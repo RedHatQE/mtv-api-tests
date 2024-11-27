@@ -82,7 +82,7 @@ if [[ ! -d $temporary_dir ]]; then
 fi
 
 if [[ ! -d $temporary_dir/mtv-api-tests ]]; then
-  git clone https://gitlab.cee.redhat.com/mtv-qe/mtv-api-tests.git $temporary_dir/mtv-api-tests
+  git clone https://github.com/RedHatQE/mtv-api-tests.git
 fi
 
 cd $temporary_dir/mtv-api-tests && uv install --python 3 --skip-lock
