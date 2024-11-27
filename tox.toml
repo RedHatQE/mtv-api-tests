@@ -1,0 +1,34 @@
+skipsdist = true
+env_list = ["pytest-check", "unused-code"]
+
+[env.pytest-check]
+commands = [
+  [
+    "uv",
+    "run",
+    "pytest",
+    "--setup-plan",
+  ],
+  [
+    "uv",
+    "run",
+    "pytest",
+    "--collect-only",
+  ],
+]
+
+
+description = "Run pytest collect-only and setup-plan"
+deps = ["uv"]
+[env.unused-code]
+description = "Find unused code"
+deps = ["python-utility-scripts"]
+commands = [
+  [
+    "pyutils-unusedcode",
+    "--exclude-files",
+    "pytest_matrix_utils.py",
+    "--exclude-function-prefixes",
+    "pytest_",
+  ],
+]

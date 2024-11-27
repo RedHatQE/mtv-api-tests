@@ -1,0 +1,26 @@
+{
+  "source_providers_list" : [
+  {
+    "type": "ovirt",
+    "version": "4.4.9",
+    "fqdn": "rhev-red-02.rdu2.scalelab.redhat.com",
+    "api_url": "https://rhev-red-02.rdu2.scalelab.redhat.com/ovirt-engine/api",
+    "username": "admin@internal",
+    "password": "<REDACTED>",
+    "cluster_name": "MTV-CNV",
+    "default": "True"
+  }
+],
+  "storage_class": "ocs-storagecluster-ceph-rbd",
+  "source_provider_type": "ovirt",
+  "source_provider_version": "4.4.9",
+  "target_namespace": "openshift-mtv",
+  "mtv_namespace": "openshift-mtv",
+  "vm_name_search_pattern": "auto-rhv-red-migcold-50gb-70usage",
+  "number_of_vms": 20,
+  "warm_migration": false,
+  "check_vms_signals": false,
+  "turn_on_vms":  false,
+  "create_scale_report": true,
+  "plan_wait_timeout": 3600
+}
