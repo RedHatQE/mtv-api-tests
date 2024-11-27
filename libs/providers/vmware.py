@@ -1,207 +1,30 @@
-import abc
+import copy
+from typing import Any
+
+from ocp_resources.exceptions import MissingResourceResError
+from timeout_sampler import TimeoutSampler, TimeoutExpiredError
+
+from ocp_resources.mtv import MTV
+from pyVmomi import vim
 import re
 
-import ovirtsdk4
-import openstack
-import glanceclient.v2.client as glclient
 
-from ovirtsdk4.types import VmStatus
-from ovirtsdk4 import NotFoundError
-from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutSampler, TimeoutExpiredError
 from pyVim.connect import Disconnect, SmartConnect
-from pyVmomi import vim
 import requests
 
-
-class MissingResourceError(Exception):
-    pass
+from libs.base_provider import BaseProvider
 
 
-class Provider(abc.ABC):
-    def __init__(
-        self,
-        username,
-        password,
-        host,
-        debug=False,
-        log=None,
-    ):
-        self.username = username
-        self.password = password
-        self.host = host
-        self.debug = debug
-        self.log = log or get_logger(name=__name__)
-        self.api = None
-
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        return
-
-    @abc.abstractmethod
-    def connect(self):
-        pass
-
-    @abc.abstractmethod
-    def disconnect(self):
-        pass
-
-    @abc.abstractmethod
-    def test(self):
-        pass
-
-
-class RHV(Provider):
-    """
-    https://github.com/oVirt/ovirt-engine-sdk/tree/master/sdk/examples
-    """
-
-    def __init__(
-        self,
-        host,
-        username,
-        password,
-        ca_file,
-        debug=False,
-        log=None,
-        insecure=False,
-    ):
-        super().__init__(
-            host=host,
-            username=username,
-            password=password,
-            debug=debug,
-            log=log,
-        )
-        self.insecure = insecure
-        self.ca_file = ca_file
-
-    def disconnect(self):
-        self.api.close()
-
-    def connect(self):
-        self.api = ovirtsdk4.Connection(
-            url=self.host,
-            username=self.username,
-            password=self.password,
-            ca_file=self.ca_file,
-            debug=self.debug,
-            log=self.log,
-            insecure=self.insecure,
-        )
-        return self
-
-    @property
-    def test(self):
-        return self.api.test()
-
-    @property
-    def vms_services(self):
-        return self.api.system_service().vms_service()
-
-    @property
-    def disks_service(self):
-        return self.api.system_service().disks_service()
-
-    @property
-    def network_services(self):
-        return self.api.system_service().networks_service()
-
-    @property
-    def storage_services(self):
-        return self.api.system_service().storage_domains_service()
-
-    def events_service(self):
-        return self.api.system_service().events_service()
-
-    def events_list_by_vm(self, vm):
-        return self.events_service().list(search=f"Vms.id = {vm.id}")
-
-    def vms(self, search):
-        return self.vms_services.list(search=search)
-
-    def vm(self, name, cluster=None):
-        query = f"name={name}"
-        if cluster:
-            query = f"{query} cluster={cluster}"
-
-        return self.vms(search=query)[0]
-
-    def vm_nics(self, vm):
-        return [self.api.follow_link(nic) for nic in self.vms_services.vm_service(id=vm.id).nics_service().list()]
-
-    def vm_disk_attachments(self, vm):
-        return [
-            self.api.follow_link(disk.disk)
-            for disk in self.vms_services.vm_service(id=vm.id).disk_attachments_service().list()
-        ]
-
-    def list_snapshots(self, vm):
-        snapshots = []
-        for snapshot in self.vms_services.vm_service(id=vm.id).snapshots_service().list():
-            try:
-                _snapshot = self.api.follow_link(snapshot)
-                snapshots.append(_snapshot)
-            except NotFoundError:
-                continue
-        return snapshots
-
-    def start_vm(self, vm):
-        if vm.status != VmStatus.UP:
-            self.vms_services.vm_service(vm.id).start()
-
-    # TODO: change the function definition to shutdown_vm once we will have the same for VMware
-    def power_off_vm(self, vm):
-        if vm.status == VmStatus.UP:
-            self.vms_services.vm_service(vm.id).shutdown()
-
-    @property
-    def networks_name(self):
-        return [f"{network.name}/{network.name}" for network in self.network_services.list()]
-
-    @property
-    def networks_id(self):
-        return [network.id for network in self.network_services.list()]
-
-    @property
-    def networks(self):
-        return [
-            {"name": network.name, "id": network.id, "data_center": self.api.follow_link(network.data_center).name}
-            for network in self.network_services.list()
-        ]
-
-    @property
-    def storages_name(self):
-        return [storage.name for storage in self.storage_services.list()]
-
-    @property
-    def storage_groups(self):
-        return [{"name": storage.name, "id": storage.id} for storage in self.storage_services.list()]
-
-
-class VMWare(Provider):
+class VMWareProvider(BaseProvider):
     """
     https://github.com/vmware/vsphere-automation-sdk-python
     """
 
-    def __init__(
-        self,
-        host,
-        username,
-        password,
-        debug=False,
-        log=None,
-    ):
-        super().__init__(
-            host=host,
-            username=username,
-            password=password,
-            debug=debug,
-            log=log,
-        )
+    def __init__(self, host: str, username: str, password: str, **kwargs: Any) -> None:
+        super().__init__(host, username, password, **kwargs)
+        self.host = host
+        self.username = username
+        self.password = password
 
     def disconnect(self):
         Disconnect(si=self.api)
@@ -298,7 +121,7 @@ class VMWare(Provider):
             if cont_obj.name == resource_name:
                 return cont_obj
 
-        raise MissingResourceError(f"{resource_type}: {resource_name}")
+        raise MissingResourceResError(f"{resource_type}: {resource_name}")
 
     @property
     def storages_name(self):
@@ -493,172 +316,143 @@ class VMWare(Provider):
         except IOError as ex:
             print(ex)
 
+    def vm_dict(self, **xargs):
+        vm_name = xargs["name"]
+        source_vm = self.vms(search=f"^{vm_name}$", folder=self.provider_data.get("vm_folder"))[0]
+        result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
+        result_vm_info["provider_type"] = MTV.ProviderType.VSPHERE
+        result_vm_info["provider_vm_api"] = source_vm
+        result_vm_info["name"] = xargs["name"]
 
-class OpenStack(Provider):
-    """
-    https://docs.openstack.org/openstacksdk/latest/user/guides/compute.html
-    """
+        # Devices
+        for device in source_vm.config.hardware.device:
+            # Network Interfaces
+            if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                result_vm_info["network_interfaces"].append({
+                    "name": device.deviceInfo.label,
+                    "macAddress": device.macAddress,
+                    "network": {"name": device.backing.network.name},
+                })
 
-    def __init__(
-        self,
-        host,
-        username,
-        password,
-        auth_url,
-        project_name,
-        user_domain_name,
-        region_name,
-        user_domain_id,
-        project_domain_id,
-        debug=False,
-        log=None,
-        insecure=False,
-    ):
-        super().__init__(
-            host=host,
-            username=username,
-            password=password,
-            debug=debug,
-            log=log,
-        )
-        self.insecure = insecure
-        self.auth_url = auth_url
-        self.project_name = project_name
-        self.user_domain_name = user_domain_name
-        self.region_name = region_name
-        self.user_domain_id = user_domain_id
-        self.project_domain_id = project_domain_id
+            # Disks
+            if isinstance(device, vim.vm.device.VirtualDisk):
+                result_vm_info["disks"].append({
+                    "name": device.deviceInfo.label,
+                    "size_in_kb": device.capacityInKB,
+                    "storage": dict(name=device.backing.datastore.name),
+                })
 
-    def disconnect(self):
-        self.api.close()
-
-    def connect(self):
-        self.api = openstack.connection.Connection(
-            auth_url=self.auth_url,
-            project_name=self.project_name,
-            username=self.username,
-            password=self.password,
-            user_domain_name=self.user_domain_name,
-            region_name=self.region_name,
-            user_domain_id=self.user_domain_id,
-            project_domain_id=self.project_domain_id,
-        )
-        return self
-
-    @property
-    def test(self):
-        return True
-
-    @property
-    def networks(self):
-        return self.api.network.networks()
-
-    @property
-    def storages_name(self):
-        return [storage.name for storage in self.api.search_volume_types()]
-
-    @property
-    def vms_list(self):
-        instances = self.api.compute.servers()
-        return [vm.name for vm in instances]
-
-    def get_instance_id_by_name(self, name_filter):
-        # Retrieve the specific instance ID
-        instance_id = None
-        for server in self.api.compute.servers(details=True):
-            if server.name == name_filter:
-                instance_id = server.id
-                break
-        return instance_id
-
-    def get_instance_obj(self, name_filter):
-        instance_id = self.get_instance_id_by_name(name_filter=name_filter)
-        if instance_id:
-            return self.api.compute.get_server(instance_id)
-
-    def list_snapshots(self, vm_name):
-        # Get list of snapshots for future use.
-        instance_id = self.get_instance_id_by_name(name_filter=vm_name)
-        if instance_id:
-            volumes = self.api.block_storage.volumes(details=True, attach_to=instance_id)
-            return [list(self.api.block_storage.snapshots(volume_id=volume.id)) for volume in volumes]
-
-    def list_network_interfaces(self, vm_name):
-        instance_id = self.get_instance_id_by_name(name_filter=vm_name)
-        if instance_id:
-            return [port for port in self.api.network.ports(device_id=instance_id)]
-
-    def vm_networks_details(self, vm_name):
-        instance_id = self.get_instance_id_by_name(name_filter=vm_name)
-        vm_networks_details = [
-            {"net_name": network.name, "net_id": network.id}
-            for port in self.api.network.ports(device_id=instance_id)
-            if (network := self.api.network.get_network(port.network_id))
-        ]
-        return vm_networks_details
-
-    def list_volumes(self, vm_name):
-        return [
-            self.api.block_storage.get_volume(attachment["volumeId"])
-            for attachment in self.api.compute.volume_attachments(server=self.get_instance_obj(name_filter=vm_name))
-        ]
-
-    def get_flavor_obj(self, vm_name):
-        # Retrieve the specific instance
-        instance_obj = self.get_instance_obj(name_filter=vm_name)
-        return next(
-            (flavor for flavor in self.api.compute.flavors() if flavor.name == instance_obj.flavor.original_name), None
+        # CPUs
+        result_vm_info["cpu"]["num_cores"] = source_vm.config.hardware.numCoresPerSocket
+        result_vm_info["cpu"]["num_sockets"] = int(
+            source_vm.config.hardware.numCPU / result_vm_info["cpu"]["num_cores"]
         )
 
-    def get_image_obj(self, vm_name):
-        # Get custom image object built on the base of the instance.
-        # For Openstack migration the instance is created by booting from a volume instead of an image.
-        # In this case, we can't see an image associated with the instance as the part of the instance object.
-        # To get the attributes of the image we use custom image created in advance on the base of the instance.
-        glance_connect = glclient.Client(
-            session=self.api.session,
-            endpoint=self.api.session.get_endpoint(service_type="image"),
-            interface="public",
-            region_name=self.region_name,
-        )
-        images = [image for image in glance_connect.images.list() if vm_name in image.get("name")]
-        return images[0] if images else None
+        # Memory
+        result_vm_info["memory_in_mb"] = source_vm.config.hardware.memoryMB
 
-    def get_volume_metadata(self, vm_name):
-        # Get metadata of the volume attached to the specific instance ID
-        instance_id = self.get_instance_id_by_name(name_filter=vm_name)
-        # Get the volume attachments associated with the instance
-        volume_attachments = self.api.compute.volume_attachments(server=self.api.compute.get_server(instance_id))
-        for attachment in volume_attachments:
-            volume = self.api.block_storage.get_volume(attachment["volumeId"])
-            return volume.volume_image_metadata
+        # Snapshots details
+        for snapshot in self.list_snapshots(source_vm):
+            result_vm_info["snapshots_data"].append(
+                dict({
+                    "name": snapshot.name,
+                    "id": snapshot.id,
+                    "create_time": snapshot.createTime,
+                    "state": snapshot.state,
+                })
+            )
 
-
-class OVA(Provider):
-    """ """
-
-    def __init__(
-        self,
-        host,
-        username,
-        password,
-        debug=False,
-        log=None,
-    ):
-        super().__init__(
-            host=host,
-            username=username,
-            password=password,
-            debug=debug,
-            log=log,
+        # Guest Agent Status (bool)
+        result_vm_info["guest_agent_running"] = (
+            hasattr(source_vm, "runtime")
+            and source_vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn
+            and source_vm.guest.toolsStatus == vim.vm.GuestInfo.ToolsStatus.toolsOk
         )
 
-    def disconnect(self):
-        return True
+        # Guest OS
+        result_vm_info["win_os"] = "win" in source_vm.config.guestId
 
-    def connect(self):
-        return True
+        # Power state
+        if source_vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+            result_vm_info["power_state"] = "on"
+        elif source_vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOff:
+            result_vm_info["power_state"] = "off"
+        else:
+            result_vm_info["power_state"] = "other"
 
-    @property
-    def test(self):
-        return True
+        return result_vm_info
+
+    def upload_data_to_vms(self, vm_names_list):
+        for vm_name in vm_names_list:
+            vm_dict = self.vm_dict(name=vm_name)
+            vm = vm_dict["provider_vm_api"]
+            if "linux" in vm.guest.guestFamily:
+                guest_vm_file_path = "/tmp/mtv-api-test"
+                guest_vm_user = self.provider_data["guest_vm_linux_user"]
+                guest_vm_password = self.provider_data["guest_vm_linux_password"]
+            else:
+                guest_vm_file_path = "c:\\mtv-api-test.txt"
+                guest_vm_user = self.provider_data["guest_vm_linux_user"]
+                guest_vm_password = self.provider_data["guest_vm_linux_user"]
+
+            local_data_file_path = "/tmp/data.mtv"
+
+            current_file_content = self.download_file_from_guest_vm(
+                vm=vm, vm_file_path=guest_vm_file_path, vm_user=guest_vm_user, vm_password=guest_vm_password
+            )
+            if not current_file_content or not vm_dict["guest_agent_running"]:
+                vm_names_list.remove(vm_name)
+                continue
+
+            prev_number_of_snapshots = current_file_content.split("|")[-1]
+            current_number_of_snapshots = str(len(vm_dict["snapshots_data"]))
+
+            if prev_number_of_snapshots != current_number_of_snapshots:
+                new_data_content = f"{current_file_content}|{current_number_of_snapshots}"
+
+                with open(local_data_file_path, "w") as local_data_file:
+                    local_data_file.write(new_data_content)
+
+                self.upload_file_to_guest_vm(
+                    vm=vm,
+                    vm_file_path=guest_vm_file_path,
+                    local_file_path=local_data_file_path,
+                    vm_user=guest_vm_user,
+                    vm_password=guest_vm_password,
+                )
+        return vm_names_list
+
+    def clear_vm_data(self, vm_names_list):
+        for vm_name in vm_names_list:
+            vm_dict = self.vm_dict(name=vm_name)
+            vm = vm_dict["provider_vm_api"]
+            if "linux" in vm.guest.guestFamily:
+                guest_vm_file_path = "/tmp/mtv-api-test"
+                guest_vm_user = self.provider_data["guest_vm_linux_user"]
+                guest_vm_password = self.provider_data["guest_vm_linux_password"]
+            else:
+                guest_vm_file_path = "c:\\mtv-api-test.txt"
+                guest_vm_user = self.provider_data["guest_vm_linux_user"]
+                guest_vm_password = self.provider_data["guest_vm_linux_user"]
+
+            local_data_file_path = "/tmp/data.mtv"
+
+            with open(local_data_file_path, "w") as local_data_file:
+                local_data_file.write("|-1")
+
+            self.upload_file_to_guest_vm(
+                vm=vm,
+                vm_file_path=guest_vm_file_path,
+                local_file_path=local_data_file_path,
+                vm_user=guest_vm_user,
+                vm_password=guest_vm_password,
+            )
+
+    def wait_for_snapshots(self, vm_names_list, number_of_snapshots):
+        """
+        return when all vms in the list have a min number of snapshots.
+        """
+        while vm_names_list:
+            for vm_name in vm_names_list:
+                if len(self.vm_dict(name=vm_name)["snapshots_data"]) >= number_of_snapshots:
+                    vm_names_list.remove(vm_name)

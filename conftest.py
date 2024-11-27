@@ -4,7 +4,6 @@ from typing import Any
 import uuid
 import shutil
 from datetime import datetime
-from time import sleep
 
 from ocp_resources.exceptions import MissingResourceResError
 import pytest
@@ -24,20 +23,18 @@ from ocp_resources.host import Host
 from pytest_testconfig import py_config
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
-import libs.providers as providers
+from libs.providers.cnv import CNVProvider
 from utilities.utils import (
+    create_source_cnv_vm,
     create_source_provider,
-    fetch_thumbprint,
     gen_network_map_list,
-    MTVCNVProvider,
-    MTVVMwareProvider,
     create_ocp_resource_if_not_exists,
     is_true,
+    start_source_vm_data_upload_vmware,
     vmware_provider,
     rhv_provider,
 )
 import logging
-from utilities.utils import background
 import os
 import pathlib
 
@@ -263,7 +260,7 @@ def destination_provider(admin_client, mtv_namespace):
     if not provider.exists:
         raise MissingResourceResError(f"Provider {provider.name} not found")
 
-    return MTVCNVProvider(cr=provider, provider_api=admin_client)
+    return CNVProvider(ocp_resource=provider)
 
 
 @pytest.fixture(scope="session")
@@ -292,11 +289,12 @@ def source_provider(source_provider_data, mtv_namespace, admin_client, tmp_path_
         source_provider_object = source_provider_objects[0]
 
     yield source_provider_object
-    source_provider_object.provider_api.disconnect()
 
     for _resource in _teardown:
         if _resource:
             _resource.clean_up()
+
+    source_provider_object.disconnect()
 
 
 @pytest.fixture(scope="session")
@@ -393,13 +391,13 @@ def network_migration_map_pod_only(
     yield create_ocp_resource_if_not_exists(
         dyn_client=admin_client,
         resource=NetworkMap,
-        name=f"{source_provider.cr.name}-{destination_provider.cr.name}-network-map-pod",
+        name=f"{source_provider.ocp_resources.name}-{destination_provider.ocp_resources.name}-network-map-pod",
         namespace=mtv_namespace,
         mapping=network_map_list,
-        source_provider_name=source_provider.cr.name,
-        source_provider_namespace=source_provider.cr.namespace,
-        destination_provider_name=destination_provider.cr.name,
-        destination_provider_namespace=destination_provider.cr.namespace,
+        source_provider_name=source_provider.ocp_resources.name,
+        source_provider_namespace=source_provider.ocp_resources.namespace,
+        destination_provider_name=destination_provider.ocp_resource.name,
+        destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
 
 
@@ -411,13 +409,13 @@ def network_migration_map(
     yield create_ocp_resource_if_not_exists(
         dyn_client=admin_client,
         resource=NetworkMap,
-        name=f"{source_provider.cr.name}-{destination_provider.cr.name}-network-map",
+        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
         namespace=mtv_namespace,
         mapping=network_map_list,
-        source_provider_name=source_provider.cr.name,
-        source_provider_namespace=source_provider.cr.namespace,
-        destination_provider_name=destination_provider.cr.name,
-        destination_provider_namespace=destination_provider.cr.namespace,
+        source_provider_name=source_provider.ocp_resource.name,
+        source_provider_namespace=source_provider.ocp_resource.namespace,
+        destination_provider_name=destination_provider.ocp_resource.name,
+        destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
 
 
@@ -434,13 +432,13 @@ def storage_migration_map(
     yield create_ocp_resource_if_not_exists(
         dyn_client=admin_client,
         resource=StorageMap,
-        name=f"{source_provider.cr.name}-{destination_provider.cr.name}-{py_config['storage_class']}-storage-map",
+        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
         namespace=mtv_namespace,
         mapping=storage_map_list,
-        source_provider_name=source_provider.cr.name,
-        source_provider_namespace=source_provider.cr.namespace,
-        destination_provider_name=destination_provider.cr.name,
-        destination_provider_namespace=destination_provider.cr.namespace,
+        source_provider_name=source_provider.ocp_resource.name,
+        source_provider_namespace=source_provider.ocp_resource.namespace,
+        destination_provider_name=destination_provider.ocp_resource.name,
+        destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
 
 
@@ -461,14 +459,14 @@ def storage_migration_map_default_settings(
     yield create_ocp_resource_if_not_exists(
         dyn_client=admin_client,
         resource=StorageMap,
-        name=f"{source_provider.cr.name}-{destination_provider.cr.name}-{py_config['storage_class']}"
+        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
         f"-storage-map-default-settings",
         namespace=mtv_namespace,
         mapping=storage_map_list,
-        source_provider_name=source_provider.cr.name,
-        source_provider_namespace=source_provider.cr.namespace,
-        destination_provider_name=destination_provider.cr.name,
-        destination_provider_namespace=destination_provider.cr.namespace,
+        source_provider_name=source_provider.ocp_resource.name,
+        source_provider_namespace=source_provider.ocp_resource.namespace,
+        destination_provider_name=destination_provider.ocp_resource.name,
+        destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
 
 
@@ -486,13 +484,13 @@ def network_migration_map_source_admin(
         yield create_ocp_resource_if_not_exists(
             dyn_client=admin_client,
             resource=NetworkMap,
-            name=f"{source_provider_admin_user.cr.name}-{destination_provider.cr.name}-network-map",
+            name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
             namespace=mtv_namespace,
             mapping=network_map_list,
-            source_provider_name=source_provider_admin_user.cr.name,
-            source_provider_namespace=source_provider_admin_user.cr.namespace,
-            destination_provider_name=destination_provider.cr.name,
-            destination_provider_namespace=destination_provider.cr.namespace,
+            source_provider_name=source_provider_admin_user.ocp_resource.name,
+            source_provider_namespace=source_provider_admin_user.ocp_resource.namespace,
+            destination_provider_name=destination_provider.ocp_resource.name,
+            destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
     else:
         yield
@@ -504,7 +502,7 @@ def storage_migration_map_source_admin(
 ):
     if vmware_provider(provider_data=source_provider_data):
         storage_map_list = []
-        source_storages = source_provider_admin_user.provider_api.storages_name
+        source_storages = source_provider_admin_user.storages_name
         for item in source_storages:
             storage_map_list.append({
                 "destination": {"storageClass": py_config["storage_class"]},
@@ -513,14 +511,14 @@ def storage_migration_map_source_admin(
         yield create_ocp_resource_if_not_exists(
             dyn_client=admin_client,
             resource=StorageMap,
-            name=f"{source_provider_admin_user.cr.name}-{destination_provider.cr.name}-{py_config['storage_class']}"
+            name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
             f"-storage-map",
             namespace=mtv_namespace,
             mapping=storage_map_list,
-            source_provider_name=source_provider_admin_user.cr.name,
-            source_provider_namespace=source_provider_admin_user.cr.namespace,
-            destination_provider_name=destination_provider.cr.name,
-            destination_provider_namespace=destination_provider.cr.namespace,
+            source_provider_name=source_provider_admin_user.ocp_resource.name,
+            source_provider_namespace=source_provider_admin_user.ocp_resource.namespace,
+            destination_provider_name=destination_provider.ocp_resource.name,
+            destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
     else:
         yield
@@ -540,13 +538,13 @@ def network_migration_map_source_non_admin(
         yield create_ocp_resource_if_not_exists(
             dyn_client=admin_client,
             resource=NetworkMap,
-            name=f"{source_provider_non_admin_user.cr.name}-{destination_provider.cr.name}-network-map",
+            name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
             namespace=mtv_namespace,
             mapping=network_map_list,
-            source_provider_name=source_provider_non_admin_user.cr.name,
-            source_provider_namespace=source_provider_non_admin_user.cr.namespace,
-            destination_provider_name=destination_provider.cr.name,
-            destination_provider_namespace=destination_provider.cr.namespace,
+            source_provider_name=source_provider_non_admin_user.ocp_resource.name,
+            source_provider_namespace=source_provider_non_admin_user.ocp_resource.namespace,
+            destination_provider_name=destination_provider.ocp_resource.name,
+            destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
     else:
         yield
@@ -558,7 +556,7 @@ def storage_migration_map_source_non_admin(
 ):
     if vmware_provider(provider_data=source_provider_data):
         storage_map_list = []
-        source_storages = source_provider_non_admin_user.provider_api.storages_name
+        source_storages = source_provider_non_admin_user.storages_name
         for item in source_storages:
             storage_map_list.append({
                 "destination": {"storageClass": py_config["storage_class"]},
@@ -567,14 +565,14 @@ def storage_migration_map_source_non_admin(
         yield create_ocp_resource_if_not_exists(
             dyn_client=admin_client,
             resource=StorageMap,
-            name=f"{source_provider_non_admin_user.cr.name}-{destination_provider.cr.name}-{py_config['storage_class']}"
+            name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
             f"-storage-map",
             namespace=mtv_namespace,
             mapping=storage_map_list,
-            source_provider_name=source_provider_non_admin_user.cr.name,
-            source_provider_namespace=source_provider_non_admin_user.cr.namespace,
-            destination_provider_name=destination_provider.cr.name,
-            destination_provider_namespace=destination_provider.cr.namespace,
+            source_provider_name=source_provider_non_admin_user.ocp_resource.name,
+            source_provider_namespace=source_provider_non_admin_user.ocp_resource.namespace,
+            destination_provider_name=destination_provider.ocp_resource.name,
+            destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
     else:
         yield
@@ -582,7 +580,7 @@ def storage_migration_map_source_non_admin(
 
 @pytest.fixture(scope="session")
 def plans_scale(source_provider):
-    source_vms = source_provider.provider_api.vms(search=py_config["vm_name_search_pattern"])
+    source_vms = source_provider.vms(search=py_config["vm_name_search_pattern"])
     plans = [
         {
             "virtual_machines": [],
@@ -590,13 +588,13 @@ def plans_scale(source_provider):
         }
     ]
 
-    for i in range(int(py_config["number_of_vms"])):
-        vm_name = source_vms[i].name
+    for idx in range(int(py_config["number_of_vms"])):
+        vm_name = source_vms[idx].name
         plans[0]["virtual_machines"].append({"name": f"{vm_name}"})
 
         if is_true(py_config.get("turn_on_vms")):
             source_vm_details = source_provider.vm_dict(name=vm_name)
-            source_provider.provider_api.start_vm(vm=source_vm_details["provider_vm_api"])
+            source_provider.start_vm(vm=source_vm_details["provider_vm_api"])
 
     return plans
 
@@ -627,7 +625,7 @@ def destination_ocp_provider(destination_ocp_secret, dyn_client, module_uuid, mt
         url=dyn_client.configuration.host,
         provider_type=Provider.ProviderType.OPENSHIFT,
     ) as ocp_resource_provider:
-        yield MTVCNVProvider(cr=ocp_resource_provider, provider_api=dyn_client)
+        yield CNVProvider(ocp_resource=ocp_resource_provider)
 
 
 @pytest.fixture(scope="session")
@@ -639,10 +637,10 @@ def remote_network_migration_map(
         name=f"{module_uuid}-networkmap",
         namespace=mtv_namespace,
         mapping=network_map_list,
-        source_provider_name=source_provider.cr.name,
-        source_provider_namespace=source_provider.cr.namespace,
-        destination_provider_name=destination_ocp_provider.cr.name,
-        destination_provider_namespace=destination_ocp_provider.cr.namespace,
+        source_provider_name=source_provider.ocp_resource.name,
+        source_provider_namespace=source_provider.ocp_resource.namespace,
+        destination_provider_name=destination_ocp_provider.ocp_resource.name,
+        destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
     ) as network_map:
         yield network_map
 
@@ -664,10 +662,10 @@ def remote_storage_migration_map(
         name=f"{module_uuid}-storagemap",
         namespace=mtv_namespace,
         mapping=storage_map_list,
-        source_provider_name=source_provider.cr.name,
-        source_provider_namespace=source_provider.cr.namespace,
-        destination_provider_name=destination_ocp_provider.cr.name,
-        destination_provider_namespace=destination_ocp_provider.cr.namespace,
+        source_provider_name=source_provider.ocp_resource.name,
+        source_provider_namespace=source_provider.ocp_resource.namespace,
+        destination_provider_name=destination_ocp_provider.ocp_resource.name,
+        destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
     ) as storage_map:
         yield storage_map
 
@@ -718,8 +716,8 @@ def source_provider_host(
             namespace=mtv_namespace,
             ip_address=host["migration_host_ip"],
             host_id=host["migration_host_id"],
-            provider_name=source_provider.cr.name,
-            provider_namespace=source_provider.cr.namespace,
+            provider_name=source_provider.ocp_resource.name,
+            provider_namespace=source_provider.ocp_resource.namespace,
             secret_name=source_provider_host_secret.name,
             secret_namespace=source_provider_host_secret.namespace,
         )
@@ -778,12 +776,12 @@ def plans(dyn_client, admin_client, source_provider_data, source_provider, reque
                 if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
                     source_provider.start_vm(source_vm_details["provider_vm_api"])
                 else:
-                    source_provider.provider_api.start_vm(vm=source_vm_details["provider_vm_api"])
+                    source_provider.start_vm(vm=source_vm_details["provider_vm_api"])
             elif vm.get("source_vm_power") == "off":
                 if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
                     source_provider.stop_vm(source_vm_details["provider_vm_api"])
                 else:
-                    source_provider.provider_api.power_off_vm(source_vm_details["provider_vm_api"])
+                    source_provider.power_off_vm(source_vm_details["provider_vm_api"])
 
     # Uploading Data to the source guest vm that may be validated later
     # The source VM is required to be running
@@ -834,46 +832,3 @@ def restore_ingress_certificate():
     assert (
         subprocess.run(["/bin/sh", "./utilities/publish.sh", "restore"]).returncode == 0
     ), "external certification restore check"
-
-
-@background
-def start_source_vm_data_upload_vmware(provider_data, vm_names_list):
-    provider_args = {
-        "username": provider_data["username"],
-        "password": provider_data["password"],
-        "host": provider_data["fqdn"],
-        "thumbprint": fetch_thumbprint(provider_data=provider_data),
-    }
-    print("start data generation")
-    with providers.VMWare(**provider_args) as provider_client:
-        mtv_vmware_provider = MTVVMwareProvider(cr=None, provider_api=provider_client, provider_data=provider_data)
-
-        mtv_vmware_provider.clear_vm_data(vm_names_list=vm_names_list)
-        while mtv_vmware_provider.upload_data_to_vms(vm_names_list=vm_names_list):
-            sleep(1)
-
-        provider_client.disconnect()
-
-
-def create_source_cnv_vm(dyn_client, vm_name):
-    vm_file = f"{vm_name}.yaml"
-    shutil.copyfile("tests/manifests/cnv-vm.yaml", vm_file)
-    with open(vm_file, "r") as f:
-        content = f.read()
-    content = content.replace("vmname", vm_name)
-    content = content.replace("vm-namespace", py_config["target_namespace"])
-    with open(vm_file, "w") as f:
-        f.write(content)
-
-    create_ocp_resource_if_not_exists(
-        resource=VirtualMachine, dyn_client=dyn_client, yaml_file=vm_file, namespace=py_config["target_namespace"]
-    )
-    cnv_vm = next(
-        VirtualMachine.get(
-            dyn_client=dyn_client,
-            name=vm_name,
-            namespace=py_config["target_namespace"],
-        )
-    )
-    if not cnv_vm.ready:
-        cnv_vm.start(wait=True)
