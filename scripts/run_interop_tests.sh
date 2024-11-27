@@ -15,4 +15,4 @@ if ! test -f "$KUBECONFIG"; then
 fi
 
 echo Running Interop Tests...
-uv run pytest -m interop --tc-file=config-interop.json
+uv run pytest -m interop --tc-file=tests/tests_config/config-interop.py

@@ -30,17 +30,12 @@ repos:
         additional_dependencies:
           [git+https://github.com/RedHatQE/flake8-plugins.git, flake8-mutable]
 
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.5.0
-    hooks:
-      - id: detect-secrets
-        args:
-          [
-            --exclude-files=scale-tests/,
-            --exclude-files=config.json,
-            --exclude-files=config-interop.json,
-            --exclude-files=cnv-vm.yaml,
-          ]
+  # TOD: enable once we open source the repository
+  # - repo: https://github.com/Yelp/detect-secrets
+  #   rev: v1.5.0
+  #   hooks:
+  #     - id: detect-secrets
+  #
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
@@ -48,10 +43,11 @@ repos:
       - id: ruff
       - id: ruff-format
 
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.20.1
-    hooks:
-      - id: gitleaks
+  # TODO: enable once we open source the repository
+  # - repo: https://github.com/gitleaks/gitleaks
+  #   rev: v8.20.1
+  #   hooks:
+  #     - id: gitleaks
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.11.2

@@ -33,7 +33,7 @@ COPY utilities  utilities
 COPY tests tests
 COPY scripts scripts
 COPY libs libs
-COPY README.md pyproject.toml uv.lock config.json conftest.py pytest.ini report.py ./
+COPY README.md pyproject.toml uv.lock config.py conftest.py pytest.ini report.py ./
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 

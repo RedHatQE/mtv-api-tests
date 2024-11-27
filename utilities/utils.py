@@ -13,7 +13,6 @@ from ocp_resources.resource import DynamicClient
 import pytest
 from simple_logger.logger import get_logger
 
-from kubernetes.client import ApiException
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.secret import Secret
 import threading
@@ -28,50 +27,6 @@ from libs.providers.vmware import VMWareProvider
 LOGGER = get_logger(__name__)
 
 
-class CustomizedSecret(Secret):
-    """
-    Customized secret object.
-    """
-
-    def __init__(
-        self,
-        name=None,
-        namespace=None,
-        client=None,
-        accesskeyid=None,
-        secretkey=None,
-        htpasswd=None,
-        teardown=True,
-        data_dict=None,
-        string_data=None,
-        yaml_file=None,
-        type=None,
-        metadata=None,
-        **kwargs,
-    ):
-        super().__init__(
-            name=name,
-            namespace=namespace,
-            client=client,
-            accesskeyid=accesskeyid,
-            secretkey=secretkey,
-            htpasswd=htpasswd,
-            teardown=teardown,
-            data_dict=data_dict,
-            string_data=string_data,
-            yaml_file=yaml_file,
-            type=type,
-            **kwargs,
-        )
-        self.metadata = metadata
-
-    def to_dict(self):
-        super().to_dict()
-        if not self.yaml_file:
-            if self.metadata:
-                self.res["metadata"].update(self.metadata)
-
-
 def get_guest_os_credentials(provider_data: dict[str, str], vm_dict: dict[str, str]) -> tuple[str, str]:
     win_os = vm_dict["win_os"]
     user = provider_data["guest_vm_win_user"] if win_os else provider_data["guest_vm_linux_user"]
@@ -79,22 +34,17 @@ def get_guest_os_credentials(provider_data: dict[str, str], vm_dict: dict[str, s
     return user, password
 
 
-def create_ocp_resource_if_not_exists(dyn_client, resource, **xargs):
+def create_ocp_resource_if_not_exists(dyn_client: DynamicClient, resource: Any, **xargs: Any) -> Any:
     """
     Create The Openshift Resource If it does not exists
-
-      Return:
-          The k8 resource
-
     """
-    try:
-        xargs.update({"client": dyn_client})
-        resource(**xargs).create()
-    except ApiException as e:
-        # if resource already found in cluster, just ignore.
-        if e.status != 409:
-            raise
-    return next(resource.get(dyn_client=dyn_client, **xargs))
+    xargs.update({"client": dyn_client})
+    _resource = resource(**xargs)
+
+    if _resource.exists:
+        return _resource
+
+    return _resource.deploy(wait=True)
 
 
 def vmware_provider(provider_data):
@@ -226,9 +176,7 @@ def create_source_provider(
             "password": source_provider_data_copy["password"],
         }
         metadata_labels = {
-            "labels": {
-                "createdForProviderType": source_provider_data_copy["type"],
-            }
+            "createdForProviderType": source_provider_data_copy["type"],
         }
         # vsphere/vmware
         if vmware_provider(provider_data=source_provider_data_copy):
@@ -236,6 +184,7 @@ def create_source_provider(
             source_provider = VMWareProvider
             secret_string_data["user"] = source_provider_data_copy["username"]
             secret_string_data["password"] = source_provider_data_copy["password"]
+
         # rhv/ovirt
         elif rhv_provider(provider_data=source_provider_data_copy):
             if not tmp_dir:
@@ -243,9 +192,8 @@ def create_source_provider(
 
             cert_file = generate_ca_cert_file(
                 provider_data=source_provider_data_copy,
-                cert_file=tmp_dir.mktemp(source_provider_data_copy["type"].upper()).join(
-                    f"{source_provider_data_copy['type']}_cert.crt"
-                ),
+                cert_file=tmp_dir.mktemp(source_provider_data_copy["type"].upper())
+                / f"{source_provider_data_copy['type']}_cert.crt",
             )
             provider_args["host"] = source_provider_data_copy["api_url"]
             provider_args["ca_file"] = cert_file
@@ -253,6 +201,7 @@ def create_source_provider(
             secret_string_data["user"] = source_provider_data_copy["username"]
             secret_string_data["password"] = source_provider_data_copy["password"]
             secret_string_data["cacert"] = Path(cert_file).read_text()
+
         # openstack
         elif openstack_provider(provider_data=source_provider_data_copy):
             provider_args["host"] = source_provider_data_copy["api_url"]
@@ -268,6 +217,7 @@ def create_source_provider(
             secret_string_data["regionName"] = source_provider_data_copy["region_name"]
             secret_string_data["projectName"] = source_provider_data_copy["project_name"]
             secret_string_data["domainName"] = source_provider_data_copy["user_domain_name"]
+
         elif ova_provider(provider_data=source_provider_data_copy):
             provider_args["host"] = source_provider_data_copy["api_url"]
             source_provider = OVAProvider
@@ -284,12 +234,12 @@ def create_source_provider(
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
             # Creating the source Secret and source Provider CRs
-            customized_secret = CustomizedSecret(
+            customized_secret = Secret(
                 client=admin_client,
                 name=name,
                 namespace=mtv_namespace,
                 string_data=secret_string_data,
-                metadata=metadata_labels,
+                label=metadata_labels,
             )
             customized_secret.deploy(wait=True)
 
@@ -327,24 +277,27 @@ def start_source_vm_data_upload_vmware(provider_data, vm_names_list):
 
 
 def create_source_cnv_vm(dyn_client, vm_name):
+    namespace = py_config["target_namespace"]
     vm_file = f"{vm_name}.yaml"
     shutil.copyfile("tests/manifests/cnv-vm.yaml", vm_file)
-    with open(vm_file, "r") as f:
-        content = f.read()
+
+    with open(vm_file, "r") as fd:
+        content = fd.read()
+
     content = content.replace("vmname", vm_name)
-    content = content.replace("vm-namespace", py_config["target_namespace"])
-    with open(vm_file, "w") as f:
-        f.write(content)
+    content = content.replace("vm-namespace", namespace)
+
+    with open(vm_file, "w") as fd:
+        fd.write(content)
 
     create_ocp_resource_if_not_exists(
-        resource=VirtualMachine, dyn_client=dyn_client, yaml_file=vm_file, namespace=py_config["target_namespace"]
+        resource=VirtualMachine, dyn_client=dyn_client, yaml_file=vm_file, namespace=namespace
     )
-    cnv_vm = next(
-        VirtualMachine.get(
-            dyn_client=dyn_client,
-            name=vm_name,
-            namespace=py_config["target_namespace"],
-        )
+    cnv_vm = VirtualMachine(
+        client=dyn_client,
+        name=vm_name,
+        namespace=namespace,
     )
+
     if not cnv_vm.ready:
         cnv_vm.start(wait=True)
