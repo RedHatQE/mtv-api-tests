@@ -38,7 +38,6 @@ class VMWareProvider(BaseProvider):
             port=443,
             disableSslCertValidation=True,
         )
-        __import__("ipdb").set_trace()
 
     def test(self) -> bool:
         return bool(self.api)
