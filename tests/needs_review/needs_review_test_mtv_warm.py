@@ -2,7 +2,7 @@ import pytest
 from pytest_testconfig import config
 
 from ocp_resources.mtv import MTV
-from utilities.mtv_migration import test_migration, get_cutover_value
+from utilities.mtv_migration import migrate_vms, get_cutover_value
 
 if config["source_provider_type"] in ["openstack", "openshift"]:
     pytest.skip("OpenStack/OpenShift warm migration is not supported.", allow_module_level=True)
@@ -48,7 +48,7 @@ def test_sanity_warm_mtv_migration(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -91,7 +91,7 @@ def test_mtv_migration_warm_2disks2nics(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -151,7 +151,7 @@ def test_mtv_warm_p1(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -195,7 +195,7 @@ def test_mtv_warm_p1_negative(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -236,7 +236,7 @@ def test_mtv_warm_p2(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -257,7 +257,7 @@ def test_mtv_migration_scale_warm(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans_scale,
@@ -298,7 +298,7 @@ def test_warm_with_data_check(
     storage_migration_map,
     skip_if_no_vmware,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -338,7 +338,7 @@ def test_warm_source_provider_admin_user(
     network_migration_map_source_admin,
     storage_migration_map_source_admin,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider_admin_user,
         destination_provider=destination_provider,
         plans=plans,
@@ -383,7 +383,7 @@ def test_warm_negative_source_provider_non_admin(
     network_migration_map_source_non_admin,
     storage_migration_map_source_non_admin,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider_non_admin_user,
         destination_provider=destination_provider,
         plans=plans,
@@ -428,7 +428,7 @@ def test_warm_remote_ocp(
     remote_network_migration_map,
     remote_storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,

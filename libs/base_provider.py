@@ -31,7 +31,7 @@ class BaseProvider(abc.ABC):
         provider_data: dict[Any, Any] | None = None,
         debug: bool = False,
         log: Logger | None = None,
-    ):
+    ) -> None:
         self.username = username
         self.password = password
         self.host = host
@@ -49,11 +49,11 @@ class BaseProvider(abc.ABC):
         return
 
     @abc.abstractmethod
-    def connect(self):
+    def connect(self) -> Any:
         pass
 
     @abc.abstractmethod
-    def disconnect(self):
+    def disconnect(self) -> Any:
         pass
 
     @abc.abstractmethod
@@ -61,7 +61,7 @@ class BaseProvider(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def vm_dict(self, **xargs):
+    def vm_dict(self, **xargs: Any) -> dict[str, Any]:
         """
         Create a dict for a single vm holding the Network Interface details, Disks and Storage, etc..
         """

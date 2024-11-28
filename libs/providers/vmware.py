@@ -6,6 +6,7 @@ from timeout_sampler import TimeoutSampler, TimeoutExpiredError
 
 from ocp_resources.mtv import MTV
 from pyVmomi import vim
+
 import re
 
 
@@ -26,10 +27,10 @@ class VMWareProvider(BaseProvider):
         self.username = username
         self.password = password
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         Disconnect(si=self.api)
 
-    def connect(self):
+    def connect(self) -> None:
         self.api = SmartConnect(  # ssl cert check is not required
             host=self.host,
             user=self.username,
@@ -37,84 +38,74 @@ class VMWareProvider(BaseProvider):
             port=443,
             disableSslCertValidation=True,
         )
+        __import__("ipdb").set_trace()
 
-    def test(self):
-        return not self.api
+    def test(self) -> bool:
+        return bool(self.api)
 
     @property
-    def content(self):
+    def content(self) -> vim.ServiceInstanceContent:
         return self.api.RetrieveContent()
 
-    def vms(self, search=None, folder=None):
-        if folder:
-            vms = [
-                __vm
-                for __vm in [
-                    _vm
-                    for _vm in self.content.rootFolder.childEntity[0].vmFolder.childEntity
-                    if (isinstance(_vm, vim.Folder)) and _vm.name == folder
-                ][0].childEntity
-                if isinstance(__vm, vim.VirtualMachine)
-            ]
-        else:
-            container = self.content.rootFolder.childEntity[0].vmFolder  # starting point to look into
-            view_type = [vim.VirtualMachine]  # object types to look for
-            recursive = True  # whether we should look into it recursively
-            container_view = self.content.viewManager.CreateContainerView(container, view_type, recursive)
-            vms = container_view.view
+    def get_view_manager(self) -> vim.view.ViewManager:
+        view_manager = self.content.viewManager
+        if not view_manager:
+            raise ValueError("View manager is not available.")
+
+        return view_manager
+
+    def vms(self, query: str = "") -> list[Any]:
+        view_manager = self.get_view_manager()
+
+        container_view = view_manager.CreateContainerView(
+            container=self.datacenters[0].vmFolder, type=[vim.VirtualMachine], recursive=True
+        )
+        vms = [vm for vm in container_view.view]  # type: ignore
 
         result = []
-        if not search:
+        if not query:
             return vms
 
-        pat = re.compile(search, re.IGNORECASE)
+        pat = re.compile(query, re.IGNORECASE)
         for vm in vms:
             if pat.search(vm.name) is not None:
                 result.append(vm)
+
         return result
 
-    def vm(self, name, datacenter=None, cluster=None):
-        if cluster:
-            _cluster = self.cluster(name=cluster, datacenter=datacenter)
-            for host in _cluster.host:
-                for vm in host.vm:
-                    if vm.summary.config.name == name:
-                        return vm
-
-        return self.vms(search=name)
-
-    def vm_by_id(self, vm_id):
-        return [vm for vm in self.vms() if str(vm).split(":")[1][:-1] == vm_id][0]
-
     @property
-    def datacenters(self):
+    def datacenters(self) -> list[Any]:
         return self.content.rootFolder.childEntity
 
-    def clusters(self, datacenter=None):
-        all_clusters = []
+    def clusters(self, datacenter: str = "") -> list[Any]:
+        all_clusters: list[Any] = []
+
         for dc in self.datacenters:  # Iterate though DataCenters
             clusters = dc.hostFolder.childEntity
-            if dc.name == datacenter:
-                return clusters
-
             if datacenter:
-                continue
+                if dc.name == datacenter:
+                    return clusters
 
-            for cluster in clusters:  # Iterate through the clusters in the DC
-                all_clusters.append(cluster)
+            else:
+                for cluster in clusters:  # Iterate through the clusters in the DC
+                    all_clusters.append(cluster)
 
         return all_clusters
 
-    def cluster(self, name, datacenter=None):
+    def cluster(self, name: str, datacenter: str = "") -> Any:
         for cluster in self.clusters(datacenter=datacenter):
             if cluster.name == name:
                 return cluster
+
+        return None
 
     def get_resource_obj(self, resource_type, resource_name):
         """
         Get the vsphere resource object associated with a given resource_name.
         """
-        containers = self.content.viewManager.CreateContainerView(
+        view_manager = self.get_view_manager()
+
+        containers = view_manager.CreateContainerView(
             container=self.content.rootFolder, type=resource_type, recursive=True
         )
         for cont_obj in containers.view:
@@ -128,9 +119,11 @@ class VMWareProvider(BaseProvider):
         """
         Get a list of all data-stores in the cluster
         """
+        view_manager = self.get_view_manager()
+
         return [
             cont_obj.name
-            for cont_obj in self.content.viewManager.CreateContainerView(
+            for cont_obj in view_manager.CreateContainerView(
                 container=self.content.rootFolder, type=[vim.Datastore], recursive=True
             ).view
         ]
@@ -140,27 +133,30 @@ class VMWareProvider(BaseProvider):
         """
         Get a list of all networks in the cluster
         """
+        view_manager = self.get_view_manager()
         return [
             cont_obj.name
-            for cont_obj in self.content.viewManager.CreateContainerView(
+            for cont_obj in view_manager.CreateContainerView(
                 container=self.content.rootFolder, type=[vim.Network], recursive=True
             ).view
         ]
 
     @property
     def all_storage(self):
+        view_manager = self.get_view_manager()
         return [
             {"name": cont_obj.name, "id": str(cont_obj.summary.datastore).split(":")[1]}
-            for cont_obj in self.content.viewManager.CreateContainerView(
+            for cont_obj in view_manager.CreateContainerView(
                 container=self.content.rootFolder, type=[vim.Datastore], recursive=True
             ).view
         ]
 
     @property
     def all_networks(self):
+        view_manager = self.get_view_manager()
         return [
             {"name": cont_obj.name, "id": cont_obj.summary.network.split(":")[1]}
-            for cont_obj in self.content.viewManager.CreateContainerView(
+            for cont_obj in view_manager.CreateContainerView(
                 container=self.content.rootFolder, type=[vim.Network], recursive=True
             ).view
         ]
@@ -318,7 +314,7 @@ class VMWareProvider(BaseProvider):
 
     def vm_dict(self, **xargs):
         vm_name = xargs["name"]
-        source_vm = self.vms(search=f"^{vm_name}$", folder=self.provider_data.get("vm_folder"))[0]
+        source_vm = self.vms(query=f"^{vm_name}$")[0]
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = MTV.ProviderType.VSPHERE
         result_vm_info["provider_vm_api"] = source_vm

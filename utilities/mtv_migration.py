@@ -34,7 +34,7 @@ def run_cut_over(migration):
     ).update()
 
 
-def test_migration(
+def migrate_vms(
     source_provider,
     destination_provider,
     plans,

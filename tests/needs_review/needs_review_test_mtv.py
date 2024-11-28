@@ -6,7 +6,7 @@ from ocp_resources.mtv import MTV
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.plan import Plan
 from report import create_migration_scale_report
-from utilities.mtv_migration import test_migration
+from utilities.mtv_migration import migrate_vms
 
 STORAGE_SUFFIX = ""
 if config["matrix_test"]:
@@ -43,7 +43,7 @@ def test_sanity_cold_mtv_migration(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -121,7 +121,7 @@ def test_mtv_migration(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -162,7 +162,7 @@ def test_mtv_migration_with_hooks(
     prehook,
     posthook,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -204,7 +204,7 @@ def test_mtv_migration_no_nics(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -243,7 +243,7 @@ def test_mtv_migration_migratable(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -283,7 +283,7 @@ def test_mtv_migration_non_utc(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -325,7 +325,7 @@ def test_cold_remote_ocp(
     remote_network_migration_map,
     remote_storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,
@@ -344,7 +344,7 @@ def test_mtv_migration_scale(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans_scale,
@@ -385,7 +385,7 @@ def test_mtv_migration_interop(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -404,7 +404,7 @@ def test_mtv_migration_set(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans_set,
@@ -461,7 +461,7 @@ def test_mtv_migration_vmware_network_selection(
     storage_migration_map,
     source_provider_host,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -502,7 +502,7 @@ def test_cold_source_provider_admin_user(
     network_migration_map_source_admin,
     storage_migration_map_source_admin,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider_admin_user,
         destination_provider=destination_provider,
         plans=plans,
@@ -551,7 +551,7 @@ def test_customer_case_bz_2064936(
     network_migration_map,
     storage_migration_map_default_settings,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -592,7 +592,7 @@ def test_negative_non_compatible_source_vm_name(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -658,7 +658,7 @@ def test_negative_same_source_vm(
     """
     In order to test MTV-108 two plans will be executed one after the other with the same source VM
     """
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -697,7 +697,7 @@ def test_cold_ocp_to_ocp(
     remote_network_migration_map,
     remote_storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,
@@ -736,7 +736,7 @@ def test_cold_ova(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
