@@ -798,7 +798,7 @@ def plans(dyn_client, admin_client, source_provider_data, source_provider, reque
         == len(virtual_machines)
         and plan.get("pre_copies_before_cut_over")
     ):
-        print("Starting Data Upload to source VM")
+        LOGGER.info("Starting Data Upload to source VMs")
         start_source_vm_data_upload_vmware(provider_data=source_provider_data, vm_names_list=vm_names_list)
 
     yield request.param
@@ -829,6 +829,6 @@ def plans(dyn_client, admin_client, source_provider_data, source_provider, reque
 @pytest.fixture(scope="function")
 def restore_ingress_certificate():
     yield
-    assert (
-        subprocess.run(["/bin/sh", "./utilities/publish.sh", "restore"]).returncode == 0
-    ), "external certification restore check"
+    assert subprocess.run(["/bin/sh", "./utilities/publish.sh", "restore"]).returncode == 0, (
+        "external certification restore check"
+    )
