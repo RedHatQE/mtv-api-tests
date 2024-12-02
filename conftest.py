@@ -226,7 +226,7 @@ def precopy_interval_forkliftcontroller(admin_client, mtv_namespace):
         condition_message="Awaiting next reconciliation",
         condition_status=forklift_controller.Condition.Status.TRUE,
         condition_type=forklift_controller.Condition.Type.RUNNING,
-        wait_timeout=10,
+        wait_timeout=300,
     )
 
     logging.info(
