@@ -5,6 +5,7 @@ from time import sleep
 from typing import Any
 
 from ocp_resources.resource import Resource
+from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutSampler, TimeoutExpiredError
 
 import humanfriendly
@@ -14,6 +15,8 @@ from ocp_resources.virtual_machine import VirtualMachine
 
 from libs.base_provider import BaseProvider
 
+LOGGER = get_logger(__name__)
+
 
 class CNVProvider(BaseProvider):
     def __init__(self, ocp_resource: Resource, **kwargs: Any) -> None:
@@ -21,23 +24,32 @@ class CNVProvider(BaseProvider):
         if not self.ocp_resource:
             raise ValueError("ocp_resource is required, but not provided")
 
-    def connect(self):
+    def connect(self) -> "CNVProvider":
+        return self
+
+    def disconnect(self) -> None:
         pass
 
-    def disconnect(self):
-        pass
+    @property
+    def test(self) -> bool:
+        if not self.ocp_resource:
+            return False
 
-    def test(self):
         return bool(self.ocp_resource.exists)
 
-    def wait_for_cnv_vm_guest_agent(self, vm_dict, timeout=300):
+    def wait_for_cnv_vm_guest_agent(self, vm_dict: dict[str, Any], timeout: int = 301) -> bool:
         """
         Wait until the guest agent is Reporting OK Status and return True
         Return False if guest agent is not reporting OK
         """
         status: dict[str, Any] = {}
         conditions: list[dict[str, Any]] = []
-        vmi = vm_dict.get("provider_vm_api").vmi
+        vm_resource = vm_dict.get("provider_vm_api")
+        if not vm_resource:
+            LOGGER.error(f"VM {vm_dict.get('name')} does not have provider_vm_api")
+            return False
+
+        vmi = vm_resource.vmi
         self.log.info(f"Wait until guest agent is active on {vmi.name}")
         sampler = TimeoutSampler(wait_timeout=timeout, sleep=1, func=lambda: vmi.instance)
         try:
@@ -59,16 +71,19 @@ class CNVProvider(BaseProvider):
             )
             return False
 
+        return True
+
     @staticmethod
-    def get_ip_by_mac_address(mac_address, vm):
+    def get_ip_by_mac_address(mac_address: str, vm: VirtualMachine) -> str:
         it_num = 30
         while not vm.vmi.interfaces and it_num > 0:
             sleep(5)
             it_num = it_num - 1
+
         return [interface["ipAddress"] for interface in vm.vmi.interfaces if interface["mac"] == mac_address][0]
 
     @staticmethod
-    def start_vm(vm_api):
+    def start_vm(vm_api: VirtualMachine) -> None:
         try:
             if not vm_api.ready:
                 vm_api.start(wait=True)
@@ -78,11 +93,14 @@ class CNVProvider(BaseProvider):
                 raise
 
     @staticmethod
-    def stop_vm(vm_api):
+    def stop_vm(vm_api: VirtualMachine) -> None:
         if vm_api.ready:
             vm_api.stop(vmi_delete_timeout=600, wait=True)
 
-    def vm_dict(self, wait_for_guest_agent=False, **xargs):
+    def vm_dict(self, wait_for_guest_agent: bool = False, **xargs: Any) -> dict[str, Any]:
+        if not self.ocp_resource:
+            return {}
+
         dynamic_client = self.ocp_resource.client
         source = xargs.get("source", False)
 

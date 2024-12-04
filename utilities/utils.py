@@ -1,4 +1,6 @@
 from pytest_testconfig import py_config
+import uuid
+from datetime import datetime
 from contextlib import contextmanager
 import copy
 from pathlib import Path
@@ -44,7 +46,8 @@ def create_ocp_resource_if_not_exists(dyn_client: DynamicClient, resource: Any, 
     if _resource.exists:
         return _resource
 
-    return _resource.deploy(wait=True)
+    _resource.deploy(wait=True)
+    return _resource
 
 
 def vmware_provider(provider_data):
@@ -132,10 +135,11 @@ def gen_network_map_list(
 
 
 def provider_cr_name(provider_data, username):
-    return (
+    name = (
         f"{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
         f"{provider_data['fqdn'].split('.')[0]}-{username.split('@')[0]}"
     )
+    return generate_time_based_uuid_name(name=name)
 
 
 @contextmanager
@@ -290,14 +294,13 @@ def create_source_cnv_vm(dyn_client, vm_name):
     with open(vm_file, "w") as fd:
         fd.write(content)
 
-    create_ocp_resource_if_not_exists(
+    cnv_vm = create_ocp_resource_if_not_exists(
         resource=VirtualMachine, dyn_client=dyn_client, yaml_file=vm_file, namespace=namespace
-    )
-    cnv_vm = VirtualMachine(
-        client=dyn_client,
-        name=vm_name,
-        namespace=namespace,
     )
 
     if not cnv_vm.ready:
         cnv_vm.start(wait=True)
+
+
+def generate_time_based_uuid_name(name: str) -> str:
+    return f"{name}-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"

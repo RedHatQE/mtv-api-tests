@@ -1,9 +1,7 @@
 import subprocess
 from pathlib import Path
 from typing import Any
-import uuid
 import shutil
-from datetime import datetime
 
 from ocp_resources.exceptions import MissingResourceResError
 import pytest
@@ -29,6 +27,7 @@ from utilities.utils import (
     create_source_provider,
     gen_network_map_list,
     create_ocp_resource_if_not_exists,
+    generate_time_based_uuid_name,
     is_true,
     start_source_vm_data_upload_vmware,
     vmware_provider,
@@ -62,7 +61,7 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionstart(session):
     tests_log_file = session.config.getoption("log_file") or "pytest-tests.log"
     if os.path.exists(tests_log_file):
-        pathlib.Path(tests_log_file).unlink()
+        pathlib.Path(tests_log_file).unlink(missing_ok=True)
 
     session.config.option.log_listener = setup_logging(
         log_file=tests_log_file,
@@ -181,8 +180,8 @@ def nfs_storage_profile(dyn_client):
 
 
 @pytest.fixture(scope="session")
-def module_uuid(source_provider_data):
-    return f"mtv-api-tests-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
+def module_uuid():
+    return generate_time_based_uuid_name(name="mtv-api-tests")
 
 
 @pytest.fixture(scope="session")

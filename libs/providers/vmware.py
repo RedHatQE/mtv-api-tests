@@ -39,6 +39,7 @@ class VMWareProvider(BaseProvider):
             disableSslCertValidation=True,
         )
 
+    @property
     def test(self) -> bool:
         return bool(self.api)
 

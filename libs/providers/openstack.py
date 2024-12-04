@@ -1,8 +1,12 @@
-import openstack
+from typing import Any
+from openstack.connection import Connection
 import copy
 import glanceclient.v2.client as glclient
+from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
+
+LOGGER = get_logger(__name__)
 
 
 class OpenStackProvider(BaseProvider):
@@ -12,17 +16,17 @@ class OpenStackProvider(BaseProvider):
 
     def __init__(
         self,
-        host,
-        username,
-        password,
-        auth_url,
-        project_name,
-        user_domain_name,
-        region_name,
-        user_domain_id,
-        project_domain_id,
-        insecure=False,
-        **kwargs,
+        host: str,
+        username: str,
+        password: str,
+        auth_url: str,
+        project_name: str,
+        user_domain_name: str,
+        region_name: str,
+        user_domain_id: str,
+        project_domain_id: str,
+        insecure: bool = False,
+        **kwargs: Any,
     ):
         super().__init__(
             host=host,
@@ -38,11 +42,11 @@ class OpenStackProvider(BaseProvider):
         self.user_domain_id = user_domain_id
         self.project_domain_id = project_domain_id
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         self.api.close()
 
-    def connect(self):
-        self.api = openstack.connection.Connection(
+    def connect(self) -> "OpenStackProvider":
+        self.api = Connection(
             auth_url=self.auth_url,
             project_name=self.project_name,
             username=self.username,
@@ -55,49 +59,51 @@ class OpenStackProvider(BaseProvider):
         return self
 
     @property
-    def test(self):
+    def test(self) -> bool:
         return True
 
     @property
-    def networks(self):
+    def networks(self) -> list[Any]:
         return self.api.network.networks()
 
     @property
-    def storages_name(self):
+    def storages_name(self) -> list[str]:
         return [storage.name for storage in self.api.search_volume_types()]
 
     @property
-    def vms_list(self):
+    def vms_list(self) -> list[str]:
         instances = self.api.compute.servers()
         return [vm.name for vm in instances]
 
-    def get_instance_id_by_name(self, name_filter):
+    def get_instance_id_by_name(self, name_filter: str) -> str:
         # Retrieve the specific instance ID
-        instance_id = None
+        instance_id = ""
         for server in self.api.compute.servers(details=True):
             if server.name == name_filter:
                 instance_id = server.id
                 break
         return instance_id
 
-    def get_instance_obj(self, name_filter):
+    def get_instance_obj(self, name_filter: str) -> Any:
         instance_id = self.get_instance_id_by_name(name_filter=name_filter)
         if instance_id:
             return self.api.compute.get_server(instance_id)
 
-    def list_snapshots(self, vm_name):
+    def list_snapshots(self, vm_name: str) -> list[Any]:
         # Get list of snapshots for future use.
         instance_id = self.get_instance_id_by_name(name_filter=vm_name)
         if instance_id:
             volumes = self.api.block_storage.volumes(details=True, attach_to=instance_id)
             return [list(self.api.block_storage.snapshots(volume_id=volume.id)) for volume in volumes]
+        return []
 
-    def list_network_interfaces(self, vm_name):
+    def list_network_interfaces(self, vm_name: str) -> list[Any]:
         instance_id = self.get_instance_id_by_name(name_filter=vm_name)
         if instance_id:
             return [port for port in self.api.network.ports(device_id=instance_id)]
+        return []
 
-    def vm_networks_details(self, vm_name):
+    def vm_networks_details(self, vm_name: str) -> list[dict[str, Any]]:
         instance_id = self.get_instance_id_by_name(name_filter=vm_name)
         vm_networks_details = [
             {"net_name": network.name, "net_id": network.id}
@@ -106,20 +112,24 @@ class OpenStackProvider(BaseProvider):
         ]
         return vm_networks_details
 
-    def list_volumes(self, vm_name):
+    def list_volumes(self, vm_name: str) -> list[Any]:
         return [
             self.api.block_storage.get_volume(attachment["volumeId"])
             for attachment in self.api.compute.volume_attachments(server=self.get_instance_obj(name_filter=vm_name))
         ]
 
-    def get_flavor_obj(self, vm_name):
+    def get_flavor_obj(self, vm_name: str) -> Any:
         # Retrieve the specific instance
         instance_obj = self.get_instance_obj(name_filter=vm_name)
+        if not instance_obj:
+            LOGGER.error(f"Instance {vm_name} not found.")
+            return None
+
         return next(
             (flavor for flavor in self.api.compute.flavors() if flavor.name == instance_obj.flavor.original_name), None
         )
 
-    def get_image_obj(self, vm_name):
+    def get_image_obj(self, vm_name: str) -> Any:
         # Get custom image object built on the base of the instance.
         # For Openstack migration the instance is created by booting from a volume instead of an image.
         # In this case, we can't see an image associated with the instance as the part of the instance object.
@@ -133,7 +143,7 @@ class OpenStackProvider(BaseProvider):
         images = [image for image in glance_connect.images.list() if vm_name in image.get("name")]
         return images[0] if images else None
 
-    def get_volume_metadata(self, vm_name):
+    def get_volume_metadata(self, vm_name: str) -> Any:
         # Get metadata of the volume attached to the specific instance ID
         instance_id = self.get_instance_id_by_name(name_filter=vm_name)
         # Get the volume attachments associated with the instance
@@ -142,7 +152,7 @@ class OpenStackProvider(BaseProvider):
             volume = self.api.block_storage.get_volume(attachment["volumeId"])
             return volume.volume_image_metadata
 
-    def vm_dict(self, **xargs):
+    def vm_dict(self, **xargs: Any) -> dict[str, Any]:
         vm_name = xargs["name"]
         source_vm = self.get_instance_obj(vm_name)
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)

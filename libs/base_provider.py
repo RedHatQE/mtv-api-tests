@@ -56,6 +56,7 @@ class BaseProvider(abc.ABC):
     def disconnect(self) -> Any:
         pass
 
+    @property
     @abc.abstractmethod
     def test(self) -> bool:
         pass
