@@ -134,6 +134,7 @@ def check_snapshots(
     failed_snapshots: list[str] = []
     snapshots_before_migration.sort(key=lambda x: x["id"])
     snapshots_after_migration.sort(key=lambda x: x["id"])
+
     for before_snapshot, after_snapshot in zip(snapshots_before_migration, snapshots_after_migration):
         if before_snapshot != after_snapshot:
             failed_snapshots.append(f"Before snapshot: {before_snapshot}, After snapshot: {after_snapshot}")
