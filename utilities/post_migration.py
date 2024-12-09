@@ -135,17 +135,13 @@ def check_vms(
     source_provider_data,
 ):
     virtual_machines = plan["virtual_machines"]
+
     for vm in virtual_machines:
-        source_vm = source_provider.vm_dict(name=vm["name"], namespace=py_config["target_namespace"], source=True)
-
-        # Skip checking guest agent for rhv vm with multiple disks
-        # because of bug https://issues.redhat.com/browse/MTV-433
+        vm_name = vm["name"]
+        source_vm = source_provider.vm_dict(name=vm_name, namespace=py_config["target_namespace"], source=True)
         vm_guest_agent = vm.get("guest_agent")
-        # if rhv_provider(source_provider_data) and "disks" in vm["name"]:
-        #     vm_guest_agent = False
-
         destination_vm = destination_provider.vm_dict(
-            wait_for_guest_agent=vm_guest_agent, name=vm["name"], namespace=destination_namespace
+            wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=destination_namespace
         )
 
         check_vms_power_state(
@@ -164,19 +160,21 @@ def check_vms(
         if source_provider_host and source_provider_data:
             check_migration_network(source_provider_data=source_provider_data, destination_vm=destination_vm)
 
-        if plan.get("warm_migration") and plan.get("pre_copies_before_cut_over"):
+        plan_pre_copies_before_cut_over = plan.get("pre_copies_before_cut_over")
+
+        if plan.get("warm_migration") and plan_pre_copies_before_cut_over:
             check_data_integrity(
                 destination_vm_dict=destination_vm,
                 source_vm_dict=source_vm,
                 source_provider_data=source_provider_data,
-                min_number_of_snapshots=plan["pre_copies_before_cut_over"],
+                min_number_of_snapshots=plan_pre_copies_before_cut_over,
             )
 
-        # TODO: Remove the condition "if cold" once these two bugs are fixed:
-        #  https://bugzilla.redhat.com/show_bug.cgi?id=2053183
-        #  https://github.com/kubev2v/forklift/issues/301
-        if "snapshots_before_migration" in vm and vmware_provider(source_provider.provider_data):
-            check.equal(vm["snapshots_before_migration"], source_vm["snapshots_data"], "Checking source VM snapshots")
+        snapshots_before_migration = vm.get("snapshots_before_migration")
+
+        if snapshots_before_migration and vmware_provider(source_provider.provider_data):
+            for snapshot_before, snapshot_data in zip(snapshots_before_migration, source_vm["snapshots_data"]):
+                check.equal(snapshot_before, snapshot_data, "Checking source VM snapshots")
 
         if vm_guest_agent:
             check_guest_agent(destination_vm=destination_vm)

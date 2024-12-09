@@ -763,8 +763,10 @@ def plans(dyn_client, admin_client, source_provider_data, source_provider, reque
     vm_names_list = [v["name"] for v in virtual_machines]
 
     if py_config["source_provider_type"] != "ova":
+        openshift_source_provider = py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT
+
         for vm in virtual_machines:
-            if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
+            if openshift_source_provider:
                 create_source_cnv_vm(admin_client, vm["name"])
 
             source_vm_details = source_provider.vm_dict(
@@ -772,12 +774,10 @@ def plans(dyn_client, admin_client, source_provider_data, source_provider, reque
             )
             vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
             if vm.get("source_vm_power") == "on":
-                if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-                    source_provider.start_vm(source_vm_details["provider_vm_api"])
-                else:
-                    source_provider.start_vm(vm=source_vm_details["provider_vm_api"])
+                source_provider.start_vm(source_vm_details["provider_vm_api"])
+
             elif vm.get("source_vm_power") == "off":
-                if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
+                if openshift_source_provider:
                     source_provider.stop_vm(source_vm_details["provider_vm_api"])
                 else:
                     source_provider.power_off_vm(source_vm_details["provider_vm_api"])
