@@ -184,7 +184,7 @@ def nfs_storage_profile(dyn_client):
 
 @pytest.fixture(scope="session")
 def module_uuid(source_provider_data):
-    generate_time_based_uuid_name("mtv-api-tests")
+    yield generate_time_based_uuid_name("mtv-api-tests")
 
 
 @pytest.fixture(scope="session")
