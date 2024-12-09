@@ -1,9 +1,13 @@
+from typing import Any
+from ocp_resources.resource import get_logger
+import pytest
 from pytest_testconfig import py_config
 from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
 from subprocess import STDOUT, check_output
 import uuid
 import pytest_check as check
 
+LOGGER = get_logger(name=__name__)
 RWO = "ReadWriteOnce"
 RWX = "ReadWriteMany"
 
@@ -99,7 +103,7 @@ def check_data_integrity(source_vm_dict, destination_vm_dict, source_provider_da
     )
 
     # we expect: -1|1|2|3|.|n|.|.| n>= the underlined minimum number of snapshots
-    print(data)
+    LOGGER.info(data)
     data = data.decode("utf8").split("-1")[1].split("|")
     for i in range(1, len(data)):
         check.equal(data[i], str(i), "data integrity check.")
@@ -122,6 +126,20 @@ def check_false_vm_power_off(source_provider, source_vm):
         source_provider.check_for_power_off_event(source_vm["provider_vm_api"]),
         "Checking RHV VM power off was not performed (event.code=33)",
     )
+
+
+def check_snapshots(
+    snapshots_before_migration: list[dict[str, Any]], snapshots_after_migration: list[dict[str, Any]]
+) -> None:
+    failed_snapshots: list[str] = []
+    snapshots_before_migration.sort(key=lambda x: x["id"])
+    snapshots_after_migration.sort(key=lambda x: x["id"])
+    for before_snapshot, after_snapshot in zip(snapshots_before_migration, snapshots_after_migration):
+        if before_snapshot != after_snapshot:
+            failed_snapshots.append(f"Before snapshot: {before_snapshot}, After snapshot: {after_snapshot}")
+
+    if failed_snapshots:
+        pytest.fail(f"Some of the VM snapshots did not match: {failed_snapshots}")
 
 
 def check_vms(
@@ -173,8 +191,10 @@ def check_vms(
         snapshots_before_migration = vm.get("snapshots_before_migration")
 
         if snapshots_before_migration and vmware_provider(source_provider.provider_data):
-            for snapshot_before, snapshot_data in zip(snapshots_before_migration, source_vm["snapshots_data"]):
-                check.equal(snapshot_before, snapshot_data, "Checking source VM snapshots")
+            check_snapshots(
+                snapshots_before_migration=snapshots_before_migration,
+                snapshots_after_migration=source_vm["snapshots_data"],
+            )
 
         if vm_guest_agent:
             check_guest_agent(destination_vm=destination_vm)
