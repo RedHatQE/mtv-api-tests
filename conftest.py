@@ -1,9 +1,7 @@
 import subprocess
 from pathlib import Path
 from typing import Any
-import uuid
 import shutil
-from datetime import datetime
 from time import sleep
 
 from ocp_resources.exceptions import MissingResourceResError
@@ -32,6 +30,7 @@ from utilities.utils import (
     MTVCNVProvider,
     MTVVMwareProvider,
     create_ocp_resource_if_not_exists,
+    generate_time_based_uuid_name,
     is_true,
     vmware_provider,
     rhv_provider,
@@ -185,7 +184,7 @@ def nfs_storage_profile(dyn_client):
 
 @pytest.fixture(scope="session")
 def module_uuid(source_provider_data):
-    return f"mtv-api-tests-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
+    generate_time_based_uuid_name("mtv-api-tests")
 
 
 @pytest.fixture(scope="session")

@@ -1,5 +1,7 @@
 import abc
 from contextlib import contextmanager
+import uuid
+from datetime import datetime
 import copy
 from pathlib import Path
 from subprocess import check_output, STDOUT
@@ -660,10 +662,11 @@ def gen_network_map_list(
 
 
 def provider_cr_name(provider_data, username):
-    return (
+    name = (
         f"{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
         f"{provider_data['fqdn'].split('.')[0]}-{username.split('@')[0]}"
     )
+    return generate_time_based_uuid_name(name=name)
 
 
 @contextmanager
@@ -723,9 +726,8 @@ def create_source_provider(
 
             cert_file = generate_ca_cert_file(
                 provider_data=source_provider_data_copy,
-                cert_file=tmp_dir.mktemp(source_provider_data_copy["type"].upper()).join(
-                    f"{source_provider_data_copy['type']}_cert.crt"
-                ),
+                cert_file=tmp_dir.mktemp(source_provider_data_copy["type"].upper())
+                / f"{source_provider_data_copy['type']}_cert.crt",
             )
             provider_args["host"] = source_provider_data_copy["api_url"]
             provider_args["ca_file"] = cert_file
@@ -798,3 +800,7 @@ def create_source_provider(
                 customized_secret,
                 ocp_resource_provider,
             )
+
+
+def generate_time_based_uuid_name(name: str) -> str:
+    return f"{name}-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
