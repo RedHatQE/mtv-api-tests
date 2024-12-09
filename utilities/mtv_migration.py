@@ -10,10 +10,10 @@ from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.provider import Provider
 from utilities.post_migration import check_vms
 from utilities.utils import is_true
-from pytest_testconfig import config
+from pytest_testconfig import py_config
 from report import create_migration_scale_report
 
-mtv_namespace = config["mtv_namespace"]
+mtv_namespace = py_config["mtv_namespace"]
 
 
 def get_cutover_value(current_cutover=None):
@@ -21,7 +21,7 @@ def get_cutover_value(current_cutover=None):
     if current_cutover:
         return datetime_utc
     else:
-        return datetime_utc + timedelta(minutes=int(config["mins_before_cutover"]))
+        return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))
 
 
 def run_cut_over(migration):
@@ -41,7 +41,7 @@ def migrate_vms(
     network_migration_map,
     storage_migration_map,
     source_provider_data,
-    target_name_space=config["target_namespace"],
+    target_name_space=py_config["target_namespace"],
     source_provider_host=None,
     cut_over=None,
     pre_hook_name=None,
@@ -56,20 +56,23 @@ def migrate_vms(
 ):
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
-    if not is_true(config.get("skip_migration")):
+    if not is_true(py_config.get("skip_migration")):
         plan_name = f"mtv-api-tests-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
         plans[0]["name"] = plan_name
 
         # Plan CR accepts only VM name/id
         virtual_machines_list = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
-        if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
+        if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
             for i in range(len(virtual_machines_list)):
-                virtual_machines_list[i].update({"namespace": config["target_namespace"]})
+                virtual_machines_list[i].update({"namespace": py_config["target_namespace"]})
+
+        plan_warm_migration = plans[0].get("warm_migration")
+
         with run_migration(
             name=plan_name,
             namespace=mtv_namespace,
             virtual_machines_list=virtual_machines_list,
-            warm_migration=plans[0].get("warm_migration", False) or bool(config["warm_migration"]),
+            warm_migration=plan_warm_migration or bool(py_config["warm_migration"]),
             source_provider_name=source_provider.ocp_resource.name,
             source_provider_namespace=source_provider.ocp_resource.namespace,
             destination_provider_name=destination_provider.ocp_resource.name,
@@ -89,27 +92,27 @@ def migrate_vms(
             condition_category=condition_category,
             condition_status=condition_status,
             condition_type=condition_type,
-        ) as (p, m):
+        ) as (plan, migration):
             # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
-            if plans[0].get("pre_copies_before_cut_over") and not cut_over and plans[0].get("warm_migration"):
+            if plans[0].get("pre_copies_before_cut_over") and not cut_over and plan_warm_migration:
                 source_provider.wait_for_snapshots(
                     vm_names_list=[v["name"] for v in plans[0]["virtual_machines"]],
                     number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
                 )
-                run_cut_over(migration=m)
+                run_cut_over(migration=migration)
 
-        if m:
-            p.wait_for_resource_status(
+        if migration:
+            plan.wait_for_resource_status(
                 condition_message=condition_message,
                 condition_status=condition_status,
                 condition_type=condition_type,
-                wait_timeout=int(config.get("plan_wait_timeout", 600)),
+                wait_timeout=int(py_config.get("plan_wait_timeout", 600)),
             )
 
-            if is_true(config.get("create_scale_report")):
-                create_migration_scale_report(plan_resource=p)
+            if is_true(py_config.get("create_scale_report")):
+                create_migration_scale_report(plan_resource=plan)
 
-    if is_true(config.get("check_vms_signals")):
+    if is_true(py_config.get("check_vms_signals")):
         if is_true(plans[0].get("check_vms_signals", True)):
             check_vms(
                 plan=plans[0],

@@ -1,4 +1,4 @@
-from pytest_testconfig import config
+from pytest_testconfig import py_config
 from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
 from subprocess import STDOUT, check_output
 import uuid
@@ -45,7 +45,10 @@ def check_network(source_provider_data, source_vm, destination_vm, network_migra
     for source_vm_nic in source_vm["network_interfaces"]:
         # for rhv we use networks ids instead of names
         # TODO: Use datacenter/name format for rhv
-        expected_network_name = get_destination(network_migration_map, source_vm_nic)["name"]
+        expected_network = get_destination(network_migration_map, source_vm_nic)
+        assert expected_network, "Network not found in migration map"
+        expected_network_name = expected_network["name"]
+
         destination_vm_nic = get_nic_by_mac(
             nics=destination_vm["network_interfaces"], mac_address=source_vm_nic["macAddress"]
         )
@@ -58,7 +61,7 @@ def check_storage(source_vm, destination_vm, storage_map_resource):
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
     check.equal(len(destination_disks), len(source_vm["disks"]), "disks count")
     for destination_disk in destination_disks:
-        check.equal(destination_disk["storage"]["name"], config["storage_class"], "storage class")
+        check.equal(destination_disk["storage"]["name"], py_config["storage_class"], "storage class")
         if destination_disk["storage"]["name"] == "ocs-storagecluster-ceph-rbd":
             for mapping in storage_map_resource.instance.spec.map:
                 if mapping.source.name in source_vm_disks_storage:
@@ -93,7 +96,7 @@ def check_data_integrity(source_vm_dict, destination_vm_dict, source_provider_da
         [
             "/bin/sh",
             "-c",
-            f"oc project {config['target_namespace']} && oc run {pod_name} --image=quay.io/mtvqe/python-runner \
+            f"oc project {py_config['target_namespace']} && oc run {pod_name} --image=quay.io/mtvqe/python-runner \
              --command -- {cli}  && sleep 10 && oc logs pod/{pod_name} && oc delete pod/{pod_name}&>/dev/null &",
         ],
         stderr=STDOUT,
@@ -137,7 +140,7 @@ def check_vms(
 ):
     virtual_machines = plan["virtual_machines"]
     for vm in virtual_machines:
-        source_vm = source_provider.vm_dict(name=vm["name"], namespace=config["target_namespace"], source=True)
+        source_vm = source_provider.vm_dict(name=vm["name"], namespace=py_config["target_namespace"], source=True)
 
         # Skip checking guest agent for rhv vm with multiple disks
         # because of bug https://issues.redhat.com/browse/MTV-433

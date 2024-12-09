@@ -1,15 +1,15 @@
 import pytest
-from pytest_testconfig import config
+from pytest_testconfig import py_config
 
 from ocp_resources.mtv import MTV
 from utilities.mtv_migration import migrate_vms, get_cutover_value
 
-if config["source_provider_type"] in ["openstack", "openshift"]:
+if py_config["source_provider_type"] in ["openstack", "openshift"]:
     pytest.skip("OpenStack/OpenShift warm migration is not supported.", allow_module_level=True)
 
 STORAGE_SUFFIX = ""
-if config["matrix_test"]:
-    SC = config["storage_class"]
+if py_config["matrix_test"]:
+    SC = py_config["storage_class"]
     if "ceph-rbd" in SC:
         STORAGE_SUFFIX = "-ceph-rbd"
     elif "nfs" in SC:
@@ -418,7 +418,7 @@ def test_warm_negative_source_provider_non_admin(
     indirect=True,
     ids=["MTV-394"],
 )
-@pytest.mark.skipif(not config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
+@pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_warm_remote_ocp(
     plans,
     source_provider,

@@ -63,8 +63,8 @@ source_providers_list = [
     {
         "type": "vsphere",
         "version": "8.0.1",
-        "fqdn": "10.6.46.249",
-        "api_url": "https://10.6.46.249/sdk",
+        "fqdn": "10.6.46.250",
+        "api_url": "https://10.6.46.250/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
         "admin_username": "administrator@vsphere.local",
@@ -78,7 +78,7 @@ source_providers_list = [
         "vddk_init_image": "quay.io/libvirt_v2v_cnv/vddk:8.0.1",
         "host_list": [
             {
-                "migration_host_id": "host-334",
+                "migration_host_id": "host-8",
                 "migration_host_ip": "10.6.46.30",
                 "user": "root",
                 "password": "123qweP",
