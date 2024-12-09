@@ -77,10 +77,6 @@ def check_migration_network(source_provider_data, destination_vm):
         check.is_in(source_provider_data["host_list"][0]["migration_host_ip"], disk["vddk_url"])
 
 
-def check_source_vm_snapshots(vm_snapshots_before, vm_snapshots_after):
-    check.equal(vm_snapshots_before, vm_snapshots_after, "Checking source VM snapshots")
-
-
 def check_data_integrity(source_vm_dict, destination_vm_dict, source_provider_data, min_number_of_snapshots):
     """
     Reads the content of the data file that was generated during the test on the source vm
@@ -180,9 +176,7 @@ def check_vms(
         #  https://bugzilla.redhat.com/show_bug.cgi?id=2053183
         #  https://github.com/kubev2v/forklift/issues/301
         if "snapshots_before_migration" in vm and vmware_provider(source_provider.provider_data):
-            check_source_vm_snapshots(
-                vm_snapshots_before=vm["snapshots_before_migration"], vm_snapshots_after=source_vm["snapshots_data"]
-            )
+            check.equal(vm["snapshots_before_migration"], source_vm["snapshots_data"], "Checking source VM snapshots")
 
         if vm_guest_agent:
             check_guest_agent(destination_vm=destination_vm)
