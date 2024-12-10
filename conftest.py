@@ -218,7 +218,8 @@ def remote_ocp_admin_client(tmp_path_factory):
         shutil.copyfile(_remote_kubeconfig_path, remote_kubeconfig_tmp_file)
 
         yield get_client(config_file=str(remote_kubeconfig_tmp_file))
-    yield
+    else:
+        yield
 
 
 @pytest.fixture(scope="session")
