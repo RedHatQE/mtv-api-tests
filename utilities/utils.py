@@ -1,6 +1,5 @@
 from pytest_testconfig import py_config
-import uuid
-from datetime import datetime
+import shortuuid
 from contextlib import contextmanager
 import copy
 from pathlib import Path
@@ -139,7 +138,7 @@ def provider_cr_name(provider_data, username):
         f"{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
         f"{provider_data['fqdn'].split('.')[0]}-{username.split('@')[0]}"
     )
-    return generate_time_based_uuid_name(name=name)
+    return generate_name_with_uuid(name=name)
 
 
 @contextmanager
@@ -302,5 +301,5 @@ def create_source_cnv_vm(dyn_client, vm_name):
         cnv_vm.start(wait=True)
 
 
-def generate_time_based_uuid_name(name: str) -> str:
-    return f"{name}-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
+def generate_name_with_uuid(name: str) -> str:
+    return f"{name}-{shortuuid.ShortUUID().random(length=8).lower()}"

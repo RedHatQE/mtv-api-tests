@@ -27,7 +27,7 @@ from utilities.utils import (
     create_source_provider,
     gen_network_map_list,
     create_ocp_resource_if_not_exists,
-    generate_time_based_uuid_name,
+    generate_name_with_uuid,
     is_true,
     start_source_vm_data_upload_vmware,
     vmware_provider,
@@ -125,7 +125,7 @@ def autouse_fixtures(target_namespace, nfs_storage_profile):
 
 
 @pytest.fixture(scope="session")
-def target_namespace(dyn_client, admin_client):
+def target_namespace(remote_ocp_admin_client, local_ocp_admin_client):
     """Delete and create the target namespace for MTV migrations"""
     namespaces: list[Namespace] = []
     label: dict[str, str] = {
@@ -133,9 +133,9 @@ def target_namespace(dyn_client, admin_client):
         "pod-security.kubernetes.io/enforce-version": "latest",
     }
     target_namespace: str = py_config["target_namespace"]
-    clients = [dyn_client]
+    clients = [remote_ocp_admin_client]
     if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        clients.append(admin_client)
+        clients.append(local_ocp_admin_client)
 
     for client in clients:
         namespace = Namespace(client=client, name=target_namespace, label=label)
@@ -148,14 +148,14 @@ def target_namespace(dyn_client, admin_client):
 
 
 @pytest.fixture(scope="session")
-def nfs_storage_profile(dyn_client):
+def nfs_storage_profile(remote_ocp_admin_client):
     """
     Edit nfs StorageProfile CR with accessModes and volumeMode default settings
     More information: https://bugzilla.redhat.com/show_bug.cgi?id=2037652
     """
     nfs = StorageClass.Types.NFS
     if py_config["storage_class"] == nfs:
-        storage_profile = StorageProfile(client=dyn_client, name=nfs)
+        storage_profile = StorageProfile(client=remote_ocp_admin_client, name=nfs)
         if not storage_profile.exists:
             raise MissingResourceResError(f"StorageProfile {nfs} not found")
 
@@ -180,8 +180,8 @@ def nfs_storage_profile(dyn_client):
 
 
 @pytest.fixture(scope="session")
-def module_uuid():
-    return generate_time_based_uuid_name(name="mtv-api-tests")
+def session_uuid():
+    return generate_name_with_uuid(name="mtv-api-tests")
 
 
 @pytest.fixture(scope="session")
@@ -190,33 +190,45 @@ def mtv_namespace():
 
 
 @pytest.fixture(scope="session")
-def admin_client():
+def local_ocp_admin_client():
+    """
+    OCP client for local cluster
+    """
     logging.info(msg="Creating admin Client")
     return get_client()
 
 
 @pytest.fixture(scope="session")
-def dyn_client():
-    _remote_kubeconfig_path = ""
-
-    logging.info(msg="Creating dynamic client")
+def remote_ocp_admin_client(tmp_path_factory):
+    """
+    OCP client for remote cluster
+    """
 
     if remote_cluster_name := py_config.get("remote_ocp_cluster"):
+        logging.info(msg=f"Creating remote OCP client for {remote_cluster_name}")
+
         mount_root = py_config.get("mount_root") or str(Path.home() / "cnv-qe.rhcloud.com")
         _remote_kubeconfig_path = f"{mount_root}/{remote_cluster_name}/auth/kubeconfig"
 
         if not Path(_remote_kubeconfig_path).exists():
             raise FileNotFoundError(f"Kubeconfig file {_remote_kubeconfig_path} not found")
 
-    yield get_client(config_file=_remote_kubeconfig_path)
+        remote_kubeconfig_tmp_path = tmp_path_factory.mktemp("kubeconfig")
+        remote_kubeconfig_tmp_file = Path(remote_kubeconfig_tmp_path / "kubeconfig")
+        shutil.copyfile(_remote_kubeconfig_path, remote_kubeconfig_tmp_file)
+
+        yield get_client(config_file=str(remote_kubeconfig_tmp_file))
+    yield
 
 
 @pytest.fixture(scope="session")
-def precopy_interval_forkliftcontroller(admin_client, mtv_namespace):
+def precopy_interval_forkliftcontroller(local_ocp_admin_client, mtv_namespace):
     """
     Set the snapshots interval in the forklift-controller ForkliftController
     """
-    forklift_controller = ForkliftController(client=admin_client, name="forklift-controller", namespace=mtv_namespace)
+    forklift_controller = ForkliftController(
+        client=local_ocp_admin_client, name="forklift-controller", namespace=mtv_namespace
+    )
     if not forklift_controller.exists:
         raise MissingResourceResError(f"ForkliftController {forklift_controller.name} not found")
 
@@ -252,9 +264,9 @@ def precopy_interval_forkliftcontroller(admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def destination_provider(admin_client, mtv_namespace):
+def destination_provider(local_ocp_admin_client, mtv_namespace):
     provider = Provider(
-        name=py_config.get("destination_provider_name", "host"), namespace=mtv_namespace, client=admin_client
+        name=py_config.get("destination_provider_name", "host"), namespace=mtv_namespace, client=local_ocp_admin_client
     )
     if not provider.exists:
         raise MissingResourceResError(f"Provider {provider.name} not found")
@@ -274,14 +286,14 @@ def source_provider_data():
 
 
 @pytest.fixture(scope="session")
-def source_provider(source_provider_data, mtv_namespace, admin_client, tmp_path_factory):
+def source_provider(source_provider_data, mtv_namespace, local_ocp_admin_client, tmp_path_factory):
     _teardown: list[Any] = []
 
     with create_source_provider(
         config=py_config,
         source_provider_data=source_provider_data,
         mtv_namespace=mtv_namespace,
-        admin_client=admin_client,
+        admin_client=local_ocp_admin_client,
         tmp_dir=tmp_path_factory,
     ) as source_provider_objects:
         _teardown.extend([src for src in source_provider_objects[1:]])
@@ -297,14 +309,14 @@ def source_provider(source_provider_data, mtv_namespace, admin_client, tmp_path_
 
 
 @pytest.fixture(scope="session")
-def source_providers(mtv_namespace, admin_client, tmp_path_factory):
+def source_providers(mtv_namespace, local_ocp_admin_client, tmp_path_factory):
     _teardown: list[Any] = []
     for source_provider_data in py_config["source_providers_list"]:
         with create_source_provider(
             config=py_config,
             source_provider_data=source_provider_data,
             mtv_namespace=mtv_namespace,
-            admin_client=admin_client,
+            admin_client=local_ocp_admin_client,
             tmp_dir=tmp_path_factory,
         ) as source_provider_data:
             _teardown.extend([src for src in source_provider_data[1:]])
@@ -316,13 +328,13 @@ def source_providers(mtv_namespace, admin_client, tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def source_provider_admin_user(source_provider_data, mtv_namespace, admin_client):
+def source_provider_admin_user(source_provider_data, mtv_namespace, local_ocp_admin_client):
     if vmware_provider(provider_data=source_provider_data):
         with create_source_provider(
             config=py_config,
             source_provider_data=source_provider_data,
             mtv_namespace=mtv_namespace,
-            admin_client=admin_client,
+            admin_client=local_ocp_admin_client,
             username=source_provider_data["admin_username"],
             password=source_provider_data["admin_password"],
         ) as source_provider_object:
@@ -337,13 +349,13 @@ def source_provider_admin_user(source_provider_data, mtv_namespace, admin_client
 
 
 @pytest.fixture(scope="session")
-def source_provider_non_admin_user(source_provider_data, mtv_namespace, admin_client):
+def source_provider_non_admin_user(source_provider_data, mtv_namespace, local_ocp_admin_client):
     if vmware_provider(provider_data=source_provider_data):
         with create_source_provider(
             config=py_config,
             source_provider_data=source_provider_data,
             mtv_namespace=mtv_namespace,
-            admin_client=admin_client,
+            admin_client=local_ocp_admin_client,
             username=source_provider_data["non_admin_username"],
             password=source_provider_data["non_admin_password"],
         ) as source_provider_object:
@@ -358,13 +370,13 @@ def source_provider_non_admin_user(source_provider_data, mtv_namespace, admin_cl
 
 
 @pytest.fixture(scope="session")
-def multus_network_name(dyn_client, admin_client):
+def multus_network_name(remote_ocp_admin_client, local_ocp_admin_client):
     nad_name: str = ""
     nads: list[NetworkAttachmentDefinition] = []
-    clients: list[DynamicClient] = [dyn_client]
+    clients: list[DynamicClient] = [remote_ocp_admin_client]
     target_namespace = py_config["target_namespace"]
     if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        clients.append(admin_client)
+        clients.append(local_ocp_admin_client)
 
     for client in clients:
         nad = NetworkAttachmentDefinition(
@@ -384,11 +396,11 @@ def multus_network_name(dyn_client, admin_client):
 
 @pytest.fixture(scope="session")
 def network_migration_map_pod_only(
-    source_provider, source_provider_data, destination_provider, mtv_namespace, admin_client
+    source_provider, source_provider_data, destination_provider, mtv_namespace, local_ocp_admin_client
 ):
     network_map_list = gen_network_map_list(config=py_config, source_provider_data=source_provider_data, pod_only=True)
     yield create_ocp_resource_if_not_exists(
-        dyn_client=admin_client,
+        dyn_client=local_ocp_admin_client,
         resource=NetworkMap,
         name=f"{source_provider.ocp_resources.name}-{destination_provider.ocp_resources.name}-network-map-pod",
         namespace=mtv_namespace,
@@ -402,11 +414,16 @@ def network_migration_map_pod_only(
 
 @pytest.fixture(scope="session")
 def network_migration_map(
-    source_provider, source_provider_data, destination_provider, multus_network_name, mtv_namespace, admin_client
+    source_provider,
+    source_provider_data,
+    destination_provider,
+    multus_network_name,
+    mtv_namespace,
+    local_ocp_admin_client,
 ):
     network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
     yield create_ocp_resource_if_not_exists(
-        dyn_client=admin_client,
+        dyn_client=local_ocp_admin_client,
         resource=NetworkMap,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
         namespace=mtv_namespace,
@@ -420,7 +437,7 @@ def network_migration_map(
 
 @pytest.fixture(scope="session")
 def storage_migration_map(
-    source_provider, source_provider_data, destination_provider, module_uuid, mtv_namespace, admin_client
+    source_provider, source_provider_data, destination_provider, session_uuid, mtv_namespace, local_ocp_admin_client
 ):
     storage_map_list = []
     for storage in source_provider_data["storages"]:
@@ -429,7 +446,7 @@ def storage_migration_map(
             "source": storage,
         })
     yield create_ocp_resource_if_not_exists(
-        dyn_client=admin_client,
+        dyn_client=local_ocp_admin_client,
         resource=StorageMap,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
         namespace=mtv_namespace,
@@ -443,7 +460,7 @@ def storage_migration_map(
 
 @pytest.fixture(scope="session")
 def storage_migration_map_default_settings(
-    source_provider, source_provider_data, destination_provider, module_uuid, mtv_namespace, admin_client
+    source_provider, source_provider_data, destination_provider, session_uuid, mtv_namespace, local_ocp_admin_client
 ):
     storage_map_list = []
     for storage in source_provider_data["storages"]:
@@ -456,7 +473,7 @@ def storage_migration_map_default_settings(
             "source": storage,
         })
     yield create_ocp_resource_if_not_exists(
-        dyn_client=admin_client,
+        dyn_client=local_ocp_admin_client,
         resource=StorageMap,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
         f"-storage-map-default-settings",
@@ -476,12 +493,12 @@ def network_migration_map_source_admin(
     destination_provider,
     multus_network_name,
     mtv_namespace,
-    admin_client,
+    local_ocp_admin_client,
 ):
     if vmware_provider(provider_data=source_provider_data):
         network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
         yield create_ocp_resource_if_not_exists(
-            dyn_client=admin_client,
+            dyn_client=local_ocp_admin_client,
             resource=NetworkMap,
             name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
             namespace=mtv_namespace,
@@ -497,7 +514,12 @@ def network_migration_map_source_admin(
 
 @pytest.fixture(scope="session")
 def storage_migration_map_source_admin(
-    source_provider_admin_user, source_provider_data, destination_provider, module_uuid, mtv_namespace, admin_client
+    source_provider_admin_user,
+    source_provider_data,
+    destination_provider,
+    session_uuid,
+    mtv_namespace,
+    local_ocp_admin_client,
 ):
     if vmware_provider(provider_data=source_provider_data):
         storage_map_list = []
@@ -508,7 +530,7 @@ def storage_migration_map_source_admin(
                 "source": {"name": item},
             })
         yield create_ocp_resource_if_not_exists(
-            dyn_client=admin_client,
+            dyn_client=local_ocp_admin_client,
             resource=StorageMap,
             name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
             f"-storage-map",
@@ -530,12 +552,12 @@ def network_migration_map_source_non_admin(
     destination_provider,
     multus_network_name,
     mtv_namespace,
-    admin_client,
+    local_ocp_admin_client,
 ):
     if vmware_provider(provider_data=source_provider_data):
         network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
         yield create_ocp_resource_if_not_exists(
-            dyn_client=admin_client,
+            dyn_client=local_ocp_admin_client,
             resource=NetworkMap,
             name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
             namespace=mtv_namespace,
@@ -551,7 +573,12 @@ def network_migration_map_source_non_admin(
 
 @pytest.fixture(scope="session")
 def storage_migration_map_source_non_admin(
-    source_provider_non_admin_user, source_provider_data, destination_provider, module_uuid, mtv_namespace, admin_client
+    source_provider_non_admin_user,
+    source_provider_data,
+    destination_provider,
+    session_uuid,
+    mtv_namespace,
+    local_ocp_admin_client,
 ):
     if vmware_provider(provider_data=source_provider_data):
         storage_map_list = []
@@ -562,7 +589,7 @@ def storage_migration_map_source_non_admin(
                 "source": {"name": item},
             })
         yield create_ocp_resource_if_not_exists(
-            dyn_client=admin_client,
+            dyn_client=local_ocp_admin_client,
             resource=StorageMap,
             name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
             f"-storage-map",
@@ -599,13 +626,13 @@ def plans_scale(source_provider):
 
 
 @pytest.fixture(scope="session")
-def destination_ocp_secret(dyn_client, module_uuid, mtv_namespace):
-    api_key = dyn_client.configuration.api_key.get("authorization")
+def destination_ocp_secret(remote_ocp_admin_client, session_uuid, mtv_namespace):
+    api_key = remote_ocp_admin_client.configuration.api_key.get("authorization")
     if not api_key:
         raise ValueError("API key not found in configuration, please login with `oc login` first")
 
     with Secret(
-        name=f"{module_uuid}-ocp-secret",
+        name=f"{session_uuid}-ocp-secret",
         namespace=mtv_namespace,
         # API key format: 'Bearer sha256~<token>', split it to get token.
         string_data={"token": api_key.split()[-1], "insecureSkipVerify": "true"},
@@ -614,14 +641,14 @@ def destination_ocp_secret(dyn_client, module_uuid, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def destination_ocp_provider(destination_ocp_secret, dyn_client, module_uuid, mtv_namespace):
-    provider_name = f"{module_uuid}-ocp-provider"
+def destination_ocp_provider(destination_ocp_secret, remote_ocp_admin_client, session_uuid, mtv_namespace):
+    provider_name = f"{session_uuid}-ocp-provider"
     with Provider(
         name=provider_name,
         namespace=mtv_namespace,
         secret_name=destination_ocp_secret.name,
         secret_namespace=destination_ocp_secret.namespace,
-        url=dyn_client.configuration.host,
+        url=remote_ocp_admin_client.configuration.host,
         provider_type=Provider.ProviderType.OPENSHIFT,
     ) as ocp_resource_provider:
         yield CNVProvider(ocp_resource=ocp_resource_provider)
@@ -629,11 +656,11 @@ def destination_ocp_provider(destination_ocp_secret, dyn_client, module_uuid, mt
 
 @pytest.fixture(scope="session")
 def remote_network_migration_map(
-    source_provider, source_provider_data, destination_ocp_provider, module_uuid, multus_network_name, mtv_namespace
+    source_provider, source_provider_data, destination_ocp_provider, session_uuid, multus_network_name, mtv_namespace
 ):
     network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
     with NetworkMap(
-        name=f"{module_uuid}-networkmap",
+        name=f"{session_uuid}-networkmap",
         namespace=mtv_namespace,
         mapping=network_map_list,
         source_provider_name=source_provider.ocp_resource.name,
@@ -646,19 +673,19 @@ def remote_network_migration_map(
 
 @pytest.fixture(scope="session")
 def remote_storage_migration_map(
-    source_provider, source_provider_data, destination_ocp_provider, module_uuid, mtv_namespace, admin_client
+    source_provider, source_provider_data, destination_ocp_provider, session_uuid, mtv_namespace, local_ocp_admin_client
 ):
     storage_map_list = []
     for storage in source_provider_data["storages"]:
         if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-            storage_class = next(StorageClass.get(name=storage["name"], dyn_client=admin_client))
+            storage_class = next(StorageClass.get(name=storage["name"], remote_ocp_admin_client=local_ocp_admin_client))
             storage.update({"id": storage_class.instance.metadata.uid})
         storage_map_list.append({
             "destination": {"storageClass": py_config["storage_class"]},
             "source": storage,
         })
     with StorageMap(
-        name=f"{module_uuid}-storagemap",
+        name=f"{session_uuid}-storagemap",
         namespace=mtv_namespace,
         mapping=storage_map_list,
         source_provider_name=source_provider.ocp_resource.name,
@@ -685,7 +712,7 @@ def plans_set():
 
 
 @pytest.fixture(scope="session")
-def source_provider_host_secret(source_provider, source_provider_data, mtv_namespace, admin_client):
+def source_provider_host_secret(source_provider, source_provider_data, mtv_namespace, local_ocp_admin_client):
     if source_provider_data.get("host_list"):
         host = source_provider_data["host_list"][0]
         name = f"{source_provider_data['fqdn']}-{host['migration_host_ip']}-{host['migration_host_id']}"
@@ -694,7 +721,7 @@ def source_provider_host_secret(source_provider, source_provider_data, mtv_names
             "password": host["password"],
         }
         return create_ocp_resource_if_not_exists(
-            dyn_client=admin_client,
+            dyn_client=local_ocp_admin_client,
             resource=Secret,
             name=name.replace(".", "-"),
             namespace=mtv_namespace,
@@ -704,12 +731,12 @@ def source_provider_host_secret(source_provider, source_provider_data, mtv_names
 
 @pytest.fixture(scope="session")
 def source_provider_host(
-    source_provider, source_provider_data, mtv_namespace, source_provider_host_secret, admin_client
+    source_provider, source_provider_data, mtv_namespace, source_provider_host_secret, local_ocp_admin_client
 ):
     if source_provider_data.get("host_list"):
         host = source_provider_data["host_list"][0]
         return create_ocp_resource_if_not_exists(
-            dyn_client=admin_client,
+            dyn_client=local_ocp_admin_client,
             resource=Host,
             name=f"{source_provider_data['fqdn']}-{host['migration_host_ip']}-{host['migration_host_id']}",
             namespace=mtv_namespace,
@@ -723,9 +750,9 @@ def source_provider_host(
 
 
 @pytest.fixture(scope="session")
-def prehook(admin_client, mtv_namespace):
+def prehook(local_ocp_admin_client, mtv_namespace):
     return create_ocp_resource_if_not_exists(
-        dyn_client=admin_client,
+        dyn_client=local_ocp_admin_client,
         resource=Hook,
         name=py_config["hook_dict"]["prehook"]["name"],
         namespace=mtv_namespace,
@@ -734,9 +761,9 @@ def prehook(admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def posthook(admin_client, mtv_namespace):
+def posthook(local_ocp_admin_client, mtv_namespace):
     return create_ocp_resource_if_not_exists(
-        dyn_client=admin_client,
+        dyn_client=local_ocp_admin_client,
         resource=Hook,
         name=py_config["hook_dict"]["posthook"]["name"],
         namespace=mtv_namespace,
@@ -757,7 +784,7 @@ def skip_if_no_rhv(source_provider_data):
 
 
 @pytest.fixture(scope="function")
-def plans(dyn_client, admin_client, source_provider_data, source_provider, request):
+def plans(remote_ocp_admin_client, local_ocp_admin_client, source_provider_data, source_provider, request):
     plan = request.param[0]
     virtual_machines = plan["virtual_machines"]
     vm_names_list = [v["name"] for v in virtual_machines]
@@ -767,7 +794,7 @@ def plans(dyn_client, admin_client, source_provider_data, source_provider, reque
 
         for vm in virtual_machines:
             if openshift_source_provider:
-                create_source_cnv_vm(admin_client, vm["name"])
+                create_source_cnv_vm(local_ocp_admin_client, vm["name"])
 
             source_vm_details = source_provider.vm_dict(
                 name=vm["name"], namespace=py_config["target_namespace"], source=True
@@ -812,9 +839,13 @@ def plans(dyn_client, admin_client, source_provider_data, source_provider, reque
     ):
         for vm in virtual_machines:
             next(
-                VirtualMachine.get(dyn_client=dyn_client, name=vm["name"], namespace=py_config["target_namespace"])
+                VirtualMachine.get(
+                    remote_ocp_admin_client=remote_ocp_admin_client,
+                    name=vm["name"],
+                    namespace=py_config["target_namespace"],
+                )
             ).delete(wait=True)
-        for pod in Pod.get(dyn_client=dyn_client, namespace=py_config["target_namespace"]):
+        for pod in Pod.get(remote_ocp_admin_client=remote_ocp_admin_client, namespace=py_config["target_namespace"]):
             if plan["name"] in pod.name:
                 try:
                     pod.delete(wait=True)
