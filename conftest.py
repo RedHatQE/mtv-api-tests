@@ -211,7 +211,7 @@ def ocp_admin_client(tmp_path_factory):
         yield get_client(config_file=str(remote_kubeconfig_tmp_file))
     else:
         logging.info(msg="Creating local OCP admin Client")
-        return get_client()
+        yield get_client()
 
 
 @pytest.fixture(scope="session")
