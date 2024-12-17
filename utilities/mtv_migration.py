@@ -1,22 +1,22 @@
+from typing import Any, Generator
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-import pytz
 
+import pytz
 from ocp_resources.migration import Migration
-from ocp_resources.plan import Plan
 from ocp_resources.mtv import MTV
-from ocp_resources.resource import Resource, ResourceEditor
+from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
+from ocp_resources.resource import Resource, ResourceEditor
+from pytest_testconfig import py_config
+
+from report import create_migration_scale_report
 from utilities.post_migration import check_vms
 from utilities.utils import is_true
-from pytest_testconfig import py_config
-from report import create_migration_scale_report
-
-mtv_namespace = py_config["mtv_namespace"]
 
 
-def get_cutover_value(current_cutover=None):
+def get_cutover_value(current_cutover: bool = False) -> datetime:
     datetime_utc = datetime.now(pytz.utc)
     if current_cutover:
         return datetime_utc
@@ -24,7 +24,7 @@ def get_cutover_value(current_cutover=None):
         return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))
 
 
-def run_cut_over(migration):
+def run_cut_over(migration: Migration) -> None:
     ResourceEditor(
         patches={
             migration: {
@@ -53,7 +53,7 @@ def migrate_vms(
     condition_message=MTV.ConditionMessage.PLAN_SUCCEEDED,
     condition_status=Resource.Condition.Status.TRUE,
     condition_type=MTV.ConditionType.SUCCEEDED,
-):
+) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
     if not is_true(py_config.get("skip_migration")):
@@ -70,7 +70,7 @@ def migrate_vms(
 
         with run_migration(
             name=plan_name,
-            namespace=mtv_namespace,
+            namespace=py_config["mtv_namespace"],
             virtual_machines_list=virtual_machines_list,
             warm_migration=plan_warm_migration or bool(py_config["warm_migration"]),
             source_provider_name=source_provider.ocp_resource.name,
@@ -99,7 +99,8 @@ def migrate_vms(
                     vm_names_list=[v["name"] for v in plans[0]["virtual_machines"]],
                     number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
                 )
-                run_cut_over(migration=migration)
+                if migration:
+                    run_cut_over(migration=migration)
 
         if migration:
             plan.wait_for_resource_status(
@@ -151,7 +152,7 @@ def run_migration(
     condition_category,
     condition_status,
     condition_type,
-):
+) -> Generator[tuple[Plan, Migration | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
