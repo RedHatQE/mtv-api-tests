@@ -813,7 +813,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
     { name = "humanfriendly", specifier = ">=10.0" },
     { name = "openshift", specifier = ">=0.13.2" },
-    { name = "openshift-python-wrapper", directory = "../openshift-python-wrapper" },
+    { name = "openshift-python-wrapper", specifier = ">=11.0.10" },
     { name = "openstacksdk", specifier = ">=4.0.0" },
     { name = "ovirt-python-sdk", specifier = ">=1.2.0" },
     { name = "pytest", specifier = ">=8.3.3" },
@@ -867,8 +867,8 @@ wheels = [
 
 [[package]]
 name = "openshift-python-wrapper"
-version = "11.0.9"
-source = { directory = "../openshift-python-wrapper" }
+version = "11.0.10"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "cloup" },
@@ -889,34 +889,7 @@ dependencies = [
     { name = "timeout-sampler" },
     { name = "xmltodict" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.1.7" },
-    { name = "cloup", specifier = ">=3.0.5" },
-    { name = "colorlog", specifier = ">=6.8.2" },
-    { name = "deepdiff", specifier = ">=8.0.1" },
-    { name = "jinja2", specifier = ">=3.1.4" },
-    { name = "kubernetes", specifier = ">=31.0.0" },
-    { name = "packaging", specifier = ">=24.1" },
-    { name = "pyhelper-utils", specifier = ">=0.0.42" },
-    { name = "pytest", specifier = ">=8.3.3" },
-    { name = "pytest-cov", specifier = ">=6.0.0" },
-    { name = "python-benedict", specifier = ">=0.33.2" },
-    { name = "python-simple-logger", specifier = ">=1.0.40" },
-    { name = "requests", specifier = ">=2.32.3" },
-    { name = "rich", specifier = ">=13.9.2" },
-    { name = "ruff", specifier = ">=0.6.9" },
-    { name = "testcontainers", specifier = ">=4.9.0" },
-    { name = "timeout-sampler", specifier = ">=0.0.46" },
-    { name = "xmltodict", specifier = ">=0.13.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "ipdb", specifier = ">=0.13.13" },
-    { name = "ipython", specifier = ">=8.12.3" },
-]
+sdist = { url = "https://files.pythonhosted.org/packages/25/75/2364cf7ea67c0a646c9e2dbf317658c32c835a790c61224d852fd252eb82/openshift_python_wrapper-11.0.10.tar.gz", hash = "sha256:98156d992f05fca10cd4b095f6227bf726621acf3204b85600c5e54e927ea8d1", size = 6489974 }
 
 [[package]]
 name = "openstacksdk"
