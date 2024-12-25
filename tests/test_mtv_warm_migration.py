@@ -39,6 +39,7 @@ if py_config["matrix_test"]:
     ids=["rhel8"],
 )
 def test_sanity_warm_mtv_migration(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -55,6 +56,7 @@ def test_sanity_warm_mtv_migration(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )
 
 
@@ -82,6 +84,7 @@ def test_sanity_warm_mtv_migration(
     ids=["MTV-200 rhel"],
 )
 def test_mtv_migration_warm_2disks2nics(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -98,6 +101,7 @@ def test_mtv_migration_warm_2disks2nics(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )
 
 
@@ -125,6 +129,7 @@ def test_mtv_migration_warm_2disks2nics(
 )
 @pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_warm_remote_ocp(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -141,4 +146,5 @@ def test_warm_remote_ocp(
         storage_migration_map=remote_storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )

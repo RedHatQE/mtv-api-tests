@@ -30,6 +30,7 @@ if py_config["matrix_test"]:
 )
 @pytest.mark.tier0
 def test_sanity_cold_mtv_migration(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -44,6 +45,7 @@ def test_sanity_cold_mtv_migration(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -72,6 +74,7 @@ def test_sanity_cold_mtv_migration(
 )
 @pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_cold_remote_ocp(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -86,4 +89,5 @@ def test_cold_remote_ocp(
         network_migration_map=remote_network_migration_map,
         storage_migration_map=remote_storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )

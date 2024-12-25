@@ -3,9 +3,9 @@ import copy
 from typing import Any
 
 from ocp_resources.exceptions import MissingResourceResError
+from ocp_resources.resource import Resource
 from timeout_sampler import TimeoutSampler, TimeoutExpiredError
 
-from ocp_resources.mtv import MTV
 from pyVmomi import vim
 
 import re
@@ -56,15 +56,15 @@ class VMWareProvider(BaseProvider):
 
         return view_manager
 
-    def vms(self, query: str = "") -> list[Any]:
+    def vms(self, query: str = "") -> list[vim.VirtualMachine]:
         view_manager = self.get_view_manager()
 
         container_view = view_manager.CreateContainerView(
             container=self.datacenters[0].vmFolder, type=[vim.VirtualMachine], recursive=True
         )
-        vms = [vm for vm in container_view.view]  # type: ignore
+        vms: list[vim.VirtualMachine] = [vm for vm in container_view.view]  # type: ignore
 
-        result = []
+        result: list[vim.VirtualMachine] = []
         if not query:
             return vms
 
@@ -318,7 +318,7 @@ class VMWareProvider(BaseProvider):
         vm_name = xargs["name"]
         source_vm = self.vms(query=f"^{vm_name}$")[0]
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
-        result_vm_info["provider_type"] = MTV.ProviderType.VSPHERE
+        result_vm_info["provider_type"] = Resource.ProviderType.VSPHERE
         result_vm_info["provider_vm_api"] = source_vm
         result_vm_info["name"] = xargs["name"]
 

@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 
 import pytz
 from ocp_resources.migration import Migration
-from ocp_resources.mtv import MTV
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
@@ -42,7 +41,7 @@ def migrate_vms(
     network_migration_map,
     storage_migration_map,
     source_provider_data,
-    target_name_space=py_config["target_namespace"],
+    target_namespace,
     source_provider_host=None,
     cut_over=None,
     pre_hook_name=None,
@@ -50,10 +49,8 @@ def migrate_vms(
     after_hook_name=None,
     after_hook_namespace=None,
     expected_plan_ready=True,
-    condition_category=None,
-    condition_message=MTV.ConditionMessage.PLAN_SUCCEEDED,
     condition_status=Resource.Condition.Status.TRUE,
-    condition_type=MTV.ConditionType.SUCCEEDED,
+    condition_type=Resource.Status.SUCCEEDED,
 ) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
@@ -65,7 +62,7 @@ def migrate_vms(
         virtual_machines_list = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
         if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
             for i in range(len(virtual_machines_list)):
-                virtual_machines_list[i].update({"namespace": py_config["target_namespace"]})
+                virtual_machines_list[i].update({"namespace": target_namespace})
 
         plan_warm_migration = plans[0].get("warm_migration")
 
@@ -82,7 +79,7 @@ def migrate_vms(
             network_map_namespace=network_migration_map.namespace,
             storage_map_name=storage_migration_map.name,
             storage_map_namespace=storage_migration_map.namespace,
-            target_namespace=target_name_space,
+            target_namespace=target_namespace,
             pre_hook_name=pre_hook_name,
             pre_hook_namespace=pre_hook_namespace,
             after_hook_name=after_hook_name,
@@ -90,7 +87,6 @@ def migrate_vms(
             teardown=False,
             cut_over=cut_over,
             expected_plan_ready=expected_plan_ready,
-            condition_category=condition_category,
             condition_status=condition_status,
             condition_type=condition_type,
         ) as (plan, migration):
@@ -104,11 +100,10 @@ def migrate_vms(
                     run_cut_over(migration=migration)
 
         if migration:
-            plan.wait_for_resource_status(
-                condition_message=condition_message,
-                condition_status=condition_status,
-                condition_type=condition_type,
-                wait_timeout=int(py_config.get("plan_wait_timeout", 600)),
+            plan.wait_for_condition(
+                status=condition_status,
+                condition=condition_type,
+                timeout=int(py_config.get("plan_wait_timeout", 600)),
             )
 
             if is_true(py_config.get("create_scale_report")):
@@ -121,10 +116,11 @@ def migrate_vms(
                 source_provider=source_provider,
                 source_provider_data=source_provider_data,
                 destination_provider=destination_provider,
-                destination_namespace=target_name_space,
+                destination_namespace=target_namespace,
                 network_map_resource=network_migration_map,
                 storage_map_resource=storage_migration_map,
                 source_provider_host=source_provider_host,
+                target_namespace=target_namespace,
             )
 
 
@@ -150,7 +146,6 @@ def run_migration(
     teardown,
     cut_over,
     expected_plan_ready,
-    condition_category,
     condition_status,
     condition_type,
 ) -> Generator[tuple[Plan, Migration | None], Any, Any]:
@@ -202,12 +197,10 @@ def run_migration(
         teardown=teardown,
     ) as plan:
         if not expected_plan_ready:
-            plan.wait_for_resource_status(
-                condition_category=condition_category, condition_status=condition_status, condition_type=condition_type
-            )
+            plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
             yield plan, None
         else:
-            plan.wait_for_condition_ready()
+            plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
             with Migration(
                 name=f"{name}-migration",
                 namespace=namespace,

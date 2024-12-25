@@ -179,7 +179,7 @@ hook_dict = {
 storage_clas = "nfs"
 source_provider_type = "vsphere"
 source_provider_version = "7.0.3"
-insecure_verify_skip = "false"
+insecure_verify_skip = "true"
 number_of_vms = 1
 warm_migration = False
 check_vms_signals = True
@@ -195,7 +195,7 @@ mins_before_cutover = 5
 skip_migration = False
 plan_wait_timeout = 3000
 clean_target_resources = True
-matrix_test = False
+matrix_test = True
 mount_root = ""
 
 for _dir in dir():

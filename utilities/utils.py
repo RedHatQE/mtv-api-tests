@@ -1,4 +1,3 @@
-from pytest_testconfig import py_config
 import shortuuid
 from contextlib import contextmanager
 import copy
@@ -279,8 +278,7 @@ def start_source_vm_data_upload_vmware(provider_data, vm_names_list):
         vmware_provider.disconnect()
 
 
-def create_source_cnv_vm(dyn_client, vm_name):
-    namespace = py_config["target_namespace"]
+def create_source_cnv_vm(dyn_client, vm_name, namespace):
     vm_file = f"{vm_name}.yaml"
     shutil.copyfile("tests/manifests/cnv-vm.yaml", vm_file)
 
@@ -293,9 +291,9 @@ def create_source_cnv_vm(dyn_client, vm_name):
     with open(vm_file, "w") as fd:
         fd.write(content)
 
-    cnv_vm = create_ocp_resource_if_not_exists(
-        resource=VirtualMachine, dyn_client=dyn_client, yaml_file=vm_file, namespace=namespace
-    )
+    cnv_vm = VirtualMachine(client=dyn_client, yaml_file=vm_file, namespace=namespace)
+    if not cnv_vm.exists:
+        cnv_vm.deploy(wait=True)
 
     if not cnv_vm.ready:
         cnv_vm.start(wait=True)

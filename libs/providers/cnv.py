@@ -1,6 +1,5 @@
 from __future__ import annotations
 import copy
-from ocp_resources.mtv import MTV
 
 from time import sleep
 from typing import Any
@@ -109,10 +108,9 @@ class CNVProvider(BaseProvider):
         cnv_vm_namespace = xargs["namespace"]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
-        result_vm_info["provider_type"] = MTV.ProviderType.OPENSHIFT
+        result_vm_info["provider_type"] = Resource.ProviderType.OPENSHIFT
         result_vm_info["name"] = cnv_vm_name
 
-        # keeping a ref to the SDK vm object
         cnv_vm = VirtualMachine(
             client=dynamic_client,
             name=cnv_vm_name,
@@ -155,20 +153,18 @@ class CNVProvider(BaseProvider):
                     continue
                 else:
                     name = pvc.dataVolume.name
-            _pvc = next(
-                PersistentVolumeClaim.get(
-                    namespace=cnv_vm.namespace,
-                    name=name,
-                    dyn_client=dynamic_client,
-                )
+
+            _pvc = PersistentVolumeClaim(
+                namespace=cnv_vm.namespace,
+                name=name,
+                client=dynamic_client,
             )
             result_vm_info["disks"].append({
                 "name": _pvc.name,
                 "size_in_kb": int(
                     humanfriendly.parse_size(_pvc.instance.spec.resources.requests.storage, binary=True) / 1024
                 ),
-                "storage": dict(name=_pvc.instance.spec.storageClassName, access_mode=_pvc.instance.spec.accessModes),
-                # "vddk_url": _dv.instance.spec.source.vddk.url if _dv.instance.spec.source.vddk else None
+                "storage": {"name": _pvc.instance.spec.storageClassName, "access_mode": _pvc.instance.spec.accessModes},
             })
 
         result_vm_info["cpu"]["num_cores"] = cnv_vm.instance.spec.template.spec.domain.cpu.cores

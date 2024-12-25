@@ -1,8 +1,8 @@
 import subprocess
 
 import pytest as pytest
+from ocp_resources.resource import Resource
 from pytest_testconfig import py_config
-from ocp_resources.mtv import MTV
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.plan import Plan
 from report import create_migration_scale_report
@@ -36,6 +36,7 @@ if py_config["matrix_test"]:
 )
 @pytest.mark.tier0
 def test_sanity_cold_mtv_migration(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -50,6 +51,7 @@ def test_sanity_cold_mtv_migration(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -114,6 +116,7 @@ def test_sanity_cold_mtv_migration(
 )
 @pytest.mark.tier1
 def test_mtv_migration(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -128,6 +131,7 @@ def test_mtv_migration(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -153,6 +157,7 @@ def test_mtv_migration(
 )
 @pytest.mark.tier2
 def test_mtv_migration_with_hooks(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -173,6 +178,7 @@ def test_mtv_migration_with_hooks(
         pre_hook_namespace=prehook.namespace,
         after_hook_name=posthook.name,
         after_hook_namespace=posthook.namespace,
+        target_namespace=target_namespace,
     )
 
 
@@ -197,6 +203,7 @@ def test_mtv_migration_with_hooks(
     ids=["MTV-102"],
 )
 def test_mtv_migration_no_nics(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -211,6 +218,7 @@ def test_mtv_migration_no_nics(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -236,6 +244,7 @@ def test_mtv_migration_no_nics(
 )
 def test_mtv_migration_migratable(
     skip_if_no_rhv,  # Reason: Related to 'Host->Migration mode' setting that can be set on RHV
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -250,6 +259,7 @@ def test_mtv_migration_migratable(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -276,6 +286,7 @@ def test_mtv_migration_migratable(
 )
 @pytest.mark.tier2
 def test_mtv_migration_non_utc(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -290,6 +301,7 @@ def test_mtv_migration_non_utc(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -318,6 +330,7 @@ def test_mtv_migration_non_utc(
 )
 @pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_cold_remote_ocp(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -332,11 +345,13 @@ def test_cold_remote_ocp(
         network_migration_map=remote_network_migration_map,
         storage_migration_map=remote_storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
 @pytest.mark.scale
 def test_mtv_migration_scale(
+    target_namespace,
     plans_scale,
     source_provider,
     source_provider_data,
@@ -351,6 +366,7 @@ def test_mtv_migration_scale(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -378,6 +394,7 @@ def test_mtv_migration_scale(
     indirect=True,
 )
 def test_mtv_migration_interop(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -392,11 +409,13 @@ def test_mtv_migration_interop(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
 @pytest.mark.set
 def test_mtv_migration_set(
+    target_namespace,
     plans_set,
     source_provider,
     source_provider_data,
@@ -411,6 +430,7 @@ def test_mtv_migration_set(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -453,6 +473,7 @@ def test_create_all_providers(source_providers):
 )
 def test_mtv_migration_vmware_network_selection(
     skip_if_no_vmware,
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -469,6 +490,7 @@ def test_mtv_migration_vmware_network_selection(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         source_provider_host=source_provider_host,
+        target_namespace=target_namespace,
     )
 
 
@@ -495,6 +517,7 @@ def test_mtv_migration_vmware_network_selection(
 @pytest.mark.source_admin
 def test_cold_source_provider_admin_user(
     skip_if_no_vmware,
+    target_namespace,
     plans,
     source_provider_data,
     source_provider_admin_user,
@@ -509,6 +532,7 @@ def test_cold_source_provider_admin_user(
         network_migration_map=network_migration_map_source_admin,
         storage_migration_map=storage_migration_map_source_admin,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -544,6 +568,7 @@ def test_external_ingress_cert_mtv_348(restore_ingress_certificate):
 )
 def test_customer_case_bz_2064936(
     skip_if_no_vmware,
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -558,6 +583,7 @@ def test_customer_case_bz_2064936(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map_default_settings,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -585,6 +611,7 @@ def test_customer_case_bz_2064936(
 @pytest.mark.negative
 def test_negative_non_compatible_source_vm_name(
     skip_if_no_rhv,  # In order to save time, test does not depend on provider.
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -600,8 +627,8 @@ def test_negative_non_compatible_source_vm_name(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         expected_plan_ready=False,
-        condition_category=MTV.ConditionCategory.CRITICAL,
-        condition_type=MTV.ConditionType.TARGET_NAME_NOT_VALID,
+        condition_type=Resource.Condition.Status.TARGET_NAME_NOT_VALID,
+        target_namespace=target_namespace,
     )
 
 
@@ -620,7 +647,7 @@ def test_negative_non_compatible_source_vm_name(
                     "check_vms_signals": False,
                     "expected_plan_ready": True,
                     "condition_category": None,
-                    "condition_type": MTV.ConditionType.SUCCEEDED,
+                    "condition_type": Resource.Status.SUCCEEDED,
                 }
             ],
         ),
@@ -635,8 +662,7 @@ def test_negative_non_compatible_source_vm_name(
                     "warm_migration": False,
                     "check_vms_signals": False,
                     "expected_plan_ready": False,
-                    "condition_category": MTV.ConditionCategory.CRITICAL,
-                    "condition_type": MTV.ConditionType.VM_ALREADY_EXISTS,
+                    "condition_type": Resource.Status.VM_ALREADY_EXISTS,
                 }
             ],
         ),
@@ -648,6 +674,7 @@ def test_negative_non_compatible_source_vm_name(
 @pytest.mark.negative
 def test_negative_same_source_vm(
     skip_if_no_rhv,  # In order to save time, test does not depend on provider.
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -666,8 +693,9 @@ def test_negative_same_source_vm(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         expected_plan_ready=plans[0]["expected_plan_ready"],
-        condition_category=plans[0]["condition_category"],
+        condition_status=plans[0]["condition_category"],
         condition_type=plans[0]["condition_type"],
+        target_namespace=target_namespace,
     )
 
 
@@ -690,6 +718,7 @@ def test_negative_same_source_vm(
 )
 @pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_cold_ocp_to_ocp(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -704,6 +733,7 @@ def test_cold_ocp_to_ocp(
         network_migration_map=remote_network_migration_map,
         storage_migration_map=remote_storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -729,6 +759,7 @@ def test_cold_ocp_to_ocp(
     ids=["MTV-ova"],
 )
 def test_cold_ova(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -743,4 +774,5 @@ def test_cold_ova(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )

@@ -152,12 +152,13 @@ def check_vms(
     storage_map_resource,
     source_provider_host,
     source_provider_data,
+    target_namespace,
 ):
     virtual_machines = plan["virtual_machines"]
 
     for vm in virtual_machines:
         vm_name = vm["name"]
-        source_vm = source_provider.vm_dict(name=vm_name, namespace=py_config["target_namespace"], source=True)
+        source_vm = source_provider.vm_dict(name=vm_name, namespace=target_namespace, source=True)
         vm_guest_agent = vm.get("guest_agent")
         destination_vm = destination_provider.vm_dict(
             wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=destination_namespace

@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import Any
+from ocp_resources.resource import Resource
 import ovirtsdk4
 import copy
 
 
-from ocp_resources.mtv import MTV
 from ovirtsdk4.types import VmStatus
 
 from libs.base_provider import BaseProvider
@@ -137,7 +137,7 @@ class RHVProvider(BaseProvider):
         source_vm = self.vms(search=xargs["name"])[0]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
-        result_vm_info["provider_type"] = MTV.ProviderType.RHV
+        result_vm_info["provider_type"] = Resource.ProviderType.RHV
         result_vm_info["provider_vm_api"] = source_vm
         result_vm_info["name"] = xargs["name"]
 
