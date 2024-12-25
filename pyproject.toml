@@ -31,7 +31,7 @@ dependencies = [
   "click>=8.1.7",
   "humanfriendly>=10.0",
   "openshift>=0.13.2",
-  "openshift-python-wrapper>=10.0.95",
+  "openshift-python-wrapper==11.0.12",
   "openstacksdk>=4.0.0",
   "ovirt-python-sdk>=1.2.0",
   "pytest>=8.3.3",
