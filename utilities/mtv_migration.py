@@ -16,20 +16,6 @@ from report import create_migration_scale_report
 mtv_namespace = config["mtv_namespace"]
 
 
-def get_vm_suffix() -> str:
-    vm_suffix = ""
-    if config["matrix_test"]:
-        storage_name = config["storage_class"]
-        if "ceph-rbd" in storage_name:
-            vm_suffix = "-ceph-rbd"
-        elif "nfs" in storage_name:
-            vm_suffix = "-nfs"
-    if config["release_test"]:
-        ocp_version = config["target_ocp_version"].replace(".", "-")
-        vm_suffix = f"{vm_suffix}-{ocp_version}"
-    return vm_suffix
-
-
 def get_cutover_value(current_cutover=None):
     datetime_utc = datetime.now(pytz.utc)
     if current_cutover:

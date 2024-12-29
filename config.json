@@ -207,7 +207,5 @@
   "plan_wait_timeout": 3000,
   "clean_target_resources": true,
   "matrix_test": false,
-  "release_test": false,
-  "target_ocp_version": "4.17",
   "mount_root": ""
 }
