@@ -20,8 +20,8 @@ def get_cutover_value(current_cutover: bool = False) -> datetime:
     datetime_utc = datetime.now(pytz.utc)
     if current_cutover:
         return datetime_utc
-    else:
-        return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))
+
+    return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))
 
 
 def run_cut_over(migration: Migration) -> None:
@@ -61,8 +61,8 @@ def migrate_vms(
         # Plan CR accepts only VM name/id
         virtual_machines_list = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
         if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-            for i in range(len(virtual_machines_list)):
-                virtual_machines_list[i].update({"namespace": target_namespace})
+            for idx in range(len(virtual_machines_list)):
+                virtual_machines_list[idx].update({"namespace": target_namespace})
 
         plan_warm_migration = plans[0].get("warm_migration")
 
@@ -109,19 +109,18 @@ def migrate_vms(
             if is_true(py_config.get("create_scale_report")):
                 create_migration_scale_report(plan_resource=plan)
 
-    if is_true(py_config.get("check_vms_signals")):
-        if is_true(plans[0].get("check_vms_signals", True)):
-            check_vms(
-                plan=plans[0],
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                destination_provider=destination_provider,
-                destination_namespace=target_namespace,
-                network_map_resource=network_migration_map,
-                storage_map_resource=storage_migration_map,
-                source_provider_host=source_provider_host,
-                target_namespace=target_namespace,
-            )
+    if is_true(py_config.get("check_vms_signals")) and is_true(plans[0].get("check_vms_signals", True)):
+        check_vms(
+            plan=plans[0],
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+            destination_provider=destination_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=network_migration_map,
+            storage_map_resource=storage_migration_map,
+            source_provider_host=source_provider_host,
+            target_namespace=target_namespace,
+        )
 
 
 @contextmanager
@@ -196,10 +195,7 @@ def run_migration(
         after_hook_namespace=after_hook_namespace,
         teardown=teardown,
     ) as plan:
-        if not expected_plan_ready:
-            plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
-            yield plan, None
-        else:
+        if expected_plan_ready:
             plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
             with Migration(
                 name=f"{name}-migration",
@@ -210,3 +206,6 @@ def run_migration(
                 teardown=teardown,
             ) as migration:
                 yield plan, migration
+        else:
+            plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
+            yield plan, None

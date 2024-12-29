@@ -148,7 +148,7 @@ def create_source_provider(
     admin_client: DynamicClient,
     tmp_dir: Optional[pytest.TempPathFactory] = None,
     **kwargs: dict[str, Any],
-) -> Generator[Tuple[BaseProvider, Any, Any], None, None]:
+) -> Generator[Tuple[BaseProvider, Secret | None, Provider | None], None, None]:
     # common
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
