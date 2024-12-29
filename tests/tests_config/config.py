@@ -196,6 +196,8 @@ skip_migration = False
 plan_wait_timeout = 3000
 clean_target_resources = True
 matrix_test = True
+release_test = False
+target_ocp_version = "4.17"
 mount_root = ""
 
 for _dir in dir():

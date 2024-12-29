@@ -209,3 +209,17 @@ def run_migration(
         else:
             plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
             yield plan, None
+
+
+def get_vm_suffix() -> str:
+    vm_suffix = ""
+    if py_config["matrix_test"]:
+        storage_name = py_config["storage_class"]
+        if "ceph-rbd" in storage_name:
+            vm_suffix = "-ceph-rbd"
+        elif "nfs" in storage_name:
+            vm_suffix = "-nfs"
+    if py_config["release_test"]:
+        ocp_version = py_config["target_ocp_version"].replace(".", "-")
+        vm_suffix = f"{vm_suffix}-{ocp_version}"
+    return vm_suffix

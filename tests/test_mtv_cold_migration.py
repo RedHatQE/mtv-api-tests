@@ -1,14 +1,8 @@
 import pytest as pytest
 from pytest_testconfig import py_config
-from utilities.mtv_migration import migrate_vms
+from utilities.mtv_migration import get_vm_suffix, migrate_vms
 
-STORAGE_SUFFIX = ""
-if py_config["matrix_test"]:
-    SC = py_config["storage_class"]
-    if "ceph-rbd" in SC:
-        STORAGE_SUFFIX = "-ceph-rbd"
-    elif "nfs" in SC:
-        STORAGE_SUFFIX = "-nfs"
+VM_SUFFIX = get_vm_suffix()
 
 
 @pytest.mark.parametrize(
@@ -18,7 +12,7 @@ if py_config["matrix_test"]:
             [
                 {
                     "virtual_machines": [
-                        {"name": f"mtv-rhel8-sanity{STORAGE_SUFFIX}", "guest_agent": True},
+                        {"name": f"mtv-rhel8-sanity{VM_SUFFIX}", "guest_agent": True},
                     ],
                     "warm_migration": False,
                 }
@@ -58,9 +52,9 @@ def test_sanity_cold_mtv_migration(
             [
                 {
                     "virtual_machines": [
-                        {"name": f"mtv-rhel8-79{STORAGE_SUFFIX}"},
+                        {"name": f"mtv-rhel8-79{VM_SUFFIX}"},
                         {
-                            "name": f"mtv-win2019-79{STORAGE_SUFFIX}",
+                            "name": f"mtv-win2019-79{VM_SUFFIX}",
                         },
                     ],
                     "warm_migration": False,

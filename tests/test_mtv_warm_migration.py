@@ -1,18 +1,12 @@
 import pytest
 from pytest_testconfig import py_config
 
-from utilities.mtv_migration import migrate_vms, get_cutover_value
+from utilities.mtv_migration import get_vm_suffix, migrate_vms, get_cutover_value
 
 if py_config["source_provider_type"] in ["openstack", "openshift"]:
     pytest.skip("OpenStack/OpenShift warm migration is not supported.", allow_module_level=True)
 
-STORAGE_SUFFIX = ""
-if py_config["matrix_test"]:
-    SC = py_config["storage_class"]
-    if "ceph-rbd" in SC:
-        STORAGE_SUFFIX = "-ceph-rbd"
-    elif "nfs" in SC:
-        STORAGE_SUFFIX = "-nfs"
+VM_SUFFIX = get_vm_suffix()
 
 
 @pytest.mark.tier0
@@ -25,7 +19,7 @@ if py_config["matrix_test"]:
                 {
                     "virtual_machines": [
                         {
-                            "name": f"mtv-rhel8-warm-sanity{STORAGE_SUFFIX}",
+                            "name": f"mtv-rhel8-warm-sanity{VM_SUFFIX}",
                             "source_vm_power": "on",
                             "guest_agent": True,
                         },
@@ -70,7 +64,7 @@ def test_sanity_warm_mtv_migration(
                 {
                     "virtual_machines": [
                         {
-                            "name": f"mtv-rhel8-warm-2disks2nics{STORAGE_SUFFIX}",
+                            "name": f"mtv-rhel8-warm-2disks2nics{VM_SUFFIX}",
                             "source_vm_power": "on",
                             "guest_agent": True,
                         },
@@ -114,7 +108,7 @@ def test_mtv_migration_warm_2disks2nics(
                 {
                     "virtual_machines": [
                         {
-                            "name": f"mtv-rhel8-warm-394{STORAGE_SUFFIX}",
+                            "name": f"mtv-rhel8-warm-394{VM_SUFFIX}",
                             "source_vm_power": "on",
                             "guest_agent": True,
                         },
