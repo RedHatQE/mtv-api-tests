@@ -6,9 +6,15 @@ from ocp_resources.mtv import MTV
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.plan import Plan
 from report import create_migration_scale_report
-from utilities.mtv_migration import test_migration, get_vm_suffix
+from utilities.mtv_migration import test_migration
 
-VM_SUFFIX = get_vm_suffix()
+STORAGE_SUFFIX = ""
+if config["matrix_test"]:
+    SC = config["storage_class"]
+    if "ceph-rbd" in SC:
+        STORAGE_SUFFIX = "-ceph-rbd"
+    elif "nfs" in SC:
+        STORAGE_SUFFIX = "-nfs"
 
 
 @pytest.mark.parametrize(
@@ -18,7 +24,7 @@ VM_SUFFIX = get_vm_suffix()
             [
                 {
                     "virtual_machines": [
-                        {"name": f"mtv-rhel8-sanity{VM_SUFFIX}", "guest_agent": True},
+                        {"name": f"mtv-rhel8-sanity{STORAGE_SUFFIX}", "guest_agent": True},
                     ],
                     "warm_migration": False,
                 }
@@ -295,7 +301,12 @@ def test_mtv_migration_non_utc(
         pytest.param(
             [
                 {
-                    "virtual_machines": [{"name": f"mtv-rhel8-79{VM_SUFFIX}"}, {"name": f"mtv-win2019-79{VM_SUFFIX}"}],
+                    "virtual_machines": [
+                        {"name": f"mtv-rhel8-79{STORAGE_SUFFIX}"},
+                        {
+                            "name": f"mtv-win2019-79{STORAGE_SUFFIX}",
+                        },
+                    ],
                     "warm_migration": False,
                 }
             ],
@@ -668,7 +679,7 @@ def test_negative_same_source_vm(
         pytest.param(
             [
                 {
-                    "virtual_machines": [{"name": f"cnv-rhel9-2disks2nics{VM_SUFFIX}", "source_vm_power": "on"}],
+                    "virtual_machines": [{"name": f"cnv-rhel9-2disks2nics{STORAGE_SUFFIX}", "source_vm_power": "on"}],
                     "warm_migration": False,
                 }
             ],
