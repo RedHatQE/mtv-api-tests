@@ -90,8 +90,8 @@ def background(func):
 
 
 def gen_network_map_list(
-    config: dict[str, Any],
     source_provider_data: dict[str, Any],
+    target_namespace: str,
     multus_network_name: str = "",
     pod_only: bool = False,
 ) -> list[dict[str, dict[str, str]]]:
@@ -99,7 +99,7 @@ def gen_network_map_list(
     _destination_pod: dict[str, str] = {"type": "pod"}
     _destination_multus: dict[str, str] = {
         "name": multus_network_name,
-        "namespace": config["target_namespace"],
+        "namespace": target_namespace,
         "type": "multus",
     }
     _destination: dict[str, str] = _destination_pod

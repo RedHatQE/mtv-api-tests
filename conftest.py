@@ -411,9 +411,11 @@ def multus_network_name(target_namespace, ocp_admin_client):
 
 @pytest.fixture(scope="session")
 def network_migration_map_pod_only(
-    source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client
+    source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client, target_namespace
 ):
-    network_map_list = gen_network_map_list(config=py_config, source_provider_data=source_provider_data, pod_only=True)
+    network_map_list = gen_network_map_list(
+        target_namespace=target_namespace, source_provider_data=source_provider_data, pod_only=True
+    )
     with NetworkMap(
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resources.name}-{destination_provider.ocp_resources.name}-network-map-pod",
@@ -435,8 +437,13 @@ def network_migration_map(
     multus_network_name,
     mtv_namespace,
     ocp_admin_client,
+    target_namespace,
 ):
-    network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
+    network_map_list = gen_network_map_list(
+        target_namespace=target_namespace,
+        source_provider_data=source_provider_data,
+        multus_network_name=multus_network_name,
+    )
     with NetworkMap(
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
@@ -509,9 +516,14 @@ def network_migration_map_source_admin(
     multus_network_name,
     mtv_namespace,
     ocp_admin_client,
+    target_namespace,
 ):
     if vmware_provider(provider_data=source_provider_data):
-        network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
+        network_map_list = gen_network_map_list(
+            target_namespace=target_namespace,
+            source_provider_data=source_provider_data,
+            multus_network_name=multus_network_name,
+        )
         with NetworkMap(
             client=ocp_admin_client,
             name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
@@ -570,9 +582,14 @@ def network_migration_map_source_non_admin(
     multus_network_name,
     mtv_namespace,
     ocp_admin_client,
+    target_namespace,
 ):
     if vmware_provider(provider_data=source_provider_data):
-        network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
+        network_map_list = gen_network_map_list(
+            target_namespace=target_namespace,
+            source_provider_data=source_provider_data,
+            multus_network_name=multus_network_name,
+        )
         with NetworkMap(
             client=ocp_admin_client,
             name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
@@ -675,9 +692,19 @@ def destination_ocp_provider(destination_ocp_secret, ocp_admin_client, session_u
 
 @pytest.fixture(scope="session")
 def remote_network_migration_map(
-    source_provider, source_provider_data, destination_ocp_provider, session_uuid, multus_network_name, mtv_namespace
+    source_provider,
+    source_provider_data,
+    destination_ocp_provider,
+    session_uuid,
+    multus_network_name,
+    mtv_namespace,
+    target_namespace,
 ):
-    network_map_list = gen_network_map_list(py_config, source_provider_data, multus_network_name)
+    network_map_list = gen_network_map_list(
+        target_namespace=target_namespace,
+        source_provider_data=source_provider_data,
+        multus_network_name=multus_network_name,
+    )
     with NetworkMap(
         name=f"{session_uuid}-networkmap",
         namespace=mtv_namespace,
