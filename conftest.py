@@ -135,7 +135,7 @@ def target_namespace(ocp_admin_client):
     target_namespace: str = py_config["target_namespace"]
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs
-    unique_namespace_name = f"{target_namespace}-{shortuuid.uuid()}"[:63]
+    unique_namespace_name = f"{target_namespace}-{shortuuid.uuid()}".lower()[:63]
     clients = [ocp_admin_client]
     if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
         clients.append(ocp_admin_client)
