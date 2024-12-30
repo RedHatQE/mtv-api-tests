@@ -34,20 +34,6 @@ def get_guest_os_credentials(provider_data: dict[str, str], vm_dict: dict[str, s
     return user, password
 
 
-def create_ocp_resource_if_not_exists(dyn_client: DynamicClient, resource: Any, **xargs: Any) -> Any:
-    """
-    Create The Openshift Resource If it does not exists
-    """
-    xargs.update({"client": dyn_client})
-    _resource = resource(**xargs)
-
-    if _resource.exists:
-        return _resource
-
-    _resource.deploy(wait=True)
-    return _resource
-
-
 def vmware_provider(provider_data):
     return provider_data["type"] == Provider.ProviderType.VSPHERE
 
