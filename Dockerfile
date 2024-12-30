@@ -1,6 +1,5 @@
-FROM registry.access.redhat.com/ubi9/python-312:latest
-
-USER root
+FROM quay.io/fedora/fedora:41
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG APP_DIR=/app
 
@@ -29,20 +28,24 @@ WORKDIR ${APP_DIR}
 
 RUN mkdir /cred && mkdir -p ${APP_DIR}/output
 
-COPY utilities  utilities
+COPY utilities utilities
 COPY tests tests
 COPY scripts scripts
 COPY libs libs
-COPY README.md pyproject.toml uv.lock config.json conftest.py pytest.ini report.py ./
+COPY README.md pyproject.toml uv.lock conftest.py pytest.ini report.py ./
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 RUN chmod +x scripts/run-tests.sh
 
-RUN uv sync \
-  && uv export --no-hashes \
-  && find ${APP_DIR}/ -type d -name "__pycache__" -print0 | xargs -0 rm -rfv
+ARG OPENSHIFT_PYTHON_WRAPPER_COMMIT=''
+ARG OPENSHIFT_PYTHON_UTILITIES_COMMIT=''
 
-RUN rm -rf ${APP_DIR}/.cache
+RUN uv sync --locked\
+  && if [ -n "${OPENSHIFT_PYTHON_WRAPPER_COMMIT}" ]; then uv pip install git+https://github.com/RedHatQE/openshift-python-wrapper.git@$OPENSHIFT_PYTHON_WRAPPER_COMMIT; fi \
+  && if [ -n "${OPENSHIFT_PYTHON_UTILITIES_COMMIT}" ]; then uv pip install git+https://github.com/RedHatQE/openshift-python-utilities.git@$OPENSHIFT_PYTHON_UTILITIES_COMMIT; fi \
+  && uv export --no-hashes \
+  && find ${APP_DIR}/ -type d -name "__pycache__" -print0 | xargs -0 rm -rfv \
+  && rm -rf ${APP_DIR}/.cache
 
 CMD ["./scripts/run-tests.sh"]

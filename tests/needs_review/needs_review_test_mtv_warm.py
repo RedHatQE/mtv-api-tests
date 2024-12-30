@@ -1,15 +1,15 @@
 import pytest
-from pytest_testconfig import config
+from pytest_testconfig import py_config
+from ocp_resources.resource import Resource
 
-from ocp_resources.mtv import MTV
-from utilities.mtv_migration import test_migration, get_cutover_value
+from utilities.mtv_migration import migrate_vms, get_cutover_value
 
-if config["source_provider_type"] in ["openstack", "openshift"]:
+if py_config["source_provider_type"] in ["openstack", "openshift"]:
     pytest.skip("OpenStack/OpenShift warm migration is not supported.", allow_module_level=True)
 
 STORAGE_SUFFIX = ""
-if config["matrix_test"]:
-    SC = config["storage_class"]
+if py_config["matrix_test"]:
+    SC = py_config["storage_class"]
     if "ceph-rbd" in SC:
         STORAGE_SUFFIX = "-ceph-rbd"
     elif "nfs" in SC:
@@ -40,6 +40,7 @@ if config["matrix_test"]:
     ids=["rhel8"],
 )
 def test_sanity_warm_mtv_migration(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -48,7 +49,7 @@ def test_sanity_warm_mtv_migration(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -56,6 +57,7 @@ def test_sanity_warm_mtv_migration(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )
 
 
@@ -83,6 +85,7 @@ def test_sanity_warm_mtv_migration(
     ids=["MTV-200 rhel"],
 )
 def test_mtv_migration_warm_2disks2nics(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -91,7 +94,7 @@ def test_mtv_migration_warm_2disks2nics(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -99,6 +102,7 @@ def test_mtv_migration_warm_2disks2nics(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )
 
 
@@ -143,6 +147,7 @@ def test_mtv_migration_warm_2disks2nics(
     ids=["MTV-201 shutdown_rhel_vm", "MTV-204 current_cutover", "MTV-206 rhel_vm_with_snapshots"],
 )
 def test_mtv_warm_p1(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -151,7 +156,7 @@ def test_mtv_warm_p1(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -159,6 +164,7 @@ def test_mtv_warm_p1(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(plans[0].get("current_cutover", None)),
+        target_namespace=target_namespace,
     )
 
 
@@ -187,6 +193,7 @@ def test_mtv_warm_p1(
 )
 def test_mtv_warm_p1_negative(
     skip_if_no_vmware,
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -195,7 +202,7 @@ def test_mtv_warm_p1_negative(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -203,8 +210,8 @@ def test_mtv_warm_p1_negative(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
-        condition_message=MTV.ConditionMessage.PLAN_FAILED,
-        condition_type=MTV.ConditionType.FAILED,
+        condition_type=Resource.Status.FAILED,
+        target_namespace=target_namespace,
     )
 
 
@@ -228,6 +235,7 @@ def test_mtv_warm_p1_negative(
     ids=["MTV-203 warm:false"],
 )
 def test_mtv_warm_p2(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -236,7 +244,7 @@ def test_mtv_warm_p2(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -244,11 +252,13 @@ def test_mtv_warm_p2(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )
 
 
 @pytest.mark.warmscale
 def test_mtv_migration_scale_warm(
+    target_namespace,
     plans_scale,
     source_provider,
     source_provider_data,
@@ -257,7 +267,7 @@ def test_mtv_migration_scale_warm(
     network_migration_map,
     storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans_scale,
@@ -265,6 +275,7 @@ def test_mtv_migration_scale_warm(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )
 
 
@@ -289,6 +300,7 @@ def test_mtv_migration_scale_warm(
 @pytest.mark.warm
 @pytest.mark.warm_with_data_check
 def test_warm_with_data_check(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -298,13 +310,14 @@ def test_warm_with_data_check(
     storage_migration_map,
     skip_if_no_vmware,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
         network_migration_map=network_migration_map_pod_only,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
     )
 
 
@@ -330,6 +343,7 @@ def test_warm_with_data_check(
 )
 def test_warm_source_provider_admin_user(
     skip_if_no_vmware,
+    target_namespace,
     plans,
     source_provider_data,
     source_provider_admin_user,
@@ -338,7 +352,7 @@ def test_warm_source_provider_admin_user(
     network_migration_map_source_admin,
     storage_migration_map_source_admin,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider_admin_user,
         destination_provider=destination_provider,
         plans=plans,
@@ -346,6 +360,7 @@ def test_warm_source_provider_admin_user(
         storage_migration_map=storage_migration_map_source_admin,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )
 
 
@@ -375,6 +390,7 @@ def test_warm_source_provider_admin_user(
 )
 def test_warm_negative_source_provider_non_admin(
     skip_if_no_vmware,
+    target_namespace,
     plans,
     source_provider_data,
     source_provider_non_admin_user,
@@ -383,7 +399,7 @@ def test_warm_negative_source_provider_non_admin(
     network_migration_map_source_non_admin,
     storage_migration_map_source_non_admin,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider_non_admin_user,
         destination_provider=destination_provider,
         plans=plans,
@@ -391,8 +407,8 @@ def test_warm_negative_source_provider_non_admin(
         storage_migration_map=storage_migration_map_source_non_admin,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
-        condition_message=MTV.ConditionMessage.PLAN_FAILED,
-        condition_type=MTV.ConditionType.FAILED,
+        condition_type=Resource.Status.FAILED,
+        target_namespace=target_namespace,
     )
 
 
@@ -418,8 +434,9 @@ def test_warm_negative_source_provider_non_admin(
     indirect=True,
     ids=["MTV-394"],
 )
-@pytest.mark.skipif(not config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
+@pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_warm_remote_ocp(
+    target_namespace,
     plans,
     source_provider,
     source_provider_data,
@@ -428,7 +445,7 @@ def test_warm_remote_ocp(
     remote_network_migration_map,
     remote_storage_migration_map,
 ):
-    test_migration(
+    migrate_vms(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,
@@ -436,4 +453,5 @@ def test_warm_remote_ocp(
         storage_migration_map=remote_storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
+        target_namespace=target_namespace,
     )

@@ -1,9 +1,13 @@
-from pytest_testconfig import config
+from typing import Any
+from ocp_resources.resource import get_logger
+import pytest
+from pytest_testconfig import py_config
 from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
 from subprocess import STDOUT, check_output
 import uuid
 import pytest_check as check
 
+LOGGER = get_logger(name=__name__)
 RWO = "ReadWriteOnce"
 RWX = "ReadWriteMany"
 
@@ -45,7 +49,10 @@ def check_network(source_provider_data, source_vm, destination_vm, network_migra
     for source_vm_nic in source_vm["network_interfaces"]:
         # for rhv we use networks ids instead of names
         # TODO: Use datacenter/name format for rhv
-        expected_network_name = get_destination(network_migration_map, source_vm_nic)["name"]
+        expected_network = get_destination(network_migration_map, source_vm_nic)
+        assert expected_network, "Network not found in migration map"
+        expected_network_name = expected_network["name"]
+
         destination_vm_nic = get_nic_by_mac(
             nics=destination_vm["network_interfaces"], mac_address=source_vm_nic["macAddress"]
         )
@@ -58,7 +65,7 @@ def check_storage(source_vm, destination_vm, storage_map_resource):
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
     check.equal(len(destination_disks), len(source_vm["disks"]), "disks count")
     for destination_disk in destination_disks:
-        check.equal(destination_disk["storage"]["name"], config["storage_class"], "storage class")
+        check.equal(destination_disk["storage"]["name"], py_config["storage_class"], "storage class")
         if destination_disk["storage"]["name"] == "ocs-storagecluster-ceph-rbd":
             for mapping in storage_map_resource.instance.spec.map:
                 if mapping.source.name in source_vm_disks_storage:
@@ -72,10 +79,6 @@ def check_storage(source_vm, destination_vm, storage_map_resource):
 def check_migration_network(source_provider_data, destination_vm):
     for disk in destination_vm["disks"]:
         check.is_in(source_provider_data["host_list"][0]["migration_host_ip"], disk["vddk_url"])
-
-
-def check_source_vm_snapshots(vm_snapshots_before, vm_snapshots_after):
-    check.equal(vm_snapshots_before, vm_snapshots_after, "Checking source VM snapshots")
 
 
 def check_data_integrity(source_vm_dict, destination_vm_dict, source_provider_data, min_number_of_snapshots):
@@ -93,14 +96,14 @@ def check_data_integrity(source_vm_dict, destination_vm_dict, source_provider_da
         [
             "/bin/sh",
             "-c",
-            f"oc project {config['target_namespace']} && oc run {pod_name} --image=quay.io/mtvqe/python-runner \
+            f"oc project {py_config['target_namespace']} && oc run {pod_name} --image=quay.io/mtvqe/python-runner \
              --command -- {cli}  && sleep 10 && oc logs pod/{pod_name} && oc delete pod/{pod_name}&>/dev/null &",
         ],
         stderr=STDOUT,
     )
 
     # we expect: -1|1|2|3|.|n|.|.| n>= the underlined minimum number of snapshots
-    print(data)
+    LOGGER.info(data)
     data = data.decode("utf8").split("-1")[1].split("|")
     for i in range(1, len(data)):
         check.equal(data[i], str(i), "data integrity check.")
@@ -125,6 +128,21 @@ def check_false_vm_power_off(source_provider, source_vm):
     )
 
 
+def check_snapshots(
+    snapshots_before_migration: list[dict[str, Any]], snapshots_after_migration: list[dict[str, Any]]
+) -> None:
+    failed_snapshots: list[str] = []
+    snapshots_before_migration.sort(key=lambda x: x["id"])
+    snapshots_after_migration.sort(key=lambda x: x["id"])
+
+    for before_snapshot, after_snapshot in zip(snapshots_before_migration, snapshots_after_migration):
+        if before_snapshot != after_snapshot:
+            failed_snapshots.append(f"Before snapshot: {before_snapshot}, After snapshot: {after_snapshot}")
+
+    if failed_snapshots:
+        pytest.fail(f"Some of the VM snapshots did not match: {failed_snapshots}")
+
+
 def check_vms(
     plan,
     source_provider,
@@ -134,19 +152,16 @@ def check_vms(
     storage_map_resource,
     source_provider_host,
     source_provider_data,
+    target_namespace,
 ):
     virtual_machines = plan["virtual_machines"]
+
     for vm in virtual_machines:
-        source_vm = source_provider.vm_dict(name=vm["name"], namespace=config["target_namespace"], source=True)
-
-        # Skip checking guest agent for rhv vm with multiple disks
-        # because of bug https://issues.redhat.com/browse/MTV-433
+        vm_name = vm["name"]
+        source_vm = source_provider.vm_dict(name=vm_name, namespace=target_namespace, source=True)
         vm_guest_agent = vm.get("guest_agent")
-        # if rhv_provider(source_provider_data) and "disks" in vm["name"]:
-        #     vm_guest_agent = False
-
         destination_vm = destination_provider.vm_dict(
-            wait_for_guest_agent=vm_guest_agent, name=vm["name"], namespace=destination_namespace
+            wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=destination_namespace
         )
 
         check_vms_power_state(
@@ -165,20 +180,22 @@ def check_vms(
         if source_provider_host and source_provider_data:
             check_migration_network(source_provider_data=source_provider_data, destination_vm=destination_vm)
 
-        if plan.get("warm_migration") and plan.get("pre_copies_before_cut_over"):
+        plan_pre_copies_before_cut_over = plan.get("pre_copies_before_cut_over")
+
+        if plan.get("warm_migration") and plan_pre_copies_before_cut_over:
             check_data_integrity(
                 destination_vm_dict=destination_vm,
                 source_vm_dict=source_vm,
                 source_provider_data=source_provider_data,
-                min_number_of_snapshots=plan["pre_copies_before_cut_over"],
+                min_number_of_snapshots=plan_pre_copies_before_cut_over,
             )
 
-        # TODO: Remove the condition "if cold" once these two bugs are fixed:
-        #  https://bugzilla.redhat.com/show_bug.cgi?id=2053183
-        #  https://github.com/kubev2v/forklift/issues/301
-        if "snapshots_before_migration" in vm and vmware_provider(source_provider.provider_data):
-            check_source_vm_snapshots(
-                vm_snapshots_before=vm["snapshots_before_migration"], vm_snapshots_after=source_vm["snapshots_data"]
+        snapshots_before_migration = vm.get("snapshots_before_migration")
+
+        if snapshots_before_migration and vmware_provider(source_provider.provider_data):
+            check_snapshots(
+                snapshots_before_migration=snapshots_before_migration,
+                snapshots_after_migration=source_vm["snapshots_data"],
             )
 
         if vm_guest_agent:

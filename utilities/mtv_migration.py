@@ -1,30 +1,30 @@
+from __future__ import annotations
+from typing import Any, Generator
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-import pytz
 
+import pytz
 from ocp_resources.migration import Migration
 from ocp_resources.plan import Plan
-from ocp_resources.mtv import MTV
-from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.provider import Provider
+from ocp_resources.resource import Resource, ResourceEditor
+from pytest_testconfig import py_config
+
+from report import create_migration_scale_report
 from utilities.post_migration import check_vms
 from utilities.utils import is_true
-from pytest_testconfig import config
-from report import create_migration_scale_report
-
-mtv_namespace = config["mtv_namespace"]
 
 
-def get_cutover_value(current_cutover=None):
+def get_cutover_value(current_cutover: bool = False) -> datetime:
     datetime_utc = datetime.now(pytz.utc)
     if current_cutover:
         return datetime_utc
-    else:
-        return datetime_utc + timedelta(minutes=int(config["mins_before_cutover"]))
+
+    return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))
 
 
-def run_cut_over(migration):
+def run_cut_over(migration: Migration) -> None:
     ResourceEditor(
         patches={
             migration: {
@@ -34,14 +34,14 @@ def run_cut_over(migration):
     ).update()
 
 
-def test_migration(
+def migrate_vms(
     source_provider,
     destination_provider,
     plans,
     network_migration_map,
     storage_migration_map,
     source_provider_data,
-    target_name_space=config["target_namespace"],
+    target_namespace,
     source_provider_host=None,
     cut_over=None,
     pre_hook_name=None,
@@ -49,36 +49,37 @@ def test_migration(
     after_hook_name=None,
     after_hook_namespace=None,
     expected_plan_ready=True,
-    condition_category=None,
-    condition_message=MTV.ConditionMessage.PLAN_SUCCEEDED,
     condition_status=Resource.Condition.Status.TRUE,
-    condition_type=MTV.ConditionType.SUCCEEDED,
-):
+    condition_type=Resource.Status.SUCCEEDED,
+) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
-    if not is_true(config.get("skip_migration")):
+    if not is_true(py_config.get("skip_migration")):
         plan_name = f"mtv-api-tests-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
         plans[0]["name"] = plan_name
 
         # Plan CR accepts only VM name/id
         virtual_machines_list = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
-        if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-            for i in range(len(virtual_machines_list)):
-                virtual_machines_list[i].update({"namespace": config["target_namespace"]})
+        if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
+            for idx in range(len(virtual_machines_list)):
+                virtual_machines_list[idx].update({"namespace": target_namespace})
+
+        plan_warm_migration = plans[0].get("warm_migration")
+
         with run_migration(
             name=plan_name,
-            namespace=mtv_namespace,
+            namespace=py_config["mtv_namespace"],
             virtual_machines_list=virtual_machines_list,
-            warm_migration=plans[0].get("warm_migration", False) or bool(config["warm_migration"]),
-            source_provider_name=source_provider.cr.name,
-            source_provider_namespace=source_provider.cr.namespace,
-            destination_provider_name=destination_provider.cr.name,
-            destination_provider_namespace=destination_provider.cr.namespace,
+            warm_migration=plan_warm_migration or bool(py_config["warm_migration"]),
+            source_provider_name=source_provider.ocp_resource.name,
+            source_provider_namespace=source_provider.ocp_resource.namespace,
+            destination_provider_name=destination_provider.ocp_resource.name,
+            destination_provider_namespace=destination_provider.ocp_resource.namespace,
             network_map_name=network_migration_map.name,
             network_map_namespace=network_migration_map.namespace,
             storage_map_name=storage_migration_map.name,
             storage_map_namespace=storage_migration_map.namespace,
-            target_namespace=target_name_space,
+            target_namespace=target_namespace,
             pre_hook_name=pre_hook_name,
             pre_hook_namespace=pre_hook_namespace,
             after_hook_name=after_hook_name,
@@ -86,41 +87,40 @@ def test_migration(
             teardown=False,
             cut_over=cut_over,
             expected_plan_ready=expected_plan_ready,
-            condition_category=condition_category,
             condition_status=condition_status,
             condition_type=condition_type,
-        ) as (p, m):
+        ) as (plan, migration):
             # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
-            if plans[0].get("pre_copies_before_cut_over") and not cut_over and plans[0].get("warm_migration"):
+            if plans[0].get("pre_copies_before_cut_over") and not cut_over and plan_warm_migration:
                 source_provider.wait_for_snapshots(
                     vm_names_list=[v["name"] for v in plans[0]["virtual_machines"]],
                     number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
                 )
-                run_cut_over(migration=m)
+                if migration:
+                    run_cut_over(migration=migration)
 
-        if m:
-            p.wait_for_resource_status(
-                condition_message=condition_message,
-                condition_status=condition_status,
-                condition_type=condition_type,
-                wait_timeout=int(config.get("plan_wait_timeout", 600)),
+        if migration:
+            plan.wait_for_condition(
+                status=condition_status,
+                condition=condition_type,
+                timeout=int(py_config.get("plan_wait_timeout", 600)),
             )
 
-            if is_true(config.get("create_scale_report")):
-                create_migration_scale_report(plan_resource=p)
+            if is_true(py_config.get("create_scale_report")):
+                create_migration_scale_report(plan_resource=plan)
 
-    if is_true(config.get("check_vms_signals")):
-        if is_true(plans[0].get("check_vms_signals", True)):
-            check_vms(
-                plan=plans[0],
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                destination_provider=destination_provider,
-                destination_namespace=target_name_space,
-                network_map_resource=network_migration_map,
-                storage_map_resource=storage_migration_map,
-                source_provider_host=source_provider_host,
-            )
+    if is_true(py_config.get("check_vms_signals")) and is_true(plans[0].get("check_vms_signals", True)):
+        check_vms(
+            plan=plans[0],
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+            destination_provider=destination_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=network_migration_map,
+            storage_map_resource=storage_migration_map,
+            source_provider_host=source_provider_host,
+            target_namespace=target_namespace,
+        )
 
 
 @contextmanager
@@ -145,10 +145,9 @@ def run_migration(
     teardown,
     cut_over,
     expected_plan_ready,
-    condition_category,
     condition_status,
     condition_type,
-):
+) -> Generator[tuple[Plan, Migration | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
@@ -196,13 +195,8 @@ def run_migration(
         after_hook_namespace=after_hook_namespace,
         teardown=teardown,
     ) as plan:
-        if not expected_plan_ready:
-            plan.wait_for_resource_status(
-                condition_category=condition_category, condition_status=condition_status, condition_type=condition_type
-            )
-            yield plan, None
-        else:
-            plan.wait_for_condition_ready()
+        if expected_plan_ready:
+            plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
             with Migration(
                 name=f"{name}-migration",
                 namespace=namespace,
@@ -212,3 +206,24 @@ def run_migration(
                 teardown=teardown,
             ) as migration:
                 yield plan, migration
+        else:
+            plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
+            yield plan, None
+
+
+def get_vm_suffix() -> str:
+    vm_suffix = ""
+
+    if py_config["matrix_test"]:
+        storage_name = py_config["storage_class"]
+        if "ceph-rbd" in storage_name:
+            vm_suffix = "-ceph-rbd"
+
+        elif "nfs" in storage_name:
+            vm_suffix = "-nfs"
+
+    if py_config["release_test"]:
+        ocp_version = py_config["target_ocp_version"].replace(".", "-")
+        vm_suffix = f"{vm_suffix}-{ocp_version}"
+
+    return vm_suffix

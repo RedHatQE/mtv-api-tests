@@ -99,7 +99,7 @@ if [[ ! -d $temp_dir ]]; then
 fi
 
 if [[ ! -d $temp_dir/mtv-api-tests ]]; then
-  git clone https://gitlab.cee.redhat.com/mtv-qe/mtv-api-tests.git $temp_dir/mtv-api-tests
+  git clone https://github.com/RedHatQE/mtv-api-tests.git
 fi
 
 cd $temp_dir/mtv-api-tests

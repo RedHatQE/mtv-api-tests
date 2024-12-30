@@ -1,5 +1,4 @@
-from subprocess import check_output, STDOUT
-from pytest_testconfig import config
+from pytest_testconfig import py_config
 from statistics import mean
 import os
 import datetime as dt
@@ -95,12 +94,11 @@ def get_migration_report_headers(plan_resource):
     dict_report_info["source_migration_environment"] = str(plan_resource.instance.spec.provider.source.name)
     dict_report_info["target_migration_environment"] = str(os.getenv("EXECUTER"))
     dict_report_info["mtv_version"] = str(os.getenv("MTV_VERSION"))
-    # dict_report_info['iib_number'] = find_iib_number()
-    dict_report_info["target_storage"] = str(config.get("storage_class", ""))
+    dict_report_info["target_storage"] = str(py_config.get("storage_class", ""))
     dict_report_info["migration_type"] = str(migration_type)
 
     if migration_type == "WARM":
-        dict_report_info["precopy_interval_in_minutes"] = str(config.get("snapshots_interval", "0"))
+        dict_report_info["precopy_interval_in_minutes"] = str(py_config.get("snapshots_interval", "0"))
 
     dict_report_info["total_migrated_vms"] = str(len(list_vms))
     dict_report_info["total_plan_duration"] = str(
@@ -167,15 +165,6 @@ def find_time_min_max_avg(list_val):
     list_val_sec = [val.total_seconds() for val in list_val]
 
     return min(list_val_sec), mean(list_val_sec), max(list_val_sec)
-
-
-def find_iib_number():
-    t = check_output(
-        ["/bin/sh", "-c", "oc get CatalogSource -n openshift-marketplace | grep redhat-osbs | tail -1"],
-        stderr=STDOUT,
-    )
-
-    return str(t).split(" ")[8]
 
 
 def get_statistics_time(dict_stat, action, func):
