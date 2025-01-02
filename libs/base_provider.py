@@ -4,7 +4,6 @@ from logging import Logger
 from typing import Any
 
 
-from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
 
 
@@ -28,8 +27,7 @@ class BaseProvider(abc.ABC):
         username: str | None = None,
         password: str | None = None,
         host: str | None = None,
-        ocp_resource: Resource | None = None,
-        provider_data: dict[Any, Any] | None = None,
+        provider_data: dict[str, Any] | None = None,
         debug: bool = False,
         log: Logger | None = None,
     ) -> None:
@@ -39,7 +37,6 @@ class BaseProvider(abc.ABC):
         self.debug = debug
         self.log = log or get_logger(name=__name__)
         self.api: Any = None
-        self.ocp_resource = ocp_resource
         self.provider_data = provider_data
 
     def __enter__(self):

@@ -20,7 +20,10 @@ LOGGER = get_logger(__name__)
 
 class CNVProvider(BaseProvider):
     def __init__(self, ocp_resource: Resource, **kwargs: Any) -> None:
-        super().__init__(ocp_resource=ocp_resource, **kwargs)
+        self.ocp_resource = ocp_resource
+
+        super().__init__(**kwargs)
+
         if not self.ocp_resource:
             raise ValueError("ocp_resource is required, but not provided")
 

@@ -34,19 +34,19 @@ def get_guest_os_credentials(provider_data: dict[str, str], vm_dict: dict[str, s
     return user, password
 
 
-def vmware_provider(provider_data):
+def vmware_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.VSPHERE
 
 
-def rhv_provider(provider_data):
+def rhv_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.RHV
 
 
-def openstack_provider(provider_data):
+def openstack_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == "openstack"
 
 
-def ova_provider(provider_data):
+def ova_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == "ova"
 
 
