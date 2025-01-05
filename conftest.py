@@ -302,17 +302,19 @@ def source_provider(source_provider_data, mtv_namespace, ocp_admin_client, tmp_p
             admin_client=ocp_admin_client,
             tmp_dir=tmp_path_factory,
         ) as source_provider_objects:
-            _teardown.extend([src for src in source_provider_objects[1:] if src])
-            source_provider_object = source_provider_objects[0]
+            _source_provider = source_provider_objects[0]
+            _provider_ocp_resource = _source_provider.ocp_resource
+            _secret_ocp_resource = source_provider_objects[1]
+            _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
-        yield source_provider_object
+            yield _source_provider
 
     finally:
         for _resource in _teardown:
             if _resource:
                 _resource.clean_up()
 
-    source_provider_object.disconnect()
+    _source_provider.disconnect()
 
 
 @pytest.fixture(scope="session")
@@ -326,9 +328,13 @@ def source_providers(mtv_namespace, ocp_admin_client, tmp_path_factory):
                 mtv_namespace=mtv_namespace,
                 admin_client=ocp_admin_client,
                 tmp_dir=tmp_path_factory,
-            ) as source_provider_data:
-                _teardown.extend([src for src in source_provider_data[1:] if src])
-        yield
+            ) as source_provider_objects:
+                _source_provider = source_provider_objects[0]
+                _provider_ocp_resource = _source_provider.ocp_resource
+                _secret_ocp_resource = source_provider_objects[1]
+                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+
+            yield _source_provider
 
     finally:
         for _resource in _teardown:
@@ -348,9 +354,13 @@ def source_provider_admin_user(source_provider_data, mtv_namespace, ocp_admin_cl
                 admin_client=ocp_admin_client,
                 username=source_provider_data["admin_username"],
                 password=source_provider_data["admin_password"],
-            ) as source_provider_object:
-                _teardown.extend([src for src in source_provider_object[1:] if src])
-                yield source_provider_object[0]
+            ) as source_provider_objects:
+                _source_provider = source_provider_objects[0]
+                _provider_ocp_resource = _source_provider.ocp_resource
+                _secret_ocp_resource = source_provider_objects[1]
+                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+
+            yield _source_provider
 
         finally:
             for _resource in _teardown:
@@ -372,9 +382,13 @@ def source_provider_non_admin_user(source_provider_data, mtv_namespace, ocp_admi
                 admin_client=ocp_admin_client,
                 username=source_provider_data["non_admin_username"],
                 password=source_provider_data["non_admin_password"],
-            ) as source_provider_object:
-                _teardown.extend([src for src in source_provider_object[1:] if src])
-                yield source_provider_object[0]
+            ) as source_provider_objects:
+                _source_provider = source_provider_objects[0]
+                _provider_ocp_resource = _source_provider.ocp_resource
+                _secret_ocp_resource = source_provider_objects[1]
+                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+
+            yield _source_provider
 
         finally:
             for _resource in _teardown:

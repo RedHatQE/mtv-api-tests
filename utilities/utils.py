@@ -134,7 +134,7 @@ def create_source_provider(
     admin_client: DynamicClient,
     tmp_dir: Optional[pytest.TempPathFactory] = None,
     **kwargs: dict[str, Any],
-) -> Generator[Tuple[BaseProvider, Secret | None, Provider | None], None, None]:
+) -> Generator[Tuple[BaseProvider, Secret | None | None], None, None]:
     # common
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
@@ -149,7 +149,6 @@ def create_source_provider(
                 ocp_resource=provider,
                 provider_data=source_provider_data_copy,
             ),
-            None,
             None,
         )
 
@@ -246,7 +245,7 @@ def create_source_provider(
             if not _source_provider.test:
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
-            yield _source_provider, customized_secret, ocp_resource_provider
+            yield _source_provider, customized_secret
 
 
 @background
