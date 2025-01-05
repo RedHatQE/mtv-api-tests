@@ -127,7 +127,6 @@ def autouse_fixtures(source_provider_data, nfs_storage_profile):
 @pytest.fixture(scope="session")
 def target_namespace(ocp_admin_client):
     """Delete and create the target namespace for MTV migrations"""
-    # namespaces: list[Namespace] = []
     label: dict[str, str] = {
         "pod-security.kubernetes.io/enforce": "restricted",
         "pod-security.kubernetes.io/enforce-version": "latest",
@@ -136,25 +135,10 @@ def target_namespace(ocp_admin_client):
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs
     unique_namespace_name = f"{target_namespace}-{shortuuid.uuid()}".lower()[:63]
-    # clients = [ocp_admin_client]
-    # if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-    #     clients.append(ocp_admin_client)
 
     with Namespace(client=ocp_admin_client, name=unique_namespace_name, label=label) as namespace:
         namespace.wait_for_status(status=namespace.Status.ACTIVE)
         yield namespace.name
-
-    # try:
-    #     for client in clients:
-    #         namespace = Namespace(client=client, name=unique_namespace_name, label=label)
-    #         namespace.deploy(wait=True)
-    #         namespaces.append(namespace)
-    #         namespace.wait_for_status(status=namespace.Status.ACTIVE)
-    #     yield unique_namespace_name
-    #
-    # finally:
-    #     for namespace in namespaces:
-    #         namespace.clean_up(wait=True)
 
 
 @pytest.fixture(scope="session")
