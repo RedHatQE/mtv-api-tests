@@ -22,8 +22,9 @@ class VMWareProvider(BaseProvider):
     https://github.com/vmware/vsphere-automation-sdk-python
     """
 
-    def __init__(self, host: str, username: str, password: str, **kwargs: Any) -> None:
-        super().__init__(host, username, password, **kwargs)
+    def __init__(self, host: str, username: str, password: str, ocp_resource: Resource, **kwargs: Any) -> None:
+        super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
+
         self.host = host
         self.username = username
         self.password = password

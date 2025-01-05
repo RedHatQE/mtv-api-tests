@@ -214,36 +214,38 @@ def create_source_provider(
         secret_string_data["insecureSkipVerify"] = config["insecure_verify_skip"]
 
         if not source_provider:
-            raise ValueError("Failed to get provider client")
+            raise ValueError("Failed to get source provider data")
+
+        # Creating the source Secret and source Provider CRs
+        customized_secret = Secret(
+            client=admin_client,
+            name=name,
+            namespace=mtv_namespace,
+            string_data=secret_string_data,
+            label=metadata_labels,
+        )
+        customized_secret.deploy(wait=True)
+
+        ocp_resource_provider = Provider(
+            client=admin_client,
+            name=name,
+            namespace=mtv_namespace,
+            secret_name=name,
+            secret_namespace=mtv_namespace,
+            url=source_provider_data_copy["api_url"],
+            provider_type=source_provider_data_copy["type"],
+            vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
+        )
+        ocp_resource_provider.deploy(wait=True)
+        ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
         # this is for communication with the provider
-        with source_provider(provider_data=source_provider_data_copy, **provider_args) as _source_provider:
+        with source_provider(
+            provider_data=source_provider_data_copy, ocp_resource=ocp_resource_provider, **provider_args
+        ) as _source_provider:
             if not _source_provider.test:
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
-            # Creating the source Secret and source Provider CRs
-            customized_secret = Secret(
-                client=admin_client,
-                name=name,
-                namespace=mtv_namespace,
-                string_data=secret_string_data,
-                label=metadata_labels,
-            )
-            customized_secret.deploy(wait=True)
-
-            ocp_resource_provider = Provider(
-                client=admin_client,
-                name=name,
-                namespace=mtv_namespace,
-                secret_name=name,
-                secret_namespace=mtv_namespace,
-                url=source_provider_data_copy["api_url"],
-                provider_type=source_provider_data_copy["type"],
-                vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
-            )
-            ocp_resource_provider.deploy(wait=True)
-            ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
-            _source_provider.ocp_resource = ocp_resource_provider
             yield _source_provider, customized_secret, ocp_resource_provider
 
 

@@ -74,6 +74,8 @@ def migrate_vms(
         run_migration_kwargs: dict[str, Any] = {
             "name": plan_name,
             "namespace": py_config["mtv_namespace"],
+            "source_provider_name": source_provider.ocp_resource.name,
+            "source_provider_namespace": source_provider.ocp_resource.namespace,
             "virtual_machines_list": virtual_machines_list,
             "warm_migration": plan_warm_migration or bool(py_config["warm_migration"]),
             "network_map_name": network_migration_map.name,
@@ -94,11 +96,6 @@ def migrate_vms(
             "destination_provider_namespace": destination_provider.ocp_resource.namespace,
         }
 
-        if isinstance(source_provider, CNVProvider):
-            run_migration_kwargs.update({
-                "source_provider_name": source_provider.ocp_resource.name,
-                "source_provider_namespace": source_provider.ocp_resource.namespace,
-            })
         with run_migration(**run_migration_kwargs) as (plan, migration):
             # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
             if (
@@ -142,6 +139,8 @@ def migrate_vms(
 def run_migration(
     name: str,
     namespace: str,
+    source_provider_name: str,
+    source_provider_namespace: str,
     destination_provider_name: str,
     destination_provider_namespace: str,
     storage_map_name: str,
@@ -160,8 +159,6 @@ def run_migration(
     expected_plan_ready: bool,
     condition_status: str,
     condition_type: str,
-    source_provider_name: str | None = None,
-    source_provider_namespace: str | None = None,
 ) -> Generator[tuple[Plan, Migration | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.

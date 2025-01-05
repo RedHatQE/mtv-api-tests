@@ -18,9 +18,17 @@ class RHVProvider(BaseProvider):
     """
 
     def __init__(
-        self, host: str, username: str, password: str, ca_file: str, insecure: bool = False, **kwargs: Any
+        self,
+        host: str,
+        username: str,
+        password: str,
+        ca_file: str,
+        ocp_resource: Resource,
+        insecure: bool = False,
+        **kwargs: Any,
     ) -> None:
         super().__init__(
+            ocp_resource=ocp_resource,
             host=host,
             username=username,
             password=password,
