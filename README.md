@@ -172,7 +172,7 @@ npm install --save-dev @release-it/bumper
 ### usage
 
 - Create a release, run from the relevant branch.  
-  To create a 4.11 release, run:
+  To create a release, run:
 
 ```bash
 git main
