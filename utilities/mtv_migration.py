@@ -142,8 +142,6 @@ def migrate_vms(
 def run_migration(
     name: str,
     namespace: str,
-    source_provider_name: str,
-    source_provider_namespace: str,
     destination_provider_name: str,
     destination_provider_namespace: str,
     storage_map_name: str,
@@ -162,6 +160,8 @@ def run_migration(
     expected_plan_ready: bool,
     condition_status: str,
     condition_type: str,
+    source_provider_name: str | None = None,
+    source_provider_namespace: str | None = None,
 ) -> Generator[tuple[Plan, Migration | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
