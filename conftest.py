@@ -142,6 +142,7 @@ def target_namespace(ocp_admin_client):
 
     with Namespace(client=ocp_admin_client, name=unique_namespace_name, label=label) as namespace:
         namespace.wait_for_status(status=namespace.Status.ACTIVE)
+        yield namespace.name
 
     # try:
     #     for client in clients:
@@ -201,7 +202,7 @@ def mtv_namespace():
 @pytest.fixture(scope="session")
 def ocp_admin_client(tmp_path_factory):
     """
-    OCP client for remote cluster
+    OCP client
     """
 
     if remote_cluster_name := py_config.get("remote_ocp_cluster"):
