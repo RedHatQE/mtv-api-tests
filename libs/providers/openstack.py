@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any
+from ocp_resources.resource import Resource
 from openstack.connection import Connection
 import copy
 import glanceclient.v2.client as glclient
@@ -26,10 +27,12 @@ class OpenStackProvider(BaseProvider):
         region_name: str,
         user_domain_id: str,
         project_domain_id: str,
+        ocp_resource: Resource,
         insecure: bool = False,
         **kwargs: Any,
     ):
         super().__init__(
+            ocp_resource=ocp_resource,
             host=host,
             username=username,
             password=password,

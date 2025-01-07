@@ -34,19 +34,19 @@ def get_guest_os_credentials(provider_data: dict[str, str], vm_dict: dict[str, s
     return user, password
 
 
-def vmware_provider(provider_data):
+def vmware_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.VSPHERE
 
 
-def rhv_provider(provider_data):
+def rhv_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.RHV
 
 
-def openstack_provider(provider_data):
+def openstack_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == "openstack"
 
 
-def ova_provider(provider_data):
+def ova_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == "ova"
 
 
@@ -134,7 +134,7 @@ def create_source_provider(
     admin_client: DynamicClient,
     tmp_dir: Optional[pytest.TempPathFactory] = None,
     **kwargs: dict[str, Any],
-) -> Generator[Tuple[BaseProvider, Secret | None, Provider | None], None, None]:
+) -> Generator[Tuple[BaseProvider, Secret | None | None], None, None]:
     # common
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
@@ -149,7 +149,6 @@ def create_source_provider(
                 ocp_resource=provider,
                 provider_data=source_provider_data_copy,
             ),
-            None,
             None,
         )
 
@@ -214,37 +213,39 @@ def create_source_provider(
         secret_string_data["insecureSkipVerify"] = config["insecure_verify_skip"]
 
         if not source_provider:
-            raise ValueError("Failed to get provider client")
+            raise ValueError("Failed to get source provider data")
+
+        # Creating the source Secret and source Provider CRs
+        customized_secret = Secret(
+            client=admin_client,
+            name=name,
+            namespace=mtv_namespace,
+            string_data=secret_string_data,
+            label=metadata_labels,
+        )
+        customized_secret.deploy(wait=True)
+
+        ocp_resource_provider = Provider(
+            client=admin_client,
+            name=name,
+            namespace=mtv_namespace,
+            secret_name=name,
+            secret_namespace=mtv_namespace,
+            url=source_provider_data_copy["api_url"],
+            provider_type=source_provider_data_copy["type"],
+            vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
+        )
+        ocp_resource_provider.deploy(wait=True)
+        ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
         # this is for communication with the provider
-        with source_provider(provider_data=source_provider_data_copy, **provider_args) as _source_provider:
+        with source_provider(
+            provider_data=source_provider_data_copy, ocp_resource=ocp_resource_provider, **provider_args
+        ) as _source_provider:
             if not _source_provider.test:
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
-            # Creating the source Secret and source Provider CRs
-            customized_secret = Secret(
-                client=admin_client,
-                name=name,
-                namespace=mtv_namespace,
-                string_data=secret_string_data,
-                label=metadata_labels,
-            )
-            customized_secret.deploy(wait=True)
-
-            ocp_resource_provider = Provider(
-                client=admin_client,
-                name=name,
-                namespace=mtv_namespace,
-                secret_name=name,
-                secret_namespace=mtv_namespace,
-                url=source_provider_data_copy["api_url"],
-                provider_type=source_provider_data_copy["type"],
-                vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
-            )
-            ocp_resource_provider.deploy(wait=True)
-            ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
-            _source_provider.ocp_resource = ocp_resource_provider
-            yield _source_provider, customized_secret, ocp_resource_provider
+            yield _source_provider, customized_secret
 
 
 @background

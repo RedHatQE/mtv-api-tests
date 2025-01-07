@@ -127,7 +127,6 @@ def autouse_fixtures(source_provider_data, nfs_storage_profile):
 @pytest.fixture(scope="session")
 def target_namespace(ocp_admin_client):
     """Delete and create the target namespace for MTV migrations"""
-    namespaces: list[Namespace] = []
     label: dict[str, str] = {
         "pod-security.kubernetes.io/enforce": "restricted",
         "pod-security.kubernetes.io/enforce-version": "latest",
@@ -136,21 +135,10 @@ def target_namespace(ocp_admin_client):
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs
     unique_namespace_name = f"{target_namespace}-{shortuuid.uuid()}".lower()[:63]
-    clients = [ocp_admin_client]
-    if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        clients.append(ocp_admin_client)
 
-    try:
-        for client in clients:
-            namespace = Namespace(client=client, name=unique_namespace_name, label=label)
-            namespace.deploy(wait=True)
-            namespaces.append(namespace)
-            namespace.wait_for_status(status=namespace.Status.ACTIVE)
-        yield unique_namespace_name
-
-    finally:
-        for namespace in namespaces:
-            namespace.clean_up(wait=True)
+    with Namespace(client=ocp_admin_client, name=unique_namespace_name, label=label) as namespace:
+        namespace.wait_for_status(status=namespace.Status.ACTIVE)
+        yield namespace.name
 
 
 @pytest.fixture(scope="session")
@@ -198,7 +186,7 @@ def mtv_namespace():
 @pytest.fixture(scope="session")
 def ocp_admin_client(tmp_path_factory):
     """
-    OCP client for remote cluster
+    OCP client
     """
 
     if remote_cluster_name := py_config.get("remote_ocp_cluster"):
@@ -302,17 +290,19 @@ def source_provider(source_provider_data, mtv_namespace, ocp_admin_client, tmp_p
             admin_client=ocp_admin_client,
             tmp_dir=tmp_path_factory,
         ) as source_provider_objects:
-            _teardown.extend([src for src in source_provider_objects[1:] if src])
-            source_provider_object = source_provider_objects[0]
+            _source_provider = source_provider_objects[0]
+            _provider_ocp_resource = _source_provider.ocp_resource
+            _secret_ocp_resource = source_provider_objects[1]
+            _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
-        yield source_provider_object
+            yield _source_provider
 
     finally:
         for _resource in _teardown:
             if _resource:
                 _resource.clean_up()
 
-    source_provider_object.disconnect()
+    _source_provider.disconnect()
 
 
 @pytest.fixture(scope="session")
@@ -326,9 +316,13 @@ def source_providers(mtv_namespace, ocp_admin_client, tmp_path_factory):
                 mtv_namespace=mtv_namespace,
                 admin_client=ocp_admin_client,
                 tmp_dir=tmp_path_factory,
-            ) as source_provider_data:
-                _teardown.extend([src for src in source_provider_data[1:] if src])
-        yield
+            ) as source_provider_objects:
+                _source_provider = source_provider_objects[0]
+                _provider_ocp_resource = _source_provider.ocp_resource
+                _secret_ocp_resource = source_provider_objects[1]
+                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+
+            yield _source_provider
 
     finally:
         for _resource in _teardown:
@@ -348,9 +342,13 @@ def source_provider_admin_user(source_provider_data, mtv_namespace, ocp_admin_cl
                 admin_client=ocp_admin_client,
                 username=source_provider_data["admin_username"],
                 password=source_provider_data["admin_password"],
-            ) as source_provider_object:
-                _teardown.extend([src for src in source_provider_object[1:] if src])
-                yield source_provider_object[0]
+            ) as source_provider_objects:
+                _source_provider = source_provider_objects[0]
+                _provider_ocp_resource = _source_provider.ocp_resource
+                _secret_ocp_resource = source_provider_objects[1]
+                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+
+            yield _source_provider
 
         finally:
             for _resource in _teardown:
@@ -372,9 +370,13 @@ def source_provider_non_admin_user(source_provider_data, mtv_namespace, ocp_admi
                 admin_client=ocp_admin_client,
                 username=source_provider_data["non_admin_username"],
                 password=source_provider_data["non_admin_password"],
-            ) as source_provider_object:
-                _teardown.extend([src for src in source_provider_object[1:] if src])
-                yield source_provider_object[0]
+            ) as source_provider_objects:
+                _source_provider = source_provider_objects[0]
+                _provider_ocp_resource = _source_provider.ocp_resource
+                _secret_ocp_resource = source_provider_objects[1]
+                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+
+            yield _source_provider
 
         finally:
             for _resource in _teardown:

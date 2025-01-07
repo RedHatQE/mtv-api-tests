@@ -1,7 +1,12 @@
+from __future__ import annotations
 from typing import Any
+from ocp_resources.network_map import NetworkMap
 from ocp_resources.resource import get_logger
+from ocp_resources.storage_map import StorageMap
 import pytest
 from pytest_testconfig import py_config
+from libs.base_provider import BaseProvider
+from libs.providers.rhv import RHVProvider
 from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
 from subprocess import STDOUT, check_output
 import uuid
@@ -12,7 +17,7 @@ RWO = "ReadWriteOnce"
 RWX = "ReadWriteMany"
 
 
-def get_destination(map_resource, source_vm_nic):
+def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[str, Any]) -> dict[str, Any] | None:
     """
     Get the source_name's (Network Or Storage) destination_name in a migration map.
     """
@@ -32,20 +37,20 @@ def get_destination(map_resource, source_vm_nic):
     return None
 
 
-def check_cpu(source_vm, destination_vm):
+def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
     check.equal(source_vm["cpu"]["num_cores"], destination_vm["cpu"]["num_cores"])
     check.equal(source_vm["cpu"]["num_sockets"], destination_vm["cpu"]["num_sockets"])
 
 
-def check_memory(source_vm, destination_vm):
+def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
     check.equal(source_vm["memory_in_mb"], destination_vm["memory_in_mb"])
 
 
-def get_nic_by_mac(nics, mac_address):
+def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, Any]:
     return [nic for nic in nics if nic["macAddress"] == mac_address][0]
 
 
-def check_network(source_provider_data, source_vm, destination_vm, network_migration_map):
+def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], network_migration_map: NetworkMap) -> None:
     for source_vm_nic in source_vm["network_interfaces"]:
         # for rhv we use networks ids instead of names
         # TODO: Use datacenter/name format for rhv
@@ -60,7 +65,7 @@ def check_network(source_provider_data, source_vm, destination_vm, network_migra
         check.equal(destination_vm_nic["network"], expected_network_name)
 
 
-def check_storage(source_vm, destination_vm, storage_map_resource):
+def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], storage_map_resource: StorageMap) -> None:
     destination_disks = destination_vm["disks"]
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
     check.equal(len(destination_disks), len(source_vm["disks"]), "disks count")
@@ -76,12 +81,17 @@ def check_storage(source_vm, destination_vm, storage_map_resource):
                         check.equal(destination_disk["storage"]["access_mode"][0], RWX)
 
 
-def check_migration_network(source_provider_data, destination_vm):
+def check_migration_network(source_provider_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
     for disk in destination_vm["disks"]:
         check.is_in(source_provider_data["host_list"][0]["migration_host_ip"], disk["vddk_url"])
 
 
-def check_data_integrity(source_vm_dict, destination_vm_dict, source_provider_data, min_number_of_snapshots):
+def check_data_integrity(
+    source_vm_dict: dict[str, Any],
+    destination_vm_dict: dict[str, Any],
+    source_provider_data: dict[str, Any],
+    min_number_of_snapshots: int,
+) -> None:
     """
     Reads the content of the data file that was generated during the test on the source vm
     And Verify the integrity of the  data generated after each snapshot
@@ -104,23 +114,25 @@ def check_data_integrity(source_vm_dict, destination_vm_dict, source_provider_da
 
     # we expect: -1|1|2|3|.|n|.|.| n>= the underlined minimum number of snapshots
     LOGGER.info(data)
-    data = data.decode("utf8").split("-1")[1].split("|")
-    for i in range(1, len(data)):
-        check.equal(data[i], str(i), "data integrity check.")
-    check.greater_equal(len(data) - 1, min_number_of_snapshots, "data integrity check.")
+    str_data: list[str] = data.decode("utf8").split("-1")[1].split("|")
+    for i in range(1, len(str_data)):
+        check.equal(str_data[i], str(i), "data integrity check.")
+    check.greater_equal(len(str_data) - 1, min_number_of_snapshots, "data integrity check.")
 
 
-def check_vms_power_state(source_vm, destination_vm, source_power_before_migration):
+def check_vms_power_state(
+    source_vm: dict[str, Any], destination_vm: dict[str, Any], source_power_before_migration: bool
+) -> None:
     check.equal(source_vm["power_state"], "off", "Checking source VM is off")
     if source_power_before_migration:
         check.equal(destination_vm["power_state"], source_power_before_migration)
 
 
-def check_guest_agent(destination_vm):
+def check_guest_agent(destination_vm: dict[str, Any]) -> None:
     check.is_true(destination_vm.get("guest_agent_running"), "checking guest agent.")
 
 
-def check_false_vm_power_off(source_provider, source_vm):
+def check_false_vm_power_off(source_provider: RHVProvider, source_vm: dict[str, Any]) -> None:
     """Checking that USER_STOP_VM (event.code=33) was not performed"""
     check.is_false(
         source_provider.check_for_power_off_event(source_vm["provider_vm_api"]),
@@ -144,16 +156,16 @@ def check_snapshots(
 
 
 def check_vms(
-    plan,
-    source_provider,
-    destination_provider,
-    destination_namespace,
-    network_map_resource,
-    storage_map_resource,
-    source_provider_host,
-    source_provider_data,
-    target_namespace,
-):
+    plan: dict[str, Any],
+    source_provider: BaseProvider,
+    destination_provider: BaseProvider,
+    destination_namespace: str,
+    network_map_resource: NetworkMap,
+    storage_map_resource: StorageMap,
+    source_provider_data: dict[str, Any],
+    target_namespace: str,
+    source_provider_host: dict[str, Any] | None = None,
+) -> None:
     virtual_machines = plan["virtual_machines"]
 
     for vm in virtual_machines:
@@ -171,7 +183,6 @@ def check_vms(
         check_cpu(source_vm=source_vm, destination_vm=destination_vm)
         check_memory(source_vm=source_vm, destination_vm=destination_vm)
         check_network(
-            source_provider_data=source_provider_data,
             source_vm=source_vm,
             destination_vm=destination_vm,
             network_migration_map=network_map_resource,
@@ -192,7 +203,11 @@ def check_vms(
 
         snapshots_before_migration = vm.get("snapshots_before_migration")
 
-        if snapshots_before_migration and vmware_provider(source_provider.provider_data):
+        if (
+            snapshots_before_migration
+            and source_provider.provider_data
+            and vmware_provider(source_provider.provider_data)
+        ):
             check_snapshots(
                 snapshots_before_migration=snapshots_before_migration,
                 snapshots_after_migration=source_vm["snapshots_data"],
@@ -201,5 +216,5 @@ def check_vms(
         if vm_guest_agent:
             check_guest_agent(destination_vm=destination_vm)
 
-        if rhv_provider(source_provider_data):
+        if rhv_provider(source_provider_data) and isinstance(source_provider, RHVProvider):
             check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)

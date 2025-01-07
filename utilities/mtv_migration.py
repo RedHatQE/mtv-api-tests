@@ -1,5 +1,7 @@
 from __future__ import annotations
 from typing import Any, Generator
+from ocp_resources.network_map import NetworkMap
+from ocp_resources.storage_map import StorageMap
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -11,6 +13,9 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from pytest_testconfig import py_config
 
+from libs.base_provider import BaseProvider
+from libs.providers.cnv import CNVProvider
+from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
 from utilities.utils import is_true
@@ -35,22 +40,22 @@ def run_cut_over(migration: Migration) -> None:
 
 
 def migrate_vms(
-    source_provider,
-    destination_provider,
-    plans,
-    network_migration_map,
-    storage_migration_map,
-    source_provider_data,
-    target_namespace,
-    source_provider_host=None,
-    cut_over=None,
-    pre_hook_name=None,
-    pre_hook_namespace=None,
-    after_hook_name=None,
-    after_hook_namespace=None,
-    expected_plan_ready=True,
-    condition_status=Resource.Condition.Status.TRUE,
-    condition_type=Resource.Status.SUCCEEDED,
+    source_provider: BaseProvider,
+    destination_provider: CNVProvider,
+    plans: list[dict[str, Any]],
+    network_migration_map: NetworkMap,
+    storage_migration_map: StorageMap,
+    source_provider_data: dict[str, Any],
+    target_namespace: str,
+    source_provider_host: dict[str, Any] | None = None,
+    cut_over: datetime | None = None,
+    pre_hook_name: str | None = None,
+    pre_hook_namespace: str | None = None,
+    after_hook_name: str | None = None,
+    after_hook_namespace: str | None = None,
+    expected_plan_ready: bool = True,
+    condition_status: str = Resource.Condition.Status.TRUE,
+    condition_type: str = Resource.Status.SUCCEEDED,
 ) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
@@ -59,39 +64,46 @@ def migrate_vms(
         plans[0]["name"] = plan_name
 
         # Plan CR accepts only VM name/id
-        virtual_machines_list = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
+        virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
         if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
             for idx in range(len(virtual_machines_list)):
                 virtual_machines_list[idx].update({"namespace": target_namespace})
 
         plan_warm_migration = plans[0].get("warm_migration")
 
-        with run_migration(
-            name=plan_name,
-            namespace=py_config["mtv_namespace"],
-            virtual_machines_list=virtual_machines_list,
-            warm_migration=plan_warm_migration or bool(py_config["warm_migration"]),
-            source_provider_name=source_provider.ocp_resource.name,
-            source_provider_namespace=source_provider.ocp_resource.namespace,
-            destination_provider_name=destination_provider.ocp_resource.name,
-            destination_provider_namespace=destination_provider.ocp_resource.namespace,
-            network_map_name=network_migration_map.name,
-            network_map_namespace=network_migration_map.namespace,
-            storage_map_name=storage_migration_map.name,
-            storage_map_namespace=storage_migration_map.namespace,
-            target_namespace=target_namespace,
-            pre_hook_name=pre_hook_name,
-            pre_hook_namespace=pre_hook_namespace,
-            after_hook_name=after_hook_name,
-            after_hook_namespace=after_hook_namespace,
-            teardown=False,
-            cut_over=cut_over,
-            expected_plan_ready=expected_plan_ready,
-            condition_status=condition_status,
-            condition_type=condition_type,
-        ) as (plan, migration):
+        run_migration_kwargs: dict[str, Any] = {
+            "name": plan_name,
+            "namespace": py_config["mtv_namespace"],
+            "source_provider_name": source_provider.ocp_resource.name,
+            "source_provider_namespace": source_provider.ocp_resource.namespace,
+            "virtual_machines_list": virtual_machines_list,
+            "warm_migration": plan_warm_migration or bool(py_config["warm_migration"]),
+            "network_map_name": network_migration_map.name,
+            "network_map_namespace": network_migration_map.namespace,
+            "storage_map_name": storage_migration_map.name,
+            "storage_map_namespace": storage_migration_map.namespace,
+            "target_namespace": target_namespace,
+            "pre_hook_name": pre_hook_name,
+            "pre_hook_namespace": pre_hook_namespace,
+            "after_hook_name": after_hook_name,
+            "after_hook_namespace": after_hook_namespace,
+            "teardown": False,
+            "cut_over": cut_over,
+            "expected_plan_ready": expected_plan_ready,
+            "condition_status": condition_status,
+            "condition_type": condition_type,
+            "destination_provider_name": destination_provider.ocp_resource.name,
+            "destination_provider_namespace": destination_provider.ocp_resource.namespace,
+        }
+
+        with run_migration(**run_migration_kwargs) as (plan, migration):
             # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
-            if plans[0].get("pre_copies_before_cut_over") and not cut_over and plan_warm_migration:
+            if (
+                plans[0].get("pre_copies_before_cut_over")
+                and not cut_over
+                and plan_warm_migration
+                and isinstance(source_provider, VMWareProvider)
+            ):
                 source_provider.wait_for_snapshots(
                     vm_names_list=[v["name"] for v in plans[0]["virtual_machines"]],
                     number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
@@ -125,28 +137,28 @@ def migrate_vms(
 
 @contextmanager
 def run_migration(
-    name,
-    namespace,
-    source_provider_name,
-    source_provider_namespace,
-    destination_provider_name,
-    destination_provider_namespace,
-    storage_map_name,
-    storage_map_namespace,
-    network_map_name,
-    network_map_namespace,
-    virtual_machines_list,
-    target_namespace,
-    warm_migration,
-    pre_hook_name,
-    pre_hook_namespace,
-    after_hook_name,
-    after_hook_namespace,
-    teardown,
-    cut_over,
-    expected_plan_ready,
-    condition_status,
-    condition_type,
+    name: str,
+    namespace: str,
+    source_provider_name: str,
+    source_provider_namespace: str,
+    destination_provider_name: str,
+    destination_provider_namespace: str,
+    storage_map_name: str,
+    storage_map_namespace: str,
+    network_map_name: str,
+    network_map_namespace: str,
+    virtual_machines_list: list,
+    target_namespace: str,
+    warm_migration: bool,
+    pre_hook_name: str,
+    pre_hook_namespace: str,
+    after_hook_name: str,
+    after_hook_namespace: str,
+    teardown: bool,
+    cut_over: datetime,
+    expected_plan_ready: bool,
+    condition_status: str,
+    condition_type: str,
 ) -> Generator[tuple[Plan, Migration | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.

@@ -25,21 +25,25 @@ class BaseProvider(abc.ABC):
 
     def __init__(
         self,
+        ocp_resource: Resource,
         username: str | None = None,
         password: str | None = None,
         host: str | None = None,
-        ocp_resource: Resource | None = None,
-        provider_data: dict[Any, Any] | None = None,
+        provider_data: dict[str, Any] | None = None,
         debug: bool = False,
         log: Logger | None = None,
     ) -> None:
+        self.ocp_resource = ocp_resource
+
+        if not self.ocp_resource:
+            raise ValueError("ocp_resource is required, but not provided")
+
         self.username = username
         self.password = password
         self.host = host
         self.debug = debug
         self.log = log or get_logger(name=__name__)
         self.api: Any = None
-        self.ocp_resource = ocp_resource
         self.provider_data = provider_data
 
     def __enter__(self):
