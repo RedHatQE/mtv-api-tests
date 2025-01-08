@@ -58,23 +58,28 @@ class VMWareProvider(BaseProvider):
         return view_manager
 
     def vms(self, query: str = "") -> list[vim.VirtualMachine]:
+        vms: list[vim.VirtualMachine] = []
         view_manager = self.get_view_manager()
 
-        container_view = view_manager.CreateContainerView(
-            container=self.datacenters[0].vmFolder, type=[vim.VirtualMachine], recursive=True
-        )
-        vms: list[vim.VirtualMachine] = [vm for vm in container_view.view]  # type: ignore
+        for dc in self.datacenters:
+            container_view = view_manager.CreateContainerView(
+                container=dc.vmFolder, type=[vim.VirtualMachine], recursive=True
+            )
+            dc_vms: list[vim.VirtualMachine] = [vm for vm in container_view.view]  # type: ignore
+            if query:
+                result: list[vim.VirtualMachine] = []
+                pat = re.compile(query, re.IGNORECASE)
+                for vm in dc_vms:
+                    if pat.search(vm.name) is not None:
+                        result.append(vm)
+                        return result
+            else:
+                vms.extend(dc_vms)
 
-        result: list[vim.VirtualMachine] = []
-        if not query:
+        if query:
+            return result
+        else:
             return vms
-
-        pat = re.compile(query, re.IGNORECASE)
-        for vm in vms:
-            if pat.search(vm.name) is not None:
-                result.append(vm)
-
-        return result
 
     @property
     def datacenters(self) -> list[Any]:
