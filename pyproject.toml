@@ -4,12 +4,10 @@ line-length = 120
 fix = true
 output-format = "grouped"
 
-[tool.ruff.format]
-exclude = [".git", ".venv", ".mypy_cache", ".tox", "__pycache__"]
+  [tool.ruff.format]
+  exclude = [ ".git", ".venv", ".mypy_cache", ".tox", "__pycache__" ]
 
 [tool.mypy]
-# check_untyped_defs = true
-# disallow_untyped_defs = false
 disallow_any_generics = false
 disallow_incomplete_defs = true
 no_implicit_optional = true
@@ -17,16 +15,15 @@ show_error_codes = true
 warn_unused_ignores = true
 
 [tool.uv]
-dev-dependencies = ["ipdb>=0.13.13", "ipython>=8.12.3"]
-
-[tool.uv.sources]
+dev-dependencies = [ "ipdb>=0.13.13", "ipython>=8.12.3" ]
+sources = { }
 
 [project]
 requires-python = ">=3.9"
 name = "mtv-api-tests"
-version = "3.0.0"
+version = "2.7.0"
 description = "MTV API Tests"
-authors = []
+authors = [ ]
 license = "Apache-2.0"
 readme = "README.md"
 dependencies = [
@@ -45,5 +42,5 @@ dependencies = [
   "pyvmomi>=8.0.3.0.1",
   "python-simple-logger>=2.0.0",
   "shortuuid>=1.0.13",
-  "openshift-python-wrapper>=11.0.12",
+  "openshift-python-wrapper>=11.0.12"
 ]
