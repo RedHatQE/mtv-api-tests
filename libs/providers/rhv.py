@@ -6,10 +6,13 @@ import copy
 
 
 from ovirtsdk4.types import VmStatus
+from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
 
 from ovirtsdk4 import NotFoundError
+
+LOGGER = get_logger(__name__)
 
 
 class RHVProvider(BaseProvider):
@@ -40,6 +43,7 @@ class RHVProvider(BaseProvider):
         self.VM_POWER_OFF_CODE: int = 33
 
     def disconnect(self) -> None:
+        LOGGER.info(f"Disconnecting RHVProvider source provider {self.host}")
         self.api.close()
 
     def connect(self) -> "RHVProvider":

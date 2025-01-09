@@ -4,6 +4,7 @@ from typing import Any
 
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.resource import Resource
+from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutSampler, TimeoutExpiredError
 
 from pyVmomi import vim
@@ -15,6 +16,8 @@ from pyVim.connect import Disconnect, SmartConnect
 import requests
 
 from libs.base_provider import BaseProvider
+
+LOGGER = get_logger(__name__)
 
 
 class VMWareProvider(BaseProvider):
@@ -30,6 +33,7 @@ class VMWareProvider(BaseProvider):
         self.password = password
 
     def disconnect(self) -> None:
+        LOGGER.info(f"Disconnecting VMWareProvider source provider {self.host}")
         Disconnect(si=self.api)
 
     def connect(self) -> None:

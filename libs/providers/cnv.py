@@ -26,6 +26,7 @@ class CNVProvider(BaseProvider):
         return self
 
     def disconnect(self) -> None:
+        LOGGER.info("Disconnecting CNVProvider source provider")
         pass
 
     @property

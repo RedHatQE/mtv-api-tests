@@ -47,6 +47,7 @@ class OpenStackProvider(BaseProvider):
         self.project_domain_id = project_domain_id
 
     def disconnect(self) -> None:
+        LOGGER.info(f"Disconnecting OpenStackProvider source provider {self.host}")
         self.api.close()
 
     def connect(self) -> "OpenStackProvider":
