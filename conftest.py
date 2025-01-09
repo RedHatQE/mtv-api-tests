@@ -13,7 +13,7 @@ from ocp_resources.network_attachment_definition import NetworkAttachmentDefinit
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
-from ocp_resources.resource import DynamicClient, ResourceEditor, get_client
+from ocp_resources.resource import DynamicClient, Resource, ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_map import StorageMap
@@ -280,7 +280,7 @@ def source_provider_data():
 
 @pytest.fixture(scope="session")
 def source_provider(source_provider_data, mtv_namespace, ocp_admin_client, tmp_path_factory):
-    _teardown: list[Any] = []
+    _teardown: list[Resource | Secret | None] = []
 
     try:
         with create_source_provider(
@@ -869,17 +869,11 @@ def plans(target_namespace, ocp_admin_client, source_provider_data, source_provi
     # skip if pre_copies_before_cut_over is not set
     if (
         plan.get("warm_migration")
-        and len([
-            vm
-            for vm in virtual_machines
-            # Start Working only if all vms are expected to be turned on.
-            if vm.get("source_vm_power") == "on"
-        ])
-        == len(virtual_machines)
+        and all([vm.get("source_vm_power") == "on" for vm in virtual_machines])
         and plan.get("pre_copies_before_cut_over")
     ):
         LOGGER.info("Starting Data Upload to source VMs")
-        start_source_vm_data_upload_vmware(provider_data=source_provider_data, vm_names_list=vm_names_list)
+        start_source_vm_data_upload_vmware(vmware_provider=source_provider, vm_names_list=vm_names_list)
 
     yield request.param
 

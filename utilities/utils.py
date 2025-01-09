@@ -249,23 +249,14 @@ def create_source_provider(
 
 
 @background
-def start_source_vm_data_upload_vmware(provider_data, vm_names_list):
-    provider_args = {
-        "username": provider_data["username"],
-        "password": provider_data["password"],
-        "host": provider_data["fqdn"],
-        "provider_data": provider_data,
-    }
+def start_source_vm_data_upload_vmware(vmware_provider: VMWareProvider, vm_names_list: list[str]) -> None:
     print("start data generation")
-    with VMWareProvider(**provider_args) as vmware_provider:
-        vmware_provider.clear_vm_data(vm_names_list=vm_names_list)
-        while vmware_provider.upload_data_to_vms(vm_names_list=vm_names_list):
-            sleep(1)
-
-        vmware_provider.disconnect()
+    vmware_provider.clear_vm_data(vm_names_list=vm_names_list)
+    while vmware_provider.upload_data_to_vms(vm_names_list=vm_names_list):
+        sleep(1)
 
 
-def create_source_cnv_vm(dyn_client, vm_name, namespace):
+def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str) -> None:
     vm_file = f"{vm_name}.yaml"
     shutil.copyfile("tests/manifests/cnv-vm.yaml", vm_file)
 

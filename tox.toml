@@ -27,7 +27,7 @@ commands = [
   [
     "pyutils-unusedcode",
     "--exclude-files",
-    "pytest_matrix_utils.py",
+    "conftest.py",
     "--exclude-function-prefixes",
     "pytest_",
   ],
