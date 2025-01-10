@@ -67,6 +67,7 @@ class VMWareProvider(BaseProvider):
     def vms(self, query: str = "") -> list[vim.VirtualMachine]:
         # Sometimes we lost connection to VMware so we need to reconnect
         if not self.test:
+            LOGGER.info("Reconnecting to VMware")
             self.connect()
 
         view_manager = self.get_view_manager()
