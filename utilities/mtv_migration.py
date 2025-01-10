@@ -127,6 +127,7 @@ def migrate_vms(
                     f"Plan {plan.name} failed to reach the expected condition, "
                     f"last condition: {plan.instance.get('status', {}).get('conditions', [])}"
                 )
+                raise
 
             if is_true(py_config.get("create_scale_report")):
                 create_migration_scale_report(plan_resource=plan)
