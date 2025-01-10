@@ -12,6 +12,8 @@ from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from pytest_testconfig import py_config
+from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
@@ -19,6 +21,8 @@ from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
 from utilities.utils import is_true
+
+LOGGER = get_logger(__name__)
 
 
 def get_cutover_value(current_cutover: bool = False) -> datetime:
@@ -112,11 +116,17 @@ def migrate_vms(
                     run_cut_over(migration=migration)
 
         if migration:
-            plan.wait_for_condition(
-                status=condition_status,
-                condition=condition_type,
-                timeout=int(py_config.get("plan_wait_timeout", 600)),
-            )
+            try:
+                plan.wait_for_condition(
+                    status=condition_status,
+                    condition=condition_type,
+                    timeout=int(py_config.get("plan_wait_timeout", 600)),
+                )
+            except TimeoutExpiredError:
+                LOGGER.error(
+                    f"Plan {plan.name} failed to reach the expected condition, "
+                    f"last condition: {plan.instance.get('status', {}).get('conditions', [])}"
+                )
 
             if is_true(py_config.get("create_scale_report")):
                 create_migration_scale_report(plan_resource=plan)
