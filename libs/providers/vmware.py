@@ -47,8 +47,11 @@ class VMWareProvider(BaseProvider):
 
     @property
     def test(self) -> bool:
-        # TODO: Need to revisit, we can have self.api but it can be disconnected or lake or premission.
-        return bool(self.api)
+        try:
+            self.api.RetrieveContent().authorizationManager.description
+            return True
+        except Exception:
+            return False
 
     @property
     def content(self) -> vim.ServiceInstanceContent:
