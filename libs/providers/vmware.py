@@ -65,6 +65,10 @@ class VMWareProvider(BaseProvider):
         return view_manager
 
     def vms(self, query: str = "") -> list[vim.VirtualMachine]:
+        # Sometimes we lost connection to VMware so we need to reconnect
+        if not self.test:
+            self.connect()
+
         view_manager = self.get_view_manager()
 
         container_view = view_manager.CreateContainerView(
