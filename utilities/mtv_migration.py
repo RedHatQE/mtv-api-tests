@@ -116,7 +116,7 @@ def migrate_vms(
                     run_cut_over(migration=migration)
 
         if migration:
-            wait_for_migration_complate(plan=plan, condition_status=condition_status, condition_type=condition_type)
+            wait_for_migration_complate(plan=plan)
 
             if is_true(py_config.get("create_scale_report")):
                 create_migration_scale_report(plan_resource=plan)
@@ -241,7 +241,7 @@ def get_vm_suffix() -> str:
     return vm_suffix
 
 
-def wait_for_migration_complate(plan: Plan, condition_status: str, condition_type: str) -> None:
+def wait_for_migration_complate(plan: Plan) -> None:
     try:
         for sample in TimeoutSampler(
             func=lambda: plan.instance.status.conditions,
@@ -250,7 +250,7 @@ def wait_for_migration_complate(plan: Plan, condition_status: str, condition_typ
         ):
             for cond in sample:
                 if cond["category"] == "Advisory":
-                    if cond["status"] == condition_status and cond["type"] == condition_type:
+                    if cond["status"] == plan.Condition.Status.TRUE and cond["type"] == plan.Status.SUCCEEDED:
                         return
 
                     elif cond["status"] == plan.Condition.Status.TRUE and cond["type"] == "Failed":
