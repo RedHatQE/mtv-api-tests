@@ -117,45 +117,6 @@ def migrate_vms(
 
         if migration:
             wait_for_migration_complate(plan=plan, condition_status=condition_status, condition_type=condition_type)
-            # error_msg = (
-            #     "Plan {plan_name} failed to reach the expected condition, "
-            #     "last condition: {last_cond} \nstatus:\n\t{instance}"
-            # )
-            # try:
-            #     for sample in TimeoutSampler(
-            #         func=plan.instance.status.conditions,
-            #         wait_timeout=int(py_config.get("plan_wait_timeout", 600)),
-            #         sleep=1,
-            #     ):
-            #         if advisory := [cond for cond in sample if cond.get("category") == "Advisory"]:
-            #             advisory = advisory[0]
-            #             if advisory["status"] == condition_status and advisory["type"] == condition_type:
-            #                 break
-            #
-            #             elif advisory["status"] == plan.Condition.Status.TRUE and advisory["type"] == "Failed":
-            #                 LOGGER.error(
-            #                     error_msg.format(
-            #                         plan_name=plan.name,
-            #                         last_cond=sample,
-            #                         instance=plan.instance,
-            #                     )
-            #                 )
-            #                 break
-            #
-            #     # plan.wait_for_condition(
-            #     #     status=condition_status,
-            #     #     condition=condition_type,
-            #     #     timeout=int(py_config.get("plan_wait_timeout", 600)),
-            #     # )
-            # except TimeoutExpiredError:
-            #     LOGGER.error(
-            #         error_msg.format(
-            #             plan_name=plan.name,
-            #             last_cond=plan.instance.get("status", {}).get("conditions"),
-            #             instance=plan.instance,
-            #         )
-            #     )
-            #     raise
 
             if is_true(py_config.get("create_scale_report")):
                 create_migration_scale_report(plan_resource=plan)
@@ -287,7 +248,7 @@ def wait_for_migration_complate(plan: Plan, condition_status: str, condition_typ
 
     try:
         for sample in TimeoutSampler(
-            func=plan.instance.status.conditions,
+            func=lambda: plan.instance.status.conditions,
             wait_timeout=int(py_config.get("plan_wait_timeout", 600)),
             sleep=1,
         ):
