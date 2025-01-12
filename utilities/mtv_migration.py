@@ -284,6 +284,7 @@ def wait_for_migration_complate(plan: Plan, condition_status: str, condition_typ
     error_msg = (
         "Plan {plan_name} failed to reach the expected condition, last condition: {last_cond} \nstatus:\n\t{instance}"
     )
+
     try:
         for sample in TimeoutSampler(
             func=plan.instance.status.conditions,
@@ -303,13 +304,8 @@ def wait_for_migration_complate(plan: Plan, condition_status: str, condition_typ
                                 instance=plan.instance,
                             )
                         )
-                        break
+                        raise TimeoutExpiredError("")
 
-        # plan.wait_for_condition(
-        #     status=condition_status,
-        #     condition=condition_type,
-        #     timeout=int(py_config.get("plan_wait_timeout", 600)),
-        # )
     except TimeoutExpiredError:
         LOGGER.error(
             error_msg.format(
