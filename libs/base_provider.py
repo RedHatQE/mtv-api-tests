@@ -67,7 +67,7 @@ class BaseProvider(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def vm_dict(self, **xargs: Any) -> dict[str, Any]:
+    def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         """
         Create a dict for a single vm holding the Network Interface details, Disks and Storage, etc..
         """

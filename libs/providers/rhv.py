@@ -145,13 +145,13 @@ class RHVProvider(BaseProvider):
     def storage_groups(self) -> list[dict[str, Any]]:
         return [{"name": storage.name, "id": storage.id} for storage in self.storage_services.list()]
 
-    def vm_dict(self, **xargs: Any) -> dict[str, Any]:
-        source_vm = self.vms(search=xargs["name"])[0]
+    def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
+        source_vm = self.vms(search=kwargs["name"])[0]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.RHV
         result_vm_info["provider_vm_api"] = source_vm
-        result_vm_info["name"] = xargs["name"]
+        result_vm_info["name"] = kwargs["name"]
 
         # Network Interfaces
         for nic in self.vm_nics(vm=source_vm):

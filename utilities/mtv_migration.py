@@ -109,7 +109,7 @@ def migrate_vms(
                 and isinstance(source_provider, VMWareProvider)
             ):
                 source_provider.wait_for_snapshots(
-                    vm_names_list=[v["name"] for v in plans[0]["virtual_machines"]],
+                    vm_names_list=[vm["name"] for vm in plans[0]["virtual_machines"]],
                     number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
                 )
                 if migration:
@@ -127,6 +127,7 @@ def migrate_vms(
                     f"Plan {plan.name} failed to reach the expected condition, "
                     f"last condition: {plan.instance.get('status', {}).get('conditions', [])}"
                 )
+                LOGGER.error(f"plan {plan.name} status:\n\t{plan.instance}")
                 raise
 
             if is_true(py_config.get("create_scale_report")):

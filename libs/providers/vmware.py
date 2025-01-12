@@ -27,6 +27,8 @@ class VMWareProvider(BaseProvider):
 
     def __init__(self, host: str, username: str, password: str, ocp_resource: Resource, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
+        if not self.provider_data:
+            raise ValueError("provider_data is required, but not provided")
 
         self.host = host
         self.username = username
@@ -77,11 +79,12 @@ class VMWareProvider(BaseProvider):
         )
         vms: list[vim.VirtualMachine] = [vm for vm in container_view.view]  # type: ignore
 
-        result: list[vim.VirtualMachine] = []
         if not query:
             return vms
 
+        result: list[vim.VirtualMachine] = []
         pat = re.compile(query, re.IGNORECASE)
+
         for vm in vms:
             if pat.search(vm.name) is not None:
                 result.append(vm)
@@ -95,15 +98,14 @@ class VMWareProvider(BaseProvider):
     def clusters(self, datacenter: str = "") -> list[Any]:
         all_clusters: list[Any] = []
 
-        for dc in self.datacenters:  # Iterate though DataCenters
+        for dc in self.datacenters:
             clusters = dc.hostFolder.childEntity
             if datacenter:
                 if dc.name == datacenter:
                     return clusters
 
             else:
-                for cluster in clusters:  # Iterate through the clusters in the DC
-                    all_clusters.append(cluster)
+                all_clusters.extend(clusters)
 
         return all_clusters
 
@@ -210,6 +212,9 @@ class VMWareProvider(BaseProvider):
                 resource_type=[vim.Datastore],
                 resource_name=datastore_name,
             )
+            if not data_store:
+                raise ValueError(f"Datastore {datastore_name} not found")
+
             relospec.datastore = data_store
 
         vmconf = vim.vm.ConfigSpec()
@@ -327,16 +332,20 @@ class VMWareProvider(BaseProvider):
         except IOError as ex:
             print(ex)
 
-    def vm_dict(self, **xargs):
-        vm_name = xargs["name"]
+    def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
+        vm_name = kwargs["name"]
         source_vm = self.vms(query=f"^{vm_name}$")[0]
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.VSPHERE
         result_vm_info["provider_vm_api"] = source_vm
-        result_vm_info["name"] = xargs["name"]
+        result_vm_info["name"] = kwargs["name"]
+
+        vm_config: Any = source_vm.config
+        if not vm_config:
+            self.log.error(f"No config found for VM {vm_name}")
 
         # Devices
-        for device in source_vm.config.hardware.device:
+        for device in vm_config.hardware.device:
             # Network Interfaces
             if isinstance(device, vim.vm.device.VirtualEthernetCard):
                 result_vm_info["network_interfaces"].append({
@@ -354,13 +363,11 @@ class VMWareProvider(BaseProvider):
                 })
 
         # CPUs
-        result_vm_info["cpu"]["num_cores"] = source_vm.config.hardware.numCoresPerSocket
-        result_vm_info["cpu"]["num_sockets"] = int(
-            source_vm.config.hardware.numCPU / result_vm_info["cpu"]["num_cores"]
-        )
+        result_vm_info["cpu"]["num_cores"] = vm_config.hardware.numCoresPerSocket
+        result_vm_info["cpu"]["num_sockets"] = int(vm_config.hardware.numCPU / result_vm_info["cpu"]["num_cores"])
 
         # Memory
-        result_vm_info["memory_in_mb"] = source_vm.config.hardware.memoryMB
+        result_vm_info["memory_in_mb"] = vm_config.hardware.memoryMB
 
         # Snapshots details
         for snapshot in self.list_snapshots(source_vm):
@@ -381,7 +388,7 @@ class VMWareProvider(BaseProvider):
         )
 
         # Guest OS
-        result_vm_info["win_os"] = "win" in source_vm.config.guestId
+        result_vm_info["win_os"] = "win" in vm_config.guestId
 
         # Power state
         if source_vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:

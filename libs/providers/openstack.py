@@ -157,13 +157,13 @@ class OpenStackProvider(BaseProvider):
             volume = self.api.block_storage.get_volume(attachment["volumeId"])
             return volume.volume_image_metadata
 
-    def vm_dict(self, **xargs: Any) -> dict[str, Any]:
-        vm_name = xargs["name"]
+    def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
+        vm_name: str = kwargs["name"]
         source_vm = self.get_instance_obj(vm_name)
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = "openstack"
         result_vm_info["provider_vm_api"] = source_vm
-        result_vm_info["name"] = xargs["name"]
+        result_vm_info["name"] = kwargs["name"]
 
         # Snapshots details
         for volume_snapshots in self.list_snapshots(vm_name):
