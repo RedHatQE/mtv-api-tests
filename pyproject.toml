@@ -42,5 +42,6 @@ dependencies = [
   "pyvmomi>=8.0.3.0.1",
   "python-simple-logger>=2.0.0",
   "shortuuid>=1.0.13",
-  "openshift-python-wrapper>=11.0.12"
+  "openshift-python-wrapper>=11.0.12",
+  "pytest-xdist>=3.6.1",
 ]
