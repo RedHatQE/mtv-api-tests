@@ -242,10 +242,6 @@ def get_vm_suffix() -> str:
 
 
 def wait_for_migration_complate(plan: Plan, condition_status: str, condition_type: str) -> None:
-    error_msg = (
-        "Plan {plan_name} failed to reach the expected condition, last condition: {last_cond} \nstatus:\n\t{instance}"
-    )
-
     try:
         for sample in TimeoutSampler(
             func=lambda: plan.instance.status.conditions,
@@ -258,21 +254,8 @@ def wait_for_migration_complate(plan: Plan, condition_status: str, condition_typ
                         break
 
                     elif cond["status"] == plan.Condition.Status.TRUE and cond["type"] == "Failed":
-                        LOGGER.error(
-                            error_msg.format(
-                                plan_name=plan.name,
-                                last_cond=sample,
-                                instance=plan.instance,
-                            )
-                        )
                         raise TimeoutExpiredError("")
 
     except TimeoutExpiredError:
-        LOGGER.error(
-            error_msg.format(
-                plan_name=plan.name,
-                last_cond=plan.instance.get("status", {}).get("conditions"),
-                instance=plan.instance,
-            )
-        )
+        LOGGER.error(f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}")
         raise
