@@ -251,7 +251,7 @@ def wait_for_migration_complate(plan: Plan, condition_status: str, condition_typ
             for cond in sample:
                 if cond["category"] == "Advisory":
                     if cond["status"] == condition_status and cond["type"] == condition_type:
-                        break
+                        return
 
                     elif cond["status"] == plan.Condition.Status.TRUE and cond["type"] == "Failed":
                         raise TimeoutExpiredError("")
