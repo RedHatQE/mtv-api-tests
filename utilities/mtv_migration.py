@@ -13,7 +13,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutExpiredError
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
@@ -116,19 +116,46 @@ def migrate_vms(
                     run_cut_over(migration=migration)
 
         if migration:
-            try:
-                plan.wait_for_condition(
-                    status=condition_status,
-                    condition=condition_type,
-                    timeout=int(py_config.get("plan_wait_timeout", 600)),
-                )
-            except TimeoutExpiredError:
-                LOGGER.error(
-                    f"Plan {plan.name} failed to reach the expected condition, "
-                    f"last condition: {plan.instance.get('status', {}).get('conditions', [])}"
-                )
-                LOGGER.error(f"plan {plan.name} status:\n\t{plan.instance}")
-                raise
+            wait_for_migration_complate(plan=plan, condition_status=condition_status, condition_type=condition_type)
+            # error_msg = (
+            #     "Plan {plan_name} failed to reach the expected condition, "
+            #     "last condition: {last_cond} \nstatus:\n\t{instance}"
+            # )
+            # try:
+            #     for sample in TimeoutSampler(
+            #         func=plan.instance.status.conditions,
+            #         wait_timeout=int(py_config.get("plan_wait_timeout", 600)),
+            #         sleep=1,
+            #     ):
+            #         if advisory := [cond for cond in sample if cond.get("category") == "Advisory"]:
+            #             advisory = advisory[0]
+            #             if advisory["status"] == condition_status and advisory["type"] == condition_type:
+            #                 break
+            #
+            #             elif advisory["status"] == plan.Condition.Status.TRUE and advisory["type"] == "Failed":
+            #                 LOGGER.error(
+            #                     error_msg.format(
+            #                         plan_name=plan.name,
+            #                         last_cond=sample,
+            #                         instance=plan.instance,
+            #                     )
+            #                 )
+            #                 break
+            #
+            #     # plan.wait_for_condition(
+            #     #     status=condition_status,
+            #     #     condition=condition_type,
+            #     #     timeout=int(py_config.get("plan_wait_timeout", 600)),
+            #     # )
+            # except TimeoutExpiredError:
+            #     LOGGER.error(
+            #         error_msg.format(
+            #             plan_name=plan.name,
+            #             last_cond=plan.instance.get("status", {}).get("conditions"),
+            #             instance=plan.instance,
+            #         )
+            #     )
+            #     raise
 
             if is_true(py_config.get("create_scale_report")):
                 create_migration_scale_report(plan_resource=plan)
@@ -251,3 +278,44 @@ def get_vm_suffix() -> str:
         vm_suffix = f"{vm_suffix}-{ocp_version}"
 
     return vm_suffix
+
+
+def wait_for_migration_complate(plan: Plan, condition_status: str, condition_type: str) -> None:
+    error_msg = (
+        "Plan {plan_name} failed to reach the expected condition, last condition: {last_cond} \nstatus:\n\t{instance}"
+    )
+    try:
+        for sample in TimeoutSampler(
+            func=plan.instance.status.conditions,
+            wait_timeout=int(py_config.get("plan_wait_timeout", 600)),
+            sleep=1,
+        ):
+            for cond in sample:
+                if cond["category"] == "Advisory":
+                    if cond["status"] == condition_status and cond["type"] == condition_type:
+                        break
+
+                    elif cond["status"] == plan.Condition.Status.TRUE and cond["type"] == "Failed":
+                        LOGGER.error(
+                            error_msg.format(
+                                plan_name=plan.name,
+                                last_cond=sample,
+                                instance=plan.instance,
+                            )
+                        )
+                        break
+
+        # plan.wait_for_condition(
+        #     status=condition_status,
+        #     condition=condition_type,
+        #     timeout=int(py_config.get("plan_wait_timeout", 600)),
+        # )
+    except TimeoutExpiredError:
+        LOGGER.error(
+            error_msg.format(
+                plan_name=plan.name,
+                last_cond=plan.instance.get("status", {}).get("conditions"),
+                instance=plan.instance,
+            )
+        )
+        raise
