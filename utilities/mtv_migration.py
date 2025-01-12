@@ -252,14 +252,15 @@ def get_vm_suffix() -> str:
 @retry(
     wait_timeout=int(py_config.get("plan_wait_timeout", 600)), sleep=1, exceptions_dict={MigrationPlainExecError: []}
 )
-def wait_for_migration_complate(plan: Plan) -> None:
+def wait_for_migration_complate(plan: Plan) -> bool:
     err = "Plan {name} failed to reach the expected condition. \nstatus:\n\t{instance}"
     for cond in plan.instance.status.conditions:
         if cond["category"] == "Advisory":
-            if cond["status"] == plan.Condition.Status.TRUE and cond["type"] == plan.Status.SUCCEEDED:
-                return
+            if cond["status"] == plan.Condition.Status.TRUE:
+                if cond["type"] == plan.Status.SUCCEEDED:
+                    return True
 
-            elif cond["status"] == plan.Condition.Status.TRUE and cond["type"] == "Failed":
-                raise MigrationPlainExecStopError(err.format(name=plan.name, instance=plan.instance))
+                elif cond["type"] == "Failed":
+                    raise MigrationPlainExecStopError(err.format(name=plan.name, instance=plan.instance))
 
     raise MigrationPlainExecError(err.format(name=plan.name, instance=plan.instance))
