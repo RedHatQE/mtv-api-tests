@@ -13,7 +13,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+from timeout_sampler import retry
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
@@ -23,6 +23,14 @@ from utilities.post_migration import check_vms
 from utilities.utils import is_true
 
 LOGGER = get_logger(__name__)
+
+
+class MigrationPlainExecError(Exception):
+    pass
+
+
+class MigrationPlainExecStopError(Exception):
+    pass
 
 
 def get_cutover_value(current_cutover: bool = False) -> datetime:
@@ -241,21 +249,17 @@ def get_vm_suffix() -> str:
     return vm_suffix
 
 
+@retry(
+    wait_timeout=int(py_config.get("plan_wait_timeout", 600)), sleep=1, exceptions_dict={MigrationPlainExecError: []}
+)
 def wait_for_migration_complate(plan: Plan) -> None:
-    try:
-        for sample in TimeoutSampler(
-            func=lambda: plan.instance.status.conditions,
-            wait_timeout=int(py_config.get("plan_wait_timeout", 600)),
-            sleep=1,
-        ):
-            for cond in sample:
-                if cond["category"] == "Advisory":
-                    if cond["status"] == plan.Condition.Status.TRUE and cond["type"] == plan.Status.SUCCEEDED:
-                        return
+    err = "Plan {name} failed to reach the expected condition. \nstatus:\n\t{instance}"
+    for cond in plan.instance.status.conditions:
+        if cond["category"] == "Advisory":
+            if cond["status"] == plan.Condition.Status.TRUE and cond["type"] == plan.Status.SUCCEEDED:
+                return
 
-                    elif cond["status"] == plan.Condition.Status.TRUE and cond["type"] == "Failed":
-                        raise TimeoutExpiredError("")
+            elif cond["status"] == plan.Condition.Status.TRUE and cond["type"] == "Failed":
+                raise MigrationPlainExecStopError(err.format(name=plan.name, instance=plan.instance))
 
-    except TimeoutExpiredError:
-        LOGGER.error(f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}")
-        raise
+    raise MigrationPlainExecError(err.format(name=plan.name, instance=plan.instance))
