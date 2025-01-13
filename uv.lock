@@ -777,7 +777,6 @@ source = { virtual = "." }
 dependencies = [
     { name = "click" },
     { name = "humanfriendly" },
-    { name = "openshift" },
     { name = "openshift-python-wrapper" },
     { name = "openstacksdk" },
     { name = "ovirt-python-sdk" },
@@ -802,7 +801,6 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
     { name = "humanfriendly", specifier = ">=10.0" },
-    { name = "openshift", specifier = ">=0.13.2" },
     { name = "openshift-python-wrapper", specifier = ">=11.0.12" },
     { name = "openshift-python-wrapper", specifier = ">=11.0.13" },
     { name = "openstacksdk", specifier = ">=4.0.0" },
@@ -840,20 +838,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6d/fa/fbf4001037904031639e6bfbfc02badfc7e12f137a8afa254df6c4c8a670/oauthlib-3.2.2.tar.gz", hash = "sha256:9859c40929662bec5d64f34d01c99e093149682a3f38915dc0655d5a633dd918", size = 177352 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/80/cab10959dc1faead58dc8384a781dfbf93cb4d33d50988f7a69f1b7c9bbe/oauthlib-3.2.2-py3-none-any.whl", hash = "sha256:8139f29aac13e25d502680e9e19963e83f16838d48a0d71c287fe40e7067fbca", size = 151688 },
-]
-
-[[package]]
-name = "openshift"
-version = "0.13.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "kubernetes" },
-    { name = "python-string-utils" },
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/55/f6/9e2e4935b59726bff3d53da35afba3904fe9ed693efedd6b7bbddff6cc78/openshift-0.13.2.tar.gz", hash = "sha256:f55789fce56fcbf7e2cd9377a68c4a99ab406074d3324b9abcca98477d101471", size = 19539 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/68/0e4ff591b6369f5ee5b50a8600e7db1444d5527f2a67a5d17b6b5ae8523c/openshift-0.13.2-py3-none-any.whl", hash = "sha256:f1459006fc7f96ff7d2f6c0c00bdef5cb2e75a1b466f601997d9084a816a8949", size = 18170 },
 ]
 
 [[package]]
@@ -1405,15 +1389,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/87/c7/5e1547c44e31da50a460df93af11a535ace568ef89d7a811069ead340c4a/python-slugify-8.0.4.tar.gz", hash = "sha256:59202371d1d05b54a9e7720c5e038f928f45daaffe41dd10822f3907b937c856", size = 10921 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl", hash = "sha256:276540b79961052b66b7d116620b36518847f52d5fd9e3a70164fc8c50faa6b8", size = 10051 },
-]
-
-[[package]]
-name = "python-string-utils"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/10/91/8c883b83c7d039ca7e6c8f8a7e154a27fdeddd98d14c10c5ee8fe425b6c0/python-string-utils-1.0.0.tar.gz", hash = "sha256:dcf9060b03f07647c0a603408dc8b03f807f3b54a05c6e19eb14460256fac0cb", size = 20147 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/84/09/6e87b91d3bb2daca20aa3db6c027735be59809dbf3415933b3b19654ca6f/python_string_utils-1.0.0-py3-none-any.whl", hash = "sha256:f1a88700baf99db1a9b6953f44181ad9ca56623c81e257e6009707e2e7851fa4", size = 26322 },
 ]
 
 [[package]]
