@@ -20,7 +20,6 @@ from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
-from utilities.utils import is_true
 
 LOGGER = get_logger(__name__)
 
@@ -71,7 +70,7 @@ def migrate_vms(
 ) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
-    if not is_true(py_config.get("skip_migration")):
+    if not py_config.get("skip_migration"):
         plan_name = f"mtv-api-tests-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
         plans[0]["name"] = plan_name
 
@@ -126,10 +125,10 @@ def migrate_vms(
         if migration:
             wait_for_migration_complate(plan=plan)
 
-            if is_true(py_config.get("create_scale_report")):
+            if py_config.get("create_scale_report"):
                 create_migration_scale_report(plan_resource=plan)
 
-    if is_true(py_config.get("check_vms_signals")) and is_true(plans[0].get("check_vms_signals", True)):
+    if py_config.get("check_vms_signals") and plans[0].get("check_vms_signals", True):
         check_vms(
             plan=plans[0],
             source_provider=source_provider,
