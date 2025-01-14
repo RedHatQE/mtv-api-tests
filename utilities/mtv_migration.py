@@ -12,13 +12,24 @@ from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from pytest_testconfig import py_config
+from simple_logger.logger import get_logger
+from timeout_sampler import retry
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
-from utilities.utils import is_true
+
+LOGGER = get_logger(__name__)
+
+
+class MigrationPlainExecError(Exception):
+    pass
+
+
+class MigrationPlainExecStopError(Exception):
+    pass
 
 
 def get_cutover_value(current_cutover: bool = False) -> datetime:
@@ -59,7 +70,7 @@ def migrate_vms(
 ) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
-    if not is_true(py_config.get("skip_migration")):
+    if not py_config.get("skip_migration"):
         plan_name = f"mtv-api-tests-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
         plans[0]["name"] = plan_name
 
@@ -105,23 +116,19 @@ def migrate_vms(
                 and isinstance(source_provider, VMWareProvider)
             ):
                 source_provider.wait_for_snapshots(
-                    vm_names_list=[v["name"] for v in plans[0]["virtual_machines"]],
+                    vm_names_list=virtual_machines_list,
                     number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
                 )
                 if migration:
                     run_cut_over(migration=migration)
 
         if migration:
-            plan.wait_for_condition(
-                status=condition_status,
-                condition=condition_type,
-                timeout=int(py_config.get("plan_wait_timeout", 600)),
-            )
+            wait_for_migration_complate(plan=plan)
 
-            if is_true(py_config.get("create_scale_report")):
+            if py_config.get("create_scale_report"):
                 create_migration_scale_report(plan_resource=plan)
 
-    if is_true(py_config.get("check_vms_signals")) and is_true(plans[0].get("check_vms_signals", True)):
+    if py_config.get("check_vms_signals") and plans[0].get("check_vms_signals", True):
         check_vms(
             plan=plans[0],
             source_provider=source_provider,
@@ -239,3 +246,20 @@ def get_vm_suffix() -> str:
         vm_suffix = f"{vm_suffix}-{ocp_version}"
 
     return vm_suffix
+
+
+@retry(
+    wait_timeout=int(py_config.get("plan_wait_timeout", 600)), sleep=1, exceptions_dict={MigrationPlainExecError: []}
+)
+def wait_for_migration_complate(plan: Plan) -> bool:
+    err = "Plan {name} failed to reach the expected condition. \nstatus:\n\t{instance}"
+    for cond in plan.instance.status.conditions:
+        if cond["category"] == "Advisory":
+            if cond["status"] == plan.Condition.Status.TRUE:
+                if cond["type"] == plan.Status.SUCCEEDED:
+                    return True
+
+                elif cond["type"] == "Failed":
+                    raise MigrationPlainExecStopError(err.format(name=plan.name, instance=plan.instance))
+
+    raise MigrationPlainExecError(err.format(name=plan.name, instance=plan.instance))

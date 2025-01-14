@@ -1,26 +1,25 @@
-import shortuuid
-from contextlib import contextmanager
 import copy
-from pathlib import Path
 import shutil
-from subprocess import check_output, STDOUT
+import threading
+from contextlib import contextmanager
+from pathlib import Path
+from subprocess import STDOUT, check_output
 from time import sleep
-from typing import Any, Generator, Optional, Tuple
+from typing import Any, Generator, Tuple
 
+import pytest
+import shortuuid
+from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.provider import Provider
-from ocp_resources.resource import DynamicClient
-import pytest
-from simple_logger.logger import get_logger
-
-from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.secret import Secret
-import threading
+from ocp_resources.virtual_machine import VirtualMachine
+from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
-from libs.providers.ova import OVAProvider
 from libs.providers.openstack import OpenStackProvider
+from libs.providers.ova import OVAProvider
 from libs.providers.rhv import RHVProvider
 from libs.providers.vmware import VMWareProvider
 
@@ -50,31 +49,18 @@ def ova_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == "ova"
 
 
-def generate_ca_cert_file(provider_data: dict[str, Any], cert_file: Path) -> str:
+def generate_ca_cert_file(provider_fqdn: dict[str, Any], cert_file: Path) -> Path:
     cert = check_output(
         [
             "/bin/sh",
             "-c",
-            f"openssl s_client -connect {provider_data['fqdn']}:443 -showcerts < /dev/null",
+            f"openssl s_client -connect {provider_fqdn}:443 -showcerts < /dev/null",
         ],
         stderr=STDOUT,
     )
 
     cert_file.write_bytes(cert)
-    return str(cert_file)
-
-
-def is_true(value):
-    if isinstance(value, str):
-        return value.lower() in ["true", "1", "t", "y", "yes"]
-
-    if isinstance(value, bool):
-        return value
-
-    if isinstance(value, int):
-        return value == 1
-
-    return False
+    return cert_file
 
 
 def background(func):
@@ -132,7 +118,7 @@ def create_source_provider(
     source_provider_data: dict[str, Any],
     mtv_namespace: str,
     admin_client: DynamicClient,
-    tmp_dir: Optional[pytest.TempPathFactory] = None,
+    tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
 ) -> Generator[Tuple[BaseProvider, Secret | None | None], None, None]:
     # common
@@ -178,16 +164,16 @@ def create_source_provider(
                 raise ValueError("tmp_dir is required for rhv")
 
             cert_file = generate_ca_cert_file(
-                provider_data=source_provider_data_copy,
+                provider_fqdn=source_provider_data_copy["fqdn"],
                 cert_file=tmp_dir.mktemp(source_provider_data_copy["type"].upper())
                 / f"{source_provider_data_copy['type']}_cert.crt",
             )
             provider_args["host"] = source_provider_data_copy["api_url"]
-            provider_args["ca_file"] = cert_file
+            provider_args["ca_file"] = str(cert_file)
             source_provider = RHVProvider
             secret_string_data["user"] = source_provider_data_copy["username"]
             secret_string_data["password"] = source_provider_data_copy["password"]
-            secret_string_data["cacert"] = Path(cert_file).read_text()
+            secret_string_data["cacert"] = cert_file.read_text()
 
         # openstack
         elif openstack_provider(provider_data=source_provider_data_copy):
@@ -249,23 +235,14 @@ def create_source_provider(
 
 
 @background
-def start_source_vm_data_upload_vmware(provider_data, vm_names_list):
-    provider_args = {
-        "username": provider_data["username"],
-        "password": provider_data["password"],
-        "host": provider_data["fqdn"],
-        "provider_data": provider_data,
-    }
+def start_source_vm_data_upload_vmware(vmware_provider: VMWareProvider, vm_names_list: list[str]) -> None:
     print("start data generation")
-    with VMWareProvider(**provider_args) as vmware_provider:
-        vmware_provider.clear_vm_data(vm_names_list=vm_names_list)
-        while vmware_provider.upload_data_to_vms(vm_names_list=vm_names_list):
-            sleep(1)
-
-        vmware_provider.disconnect()
+    vmware_provider.clear_vm_data(vm_names_list=vm_names_list)
+    while vmware_provider.upload_data_to_vms(vm_names_list=vm_names_list):
+        sleep(1)
 
 
-def create_source_cnv_vm(dyn_client, vm_name, namespace):
+def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str) -> None:
     vm_file = f"{vm_name}.yaml"
     shutil.copyfile("tests/manifests/cnv-vm.yaml", vm_file)
 

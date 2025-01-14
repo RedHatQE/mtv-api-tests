@@ -26,13 +26,11 @@ class CNVProvider(BaseProvider):
         return self
 
     def disconnect(self) -> None:
+        LOGGER.info("Disconnecting CNVProvider source provider")
         pass
 
     @property
     def test(self) -> bool:
-        if not self.ocp_resource:
-            return False
-
         return bool(self.ocp_resource.exists)
 
     def wait_for_cnv_vm_guest_agent(self, vm_dict: dict[str, Any], timeout: int = 301) -> bool:
@@ -95,15 +93,12 @@ class CNVProvider(BaseProvider):
         if vm_api.ready:
             vm_api.stop(vmi_delete_timeout=600, wait=True)
 
-    def vm_dict(self, wait_for_guest_agent: bool = False, **xargs: Any) -> dict[str, Any]:
-        if not self.ocp_resource:
-            return {}
-
+    def vm_dict(self, wait_for_guest_agent: bool = False, **kwargs: Any) -> dict[str, Any]:
         dynamic_client = self.ocp_resource.client
-        source = xargs.get("source", False)
+        source = kwargs.get("source", False)
 
-        cnv_vm_name = xargs["name"]
-        cnv_vm_namespace = xargs["namespace"]
+        cnv_vm_name = kwargs["name"]
+        cnv_vm_namespace = kwargs["namespace"]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.OPENSHIFT

@@ -1,42 +1,43 @@
 from __future__ import annotations
-import shortuuid
+
+import logging
+import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
-import shutil
 
-from ocp_resources.exceptions import MissingResourceResError
 import pytest
-from ocp_resources.hook import Hook
+import shortuuid
+from kubernetes.dynamic import DynamicClient
+from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
+from ocp_resources.hook import Hook
+from ocp_resources.host import Host
+from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
-from ocp_resources.resource import DynamicClient, ResourceEditor, get_client
+from ocp_resources.resource import Resource, ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_map import StorageMap
-from ocp_resources.namespace import Namespace
-from ocp_resources.host import Host
-from pytest_testconfig import py_config
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
+from pytest_testconfig import py_config
+
 from libs.providers.cnv import CNVProvider
+from utilities.logger import separator, setup_logging
 from utilities.utils import (
     create_source_cnv_vm,
     create_source_provider,
     gen_network_map_list,
     generate_name_with_uuid,
-    is_true,
+    rhv_provider,
     start_source_vm_data_upload_vmware,
     vmware_provider,
-    rhv_provider,
 )
-import logging
-import os
-
-from utilities.logger import separator, setup_logging
 
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
@@ -280,7 +281,7 @@ def source_provider_data():
 
 @pytest.fixture(scope="session")
 def source_provider(source_provider_data, mtv_namespace, ocp_admin_client, tmp_path_factory):
-    _teardown: list[Any] = []
+    _teardown: list[Resource | Secret | None] = []
 
     try:
         with create_source_provider(
@@ -656,7 +657,7 @@ def plans_scale(source_provider):
         vm_name = source_vms[idx].name
         plans[0]["virtual_machines"].append({"name": f"{vm_name}"})
 
-        if is_true(py_config.get("turn_on_vms")):
+        if py_config.get("turn_on_vms"):
             source_vm_details = source_provider.vm_dict(name=vm_name)
             source_provider.start_vm(vm=source_vm_details["provider_vm_api"])
 
@@ -869,28 +870,18 @@ def plans(target_namespace, ocp_admin_client, source_provider_data, source_provi
     # skip if pre_copies_before_cut_over is not set
     if (
         plan.get("warm_migration")
-        and len([
-            vm
-            for vm in virtual_machines
-            # Start Working only if all vms are expected to be turned on.
-            if vm.get("source_vm_power") == "on"
-        ])
-        == len(virtual_machines)
+        and all([vm.get("source_vm_power") == "on" for vm in virtual_machines])
         and plan.get("pre_copies_before_cut_over")
     ):
         LOGGER.info("Starting Data Upload to source VMs")
-        start_source_vm_data_upload_vmware(provider_data=source_provider_data, vm_names_list=vm_names_list)
+        start_source_vm_data_upload_vmware(vmware_provider=source_provider, vm_names_list=vm_names_list)
 
     yield request.param
 
     # Cleanup target resources of a positive test that succeeded
     # Getting the @pytest.marks of the test
     test_marks = [_mark.name for _mark in request.node.iter_markers()]
-    if (
-        is_true(py_config.get("clean_target_resources", False))
-        and request.node.rep_call.passed
-        and "negative" not in test_marks
-    ):
+    if py_config.get("clean_target_resources", False) and request.node.rep_call.passed and "negative" not in test_marks:
         for vm in virtual_machines:
             vm = VirtualMachine(
                 client=ocp_admin_client,
