@@ -1,19 +1,16 @@
 from __future__ import annotations
+
 import copy
+import re
 from typing import Any
 
+import requests
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.resource import Resource
-from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutSampler, TimeoutExpiredError
-
-from pyVmomi import vim
-
-import re
-
-
 from pyVim.connect import Disconnect, SmartConnect
-import requests
+from pyVmomi import vim
+from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from libs.base_provider import BaseProvider
 
@@ -338,11 +335,11 @@ class VMWareProvider(BaseProvider):
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.VSPHERE
         result_vm_info["provider_vm_api"] = source_vm
-        result_vm_info["name"] = kwargs["name"]
+        result_vm_info["name"] = vm_name
 
         vm_config: Any = source_vm.config
         if not vm_config:
-            self.log.error(f"No config found for VM {vm_name}")
+            raise ValueError(f"No config found for VM {vm_name}")
 
         # Devices
         for device in vm_config.hardware.device:

@@ -116,7 +116,7 @@ def migrate_vms(
                 and isinstance(source_provider, VMWareProvider)
             ):
                 source_provider.wait_for_snapshots(
-                    vm_names_list=[vm["name"] for vm in plans[0]["virtual_machines"]],
+                    vm_names_list=virtual_machines_list,
                     number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
                 )
                 if migration:

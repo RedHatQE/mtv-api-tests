@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-from kubernetes.dynamic import DynamicClient
 import shutil
 import subprocess
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Any
 
 import pytest
 import shortuuid
+from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.hook import Hook
