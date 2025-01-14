@@ -243,7 +243,7 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
         forklift_controller.wait_for_condition(
             status=forklift_controller.Condition.Status.TRUE,
             condition=forklift_controller.Condition.Type.SUCCESSFUL,
-            timeout=120,
+            timeout=300,
         )
 
         yield
@@ -839,7 +839,7 @@ def skip_if_no_rhv(source_provider_data):
 
 
 @pytest.fixture(scope="function")
-def plans(target_namespace, ocp_admin_client, source_provider_data, source_provider, request):
+def plans(target_namespace, ocp_admin_client, source_provider, request):
     plan: dict[str, Any] = request.param[0]
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]

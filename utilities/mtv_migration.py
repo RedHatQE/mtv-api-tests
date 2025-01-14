@@ -1,16 +1,17 @@
 from __future__ import annotations
-from typing import Any, Generator
-from ocp_resources.network_map import NetworkMap
-from ocp_resources.storage_map import StorageMap
+
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from typing import Any, Generator
 
 import pytz
 from ocp_resources.migration import Migration
+from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
+from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import retry
@@ -195,7 +196,7 @@ def run_migration(
         Plan and Migration Managed Resources.
     """
     with Plan(
-        name=f"{name}-plan",
+        name=f"{name}-plan-{'warm' if warm_migration else 'cold'}",
         namespace=namespace,
         source_provider_name=source_provider_name,
         source_provider_namespace=source_provider_namespace or namespace,
@@ -207,7 +208,7 @@ def run_migration(
         network_map_namespace=network_map_namespace,
         virtual_machines_list=virtual_machines_list,
         target_namespace=target_namespace,
-        warm_migration=bool(warm_migration),
+        warm_migration=warm_migration,
         pre_hook_name=pre_hook_name,
         pre_hook_namespace=pre_hook_namespace,
         after_hook_name=after_hook_name,
