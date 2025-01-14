@@ -170,7 +170,7 @@ class CNVProvider(BaseProvider):
 
         result_vm_info["memory_in_mb"] = int(
             humanfriendly.parse_size(
-                cnv_vm.instance.spec.template.spec.domain.resources.requests.memory,
+                cnv_vm.instance.spec.template.spec.domain.memory.guest,
                 binary=True,
             )
             / 1024
