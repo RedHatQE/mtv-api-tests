@@ -79,6 +79,7 @@ def migrate_vms(
             f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}-{uuid.uuid4().hex[0:3]}"
         )
         plan_name = _plan_name.replace("_", "-").replace(".", "-").lower()
+        plans[0]["name"] = plan_name
 
         # Plan CR accepts only VM name/id
         virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
