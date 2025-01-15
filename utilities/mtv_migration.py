@@ -92,7 +92,7 @@ def migrate_vms(
             "source_provider_name": source_provider.ocp_resource.name,
             "source_provider_namespace": source_provider.ocp_resource.namespace,
             "virtual_machines_list": virtual_machines_list,
-            "warm_migration": plan_warm_migration or bool(py_config["warm_migration"]),
+            "warm_migration": plan_warm_migration or py_config["warm_migration"],
             "network_map_name": network_migration_map.name,
             "network_map_namespace": network_migration_map.namespace,
             "storage_map_name": storage_migration_map.name,
