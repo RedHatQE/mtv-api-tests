@@ -72,16 +72,19 @@ def migrate_vms(
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
     if not py_config.get("skip_migration"):
-        plan_name = f"mtv-api-tests-{datetime.now().strftime('%y-%d-%m-%H-%M-%S')}-{uuid.uuid4().hex[0:3]}"
-        plans[0]["name"] = plan_name
+        plan_warm_migration = plans[0].get("warm_migration")
+        _source_provider_type = py_config.get("source_provider_type")
+        _plan_name = (
+            f"mtv-api-tests-{_source_provider_type}-{py_config['source_provider_version']}"
+            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}-{uuid.uuid4().hex[0:3]}"
+        )
+        plan_name = _plan_name.replace("_", "-").replace(".", "-").lower()
 
         # Plan CR accepts only VM name/id
         virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
-        if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
+        if _source_provider_type == Provider.ProviderType.OPENSHIFT:
             for idx in range(len(virtual_machines_list)):
                 virtual_machines_list[idx].update({"namespace": target_namespace})
-
-        plan_warm_migration = plans[0].get("warm_migration")
 
         run_migration_kwargs: dict[str, Any] = {
             "name": plan_name,
@@ -196,7 +199,7 @@ def run_migration(
         Plan and Migration Managed Resources.
     """
     with Plan(
-        name=f"{name}-plan-{'warm' if warm_migration else 'cold'}",
+        name=name,
         namespace=namespace,
         source_provider_name=source_provider_name,
         source_provider_namespace=source_provider_namespace or namespace,
