@@ -75,7 +75,7 @@ def migrate_vms(
         plan_warm_migration = plans[0].get("warm_migration")
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
-            f"mtv-api-tests-{_source_provider_type}-{py_config['source_provider_version']}"
+            f"mtvqe-{_source_provider_type}-{py_config['source_provider_version']}"
             f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}-{uuid.uuid4().hex[0:3]}"
         )
         plan_name = _plan_name.replace("_", "-").replace(".", "-").lower()
