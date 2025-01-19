@@ -120,31 +120,32 @@ def pytest_sessionfinish(session, exitstatus):
     _session_store = get_fixture_store(session)
     _log_collector_path = Path(session.config.getoption("log_collector_path"))
 
+    _created_reousrces: list[dict[str, str]] = []
+
+    for _resource in _session_store.get("teardown", []):
+        try:
+            _created_reousrces.append({
+                "module": _resource.__module__,
+                "kind": _resource.kind,
+                "name": _resource.name,
+                "namespace": _resource.namespace,
+            })
+
+        except Exception as ex:
+            LOGGER.error(f"Failed to collect resource {_resource.name} data due to: {ex}")
+
+    try:
+        with open(_log_collector_path / "resources.json", "w") as fd:
+            json.dump(_created_reousrces, fd)
+    except Exception as ex:
+        LOGGER.error(f"Failed to store resources.json due to: {ex}")
+
     if py_config.get("clean_test_env", True) or exitstatus.value == 0:
-        _created_reousrces: list[dict[str, str]] = []
-
         for _resource in _session_store.get("teardown", []):
-            try:
-                _created_reousrces.append({
-                    "module": _resource.__module__,
-                    "kind": _resource.kind,
-                    "name": _resource.name,
-                    "namespace": _resource.namespace,
-                })
-
-            except Exception as ex:
-                LOGGER.error(f"Failed to collect resource {_resource.name} data due to: {ex}")
-
             try:
                 _resource.clean_up()
             except Exception as ex:
                 LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
-
-        try:
-            with open(_log_collector_path / "resources.json", "w") as fd:
-                json.dump(_created_reousrces, fd)
-        except Exception as ex:
-            LOGGER.error(f"Failed to store resources.json due to: {ex}")
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
