@@ -43,15 +43,6 @@ def collect_namespaced_resource_yaml(
             yaml.dump(_resource_obj.instance.to_dict(), fd)
 
 
-def collect_resource_yaml(
-    yaml_path: Path, resource: type[Resource], resource_instance: ResourceInstance, client: DynamicClient
-) -> None:
-    _resource_obj = resource(name=resource_instance.name, client=client)
-    if _resource_obj.exists:
-        with open(yaml_path / f"{_resource_obj.name}.yaml", "w") as fd:
-            yaml.dump(_resource_obj.instance.to_dict(), fd)
-
-
 def collect_all_namespaced_resources_yaml(
     yaml_path: Path, resource: type[NamespacedResource], namespace: str, client: DynamicClient
 ) -> None:
