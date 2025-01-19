@@ -1,5 +1,6 @@
 import pytest as pytest
 from pytest_testconfig import py_config
+
 from utilities.mtv_migration import get_vm_suffix, migrate_vms
 
 VM_SUFFIX = get_vm_suffix()
@@ -24,6 +25,8 @@ VM_SUFFIX = get_vm_suffix()
 )
 @pytest.mark.tier0
 def test_sanity_cold_mtv_migration(
+    fixture_store,
+    session_uuid,
     target_namespace,
     plans,
     source_provider,
@@ -33,6 +36,8 @@ def test_sanity_cold_mtv_migration(
     storage_migration_map,
 ):
     migrate_vms(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -68,6 +73,8 @@ def test_sanity_cold_mtv_migration(
 )
 @pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_cold_remote_ocp(
+    fixture_store,
+    session_uuid,
     target_namespace,
     plans,
     source_provider,
@@ -77,6 +84,8 @@ def test_cold_remote_ocp(
     remote_storage_migration_map,
 ):
     migrate_vms(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,

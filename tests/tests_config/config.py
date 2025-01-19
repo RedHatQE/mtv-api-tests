@@ -184,7 +184,6 @@ number_of_vms = 1
 warm_migration = False
 check_vms_signals = True
 target_namespace = "mtv-api-tests"
-delete_target_namespace = False
 mtv_namespace = "openshift-mtv"
 list_of_vms_csv = ""
 vm_name_search_pattern = ""
@@ -194,11 +193,11 @@ snapshots_interval = 2
 mins_before_cutover = 5
 skip_migration = False
 plan_wait_timeout = 3000
-clean_target_resources = True
 matrix_test = True
 release_test = False
 target_ocp_version = "4.17"
 mount_root = ""
+clean_test_env = True
 
 for _dir in dir():
     val = locals()[_dir]

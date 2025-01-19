@@ -43,4 +43,6 @@ dependencies = [
   "openshift-python-wrapper>=11.0.12",
   "pytest-xdist>=3.6.1",
   "setuptools>=75.8.0",
+  "pytest-harvest>=1.10.5",
+  "pandas>=2.2.3",
 ]
