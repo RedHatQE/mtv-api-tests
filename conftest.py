@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -8,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import shortuuid
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
@@ -19,15 +19,17 @@ from ocp_resources.network_attachment_definition import NetworkAttachmentDefinit
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
-from ocp_resources.resource import Resource, ResourceEditor, get_client
+from ocp_resources.resource import ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
+from pytest_harvest import get_fixture_store
 from pytest_testconfig import py_config
 
 from libs.providers.cnv import CNVProvider
+from utilities.log_collector import logs_collector, prepare_base_path
 from utilities.logger import separator, setup_logging
 from utilities.utils import (
     create_source_cnv_vm,
@@ -46,6 +48,13 @@ BASIC_LOGGER = logging.getLogger("basic")
 # Pytest start
 
 
+def pytest_addoption(parser):
+    data_collector_group = parser.getgroup(name="DataCollector")
+    data_collector_group.addoption(
+        "--log-collector-path", help="Path to store collected data for failed tests", default="/tmp/mtv-api-tests"
+    )
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     # execute all other hooks to obtain the report object
@@ -59,6 +68,9 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionstart(session):
+    _log_collector_path = Path(session.config.getoption("log_collector_path"))
+    prepare_base_path(base_path=_log_collector_path)
+
     tests_log_file = session.config.getoption("log_file") or "pytest-tests.log"
     if os.path.exists(tests_log_file):
         Path(tests_log_file).unlink(missing_ok=True)
@@ -105,6 +117,35 @@ def pytest_report_teststatus(report, config):
 
 
 def pytest_sessionfinish(session, exitstatus):
+    _session_store = get_fixture_store(session)
+    _log_collector_path = Path(session.config.getoption("log_collector_path"))
+
+    if py_config.get("clean_test_env", True) or exitstatus.value == 0:
+        _created_reousrces: list[dict[str, str]] = []
+
+        for _resource in _session_store.get("teardown", []):
+            try:
+                _created_reousrces.append({
+                    "module": _resource.__module__,
+                    "kind": _resource.kind,
+                    "name": _resource.name,
+                    "namespace": _resource.namespace,
+                })
+
+            except Exception as ex:
+                LOGGER.error(f"Failed to collect resource {_resource.name} data due to: {ex}")
+
+            try:
+                _resource.clean_up()
+            except Exception as ex:
+                LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
+
+        try:
+            with open(_log_collector_path / "resources.json", "w") as fd:
+                json.dump(_created_reousrces, fd)
+        except Exception as ex:
+            LOGGER.error(f"Failed to store resources.json due to: {ex}")
+
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     reporter.summary_stats()
@@ -114,6 +155,11 @@ def pytest_collection_modifyitems(session, config, items):
     for item in items:
         # Add test ID to test name
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
+
+
+def pytest_exception_interact(node, call, report):
+    _log_collector_path = Path(f"{node.session.config.getoption('log_collector_path')}/{node.name}")
+    logs_collector(client=get_client(), base_path=_log_collector_path, mtv_namespace=py_config["mtv_namespace"])
 
 
 # Pytest end
@@ -126,20 +172,23 @@ def autouse_fixtures(source_provider_data, nfs_storage_profile):
 
 
 @pytest.fixture(scope="session")
-def target_namespace(ocp_admin_client):
-    """Delete and create the target namespace for MTV migrations"""
+def target_namespace(fixture_store, session_uuid, ocp_admin_client):
+    """create the target namespace for MTV migrations"""
     label: dict[str, str] = {
         "pod-security.kubernetes.io/enforce": "restricted",
         "pod-security.kubernetes.io/enforce-version": "latest",
     }
-    target_namespace: str = py_config["target_namespace"]
+    _target_namespace: str = py_config["target_namespace"]
+    _target_namespace = _target_namespace.replace("mtv-api-tests", "")
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs
-    unique_namespace_name = f"{target_namespace}-{shortuuid.uuid()}".lower()[:63]
+    unique_namespace_name = f"{session_uuid}-{_target_namespace}"[:63]
 
-    with Namespace(client=ocp_admin_client, name=unique_namespace_name, label=label) as namespace:
-        namespace.wait_for_status(status=namespace.Status.ACTIVE)
-        yield namespace.name
+    namespace = Namespace(client=ocp_admin_client, name=unique_namespace_name, label=label)
+    namespace.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(namespace)
+    namespace.wait_for_status(status=namespace.Status.ACTIVE)
+    yield namespace.name
 
 
 @pytest.fixture(scope="session")
@@ -280,11 +329,43 @@ def source_provider_data():
 
 
 @pytest.fixture(scope="session")
-def source_provider(source_provider_data, mtv_namespace, ocp_admin_client, tmp_path_factory):
-    _teardown: list[Resource | Secret | None] = []
+def source_provider(
+    fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client, tmp_path_factory
+):
+    # _teardown: list[Resource | Secret | None] = []
 
-    try:
+    # try:
+    with create_source_provider(
+        session_uuid=session_uuid,
+        config=py_config,
+        source_provider_data=source_provider_data,
+        mtv_namespace=mtv_namespace,
+        admin_client=ocp_admin_client,
+        tmp_dir=tmp_path_factory,
+    ) as source_provider_objects:
+        _source_provider = source_provider_objects[0]
+        _provider_ocp_resource = _source_provider.ocp_resource
+        _secret_ocp_resource = source_provider_objects[1]
+        fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+        # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+
+        yield _source_provider
+
+    # finally:
+    #     for _resource in _teardown:
+    #         if _resource:
+    #             _resource.clean_up()
+
+    _source_provider.disconnect()
+
+
+@pytest.fixture(scope="session")
+def source_providers(fixture_store, session_uuid, mtv_namespace, ocp_admin_client, tmp_path_factory):
+    # _teardown: list[Any] = []
+    # try:
+    for source_provider_data in py_config["source_providers_list"]:
         with create_source_provider(
+            session_uuid=session_uuid,
             config=py_config,
             source_provider_data=source_provider_data,
             mtv_namespace=mtv_namespace,
@@ -294,132 +375,117 @@ def source_provider(source_provider_data, mtv_namespace, ocp_admin_client, tmp_p
             _source_provider = source_provider_objects[0]
             _provider_ocp_resource = _source_provider.ocp_resource
             _secret_ocp_resource = source_provider_objects[1]
-            _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+            fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+            # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
-            yield _source_provider
+        yield _source_provider
 
-    finally:
-        for _resource in _teardown:
-            if _resource:
-                _resource.clean_up()
-
-    _source_provider.disconnect()
-
-
-@pytest.fixture(scope="session")
-def source_providers(mtv_namespace, ocp_admin_client, tmp_path_factory):
-    _teardown: list[Any] = []
-    try:
-        for source_provider_data in py_config["source_providers_list"]:
-            with create_source_provider(
-                config=py_config,
-                source_provider_data=source_provider_data,
-                mtv_namespace=mtv_namespace,
-                admin_client=ocp_admin_client,
-                tmp_dir=tmp_path_factory,
-            ) as source_provider_objects:
-                _source_provider = source_provider_objects[0]
-                _provider_ocp_resource = _source_provider.ocp_resource
-                _secret_ocp_resource = source_provider_objects[1]
-                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
-
-            yield _source_provider
-
-    finally:
-        for _resource in _teardown:
-            if _resource:
-                _resource.clean_up()
+    # finally:
+    #     for _resource in _teardown:
+    #         if _resource:
+    #             _resource.clean_up()
 
 
 @pytest.fixture(scope="session")
-def source_provider_admin_user(source_provider_data, mtv_namespace, ocp_admin_client):
+def source_provider_admin_user(fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client):
     if vmware_provider(provider_data=source_provider_data):
-        _teardown: list[Any] = []
-        try:
-            with create_source_provider(
-                config=py_config,
-                source_provider_data=source_provider_data,
-                mtv_namespace=mtv_namespace,
-                admin_client=ocp_admin_client,
-                username=source_provider_data["admin_username"],
-                password=source_provider_data["admin_password"],
-            ) as source_provider_objects:
-                _source_provider = source_provider_objects[0]
-                _provider_ocp_resource = _source_provider.ocp_resource
-                _secret_ocp_resource = source_provider_objects[1]
-                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+        # _teardown: list[Any] = []
+        # try:
+        with create_source_provider(
+            session_uuid=session_uuid,
+            config=py_config,
+            source_provider_data=source_provider_data,
+            mtv_namespace=mtv_namespace,
+            admin_client=ocp_admin_client,
+            username=source_provider_data["admin_username"],
+            password=source_provider_data["admin_password"],
+        ) as source_provider_objects:
+            _source_provider = source_provider_objects[0]
+            _provider_ocp_resource = _source_provider.ocp_resource
+            _secret_ocp_resource = source_provider_objects[1]
+            fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+            # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
-            yield _source_provider
+        yield _source_provider
 
-        finally:
-            for _resource in _teardown:
-                if _resource:
-                    _resource.clean_up()
+        # finally:
+        #     for _resource in _teardown:
+        #         if _resource:
+        #             _resource.clean_up()
     else:
         yield
 
 
 @pytest.fixture(scope="session")
-def source_provider_non_admin_user(source_provider_data, mtv_namespace, ocp_admin_client):
+def source_provider_non_admin_user(fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client):
     if vmware_provider(provider_data=source_provider_data):
-        _teardown: list[Any] = []
-        try:
-            with create_source_provider(
-                config=py_config,
-                source_provider_data=source_provider_data,
-                mtv_namespace=mtv_namespace,
-                admin_client=ocp_admin_client,
-                username=source_provider_data["non_admin_username"],
-                password=source_provider_data["non_admin_password"],
-            ) as source_provider_objects:
-                _source_provider = source_provider_objects[0]
-                _provider_ocp_resource = _source_provider.ocp_resource
-                _secret_ocp_resource = source_provider_objects[1]
-                _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
+        # _teardown: list[Any] = []
+        # try:
+        with create_source_provider(
+            session_uuid=session_uuid,
+            config=py_config,
+            source_provider_data=source_provider_data,
+            mtv_namespace=mtv_namespace,
+            admin_client=ocp_admin_client,
+            username=source_provider_data["non_admin_username"],
+            password=source_provider_data["non_admin_password"],
+        ) as source_provider_objects:
+            _source_provider = source_provider_objects[0]
+            _provider_ocp_resource = _source_provider.ocp_resource
+            _secret_ocp_resource = source_provider_objects[1]
+            fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+            # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
-            yield _source_provider
+        yield _source_provider
 
-        finally:
-            for _resource in _teardown:
-                if _resource:
-                    _resource.clean_up()
+        # finally:
+        #     for _resource in _teardown:
+        #         if _resource:
+        #             _resource.clean_up()
     else:
         yield
 
 
 @pytest.fixture(scope="session")
-def multus_network_name(target_namespace, ocp_admin_client):
+def multus_network_name(fixture_store, target_namespace, ocp_admin_client):
     nad_name: str = ""
-    nads: list[NetworkAttachmentDefinition] = []
+    # nads: list[NetworkAttachmentDefinition] = []
     clients: list[DynamicClient] = [ocp_admin_client]
     if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
         clients.append(ocp_admin_client)
 
-    try:
-        for client in clients:
-            nad = NetworkAttachmentDefinition(
-                client=client,
-                yaml_file="tests/manifests/second_network.yaml",
-                namespace=target_namespace,
-            )
-            nad.deploy(wait=True)
-            nad_name = nad.name
-            nads.append(nad)
+    # try:
+    for client in clients:
+        nad = NetworkAttachmentDefinition(
+            client=client,
+            yaml_file="tests/manifests/second_network.yaml",
+            namespace=target_namespace,
+        )
+        nad.deploy(wait=True)
+        fixture_store.setdefault("teardown", []).append(nad)
+        nad_name = nad.name
+        # nads.append(nad)
 
-        yield nad_name
-    finally:
-        for _nad in nads:
-            _nad.clean_up(wait=True)
+    yield nad_name
+    # finally:
+    #     for _nad in nads:
+    #         _nad.clean_up(wait=True)
 
 
 @pytest.fixture(scope="session")
 def network_migration_map_pod_only(
-    source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client, target_namespace
+    fixture_store,
+    source_provider,
+    source_provider_data,
+    destination_provider,
+    mtv_namespace,
+    ocp_admin_client,
+    target_namespace,
 ):
     network_map_list = gen_network_map_list(
         target_namespace=target_namespace, source_provider_data=source_provider_data, pod_only=True
     )
-    with NetworkMap(
+    network_map = NetworkMap(
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resources.name}-{destination_provider.ocp_resources.name}-network-map-pod",
         namespace=mtv_namespace,
@@ -428,12 +494,15 @@ def network_migration_map_pod_only(
         source_provider_namespace=source_provider.ocp_resources.namespace,
         destination_provider_name=destination_provider.ocp_resource.name,
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    ) as network_map:
-        yield network_map
+    )
+    network_map.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(network_map)
+    yield network_map
 
 
 @pytest.fixture(scope="session")
 def network_migration_map(
+    fixture_store,
     source_provider,
     source_provider_data,
     destination_provider,
@@ -447,7 +516,7 @@ def network_migration_map(
         source_provider_data=source_provider_data,
         multus_network_name=multus_network_name,
     )
-    with NetworkMap(
+    network_map = NetworkMap(
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
         namespace=mtv_namespace,
@@ -456,12 +525,16 @@ def network_migration_map(
         source_provider_namespace=source_provider.ocp_resource.namespace,
         destination_provider_name=destination_provider.ocp_resource.name,
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    ) as network_map:
-        yield network_map
+    )
+    network_map.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(network_map)
+    yield network_map
 
 
 @pytest.fixture(scope="session")
-def storage_migration_map(source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client):
+def storage_migration_map(
+    fixture_store, source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client
+):
     storage_map_list: list[dict[str, Any]] = []
     for storage in source_provider_data["storages"]:
         storage_map_list.append({
@@ -469,7 +542,7 @@ def storage_migration_map(source_provider, source_provider_data, destination_pro
             "source": storage,
         })
 
-    with StorageMap(
+    storage_map = StorageMap(
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
         namespace=mtv_namespace,
@@ -478,13 +551,15 @@ def storage_migration_map(source_provider, source_provider_data, destination_pro
         source_provider_namespace=source_provider.ocp_resource.namespace,
         destination_provider_name=destination_provider.ocp_resource.name,
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    ) as storage_map:
-        yield storage_map
+    )
+    storage_map.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(storage_map)
+    yield storage_map
 
 
 @pytest.fixture(scope="session")
 def storage_migration_map_default_settings(
-    source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client
+    fixture_store, source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client
 ):
     storage_map_list: list[dict[str, Any]] = []
     for storage in source_provider_data["storages"]:
@@ -497,7 +572,7 @@ def storage_migration_map_default_settings(
             "source": storage,
         })
 
-    with StorageMap(
+    storage_map = StorageMap(
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
         f"-storage-map-default-settings",
@@ -507,12 +582,15 @@ def storage_migration_map_default_settings(
         source_provider_namespace=source_provider.ocp_resource.namespace,
         destination_provider_name=destination_provider.ocp_resource.name,
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    ) as storage_map:
-        yield storage_map
+    )
+    storage_map.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(storage_map)
+    yield storage_map
 
 
 @pytest.fixture(scope="session")
 def network_migration_map_source_admin(
+    fixture_store,
     source_provider_admin_user,
     source_provider_data,
     destination_provider,
@@ -527,7 +605,7 @@ def network_migration_map_source_admin(
             source_provider_data=source_provider_data,
             multus_network_name=multus_network_name,
         )
-        with NetworkMap(
+        network_map = NetworkMap(
             client=ocp_admin_client,
             name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
             namespace=mtv_namespace,
@@ -536,8 +614,10 @@ def network_migration_map_source_admin(
             source_provider_namespace=source_provider_admin_user.ocp_resource.namespace,
             destination_provider_name=destination_provider.ocp_resource.name,
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        ) as network_map:
-            yield network_map
+        )
+        network_map.deploy(wait=True)
+        fixture_store.setdefault("teardown", []).append(network_map)
+        yield network_map
 
     else:
         yield
@@ -545,6 +625,7 @@ def network_migration_map_source_admin(
 
 @pytest.fixture(scope="session")
 def storage_migration_map_source_admin(
+    fixture_store,
     source_provider_admin_user,
     source_provider_data,
     destination_provider,
@@ -560,7 +641,7 @@ def storage_migration_map_source_admin(
                 "source": {"name": item},
             })
 
-        with StorageMap(
+        storage_map = StorageMap(
             client=ocp_admin_client,
             name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
             f"-storage-map",
@@ -570,8 +651,10 @@ def storage_migration_map_source_admin(
             source_provider_namespace=source_provider_admin_user.ocp_resource.namespace,
             destination_provider_name=destination_provider.ocp_resource.name,
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        ) as storage_map:
-            yield storage_map
+        )
+        storage_map.deploy(wait=True)
+        fixture_store.setdefault("teardown", []).append(storage_map)
+        yield storage_map
 
     else:
         yield
@@ -579,6 +662,7 @@ def storage_migration_map_source_admin(
 
 @pytest.fixture(scope="session")
 def network_migration_map_source_non_admin(
+    fixture_store,
     source_provider_non_admin_user,
     source_provider_data,
     destination_provider,
@@ -593,7 +677,7 @@ def network_migration_map_source_non_admin(
             source_provider_data=source_provider_data,
             multus_network_name=multus_network_name,
         )
-        with NetworkMap(
+        network_map = NetworkMap(
             client=ocp_admin_client,
             name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
             namespace=mtv_namespace,
@@ -602,8 +686,10 @@ def network_migration_map_source_non_admin(
             source_provider_namespace=source_provider_non_admin_user.ocp_resource.namespace,
             destination_provider_name=destination_provider.ocp_resource.name,
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        ) as network_map:
-            yield network_map
+        )
+        network_map.deploy(wait=True)
+        fixture_store.setdefault("teardown", []).append(network_map)
+        yield network_map
 
     else:
         yield
@@ -611,6 +697,7 @@ def network_migration_map_source_non_admin(
 
 @pytest.fixture(scope="session")
 def storage_migration_map_source_non_admin(
+    fixture_store,
     source_provider_non_admin_user,
     source_provider_data,
     destination_provider,
@@ -626,7 +713,7 @@ def storage_migration_map_source_non_admin(
                 "source": {"name": item},
             })
 
-        with StorageMap(
+        storage_map = StorageMap(
             client=ocp_admin_client,
             name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
             f"-storage-map",
@@ -636,8 +723,10 @@ def storage_migration_map_source_non_admin(
             source_provider_namespace=source_provider_non_admin_user.ocp_resource.namespace,
             destination_provider_name=destination_provider.ocp_resource.name,
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        ) as storage_map:
-            yield storage_map
+        )
+        storage_map.deploy(wait=True)
+        fixture_store.setdefault("teardown", []).append(storage_map)
+        yield storage_map
 
     else:
         yield
@@ -665,36 +754,41 @@ def plans_scale(source_provider):
 
 
 @pytest.fixture(scope="session")
-def destination_ocp_secret(ocp_admin_client, session_uuid, mtv_namespace):
+def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, mtv_namespace):
     api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
     if not api_key:
         raise ValueError("API key not found in configuration, please login with `oc login` first")
 
-    with Secret(
+    secret = Secret(
         name=f"{session_uuid}-ocp-secret",
         namespace=mtv_namespace,
         # API key format: 'Bearer sha256~<token>', split it to get token.
         string_data={"token": api_key.split()[-1], "insecureSkipVerify": "true"},
-    ) as secret:
-        yield secret
+    )
+    secret.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(secret)
+    yield secret
 
 
 @pytest.fixture(scope="session")
-def destination_ocp_provider(destination_ocp_secret, ocp_admin_client, session_uuid, mtv_namespace):
+def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_client, session_uuid, mtv_namespace):
     provider_name: str = f"{session_uuid}-ocp-provider"
-    with Provider(
+    provider = Provider(
         name=provider_name,
         namespace=mtv_namespace,
         secret_name=destination_ocp_secret.name,
         secret_namespace=destination_ocp_secret.namespace,
         url=ocp_admin_client.configuration.host,
         provider_type=Provider.ProviderType.OPENSHIFT,
-    ) as ocp_resource_provider:
-        yield CNVProvider(ocp_resource=ocp_resource_provider)
+    )
+    provider.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(provider)
+    yield CNVProvider(ocp_resource=provider)
 
 
 @pytest.fixture(scope="session")
 def remote_network_migration_map(
+    fixture_store,
     source_provider,
     source_provider_data,
     destination_ocp_provider,
@@ -708,7 +802,7 @@ def remote_network_migration_map(
         source_provider_data=source_provider_data,
         multus_network_name=multus_network_name,
     )
-    with NetworkMap(
+    network_map = NetworkMap(
         name=f"{session_uuid}-networkmap",
         namespace=mtv_namespace,
         mapping=network_map_list,
@@ -716,13 +810,21 @@ def remote_network_migration_map(
         source_provider_namespace=source_provider.ocp_resource.namespace,
         destination_provider_name=destination_ocp_provider.ocp_resource.name,
         destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
-    ) as network_map:
-        yield network_map
+    )
+    network_map.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(network_map)
+    yield network_map
 
 
 @pytest.fixture(scope="session")
 def remote_storage_migration_map(
-    source_provider, source_provider_data, destination_ocp_provider, session_uuid, mtv_namespace, ocp_admin_client
+    fixture_store,
+    source_provider,
+    source_provider_data,
+    destination_ocp_provider,
+    session_uuid,
+    mtv_namespace,
+    ocp_admin_client,
 ):
     storage_map_list: list[dict[str, Any]] = []
     for storage in source_provider_data["storages"]:
@@ -735,7 +837,7 @@ def remote_storage_migration_map(
             "source": storage,
         })
 
-    with StorageMap(
+    storage_map = StorageMap(
         name=f"{session_uuid}-storagemap",
         namespace=mtv_namespace,
         mapping=storage_map_list,
@@ -743,8 +845,10 @@ def remote_storage_migration_map(
         source_provider_namespace=source_provider.ocp_resource.namespace,
         destination_provider_name=destination_ocp_provider.ocp_resource.name,
         destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
-    ) as storage_map:
-        yield storage_map
+    )
+    storage_map.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(storage_map)
+    yield storage_map
 
 
 @pytest.fixture(scope="session")
@@ -763,7 +867,7 @@ def plans_set():
 
 
 @pytest.fixture(scope="session")
-def source_provider_host_secret(source_provider, source_provider_data, mtv_namespace, ocp_admin_client):
+def source_provider_host_secret(fixture_store, source_provider, source_provider_data, mtv_namespace, ocp_admin_client):
     if source_provider_data.get("host_list"):
         host = source_provider_data["host_list"][0]
         name = f"{source_provider_data['fqdn']}-{host['migration_host_ip']}-{host['migration_host_id']}"
@@ -771,59 +875,67 @@ def source_provider_host_secret(source_provider, source_provider_data, mtv_names
             "user": host["user"],
             "password": host["password"],
         }
-        with Secret(
+        secret = Secret(
             client=ocp_admin_client, name=name.replace(".", "-"), namespace=mtv_namespace, string_data=string_data
-        ) as secret:
-            yield secret
+        )
+        secret.deploy(wait=True)
+        fixture_store.setdefault("teardown", []).append(secret)
+        yield secret
     else:
         yield
 
 
 @pytest.fixture(scope="session")
 def source_provider_host(
-    source_provider, source_provider_data, mtv_namespace, source_provider_host_secret, ocp_admin_client
+    fixture_store, source_provider, source_provider_data, mtv_namespace, source_provider_host_secret, ocp_admin_client
 ):
     if source_provider_data.get("host_list"):
-        host = source_provider_data["host_list"][0]
-        with Host(
+        _host = source_provider_data["host_list"][0]
+        host = Host(
             client=ocp_admin_client,
-            name=f"{source_provider_data['fqdn']}-{host['migration_host_ip']}-{host['migration_host_id']}",
+            name=f"{source_provider_data['fqdn']}-{_host['migration_host_ip']}-{_host['migration_host_id']}",
             namespace=mtv_namespace,
-            ip_address=host["migration_host_ip"],
-            host_id=host["migration_host_id"],
+            ip_address=_host["migration_host_ip"],
+            host_id=_host["migration_host_id"],
             provider_name=source_provider.ocp_resource.name,
             provider_namespace=source_provider.ocp_resource.namespace,
             secret_name=source_provider_host_secret.name,
             secret_namespace=source_provider_host_secret.namespace,
-        ) as host:
-            yield host
+        )
+        host.deploy(wait=True)
+        fixture_store.setdefault("teardown", []).append(host)
+        yield _host
 
     else:
         yield
 
 
 @pytest.fixture(scope="session")
-def prehook(ocp_admin_client, mtv_namespace):
+def prehook(fixture_store, ocp_admin_client, mtv_namespace):
     pre_hook_dict: dict[str, str] = py_config["hook_dict"]["prehook"]
-    with Hook(
+    hook = Hook(
         client=ocp_admin_client,
         name=pre_hook_dict["name"],
         namespace=mtv_namespace,
         playbook=pre_hook_dict["payload"],
-    ) as hook:
-        yield hook
+    )
+    hook.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(hook)
+    yield hook
 
 
 @pytest.fixture(scope="session")
-def posthook(ocp_admin_client, mtv_namespace):
+def posthook(fixture_store, ocp_admin_client, mtv_namespace):
     posthook_dict: dict[str, str] = py_config["hook_dict"]["posthook"]
-    with Hook(
+    hook = Hook(
         client=ocp_admin_client,
         name=posthook_dict["name"],
         namespace=mtv_namespace,
         playbook=posthook_dict["payload"],
-    ) as hook:
-        yield hook
+    )
+    hook.deploy(wait=True)
+    fixture_store.setdefault("teardown", []).append(hook)
+    yield hook
 
 
 @pytest.fixture(scope="function")
@@ -839,7 +951,7 @@ def skip_if_no_rhv(source_provider_data):
 
 
 @pytest.fixture(scope="function")
-def plans(target_namespace, ocp_admin_client, source_provider, request):
+def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, request):
     plan: dict[str, Any] = request.param[0]
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]
@@ -878,23 +990,18 @@ def plans(target_namespace, ocp_admin_client, source_provider, request):
 
     yield request.param
 
-    # Cleanup target resources of a positive test that succeeded
-    # Getting the @pytest.marks of the test
-    test_marks = [_mark.name for _mark in request.node.iter_markers()]
-    if py_config.get("clean_target_resources", False) and request.node.rep_call.passed and "negative" not in test_marks:
-        for vm in virtual_machines:
-            vm = VirtualMachine(
+    for vm in virtual_machines:
+        fixture_store.setdefault("teardown", []).append(
+            VirtualMachine(
                 client=ocp_admin_client,
                 name=vm["name"],
                 namespace=target_namespace,
             )
-            if vm.exists:
-                vm.delete(wait=True)
+        )
 
-        for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
-            if plan["name"] in pod.name:
-                if pod.exists:
-                    pod.delete(wait=True)
+    for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
+        if plan["name"] in pod.name:
+            fixture_store.setdefault("teardown", []).append(pod)
 
 
 @pytest.fixture(scope="function")

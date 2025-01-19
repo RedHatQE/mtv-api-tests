@@ -1,7 +1,7 @@
 import pytest
 from pytest_testconfig import py_config
 
-from utilities.mtv_migration import get_vm_suffix, migrate_vms, get_cutover_value
+from utilities.mtv_migration import get_cutover_value, get_vm_suffix, migrate_vms
 
 if py_config["source_provider_type"] in ["openstack", "openshift"]:
     pytest.skip("OpenStack/OpenShift warm migration is not supported.", allow_module_level=True)
@@ -33,6 +33,8 @@ VM_SUFFIX = get_vm_suffix()
     ids=["rhel8"],
 )
 def test_sanity_warm_mtv_migration(
+    fixture_store,
+    session_uuid,
     target_namespace,
     plans,
     source_provider,
@@ -43,6 +45,8 @@ def test_sanity_warm_mtv_migration(
     storage_migration_map,
 ):
     migrate_vms(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -78,6 +82,8 @@ def test_sanity_warm_mtv_migration(
     ids=["MTV-200 rhel"],
 )
 def test_mtv_migration_warm_2disks2nics(
+    fixture_store,
+    session_uuid,
     target_namespace,
     plans,
     source_provider,
@@ -88,6 +94,8 @@ def test_mtv_migration_warm_2disks2nics(
     storage_migration_map,
 ):
     migrate_vms(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         plans=plans,
@@ -123,6 +131,8 @@ def test_mtv_migration_warm_2disks2nics(
 )
 @pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
 def test_warm_remote_ocp(
+    fixture_store,
+    session_uuid,
     target_namespace,
     plans,
     source_provider,
@@ -133,6 +143,8 @@ def test_warm_remote_ocp(
     remote_storage_migration_map,
 ):
     migrate_vms(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,

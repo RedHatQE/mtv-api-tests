@@ -104,12 +104,11 @@ def gen_network_map_list(
     return network_map_list
 
 
-def provider_cr_name(provider_data, username):
-    name = (
-        f"{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
+def provider_cr_name(session_uuid: str, provider_data: dict[str, Any], username: str) -> str:
+    return (
+        f"{session_uuid}-{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
         f"{provider_data['fqdn'].split('.')[0]}-{username.split('@')[0]}"
     )
-    return generate_name_with_uuid(name=name)
 
 
 @contextmanager
@@ -118,6 +117,7 @@ def create_source_provider(
     source_provider_data: dict[str, Any],
     mtv_namespace: str,
     admin_client: DynamicClient,
+    session_uuid: str,
     tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
 ) -> Generator[Tuple[BaseProvider, Secret | None | None], None, None]:
@@ -142,7 +142,11 @@ def create_source_provider(
         for key, value in kwargs.items():
             source_provider_data_copy[key] = value
 
-        name = provider_cr_name(provider_data=source_provider_data_copy, username=source_provider_data_copy["username"])
+        name = provider_cr_name(
+            session_uuid=session_uuid,
+            provider_data=source_provider_data_copy,
+            username=source_provider_data_copy["username"],
+        )
         secret_string_data = {}
         provider_args = {
             "username": source_provider_data_copy["username"],
@@ -264,4 +268,4 @@ def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str
 
 
 def generate_name_with_uuid(name: str) -> str:
-    return f"{name}-{shortuuid.ShortUUID().random(length=8).lower()}"
+    return f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"

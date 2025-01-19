@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any, Generator
@@ -59,6 +58,8 @@ def migrate_vms(
     storage_migration_map: StorageMap,
     source_provider_data: dict[str, Any],
     target_namespace: str,
+    session_uuid: str,
+    fixture_store: Any,
     source_provider_host: dict[str, Any] | None = None,
     cut_over: datetime | None = None,
     pre_hook_name: str | None = None,
@@ -75,8 +76,8 @@ def migrate_vms(
         plan_warm_migration = plans[0].get("warm_migration")
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
-            f"mtv-api-tests-{_source_provider_type}-{py_config['source_provider_version']}"
-            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}-{uuid.uuid4().hex[0:3]}"
+            f"{session_uuid}-{_source_provider_type}-{py_config['source_provider_version']}"
+            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}"
         )
         plan_name = _plan_name.replace("_", "-").replace(".", "-").lower()
         plans[0]["name"] = plan_name
@@ -103,13 +104,13 @@ def migrate_vms(
             "pre_hook_namespace": pre_hook_namespace,
             "after_hook_name": after_hook_name,
             "after_hook_namespace": after_hook_namespace,
-            "teardown": False,
             "cut_over": cut_over,
             "expected_plan_ready": expected_plan_ready,
             "condition_status": condition_status,
             "condition_type": condition_type,
             "destination_provider_name": destination_provider.ocp_resource.name,
             "destination_provider_namespace": destination_provider.ocp_resource.namespace,
+            "fixture_store": fixture_store,
         }
 
         with run_migration(**run_migration_kwargs) as (plan, migration):
@@ -166,11 +167,11 @@ def run_migration(
     pre_hook_namespace: str,
     after_hook_name: str,
     after_hook_namespace: str,
-    teardown: bool,
     cut_over: datetime,
     expected_plan_ready: bool,
     condition_status: str,
     condition_type: str,
+    fixture_store: Any,
 ) -> Generator[tuple[Plan, Migration | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -199,7 +200,7 @@ def run_migration(
     Returns:
         Plan and Migration Managed Resources.
     """
-    with Plan(
+    plan = Plan(
         name=name,
         namespace=namespace,
         source_provider_name=source_provider_name,
@@ -217,22 +218,25 @@ def run_migration(
         pre_hook_namespace=pre_hook_namespace,
         after_hook_name=after_hook_name,
         after_hook_namespace=after_hook_namespace,
-        teardown=teardown,
-    ) as plan:
-        if expected_plan_ready:
-            plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
-            with Migration(
-                name=f"{name}-migration",
-                namespace=namespace,
-                plan_name=plan.name,
-                plan_namespace=namespace,
-                cut_over=cut_over,
-                teardown=teardown,
-            ) as migration:
-                yield plan, migration
-        else:
-            plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
-            yield plan, None
+    )
+    plan.deploy(wait=True)
+    fixture_store.setdefault("plan", []).append(plan)
+
+    if expected_plan_ready:
+        plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
+        migration = Migration(
+            name=f"{name}-migration",
+            namespace=namespace,
+            plan_name=plan.name,
+            plan_namespace=namespace,
+            cut_over=cut_over,
+        )
+        migration.deploy(wait=True)
+        fixture_store.setdefault("migration", []).append(migration)
+        yield plan, migration
+    else:
+        plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
+        yield plan, None
 
 
 def get_vm_suffix() -> str:
