@@ -140,7 +140,7 @@ def pytest_sessionfinish(session, exitstatus):
     except Exception as ex:
         LOGGER.error(f"Failed to store resources.json due to: {ex}")
 
-    if py_config.get("clean_test_env", True) or exitstatus.value == 0:
+    if py_config.get("clean_test_env", True) in ("True", "true", True) or exitstatus.value == 0:
         for _resource in _session_store.get("teardown", []):
             try:
                 _resource.clean_up()

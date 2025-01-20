@@ -107,10 +107,10 @@ oc delete -f tests/manifests/second_network.yaml --wait=true
 Set log collector folder: (default to `/tmp/mtv-api-tests`)
 
 ```bash
-uv run pytest .... --log-collector-path <p>ath to log collector folder>
+uv run pytest .... --log-collector-path <path> to log collector folder>
 ```
 
-After run there is `resources.json` file under `--`-log-collector-path` that hold all created resources during the run.
+After run there is `resources.json` file under `--log-collector-path` that hold all created resources during the run.
 To delete all created resources using the above file run:
 
 ```bash
@@ -122,7 +122,7 @@ uv run tools/clean_cluster.py <path-to-resources.json>
 Run without calling teardown (Do not delete created resources)
 
 ```bash
-uv run pytest --tc=clean_test_env:true
+uv run pytest --tc=clean_test_env:false
 ```
 
 ## Run Functional Tests tier1
