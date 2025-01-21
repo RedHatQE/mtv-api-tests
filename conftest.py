@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shutil
@@ -31,6 +30,7 @@ from pytest_testconfig import py_config
 from libs.providers.cnv import CNVProvider
 from utilities.log_collector import logs_collector, prepare_base_path
 from utilities.logger import separator, setup_logging
+from utilities.pytest_utils import collect_created_resources, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
@@ -127,38 +127,13 @@ def pytest_sessionfinish(session, exitstatus):
     _session_store = get_fixture_store(session)
     _log_collector_path = Path(session.config.getoption("log_collector_path"))
 
-    _created_reousrces: dict[str, list[dict[str, str]]] = {}
-
-    for _resource_kind, _resource_list in _session_store["teardown"].items():
-        _created_reousrces.setdefault(_resource_kind, [])
-        for _resource in _resource_list:
-            try:
-                _created_reousrces[_resource_kind].append({
-                    "module": _resource.__module__,
-                    "kind": _resource.kind,
-                    "name": _resource.name,
-                    "namespace": _resource.namespace,
-                })
-
-            except Exception as ex:
-                LOGGER.error(f"Failed to collect resource {_resource.name} data due to: {ex}")
-
-    try:
-        with open(_log_collector_path / "resources.json", "w") as fd:
-            json.dump(_created_reousrces, fd)
-    except Exception as ex:
-        LOGGER.error(f"Failed to store resources.json due to: {ex}")
+    collect_created_resources(session_store=_session_store, log_collector_path=_log_collector_path)
 
     if session.config.getoption("skip_teardown"):
         LOGGER.warning("User requested to skip teardown of resources")
 
     else:
-        for _resource_kind, _resource_list in _session_store["teardown"].items():
-            for _resource in _resource_list:
-                try:
-                    _resource.clean_up(wait=True)
-                except Exception as ex:
-                    LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
+        session_teardown(session_store=_session_store)
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -193,6 +168,8 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
         "pod-security.kubernetes.io/enforce-version": "latest",
     }
     _target_namespace: str = py_config["target_namespace"]
+
+    # replace mtv-api-tests since session_uuid already include mtv-api-tests in the name
     _target_namespace = _target_namespace.replace("mtv-api-tests", "")
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs

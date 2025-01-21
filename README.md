@@ -107,7 +107,7 @@ oc delete -f tests/manifests/second_network.yaml --wait=true
 Set log collector folder: (default to `/tmp/mtv-api-tests`)
 
 ```bash
-uv run pytest .... --log-collector-path <path> to log collector folder>
+uv run pytest .... --log-collector-path <path to log collector folder>
 ```
 
 After run there is `resources.json` file under `--log-collector-path` that hold all created resources during the run.
@@ -159,7 +159,7 @@ uv run pytest -m scale --tc:vm_name_search_pattern:<search> --tc=number_of_vms:X
   uv run pip install pycurl --no-cache-dir
   ```
 
-- message":"network-attachment-definitions.k8s.cni.cncf.io \"mybridge\" already exists","reason":"AlreadyExists"
+- message":"network-attachment-definitions.k8s.cni.cncf.io \"mtv-api-tests-mybridge\" already exists","reason":"AlreadyExists"
 
   fix:
 
