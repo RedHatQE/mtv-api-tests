@@ -45,6 +45,7 @@ dependencies = [
   "setuptools>=75.8.0",
   "pytest-harvest",
   "pandas>=2.2.3",
+  "cloudpickle>=3.1.1",
 ]
 
 [tool.uv.sources]
