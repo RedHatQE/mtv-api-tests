@@ -12,6 +12,7 @@ import shortuuid
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.provider import Provider
+from ocp_resources.resource import NamespacedResource, Resource
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
@@ -22,6 +23,7 @@ from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
 from libs.providers.rhv import RHVProvider
 from libs.providers.vmware import VMWareProvider
+from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
 
@@ -118,9 +120,10 @@ def create_source_provider(
     mtv_namespace: str,
     admin_client: DynamicClient,
     session_uuid: str,
+    fixture_store: dict[str, Any],
     tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
-) -> Generator[Tuple[BaseProvider, Secret | None | None], None, None]:
+) -> Generator[Tuple[BaseProvider, Resource | NamespacedResource | None | None], None, None]:
     # common
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
@@ -206,16 +209,19 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        customized_secret = Secret(
+        customized_secret = create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=Secret,
             client=admin_client,
             name=name,
             namespace=mtv_namespace,
             string_data=secret_string_data,
             label=metadata_labels,
         )
-        customized_secret.deploy(wait=True)
 
-        ocp_resource_provider = Provider(
+        ocp_resource_provider = create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=Provider,
             client=admin_client,
             name=name,
             namespace=mtv_namespace,
@@ -225,7 +231,6 @@ def create_source_provider(
             provider_type=source_provider_data_copy["type"],
             vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
         )
-        ocp_resource_provider.deploy(wait=True)
         ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
         # this is for communication with the provider
