@@ -9,7 +9,7 @@ from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
-from ocp_resources.resource import Resource, ResourceEditor
+from ocp_resources.resource import NamespacedResource, Resource, ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -20,6 +20,7 @@ from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
+from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
 
@@ -172,7 +173,7 @@ def run_migration(
     condition_status: str,
     condition_type: str,
     fixture_store: Any,
-) -> Generator[tuple[Plan, Migration | None], Any, Any]:
+) -> Generator[tuple[Resource | NamespacedResource, Resource | NamespacedResource | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
@@ -200,7 +201,9 @@ def run_migration(
     Returns:
         Plan and Migration Managed Resources.
     """
-    plan = Plan(
+    plan = create_and_store_resource(
+        fixture_store=fixture_store,
+        resource=Plan,
         name=name,
         namespace=namespace,
         source_provider_name=source_provider_name,
@@ -219,20 +222,18 @@ def run_migration(
         after_hook_name=after_hook_name,
         after_hook_namespace=after_hook_namespace,
     )
-    plan.deploy(wait=True)
-    fixture_store["teardown"].append(plan)
 
     if expected_plan_ready:
         plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
-        migration = Migration(
+        migration = create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=Migration,
             name=f"{name}-migration",
             namespace=namespace,
             plan_name=plan.name,
             plan_namespace=namespace,
             cut_over=cut_over,
         )
-        migration.deploy(wait=True)
-        fixture_store["teardown"].append(migration)
         yield plan, migration
     else:
         plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)

@@ -122,7 +122,7 @@ uv run tools/clean_cluster.py <path-to-resources.json>
 Run without calling teardown (Do not delete created resources)
 
 ```bash
-uv run pytest --tc=clean_test_env:false
+uv run pytest --skip-teardown
 ```
 
 ## Run Functional Tests tier1

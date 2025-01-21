@@ -197,7 +197,6 @@ matrix_test = True
 release_test = False
 target_ocp_version = "4.17"
 mount_root = ""
-clean_test_env = True
 
 for _dir in dir():
     val = locals()[_dir]
