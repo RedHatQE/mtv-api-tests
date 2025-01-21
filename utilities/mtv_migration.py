@@ -220,7 +220,7 @@ def run_migration(
         after_hook_namespace=after_hook_namespace,
     )
     plan.deploy(wait=True)
-    fixture_store.setdefault("plan", []).append(plan)
+    fixture_store["teardown"].append(plan)
 
     if expected_plan_ready:
         plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
@@ -232,7 +232,7 @@ def run_migration(
             cut_over=cut_over,
         )
         migration.deploy(wait=True)
-        fixture_store.setdefault("migration", []).append(migration)
+        fixture_store["teardown"].append(migration)
         yield plan, migration
     else:
         plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)

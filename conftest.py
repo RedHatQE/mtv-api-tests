@@ -67,7 +67,8 @@ def pytest_runtest_makereport(item, call):
     setattr(item, "rep_" + rep.when, rep)
 
 
-def pytest_sessionstart(session):
+def pytest_sessionstart(session, fixture_store):
+    fixture_store["teardown"] = []
     _log_collector_path = Path(session.config.getoption("log_collector_path"))
     prepare_base_path(base_path=_log_collector_path)
 
@@ -122,7 +123,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     _created_reousrces: list[dict[str, str]] = []
 
-    for _resource in _session_store.get("teardown", []):
+    for _resource in _session_store["teardown"]:
         try:
             _created_reousrces.append({
                 "module": _resource.__module__,
@@ -141,7 +142,7 @@ def pytest_sessionfinish(session, exitstatus):
         LOGGER.error(f"Failed to store resources.json due to: {ex}")
 
     if py_config.get("clean_test_env", True) in ("True", "true", True) or exitstatus.value == 0:
-        for _resource in _session_store.get("teardown", []):
+        for _resource in _session_store["teardown"]:
             try:
                 _resource.clean_up()
             except Exception as ex:
@@ -187,7 +188,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
 
     namespace = Namespace(client=ocp_admin_client, name=unique_namespace_name, label=label)
     namespace.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(namespace)
+    fixture_store["teardown"].append(namespace)
     namespace.wait_for_status(status=namespace.Status.ACTIVE)
     yield namespace.name
 
@@ -333,9 +334,6 @@ def source_provider_data():
 def source_provider(
     fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client, tmp_path_factory
 ):
-    # _teardown: list[Resource | Secret | None] = []
-
-    # try:
     with create_source_provider(
         session_uuid=session_uuid,
         config=py_config,
@@ -347,23 +345,16 @@ def source_provider(
         _source_provider = source_provider_objects[0]
         _provider_ocp_resource = _source_provider.ocp_resource
         _secret_ocp_resource = source_provider_objects[1]
-        fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+        fixture_store["teardown"].extend([_provider_ocp_resource, _secret_ocp_resource])
         # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
         yield _source_provider
-
-    # finally:
-    #     for _resource in _teardown:
-    #         if _resource:
-    #             _resource.clean_up()
 
     _source_provider.disconnect()
 
 
 @pytest.fixture(scope="session")
 def source_providers(fixture_store, session_uuid, mtv_namespace, ocp_admin_client, tmp_path_factory):
-    # _teardown: list[Any] = []
-    # try:
     for source_provider_data in py_config["source_providers_list"]:
         with create_source_provider(
             session_uuid=session_uuid,
@@ -376,22 +367,15 @@ def source_providers(fixture_store, session_uuid, mtv_namespace, ocp_admin_clien
             _source_provider = source_provider_objects[0]
             _provider_ocp_resource = _source_provider.ocp_resource
             _secret_ocp_resource = source_provider_objects[1]
-            fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+            fixture_store["teardown"].extend([_provider_ocp_resource, _secret_ocp_resource])
             # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
         yield _source_provider
-
-    # finally:
-    #     for _resource in _teardown:
-    #         if _resource:
-    #             _resource.clean_up()
 
 
 @pytest.fixture(scope="session")
 def source_provider_admin_user(fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client):
     if vmware_provider(provider_data=source_provider_data):
-        # _teardown: list[Any] = []
-        # try:
         with create_source_provider(
             session_uuid=session_uuid,
             config=py_config,
@@ -404,15 +388,11 @@ def source_provider_admin_user(fixture_store, session_uuid, source_provider_data
             _source_provider = source_provider_objects[0]
             _provider_ocp_resource = _source_provider.ocp_resource
             _secret_ocp_resource = source_provider_objects[1]
-            fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+            fixture_store["teardown"].extend([_provider_ocp_resource, _secret_ocp_resource])
             # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
         yield _source_provider
 
-        # finally:
-        #     for _resource in _teardown:
-        #         if _resource:
-        #             _resource.clean_up()
     else:
         yield
 
@@ -420,8 +400,6 @@ def source_provider_admin_user(fixture_store, session_uuid, source_provider_data
 @pytest.fixture(scope="session")
 def source_provider_non_admin_user(fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client):
     if vmware_provider(provider_data=source_provider_data):
-        # _teardown: list[Any] = []
-        # try:
         with create_source_provider(
             session_uuid=session_uuid,
             config=py_config,
@@ -434,15 +412,11 @@ def source_provider_non_admin_user(fixture_store, session_uuid, source_provider_
             _source_provider = source_provider_objects[0]
             _provider_ocp_resource = _source_provider.ocp_resource
             _secret_ocp_resource = source_provider_objects[1]
-            fixture_store.setdefault("teardown", []).extend([_provider_ocp_resource, _secret_ocp_resource])
+            fixture_store["teardown"].extend([_provider_ocp_resource, _secret_ocp_resource])
             # _teardown.extend([_provider_ocp_resource, _secret_ocp_resource])
 
         yield _source_provider
 
-        # finally:
-        #     for _resource in _teardown:
-        #         if _resource:
-        #             _resource.clean_up()
     else:
         yield
 
@@ -450,12 +424,10 @@ def source_provider_non_admin_user(fixture_store, session_uuid, source_provider_
 @pytest.fixture(scope="session")
 def multus_network_name(fixture_store, target_namespace, ocp_admin_client):
     nad_name: str = ""
-    # nads: list[NetworkAttachmentDefinition] = []
     clients: list[DynamicClient] = [ocp_admin_client]
     if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
         clients.append(ocp_admin_client)
 
-    # try:
     for client in clients:
         nad = NetworkAttachmentDefinition(
             client=client,
@@ -463,14 +435,10 @@ def multus_network_name(fixture_store, target_namespace, ocp_admin_client):
             namespace=target_namespace,
         )
         nad.deploy(wait=True)
-        fixture_store.setdefault("teardown", []).append(nad)
+        fixture_store["teardown"].append(nad)
         nad_name = nad.name
-        # nads.append(nad)
 
     yield nad_name
-    # finally:
-    #     for _nad in nads:
-    #         _nad.clean_up(wait=True)
 
 
 @pytest.fixture(scope="session")
@@ -497,7 +465,7 @@ def network_migration_map_pod_only(
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
     network_map.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(network_map)
+    fixture_store["teardown"].append(network_map)
     yield network_map
 
 
@@ -528,7 +496,7 @@ def network_migration_map(
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
     network_map.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(network_map)
+    fixture_store["teardown"].append(network_map)
     yield network_map
 
 
@@ -554,7 +522,7 @@ def storage_migration_map(
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
     storage_map.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(storage_map)
+    fixture_store["teardown"].append(storage_map)
     yield storage_map
 
 
@@ -585,7 +553,7 @@ def storage_migration_map_default_settings(
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
     storage_map.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(storage_map)
+    fixture_store["teardown"].append(storage_map)
     yield storage_map
 
 
@@ -617,7 +585,7 @@ def network_migration_map_source_admin(
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
         network_map.deploy(wait=True)
-        fixture_store.setdefault("teardown", []).append(network_map)
+        fixture_store["teardown"].append(network_map)
         yield network_map
 
     else:
@@ -654,7 +622,7 @@ def storage_migration_map_source_admin(
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
         storage_map.deploy(wait=True)
-        fixture_store.setdefault("teardown", []).append(storage_map)
+        fixture_store["teardown"].append(storage_map)
         yield storage_map
 
     else:
@@ -689,7 +657,7 @@ def network_migration_map_source_non_admin(
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
         network_map.deploy(wait=True)
-        fixture_store.setdefault("teardown", []).append(network_map)
+        fixture_store["teardown"].append(network_map)
         yield network_map
 
     else:
@@ -726,7 +694,7 @@ def storage_migration_map_source_non_admin(
             destination_provider_namespace=destination_provider.ocp_resource.namespace,
         )
         storage_map.deploy(wait=True)
-        fixture_store.setdefault("teardown", []).append(storage_map)
+        fixture_store["teardown"].append(storage_map)
         yield storage_map
 
     else:
@@ -767,7 +735,7 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, mtv_na
         string_data={"token": api_key.split()[-1], "insecureSkipVerify": "true"},
     )
     secret.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(secret)
+    fixture_store["teardown"].append(secret)
     yield secret
 
 
@@ -783,7 +751,7 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
     provider.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(provider)
+    fixture_store["teardown"].append(provider)
     yield CNVProvider(ocp_resource=provider)
 
 
@@ -813,7 +781,7 @@ def remote_network_migration_map(
         destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
     )
     network_map.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(network_map)
+    fixture_store["teardown"].append(network_map)
     yield network_map
 
 
@@ -848,7 +816,7 @@ def remote_storage_migration_map(
         destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
     )
     storage_map.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(storage_map)
+    fixture_store["teardown"].append(storage_map)
     yield storage_map
 
 
@@ -880,7 +848,7 @@ def source_provider_host_secret(fixture_store, source_provider, source_provider_
             client=ocp_admin_client, name=name.replace(".", "-"), namespace=mtv_namespace, string_data=string_data
         )
         secret.deploy(wait=True)
-        fixture_store.setdefault("teardown", []).append(secret)
+        fixture_store["teardown"].append(secret)
         yield secret
     else:
         yield
@@ -904,7 +872,7 @@ def source_provider_host(
             secret_namespace=source_provider_host_secret.namespace,
         )
         host.deploy(wait=True)
-        fixture_store.setdefault("teardown", []).append(host)
+        fixture_store["teardown"].append(host)
         yield _host
 
     else:
@@ -921,7 +889,7 @@ def prehook(fixture_store, ocp_admin_client, mtv_namespace):
         playbook=pre_hook_dict["payload"],
     )
     hook.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(hook)
+    fixture_store["teardown"].append(hook)
     yield hook
 
 
@@ -935,7 +903,7 @@ def posthook(fixture_store, ocp_admin_client, mtv_namespace):
         playbook=posthook_dict["payload"],
     )
     hook.deploy(wait=True)
-    fixture_store.setdefault("teardown", []).append(hook)
+    fixture_store["teardown"].append(hook)
     yield hook
 
 
@@ -992,7 +960,7 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
     yield request.param
 
     for vm in virtual_machines:
-        fixture_store.setdefault("teardown", []).append(
+        fixture_store["teardown"].append(
             VirtualMachine(
                 client=ocp_admin_client,
                 name=vm["name"],
@@ -1002,7 +970,7 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
 
     for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
         if plan["name"] in pod.name:
-            fixture_store.setdefault("teardown", []).append(pod)
+            fixture_store["teardown"].append(pod)
 
 
 @pytest.fixture(scope="function")
