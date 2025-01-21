@@ -67,8 +67,9 @@ def pytest_runtest_makereport(item, call):
     setattr(item, "rep_" + rep.when, rep)
 
 
-def pytest_sessionstart(session, fixture_store):
-    fixture_store["teardown"] = []
+def pytest_sessionstart(session):
+    _session_store = get_fixture_store(session)
+    _session_store["teardown"] = []
     _log_collector_path = Path(session.config.getoption("log_collector_path"))
     prepare_base_path(base_path=_log_collector_path)
 
