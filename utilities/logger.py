@@ -1,7 +1,7 @@
 import logging
+import multiprocessing
 import shutil
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
-import multiprocessing
 from typing import Optional
 
 from simple_logger.logger import DuplicateFilter, WrapperLogFormatter
@@ -42,6 +42,7 @@ def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> Qu
     console_handler = logging.StreamHandler()
     log_file_handler = RotatingFileHandler(filename=log_file, maxBytes=100 * 1024 * 1024, backupCount=20)
 
+    multiprocessing.set_start_method("fork")
     log_queue = multiprocessing.Queue(maxsize=-1)  # type: ignore[var-annotated]
     log_listener = QueueListener(
         log_queue,
