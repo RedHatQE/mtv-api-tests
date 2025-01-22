@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import cloudpickle
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(__name__)
@@ -37,3 +38,16 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
             json.dump(_created_reousrces, fd)
     except Exception as ex:
         LOGGER.error(f"Failed to store resources.json due to: {ex}")
+
+
+def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
+    results_path = Path("./.xdist_harvested/")
+
+    # The original implementation of this function is to log the exception in the warning, we do not want it
+    # https://github.com/smarie/python-pytest-harvest/blob/main/src/pytest_harvest/plugin.py#L409
+    with open(results_path / f"{worker_id}.pkl", "wb") as fd:
+        try:
+            cloudpickle.dump((session_items, fixture_store), fd)
+        except Exception:
+            LOGGER.warning(f"Error while pickling worker {worker_id}'s harvested results")
+    return True
