@@ -8,6 +8,7 @@ LOGGER = get_logger(__name__)
 
 
 def session_teardown(session_store: dict[str, Any]) -> None:
+    LOGGER.info("Running teardown to all created resources")
     for _resource_kind, _resource_list in session_store["teardown"].items():
         for _resource in _resource_list:
             try:
@@ -18,6 +19,7 @@ def session_teardown(session_store: dict[str, Any]) -> None:
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
     _created_reousrces: dict[str, list[dict[str, str]]] = {}
+    LOGGER.info(f"Write created resources data to {data_collector_path}/resources.json")
 
     for _resource_kind, _resource_list in session_store["teardown"].items():
         _created_reousrces.setdefault(_resource_kind, [])
