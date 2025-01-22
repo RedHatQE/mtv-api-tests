@@ -16,7 +16,7 @@ def session_teardown(session_store: dict[str, Any]) -> None:
                 LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
 
 
-def collect_created_resources(session_store: dict[str, Any], log_collector_path: Path) -> None:
+def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
     _created_reousrces: dict[str, list[dict[str, str]]] = {}
 
     for _resource_kind, _resource_list in session_store["teardown"].items():
@@ -33,7 +33,7 @@ def collect_created_resources(session_store: dict[str, Any], log_collector_path:
                 LOGGER.error(f"Failed to collect resource {_resource.name} data due to: {ex}")
 
     try:
-        with open(log_collector_path / "resources.json", "w") as fd:
+        with open(data_collector_path / "resources.json", "w") as fd:
             json.dump(_created_reousrces, fd)
     except Exception as ex:
         LOGGER.error(f"Failed to store resources.json due to: {ex}")

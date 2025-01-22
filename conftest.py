@@ -28,7 +28,7 @@ from pytest_harvest import get_fixture_store
 from pytest_testconfig import py_config
 
 from libs.providers.cnv import CNVProvider
-from utilities.log_collector import logs_collector, prepare_base_path
+from utilities.data_collector import data_collector, prepare_base_path
 from utilities.logger import separator, setup_logging
 from utilities.pytest_utils import collect_created_resources, session_teardown
 from utilities.resources import create_and_store_resource
@@ -53,7 +53,7 @@ def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     data_collector_group.addoption(
-        "--log-collector-path", help="Path to store collected data for failed tests", default="/tmp/mtv-api-tests"
+        "--data-collector-path", help="Path to store collected data for failed tests", default="/tmp/mtv-api-tests"
     )
     teardown_group.addoption(
         "--skip-teardown", action="store_true", help="Do not teardown resource created by the tests"
@@ -75,8 +75,8 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionstart(session):
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
-    _log_collector_path = Path(session.config.getoption("log_collector_path"))
-    prepare_base_path(base_path=_log_collector_path)
+    _data_collector_path = Path(session.config.getoption("data_collector_path"))
+    prepare_base_path(base_path=_data_collector_path)
 
     tests_log_file = session.config.getoption("log_file") or "pytest-tests.log"
     if os.path.exists(tests_log_file):
@@ -125,9 +125,9 @@ def pytest_report_teststatus(report, config):
 
 def pytest_sessionfinish(session, exitstatus):
     _session_store = get_fixture_store(session)
-    _log_collector_path = Path(session.config.getoption("log_collector_path"))
+    _data_collector_path = Path(session.config.getoption("data_collector_path"))
 
-    collect_created_resources(session_store=_session_store, log_collector_path=_log_collector_path)
+    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
 
     if session.config.getoption("skip_teardown"):
         LOGGER.warning("User requested to skip teardown of resources")
@@ -147,8 +147,8 @@ def pytest_collection_modifyitems(session, config, items):
 
 
 def pytest_exception_interact(node, call, report):
-    _log_collector_path = Path(f"{node.session.config.getoption('log_collector_path')}/{node.name}")
-    logs_collector(client=get_client(), base_path=_log_collector_path, mtv_namespace=py_config["mtv_namespace"])
+    _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
+    data_collector(client=get_client(), base_path=_data_collector_path, mtv_namespace=py_config["mtv_namespace"])
 
 
 # Pytest end

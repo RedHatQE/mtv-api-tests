@@ -57,7 +57,7 @@ def collect_all_resources_yaml(yaml_path: Path, resource: type[Resource], client
             yaml.dump(_resource.instance.to_dict(), fd)
 
 
-def logs_collector(client: DynamicClient, base_path: Path, mtv_namespace: str) -> None:
+def data_collector(client: DynamicClient, base_path: Path, mtv_namespace: str) -> None:
     LOGGER.info(f"Collecting logs in {base_path}")
 
     for plan in Plan.get(dyn_client=client, namespace=mtv_namespace):
