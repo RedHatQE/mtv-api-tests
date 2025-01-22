@@ -147,7 +147,10 @@ def pytest_sessionfinish(session, exitstatus):
 
     elif is_xdist_master(session):
         # final master cleanup
-        session.config.hook.pytest_harvest_xdist_cleanup()
+        try:
+            session.config.hook.pytest_harvest_xdist_cleanup()
+        except Exception:
+            LOGGER.warning("Failed to execute pytest_harvest_xdist_cleanup")
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
