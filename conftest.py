@@ -136,19 +136,6 @@ def pytest_sessionfinish(session, exitstatus):
     else:
         session_teardown(session_store=_session_store)
 
-    # if is_xdist_worker(session):
-    #     # persist fixture store and report items in a pickle file with this id
-    #     wid = get_xdist_worker_id(session)
-    #     session_items = get_persistable_session_items(session)
-    #     pytest_harvest_xdist_worker_dump(worker_id=wid, session_items=session_items, fixture_store=_session_store)
-    #
-    # elif is_xdist_master(session):
-    #     # final master cleanup
-    #     try:
-    #         session.config.hook.pytest_harvest_xdist_cleanup()
-    #     except Exception:
-    #         LOGGER.warning("Failed to execute pytest_harvest_xdist_cleanup")
-
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     reporter.summary_stats()
