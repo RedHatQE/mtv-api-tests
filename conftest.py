@@ -25,15 +25,12 @@ from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
-from pytest_harvest.results_session import get_persistable_session_items
-from pytest_harvest.xdist_api import get_xdist_worker_id, is_xdist_worker
 from pytest_testconfig import config as py_config
-from xdist import is_xdist_master
 
 from libs.providers.cnv import CNVProvider
 from utilities.data_collector import data_collector, prepare_base_path
 from utilities.logger import separator, setup_logging
-from utilities.pytest_utils import collect_created_resources, pytest_harvest_xdist_worker_dump, session_teardown
+from utilities.pytest_utils import collect_created_resources, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
@@ -139,18 +136,18 @@ def pytest_sessionfinish(session, exitstatus):
     else:
         session_teardown(session_store=_session_store)
 
-    if is_xdist_worker(session):
-        # persist fixture store and report items in a pickle file with this id
-        wid = get_xdist_worker_id(session)
-        session_items = get_persistable_session_items(session)
-        pytest_harvest_xdist_worker_dump(worker_id=wid, session_items=session_items, fixture_store=_session_store)
-
-    elif is_xdist_master(session):
-        # final master cleanup
-        try:
-            session.config.hook.pytest_harvest_xdist_cleanup()
-        except Exception:
-            LOGGER.warning("Failed to execute pytest_harvest_xdist_cleanup")
+    # if is_xdist_worker(session):
+    #     # persist fixture store and report items in a pickle file with this id
+    #     wid = get_xdist_worker_id(session)
+    #     session_items = get_persistable_session_items(session)
+    #     pytest_harvest_xdist_worker_dump(worker_id=wid, session_items=session_items, fixture_store=_session_store)
+    #
+    # elif is_xdist_master(session):
+    #     # final master cleanup
+    #     try:
+    #         session.config.hook.pytest_harvest_xdist_cleanup()
+    #     except Exception:
+    #         LOGGER.warning("Failed to execute pytest_harvest_xdist_cleanup")
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
