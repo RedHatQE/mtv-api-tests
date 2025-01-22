@@ -53,7 +53,7 @@ def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     data_collector_group.addoption(
-        "--data-collector-path", help="Path to store collected data for failed tests", default="/tmp/mtv-api-tests"
+        "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
     )
     teardown_group.addoption(
         "--skip-teardown", action="store_true", help="Do not teardown resource created by the tests"
