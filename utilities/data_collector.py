@@ -25,10 +25,13 @@ def prepare_base_path(base_path: Path) -> None:
 
 def collect_pods_logs(logs_path: Path, namespace: str, client: DynamicClient) -> None:
     for _pod in Pod.get(namespace=namespace, dyn_client=client):
-        for _container in _pod.instance.spec.containers:
-            _container_name = _container["name"]
-            with open(logs_path / f"{_pod.name}-{_container_name}.log", "w") as fd:
-                fd.write(_pod.log(container=_container_name))
+        try:
+            for _container in _pod.instance.spec.containers:
+                _container_name = _container["name"]
+                with open(logs_path / f"{_pod.name}-{_container_name}.log", "w") as fd:
+                    fd.write(_pod.log(container=_container_name))
+        except Exception:
+            LOGGER.warning(f"Failed to collect logs for pod {_pod.name}")
 
 
 def collect_namespaced_resource_yaml(
