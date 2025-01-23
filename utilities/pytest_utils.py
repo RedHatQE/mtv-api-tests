@@ -34,9 +34,11 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
             except Exception as ex:
                 LOGGER.error(f"Failed to collect data for resource {_resource.name} data due to: {ex}")
 
-    try:
-        LOGGER.info(f"Write created resources data to {data_collector_path}/resources.json")
-        with open(data_collector_path / "resources.json", "w") as fd:
-            json.dump(_created_reousrces, fd)
-    except Exception as ex:
-        LOGGER.error(f"Failed to store resources.json due to: {ex}")
+    if _created_reousrces:
+        try:
+            LOGGER.info(f"Write created resources data to {data_collector_path}/resources.json")
+            with open(data_collector_path / "resources.json", "w") as fd:
+                json.dump(_created_reousrces, fd)
+
+        except Exception as ex:
+            LOGGER.error(f"Failed to store resources.json due to: {ex}")
