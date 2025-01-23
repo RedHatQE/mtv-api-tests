@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
@@ -404,19 +405,25 @@ def source_provider_non_admin_user(fixture_store, session_uuid, source_provider_
 
 
 @pytest.fixture(scope="session")
-def multus_network_name(fixture_store, target_namespace, ocp_admin_client):
+def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin_client):
     nad_name: str = ""
     clients: list[DynamicClient] = [ocp_admin_client]
 
     if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
         clients.append(ocp_admin_client)
 
+    with open("tests/manifests/second_network.yaml") as fd:
+        bridge_yaml = yaml.safe_load(fd)
+
+    bridge_name = bridge_yaml["metadata"]["name"]
+    bridge_yaml["metadata"]["name"] = f"{session_uuid}-{bridge_name}"
+
     for client in clients:
         nad = create_and_store_resource(
             fixture_store=fixture_store,
             resource=NetworkAttachmentDefinition,
             client=client,
-            yaml_file="tests/manifests/second_network.yaml",
+            kind_dict=bridge_yaml,
             namespace=target_namespace,
         )
         nad_name = nad.name
