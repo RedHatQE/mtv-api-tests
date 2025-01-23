@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import subprocess
+import os
 from pathlib import Path
 from typing import Any
 
+import cloudpickle
 import pytest
 import yaml
 from kubernetes.dynamic import DynamicClient
@@ -46,7 +47,9 @@ from utilities.utils import (
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 
-
+# Define the folder in which temporary worker's results will be stored
+XDIST_RESULTS_PATH = Path("./.xdist_results/")
+XDIST_RESULTS_PATH.mkdir(exist_ok=True)
 # Pytest start
 
 
@@ -151,6 +154,42 @@ def pytest_collection_modifyitems(session, config, items):
 def pytest_exception_interact(node, call, report):
     _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
     data_collector(client=get_client(), base_path=_data_collector_path, mtv_namespace=py_config["mtv_namespace"])
+
+
+def pytest_harvest_xdist_init():
+    # reset the recipient folder
+    if XDIST_RESULTS_PATH.exists():
+        shutil.rmtree(XDIST_RESULTS_PATH)
+
+    XDIST_RESULTS_PATH.mkdir(exist_ok=False)
+    return True
+
+
+def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
+    # persist session_items and fixture_store in the file system
+    with open(XDIST_RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as fd:
+        try:
+            cloudpickle.dump((session_items, fixture_store), fd)
+        except Exception:
+            LOGGER.warning(f"Error while pickling worker {worker_id}'s harvested results")
+    return True
+
+
+def pytest_harvest_xdist_load():
+    # restore the saved objects from file system
+    workers_saved_material = {}
+
+    for pkl_file in XDIST_RESULTS_PATH.glob("*.pkl"):
+        wid = pkl_file.stem
+        with pkl_file.open("rb") as f:
+            workers_saved_material[wid] = cloudpickle.load(f)
+    return workers_saved_material
+
+
+def pytest_harvest_xdist_cleanup():
+    # delete all temporary pickle files
+    shutil.rmtree(XDIST_RESULTS_PATH)
+    return True
 
 
 # Pytest end
