@@ -25,6 +25,7 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
         _created_reousrces.setdefault(_resource_kind, [])
         for _resource in _resource_list:
             try:
+                LOGGER.info(f"Collecting data for resource {_resource.name}")
                 _created_reousrces[_resource_kind].append({
                     "module": _resource.__module__,
                     "name": _resource.name,
@@ -32,7 +33,7 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
                 })
 
             except Exception as ex:
-                LOGGER.error(f"Failed to collect resource {_resource.name} data due to: {ex}")
+                LOGGER.error(f"Failed to collect data for resource {_resource.name} data due to: {ex}")
 
     try:
         with open(data_collector_path / "resources.json", "w") as fd:
