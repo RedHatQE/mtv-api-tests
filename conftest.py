@@ -39,6 +39,7 @@ from utilities.utils import (
     create_source_provider,
     gen_network_map_list,
     generate_name_with_uuid,
+    get_value_from_py_config,
     rhv_provider,
     start_source_vm_data_upload_vmware,
     vmware_provider,
@@ -275,7 +276,7 @@ def ocp_admin_client(tmp_path_factory):
     OCP client
     """
 
-    if remote_cluster_name := py_config.get("remote_ocp_cluster"):
+    if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
         LOGGER.info(msg=f"Creating remote OCP admin client for {remote_cluster_name}")
 
         mount_root = py_config.get("mount_root") or str(Path.home() / "cnv-qe.rhcloud.com")
@@ -736,7 +737,7 @@ def plans_scale(source_provider):
     plans: list[dict[str, Any]] = [
         {
             "virtual_machines": [],
-            "warm_migration": py_config["warm_migration"],
+            "warm_migration": get_value_from_py_config("warm_migration"),
         }
     ]
 
@@ -744,7 +745,7 @@ def plans_scale(source_provider):
         vm_name = source_vms[idx].name
         plans[0]["virtual_machines"].append({"name": f"{vm_name}"})
 
-        if py_config.get("turn_on_vms"):
+        if get_value_from_py_config("turn_on_vms"):
             source_vm_details = source_provider.vm_dict(name=vm_name)
             source_provider.start_vm(vm=source_vm_details["provider_vm_api"])
 
@@ -854,7 +855,7 @@ def plans_set():
     plans: list[dict[str, Any]] = [
         {
             "virtual_machines": [],
-            "warm_migration": py_config["warm_migration"],
+            "warm_migration": get_value_from_py_config("warm_migration"),
         }
     ]
 

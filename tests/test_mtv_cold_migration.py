@@ -1,7 +1,7 @@
 import pytest as pytest
-from pytest_testconfig import py_config
 
 from utilities.mtv_migration import get_vm_suffix, migrate_vms
+from utilities.utils import get_value_from_py_config
 
 VM_SUFFIX = get_vm_suffix()
 
@@ -71,7 +71,7 @@ def test_sanity_cold_mtv_migration(
     indirect=True,
     ids=["MTV-79"],
 )
-@pytest.mark.skipif(not py_config.get("remote_ocp_cluster", False), reason="remote_ocp_cluster=false")
+@pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
 def test_cold_remote_ocp(
     fixture_store,
     session_uuid,

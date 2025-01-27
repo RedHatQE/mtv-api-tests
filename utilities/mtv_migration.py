@@ -21,6 +21,7 @@ from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
+from utilities.utils import get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -73,7 +74,7 @@ def migrate_vms(
 ) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
-    if not py_config.get("skip_migration"):
+    if not get_value_from_py_config("skip_migration"):
         plan_warm_migration = plans[0].get("warm_migration")
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
@@ -95,7 +96,7 @@ def migrate_vms(
             "source_provider_name": source_provider.ocp_resource.name,
             "source_provider_namespace": source_provider.ocp_resource.namespace,
             "virtual_machines_list": virtual_machines_list,
-            "warm_migration": plan_warm_migration or py_config["warm_migration"],
+            "warm_migration": plan_warm_migration or get_value_from_py_config("warm_migration"),
             "network_map_name": network_migration_map.name,
             "network_map_namespace": network_migration_map.namespace,
             "storage_map_name": storage_migration_map.name,
@@ -135,7 +136,7 @@ def migrate_vms(
             if py_config.get("create_scale_report"):
                 create_migration_scale_report(plan_resource=plan)
 
-    if py_config.get("check_vms_signals") and plans[0].get("check_vms_signals", True):
+    if get_value_from_py_config("check_vms_signals") and plans[0].get("check_vms_signals", True):
         check_vms(
             plan=plans[0],
             source_provider=source_provider,
@@ -243,7 +244,7 @@ def run_migration(
 def get_vm_suffix() -> str:
     vm_suffix = ""
 
-    if py_config["matrix_test"]:
+    if get_value_from_py_config("matrix_test"):
         storage_name = py_config["storage_class"]
         if "ceph-rbd" in storage_name:
             vm_suffix = "-ceph-rbd"
@@ -251,7 +252,7 @@ def get_vm_suffix() -> str:
         elif "nfs" in storage_name:
             vm_suffix = "-nfs"
 
-    if py_config["release_test"]:
+    if get_value_from_py_config("release_test"):
         ocp_version = py_config["target_ocp_version"].replace(".", "-")
         vm_suffix = f"{vm_suffix}-{ocp_version}"
 
