@@ -9,7 +9,7 @@ from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
-from ocp_resources.resource import NamespacedResource, Resource
+from ocp_resources.resource import NamespacedResource, Resource, get_client
 from ocp_resources.storage_map import StorageMap
 from simple_logger.logger import get_logger
 
@@ -60,11 +60,12 @@ def collect_all_resources_yaml(yaml_path: Path, resource: type[Resource], client
             yaml.dump(_resource.instance.to_dict(), fd)
 
 
-def data_collector(client: DynamicClient, base_path: Path, mtv_namespace: str) -> None:
+def data_collector(client: DynamicClient, base_path: Path, mtv_namespace: str, plan: Plan | None = None) -> None:
     LOGGER.info(f"Collecting logs in {base_path}")
+    plans = [plan] if plan else Plan.get(dyn_client=client, namespace=mtv_namespace)
 
-    for plan in Plan.get(dyn_client=client, namespace=mtv_namespace):
-        _instance = plan.instance
+    for _plan in plans:
+        _instance = _plan.instance
         _target_namespace = _instance.spec.targetNamespace
         _network_map = _instance.spec.map.network
         _storage_map = _instance.spec.map.storage
@@ -98,7 +99,7 @@ def data_collector(client: DynamicClient, base_path: Path, mtv_namespace: str) -
             _path.mkdir(parents=True, exist_ok=True)
 
         # Collect plan.yaml
-        with open(base_path / f"{plan.name}-plan.yaml", "w") as fd:
+        with open(base_path / f"{_plan.name}-plan.yaml", "w") as fd:
             yaml.dump(_instance.to_dict(), fd)
 
         # Collect pods logs in mtv namespace and target namespace
@@ -147,3 +148,19 @@ def data_collector(client: DynamicClient, base_path: Path, mtv_namespace: str) -
             resource_instance=_dst_provider,
             client=client,
         )
+
+
+if __name__ == "__main__":
+    import sys
+
+    try:
+        plan_name = sys.argv[1]
+    except IndexError:
+        print("Usage: python data_collector.py <plan_name>")
+        sys.exit(1)
+
+    mtv_namespace = "openshift-mtv"
+    logs_path = Path(f".local/plan-{plan_name}-debug")
+    plan = Plan(name=plan_name, namespace=mtv_namespace)
+    prepare_base_path(base_path=logs_path)
+    data_collector(client=get_client(), base_path=logs_path, mtv_namespace=mtv_namespace, plan=plan)
