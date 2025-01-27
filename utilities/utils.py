@@ -15,6 +15,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import NamespacedResource, Resource
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
+from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
@@ -274,3 +275,23 @@ def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str
 
 def generate_name_with_uuid(name: str) -> str:
     return f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
+
+
+def get_value_from_py_config(value: str) -> Any:
+    config_value = py_config.get(value)
+
+    if not config_value:
+        return config_value
+
+    if isinstance(config_value, str):
+        if config_value.lower() == "true":
+            return True
+
+        elif config_value.lower() == "false":
+            return False
+
+        else:
+            return config_value
+
+    else:
+        return config_value
