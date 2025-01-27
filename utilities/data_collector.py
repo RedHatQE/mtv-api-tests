@@ -1,4 +1,6 @@
+import os
 import shutil
+import zipfile
 from pathlib import Path
 
 import yaml
@@ -150,6 +152,20 @@ def data_collector(client: DynamicClient, base_path: Path, mtv_namespace: str, p
         )
 
 
+def zip_folder(folder_path, output_zip_path):
+    # Ensure the folder path exists
+    if not os.path.exists(folder_path):
+        raise ValueError(f"Folder does not exist: {folder_path}")
+
+    with zipfile.ZipFile(output_zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                # Create the full path to the file
+                file_path = os.path.join(root, file)
+                # Add the file to the ZIP file
+                zipf.write(file_path, arcname=os.path.relpath(file_path, start=folder_path))
+
+
 if __name__ == "__main__":
     import sys
 
@@ -169,3 +185,4 @@ if __name__ == "__main__":
 
     prepare_base_path(base_path=logs_path)
     data_collector(client=get_client(), base_path=logs_path, mtv_namespace=mtv_namespace, plan=plan)
+    zip_folder(folder_path=logs_path, output_zip_path=logs_path / f"{plan_name}.zip")
