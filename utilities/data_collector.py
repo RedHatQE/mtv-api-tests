@@ -160,7 +160,12 @@ if __name__ == "__main__":
         sys.exit(1)
 
     mtv_namespace = "openshift-mtv"
-    logs_path = Path(f".local/plan-{plan_name}-debug")
+    logs_path = Path(f".local/plan-debug/{plan_name}")
     plan = Plan(name=plan_name, namespace=mtv_namespace)
+
+    if not plan.exists:
+        print(f"{plan.name} does not exist in {mtv_namespace} namespace")
+        sys.exit(1)
+
     prepare_base_path(base_path=logs_path)
     data_collector(client=get_client(), base_path=logs_path, mtv_namespace=mtv_namespace, plan=plan)
