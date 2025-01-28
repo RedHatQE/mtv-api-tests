@@ -39,6 +39,7 @@ from utilities.utils import (
     create_source_provider,
     gen_network_map_list,
     generate_name_with_uuid,
+    get_source_provider_data,
     get_value_from_py_config,
     rhv_provider,
     start_source_vm_data_upload_vmware,
@@ -348,21 +349,12 @@ def destination_provider(ocp_admin_client, mtv_namespace):
 
 @pytest.fixture(scope="session")
 def source_provider_data():
-    _source_provider_type = py_config["source_provider_type"]
-    _source_provider_version = py_config["source_provider_version"]
-
-    _source_provider = [
-        _provider
-        for _provider in py_config["source_providers_list"]
-        if _provider["type"] == _source_provider_type
-        and _provider["version"] == _source_provider_version
-        and _provider["default"] == "True"
-    ]
+    _source_provider = get_source_provider_data()
 
     if not _source_provider:
-        raise ValueError(f"Source provider {_source_provider_type}-{_source_provider_version} not found")
+        raise ValueError(f"Source provider {_source_provider['type']}-{_source_provider['version']} not found")
 
-    return _source_provider[0]
+    return _source_provider
 
 
 @pytest.fixture(scope="session")

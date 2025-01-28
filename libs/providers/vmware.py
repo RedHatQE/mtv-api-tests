@@ -22,7 +22,7 @@ class VMWareProvider(BaseProvider):
     https://github.com/vmware/vsphere-automation-sdk-python
     """
 
-    def __init__(self, host: str, username: str, password: str, ocp_resource: Resource, **kwargs: Any) -> None:
+    def __init__(self, host: str, username: str, password: str, ocp_resource: type[Resource], **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
         if not self.provider_data:
             raise ValueError("provider_data is required, but not provided")

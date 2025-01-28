@@ -295,3 +295,18 @@ def get_value_from_py_config(value: str) -> Any:
 
     else:
         return config_value
+
+
+def get_source_provider_data() -> dict[str, Any]:
+    _source_provider_type = py_config["source_provider_type"]
+    _source_provider_version = py_config["source_provider_version"]
+
+    _source_provider = [
+        _provider
+        for _provider in py_config["source_providers_list"]
+        if _provider["type"] == _source_provider_type
+        and _provider["version"] == _source_provider_version
+        and _provider["default"] == "True"
+    ]
+
+    return _source_provider[0]

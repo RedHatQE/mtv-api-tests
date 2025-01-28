@@ -2,19 +2,43 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ocp_resources.resource import ResourceEditor
 from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError
 
 LOGGER = get_logger(__name__)
 
 
 def session_teardown(session_store: dict[str, Any]) -> None:
-    LOGGER.info("Running teardown to all created resources")
-    for _resource_kind, _resource_list in session_store["teardown"].items():
-        for _resource in _resource_list:
+    LOGGER.info("Running teardown to delete all created resources")
+    session_teardown_resources = session_store["teardown"]
+
+    try:
+        # Archive all plans before delete them
+        for plan in session_teardown_resources.get("Plan", []):
+            LOGGER.info(f"Archiving plan {plan.name}")
+
+            ResourceEditor(
+                patches={
+                    plan: {
+                        "spec": {
+                            "archived": True,
+                        }
+                    }
+                }
+            ).update()
             try:
-                _resource.clean_up(wait=True)
-            except Exception as ex:
-                LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
+                plan.wait_for_condition(condition="Archived", status=plan.Condition.Status.TRUE)
+            except TimeoutExpiredError:
+                LOGGER.error(f"Failed to archive plan {plan.name}")
+
+    finally:
+        for _resource_list in session_teardown_resources.values():
+            for _resource in _resource_list:
+                try:
+                    _resource.clean_up(wait=True)
+                except Exception as ex:
+                    LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
 
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
