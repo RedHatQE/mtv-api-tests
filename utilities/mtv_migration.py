@@ -21,7 +21,7 @@ from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
-from utilities.utils import get_value_from_py_config
+from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -79,7 +79,7 @@ def migrate_vms(
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
             f"{session_uuid}-{_source_provider_type}-{py_config['source_provider_version']}"
-            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}"
+            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}{generate_name_with_uuid(name='')}"
         )
         plan_name = _plan_name.replace("_", "-").replace(".", "-").lower()
         plans[0]["name"] = plan_name

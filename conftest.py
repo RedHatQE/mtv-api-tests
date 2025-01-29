@@ -216,7 +216,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
     _target_namespace = _target_namespace.replace("mtv-api-tests", "")
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs
-    unique_namespace_name = f"{session_uuid}-{_target_namespace}"[:63]
+    unique_namespace_name = f"{session_uuid}{_target_namespace}"[:63]
 
     namespace = create_and_store_resource(
         fixture_store=fixture_store,
