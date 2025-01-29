@@ -274,7 +274,9 @@ def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str
 
 
 def generate_name_with_uuid(name: str) -> str:
-    return f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
+    _name = f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
+    _name = _name.replace("_", "-").replace(".", "-").lower()
+    return _name
 
 
 def get_value_from_py_config(value: str) -> Any:

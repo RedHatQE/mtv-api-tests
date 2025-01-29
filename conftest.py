@@ -858,10 +858,14 @@ def plans_set():
 
 
 @pytest.fixture(scope="session")
-def source_provider_host_secret(fixture_store, source_provider, source_provider_data, mtv_namespace, ocp_admin_client):
+def source_provider_host_secret(
+    fixture_store, session_uuid, source_provider, source_provider_data, mtv_namespace, ocp_admin_client
+):
     if source_provider_data.get("host_list"):
         host = source_provider_data["host_list"][0]
-        name = f"{source_provider_data['fqdn']}-{host['migration_host_ip']}-{host['migration_host_id']}"
+        name = generate_name_with_uuid(
+            name=f"{session_uuid}-{source_provider_data['fqdn']}-{host['migration_host_ip']}-{host['migration_host_id']}"
+        )
         string_data: dict[str, str] = {
             "user": host["user"],
             "password": host["password"],
@@ -870,7 +874,7 @@ def source_provider_host_secret(fixture_store, source_provider, source_provider_
             fixture_store=fixture_store,
             resource=Secret,
             client=ocp_admin_client,
-            name=name.replace(".", "-"),
+            name=name,
             namespace=mtv_namespace,
             string_data=string_data,
         )

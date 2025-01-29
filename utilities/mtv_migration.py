@@ -79,9 +79,9 @@ def migrate_vms(
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
             f"{session_uuid}-{_source_provider_type}-{py_config['source_provider_version']}"
-            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}{generate_name_with_uuid(name='')}"
+            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}"
         )
-        plan_name = _plan_name.replace("_", "-").replace(".", "-").lower()
+        plan_name = generate_name_with_uuid(name=_plan_name)
         plans[0]["name"] = plan_name
 
         # Plan CR accepts only VM name/id
