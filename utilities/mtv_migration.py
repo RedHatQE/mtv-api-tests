@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any, Generator
@@ -10,7 +9,7 @@ from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
-from ocp_resources.resource import Resource, ResourceEditor
+from ocp_resources.resource import NamespacedResource, Resource, ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -21,6 +20,8 @@ from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
+from utilities.resources import create_and_store_resource
+from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -59,6 +60,8 @@ def migrate_vms(
     storage_migration_map: StorageMap,
     source_provider_data: dict[str, Any],
     target_namespace: str,
+    session_uuid: str,
+    fixture_store: Any,
     source_provider_host: dict[str, Any] | None = None,
     cut_over: datetime | None = None,
     pre_hook_name: str | None = None,
@@ -71,14 +74,14 @@ def migrate_vms(
 ) -> None:
     # Allow Running the Post VM Signals Check For VMs that were already imported with an earlier session (API or UI).
     # The VMs are identified by Name Only
-    if not py_config.get("skip_migration"):
+    if not get_value_from_py_config("skip_migration"):
         plan_warm_migration = plans[0].get("warm_migration")
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
-            f"mtv-api-tests-{_source_provider_type}-{py_config['source_provider_version']}"
-            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}-{uuid.uuid4().hex[0:3]}"
+            f"{session_uuid}-{_source_provider_type}-{py_config['source_provider_version']}"
+            f"-{py_config['storage_class']}-{'warm' if plan_warm_migration else 'cold'}"
         )
-        plan_name = _plan_name.replace("_", "-").replace(".", "-").lower()
+        plan_name = generate_name_with_uuid(name=_plan_name)
         plans[0]["name"] = plan_name
 
         # Plan CR accepts only VM name/id
@@ -93,7 +96,7 @@ def migrate_vms(
             "source_provider_name": source_provider.ocp_resource.name,
             "source_provider_namespace": source_provider.ocp_resource.namespace,
             "virtual_machines_list": virtual_machines_list,
-            "warm_migration": plan_warm_migration or py_config["warm_migration"],
+            "warm_migration": plan_warm_migration or get_value_from_py_config("warm_migration"),
             "network_map_name": network_migration_map.name,
             "network_map_namespace": network_migration_map.namespace,
             "storage_map_name": storage_migration_map.name,
@@ -103,13 +106,13 @@ def migrate_vms(
             "pre_hook_namespace": pre_hook_namespace,
             "after_hook_name": after_hook_name,
             "after_hook_namespace": after_hook_namespace,
-            "teardown": False,
             "cut_over": cut_over,
             "expected_plan_ready": expected_plan_ready,
             "condition_status": condition_status,
             "condition_type": condition_type,
             "destination_provider_name": destination_provider.ocp_resource.name,
             "destination_provider_namespace": destination_provider.ocp_resource.namespace,
+            "fixture_store": fixture_store,
         }
 
         with run_migration(**run_migration_kwargs) as (plan, migration):
@@ -133,7 +136,7 @@ def migrate_vms(
             if py_config.get("create_scale_report"):
                 create_migration_scale_report(plan_resource=plan)
 
-    if py_config.get("check_vms_signals") and plans[0].get("check_vms_signals", True):
+    if get_value_from_py_config("check_vms_signals") and plans[0].get("check_vms_signals", True):
         check_vms(
             plan=plans[0],
             source_provider=source_provider,
@@ -166,12 +169,12 @@ def run_migration(
     pre_hook_namespace: str,
     after_hook_name: str,
     after_hook_namespace: str,
-    teardown: bool,
     cut_over: datetime,
     expected_plan_ready: bool,
     condition_status: str,
     condition_type: str,
-) -> Generator[tuple[Plan, Migration | None], Any, Any]:
+    fixture_store: Any,
+) -> Generator[tuple[Resource | NamespacedResource, Resource | NamespacedResource | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
@@ -199,7 +202,9 @@ def run_migration(
     Returns:
         Plan and Migration Managed Resources.
     """
-    with Plan(
+    plan = create_and_store_resource(
+        fixture_store=fixture_store,
+        resource=Plan,
         name=name,
         namespace=namespace,
         source_provider_name=source_provider_name,
@@ -217,28 +222,29 @@ def run_migration(
         pre_hook_namespace=pre_hook_namespace,
         after_hook_name=after_hook_name,
         after_hook_namespace=after_hook_namespace,
-        teardown=teardown,
-    ) as plan:
-        if expected_plan_ready:
-            plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
-            with Migration(
-                name=f"{name}-migration",
-                namespace=namespace,
-                plan_name=plan.name,
-                plan_namespace=namespace,
-                cut_over=cut_over,
-                teardown=teardown,
-            ) as migration:
-                yield plan, migration
-        else:
-            plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
-            yield plan, None
+    )
+
+    if expected_plan_ready:
+        plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
+        migration = create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=Migration,
+            name=f"{name}-migration",
+            namespace=namespace,
+            plan_name=plan.name,
+            plan_namespace=namespace,
+            cut_over=cut_over,
+        )
+        yield plan, migration
+    else:
+        plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
+        yield plan, None
 
 
 def get_vm_suffix() -> str:
     vm_suffix = ""
 
-    if py_config["matrix_test"]:
+    if get_value_from_py_config("matrix_test"):
         storage_name = py_config["storage_class"]
         if "ceph-rbd" in storage_name:
             vm_suffix = "-ceph-rbd"
@@ -246,7 +252,7 @@ def get_vm_suffix() -> str:
         elif "nfs" in storage_name:
             vm_suffix = "-nfs"
 
-    if py_config["release_test"]:
+    if get_value_from_py_config("release_test"):
         ocp_version = py_config["target_ocp_version"].replace(".", "-")
         vm_suffix = f"{vm_suffix}-{ocp_version}"
 

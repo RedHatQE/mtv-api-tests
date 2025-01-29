@@ -12,8 +12,10 @@ import shortuuid
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.provider import Provider
+from ocp_resources.resource import NamespacedResource, Resource
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
+from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
@@ -22,6 +24,7 @@ from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
 from libs.providers.rhv import RHVProvider
 from libs.providers.vmware import VMWareProvider
+from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
 
@@ -104,12 +107,11 @@ def gen_network_map_list(
     return network_map_list
 
 
-def provider_cr_name(provider_data, username):
-    name = (
-        f"{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
+def provider_cr_name(session_uuid: str, provider_data: dict[str, Any], username: str) -> str:
+    return (
+        f"{session_uuid}-{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
         f"{provider_data['fqdn'].split('.')[0]}-{username.split('@')[0]}"
     )
-    return generate_name_with_uuid(name=name)
 
 
 @contextmanager
@@ -118,9 +120,11 @@ def create_source_provider(
     source_provider_data: dict[str, Any],
     mtv_namespace: str,
     admin_client: DynamicClient,
+    session_uuid: str,
+    fixture_store: dict[str, Any],
     tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
-) -> Generator[Tuple[BaseProvider, Secret | None | None], None, None]:
+) -> Generator[Tuple[BaseProvider, Resource | NamespacedResource | None | None], None, None]:
     # common
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
@@ -142,7 +146,11 @@ def create_source_provider(
         for key, value in kwargs.items():
             source_provider_data_copy[key] = value
 
-        name = provider_cr_name(provider_data=source_provider_data_copy, username=source_provider_data_copy["username"])
+        name = provider_cr_name(
+            session_uuid=session_uuid,
+            provider_data=source_provider_data_copy,
+            username=source_provider_data_copy["username"],
+        )
         secret_string_data = {}
         provider_args = {
             "username": source_provider_data_copy["username"],
@@ -202,16 +210,19 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        customized_secret = Secret(
+        customized_secret = create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=Secret,
             client=admin_client,
             name=name,
             namespace=mtv_namespace,
             string_data=secret_string_data,
             label=metadata_labels,
         )
-        customized_secret.deploy(wait=True)
 
-        ocp_resource_provider = Provider(
+        ocp_resource_provider = create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=Provider,
             client=admin_client,
             name=name,
             namespace=mtv_namespace,
@@ -221,7 +232,6 @@ def create_source_provider(
             provider_type=source_provider_data_copy["type"],
             vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
         )
-        ocp_resource_provider.deploy(wait=True)
         ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
         # this is for communication with the provider
@@ -264,4 +274,41 @@ def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str
 
 
 def generate_name_with_uuid(name: str) -> str:
-    return f"{name}-{shortuuid.ShortUUID().random(length=8).lower()}"
+    _name = f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
+    _name = _name.replace("_", "-").replace(".", "-").lower()
+    return _name
+
+
+def get_value_from_py_config(value: str) -> Any:
+    config_value = py_config.get(value)
+
+    if not config_value:
+        return config_value
+
+    if isinstance(config_value, str):
+        if config_value.lower() == "true":
+            return True
+
+        elif config_value.lower() == "false":
+            return False
+
+        else:
+            return config_value
+
+    else:
+        return config_value
+
+
+def get_source_provider_data() -> dict[str, Any]:
+    _source_provider_type = py_config["source_provider_type"]
+    _source_provider_version = py_config["source_provider_version"]
+
+    _source_provider = [
+        _provider
+        for _provider in py_config["source_providers_list"]
+        if _provider["type"] == _source_provider_type
+        and _provider["version"] == _source_provider_version
+        and _provider["default"] == "True"
+    ]
+
+    return _source_provider[0]
