@@ -1,3 +1,4 @@
+import contextlib
 import os
 import shutil
 import zipfile
@@ -19,8 +20,10 @@ LOGGER = get_logger(__name__)
 
 
 def prepare_base_path(base_path: Path) -> None:
-    if base_path.exists():
-        shutil.rmtree(base_path)
+    with contextlib.suppress(FileNotFoundError):
+        # When running pytest in parallel (-n) we may get here error even when path exists
+        if base_path.exists():
+            shutil.rmtree(base_path)
 
     base_path.mkdir(parents=True, exist_ok=True)
 
