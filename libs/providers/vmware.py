@@ -17,12 +17,20 @@ from libs.base_provider import BaseProvider
 LOGGER = get_logger(__name__)
 
 
+class VmMissingVmxError(Exception):
+    pass
+
+
+class NoVmsFoundError(Exception):
+    pass
+
+
 class VMWareProvider(BaseProvider):
     """
     https://github.com/vmware/vsphere-automation-sdk-python
     """
 
-    def __init__(self, host: str, username: str, password: str, ocp_resource: Resource, **kwargs: Any) -> None:
+    def __init__(self, host: str, username: str, password: str, ocp_resource: type[Resource], **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
         if not self.provider_data:
             raise ValueError("provider_data is required, but not provided")
@@ -76,17 +84,31 @@ class VMWareProvider(BaseProvider):
         )
         vms: list[vim.VirtualMachine] = [vm for vm in container_view.view]  # type: ignore
 
-        if not query:
-            return vms
+        if not vms:
+            raise NoVmsFoundError(f"No VMs found. [{self.host}]")
 
-        result: list[vim.VirtualMachine] = []
-        pat = re.compile(query, re.IGNORECASE)
+        if query:
+            result: list[vim.VirtualMachine] = []
+            pat = re.compile(query, re.IGNORECASE)
 
-        for vm in vms:
-            if pat.search(vm.name) is not None:
-                result.append(vm)
+            vms_with_missing_vmx: list[bool] = []
+            for vm in vms:
+                if pat.search(vm.name) is not None:
+                    vms_with_missing_vmx.append(self.is_vm_missing_vmx_file(vm=vm))
+                    result.append(vm)
 
-        return result
+            if any(vms_with_missing_vmx):
+                raise VmMissingVmxError()
+
+            if not result:
+                raise NoVmsFoundError(f"No VMs found. {query=}. [{self.host}]")
+
+            return result
+
+        if any([self.is_vm_missing_vmx_file(vm=vm) for vm in vms]):
+            raise VmMissingVmxError()
+
+        return vms
 
     @property
     def datacenters(self) -> list[Any]:
@@ -471,3 +493,12 @@ class VMWareProvider(BaseProvider):
             for vm_name in vm_names_list:
                 if len(self.vm_dict(name=vm_name)["snapshots_data"]) >= number_of_snapshots:
                     vm_names_list.remove(vm_name)
+
+    def is_vm_missing_vmx_file(self, vm: vim.VirtualMachine) -> bool:
+        vm_datastore_info = vm.datastore[0].browser.Search(vm.config.files.vmPathName)
+        if vm_datastore_info.info.state == "error":
+            _error = vm_datastore_info.info.error.msg
+            if "vmx was not found" in _error:
+                self.log.error(f"VM {vm.name} is inaccessible due to datastore error: {_error}")
+                return True
+        return False
