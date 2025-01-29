@@ -1,7 +1,7 @@
 import logging
+import multiprocessing
 import shutil
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
-import multiprocessing
 from typing import Optional
 
 from simple_logger.logger import DuplicateFilter, WrapperLogFormatter
