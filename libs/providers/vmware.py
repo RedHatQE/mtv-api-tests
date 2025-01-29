@@ -21,6 +21,10 @@ class VmMissingVmxError(Exception):
     pass
 
 
+class NoVmsFoundError(Exception):
+    pass
+
+
 class VMWareProvider(BaseProvider):
     """
     https://github.com/vmware/vsphere-automation-sdk-python
@@ -80,21 +84,31 @@ class VMWareProvider(BaseProvider):
         )
         vms: list[vim.VirtualMachine] = [vm for vm in container_view.view]  # type: ignore
 
-        if not query:
-            if not all([self.is_vm_missing_vmx_file(vm=vm) for vm in vms]):
+        if not vms:
+            raise NoVmsFoundError(f"No VMs found. [{self.host}]")
+
+        if query:
+            result: list[vim.VirtualMachine] = []
+            pat = re.compile(query, re.IGNORECASE)
+
+            vms_with_missing_vmx: list[bool] = []
+            for vm in vms:
+                if pat.search(vm.name) is not None:
+                    vms_with_missing_vmx.append(self.is_vm_missing_vmx_file(vm=vm))
+                    result.append(vm)
+
+            if any(vms_with_missing_vmx):
                 raise VmMissingVmxError()
-            return vms
 
-        result: list[vim.VirtualMachine] = []
-        pat = re.compile(query, re.IGNORECASE)
+            if not result:
+                raise NoVmsFoundError(f"No VMs found. {query=}. [{self.host}]")
 
-        for vm in vms:
-            if pat.search(vm.name) is not None:
-                if not self.is_vm_missing_vmx_file(vm=vm):
-                    raise VmMissingVmxError()
-                result.append(vm)
+            return result
 
-        return result
+        if any([self.is_vm_missing_vmx_file(vm=vm) for vm in vms]):
+            raise VmMissingVmxError()
+
+        return vms
 
     @property
     def datacenters(self) -> list[Any]:
@@ -486,5 +500,5 @@ class VMWareProvider(BaseProvider):
             _error = vm_datastore_info.info.error.msg
             if "vmx was not found" in _error:
                 self.log.error(f"VM {vm.name} is inaccessible due to datastore error: {_error}")
-                return False
-        return True
+                return True
+        return False
