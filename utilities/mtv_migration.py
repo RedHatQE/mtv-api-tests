@@ -78,8 +78,7 @@ def migrate_vms(
         plan_warm_migration = plans[0].get("warm_migration")
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
-            f"{session_uuid}-{_source_provider_type}-{py_config['source_provider_version']}"
-            f"-{py_config['storage_class']}-{'remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
+            f"{target_namespace}-{'remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
             f"-{'warm' if plan_warm_migration else 'cold'}"
         )
         plan_name = generate_name_with_uuid(name=_plan_name)
