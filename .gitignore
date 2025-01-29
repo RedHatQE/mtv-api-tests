@@ -143,3 +143,6 @@ junit-report.xml
 
 # Local develop
 .local/
+
+# Data collector
+.data-collector/
