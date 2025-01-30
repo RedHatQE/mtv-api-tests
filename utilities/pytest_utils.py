@@ -56,35 +56,37 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
 
 
 def cancel_migrations(migrations: list[Migration]) -> None:
-    # Cancel all migrations before delete them
     for migration in migrations:
+        need_cancel = True
         migration_instance = migration.instance
 
-        # No need to cancel migration if it's already succeeded
-        for condition in migration_instance.conditions:
+        for condition in migration_instance.status.conditions:
+            # No need to cancel migration if it's already succeeded
             if condition.type == "Succeeded" and condition.status == migration.Condition.Status.TRUE:
-                continue
+                need_cancel = False
+                break
 
-        migration_spec = migration.instance.spec
-        plan = Plan(client=migration.client, name=migration_spec.plan.name, namespace=migration_spec.plan.namespace)
-        ResourceEditor(
-            patches={
-                migration: {
-                    "spec": {
-                        "cancel": plan.instance.spec.vms,
+        if need_cancel:
+            LOGGER.info(f"Canceling migration {migration.name}")
+            migration_spec = migration.instance.spec
+            plan = Plan(client=migration.client, name=migration_spec.plan.name, namespace=migration_spec.plan.namespace)
+            ResourceEditor(
+                patches={
+                    migration: {
+                        "spec": {
+                            "cancel": plan.instance.spec.vms,
+                        }
                     }
                 }
-            }
-        ).update()
+            ).update()
 
-        try:
-            plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
-        except Exception:
-            LOGGER.error(f"Failed to cancel migration {migration.name}")
+            try:
+                plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
+            except Exception:
+                LOGGER.error(f"Failed to cancel migration {migration.name}")
 
 
 def archive_plans(plans: list[Plan]) -> None:
-    # Archive all plans before delete them
     for plan in plans:
         LOGGER.info(f"Archiving plan {plan.name}")
 
