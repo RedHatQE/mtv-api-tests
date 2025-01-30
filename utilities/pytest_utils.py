@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ocp_resources.migration import Migration
 from ocp_resources.plan import Plan
 from ocp_resources.resource import ResourceEditor
 from simple_logger.logger import get_logger
@@ -15,8 +16,8 @@ def session_teardown(session_store: dict[str, Any]) -> None:
     session_teardown_resources = session_store["teardown"]
 
     try:
-        cancel_migrations(session_teardown_resources=session_teardown_resources)
-        archive_plans(session_teardown_resources=session_teardown_resources)
+        cancel_migrations(migrations=session_teardown_resources.get("Migration", []))
+        archive_plans(plans=session_teardown_resources.get("Plan", []))
 
     finally:
         for _resource_list in session_teardown_resources.values():
@@ -54,10 +55,16 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
             LOGGER.error(f"Failed to store resources.json due to: {ex}")
 
 
-def cancel_migrations(session_teardown_resources: dict[str, list[Any]]) -> None:
+def cancel_migrations(migrations: list[Migration]) -> None:
     # Cancel all migrations before delete them
-    migrations = session_teardown_resources.get("Migration", [])
     for migration in migrations:
+        migration_instance = migration.instance
+
+        # No need to cancel migration if it's already succeeded
+        for condition in migration_instance.conditions:
+            if condition.type == "Succeeded" and condition.status == migration.Condition.Status.TRUE:
+                continue
+
         migration_spec = migration.instance.spec
         plan = Plan(client=migration.client, name=migration_spec.plan.name, namespace=migration_spec.plan.namespace)
         ResourceEditor(
@@ -69,15 +76,16 @@ def cancel_migrations(session_teardown_resources: dict[str, list[Any]]) -> None:
                 }
             }
         ).update()
+
         try:
             plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
         except Exception:
             LOGGER.error(f"Failed to cancel migration {migration.name}")
 
 
-def archive_plans(session_teardown_resources: dict[str, list[Any]]) -> None:
+def archive_plans(plans: list[Plan]) -> None:
     # Archive all plans before delete them
-    for plan in session_teardown_resources.get("Plan", []):
+    for plan in plans:
         LOGGER.info(f"Archiving plan {plan.name}")
 
         ResourceEditor(
@@ -89,6 +97,7 @@ def archive_plans(session_teardown_resources: dict[str, list[Any]]) -> None:
                 }
             }
         ).update()
+
         try:
             plan.wait_for_condition(condition="Archived", status=plan.Condition.Status.TRUE)
         except TimeoutExpiredError:
