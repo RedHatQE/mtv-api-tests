@@ -58,8 +58,8 @@ def cancel_migrations(session_teardown_resources: dict[str, list[Any]]) -> None:
     # Cancel all migrations before delete them
     migrations = session_teardown_resources.get("Migration", [])
     for migration in migrations:
-        spec = migration.instance.spec
-        plan = Plan(client=migration.client, name=spec.plan.name, namespace=spec.plan.namespace)
+        migration_spec = migration.instance.spec
+        plan = Plan(client=migration.client, name=migration_spec.plan.name, namespace=migration_spec.plan.namespace)
         ResourceEditor(
             patches={
                 migration: {
