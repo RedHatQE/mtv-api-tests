@@ -141,10 +141,8 @@ cython_debug/
 # Tests
 junit-report.xml
 .xdist_harvested
+.xdist_results
 .data-collector
 
 # Local develop
 .local/
-
-# Data collector
-.data-collector/
