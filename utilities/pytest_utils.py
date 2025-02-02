@@ -61,7 +61,10 @@ def cancel_migrations(migrations: list[Migration]) -> None:
     for migration in migrations:
         for condition in migration.instance.status.conditions:
             # No need to cancel migration if it's already succeeded
-            if condition.type == "Succeeded" and condition.status == migration.Condition.Status.TRUE:
+            if (
+                condition.type == migration.Condition.Type.SUCCEEDED
+                and condition.status == migration.Condition.Status.TRUE
+            ):
                 migrations_to_cancel.remove(migration)
                 break
 
