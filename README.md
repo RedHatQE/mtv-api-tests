@@ -117,6 +117,12 @@ To delete all created resources using the above file run:
 uv run tools/clean_cluster.py <path-to-resources.json>
 ```
 
+Run without data-collector:
+
+```bash
+uv run pytest .... --skip-data-collector
+```
+
 ## Run options
 
 Run without calling teardown (Do not delete created resources)
