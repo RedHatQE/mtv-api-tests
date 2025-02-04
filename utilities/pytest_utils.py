@@ -104,10 +104,10 @@ def cancel_migrations(migrations: list[Migration]) -> None:
             plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
 
             # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_delete also make sure the pvc is deleted)
-            for _dv in DataVolume.get(dyn_client=plan.client, namespace=_target_namespace):
+            for _dv in DataVolume.get(dyn_client=migration.client, namespace=_target_namespace):
                 _dv.wait_delete()
 
-            for _pv in PersistentVolume.get(dyn_client=plan.client):
+            for _pv in PersistentVolume.get(dyn_client=migration.client):
                 if _target_namespace in _pv.name:
                     LOGGER.error(
                         f"PV {_pv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
