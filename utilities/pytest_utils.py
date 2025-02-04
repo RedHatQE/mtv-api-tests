@@ -17,9 +17,7 @@ def session_teardown(session_store: dict[str, Any]) -> None:
 
     try:
         cancel_migrations(migrations=session_teardown_resources.get("Migration", []))
-        __import__("ipdb").set_trace()
         archive_plans(plans=session_teardown_resources.get("Plan", []))
-        __import__("ipdb").set_trace()
 
     finally:
         namespaces = session_teardown_resources.get("Namespace", [])
