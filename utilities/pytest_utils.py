@@ -101,7 +101,7 @@ def cancel_migrations(migrations: list[Migration]) -> None:
 
         try:
             _target_namespace = plan_instance.spec.targetNamespace
-            plan.wait_for_condition(condition="Canceled", status=_target_namespace)
+            plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
 
             # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_delete also make sure the pvc is deleted)
             for _dv in DataVolume.get(dyn_client=plan.client, namespace=_target_namespace):
