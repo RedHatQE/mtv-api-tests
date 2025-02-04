@@ -58,7 +58,7 @@ XDIST_RESULTS_PATH.mkdir(exist_ok=True)
 def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
-    data_collector_group.addoption("--skip-data-collector", action="store_false", help="Collect data for failed tests")
+    data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
     )
