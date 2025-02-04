@@ -2,8 +2,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ocp_resources.datavolume import DataVolume
 from ocp_resources.migration import Migration
 from ocp_resources.plan import Plan
+from ocp_resources.pod import Pod
 from ocp_resources.resource import ResourceEditor
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError
@@ -84,11 +86,13 @@ def cancel_migrations(migrations: list[Migration]) -> None:
         LOGGER.info(f"Canceling migration {migration.name}")
         migration_spec = migration.instance.spec
         plan = Plan(client=migration.client, name=migration_spec.plan.name, namespace=migration_spec.plan.namespace)
+        plan_instance = plan.instance
+
         ResourceEditor(
             patches={
                 migration: {
                     "spec": {
-                        "cancel": plan.instance.spec.vms,
+                        "cancel": plan_instance.spec.vms,
                     }
                 }
             }
@@ -96,6 +100,10 @@ def cancel_migrations(migrations: list[Migration]) -> None:
 
         try:
             plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
+            # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_delete also make sure the pvc is deleted)
+            for _dv in DataVolume.get(client=plan.client, namespace=plan_instance.spec.targetNamespace):
+                _dv.wait_delete()
+
         except Exception:
             LOGGER.error(f"Failed to cancel migration {migration.name}")
 
@@ -116,5 +124,9 @@ def archive_plans(plans: list[Plan]) -> None:
 
         try:
             plan.wait_for_condition(condition="Archived", status=plan.Condition.Status.TRUE)
+            # Make sure pods are deleted after archiving the plan.
+            for _pod in Pod.get(client=plan.client, namespace=plan.instance.spec.targetNamespace):
+                _pod.wait_delete()
+
         except TimeoutExpiredError:
             LOGGER.error(f"Failed to archive plan {plan.name}")
