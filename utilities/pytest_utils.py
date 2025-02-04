@@ -17,15 +17,29 @@ def session_teardown(session_store: dict[str, Any]) -> None:
 
     try:
         cancel_migrations(migrations=session_teardown_resources.get("Migration", []))
+        __import__("ipdb").set_trace()
         archive_plans(plans=session_teardown_resources.get("Plan", []))
+        __import__("ipdb").set_trace()
 
     finally:
-        for _resource_list in session_teardown_resources.values():
+        namespaces = session_teardown_resources.get("Namespace", [])
+
+        for _kind, _resource_list in session_teardown_resources.items():
+            if _kind == "Namespace":
+                continue
+
             for _resource in _resource_list:
                 try:
                     _resource.clean_up(wait=True)
                 except Exception as ex:
                     LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
+
+        # Namespaces should be deleted last
+        for _namespace in namespaces:
+            try:
+                _namespace.clean_up(wait=True)
+            except Exception as ex:
+                LOGGER.error(f"Failed to clean up {_namespace.name} namespace due to: {ex}")
 
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
