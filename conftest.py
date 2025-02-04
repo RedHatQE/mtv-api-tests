@@ -58,6 +58,7 @@ XDIST_RESULTS_PATH.mkdir(exist_ok=True)
 def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
+    data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
     )
@@ -81,8 +82,9 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionstart(session):
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
-    _data_collector_path = Path(session.config.getoption("data_collector_path"))
-    prepare_base_path(base_path=_data_collector_path)
+    if not session.config.getoption("skip_data_collector"):
+        _data_collector_path = Path(session.config.getoption("data_collector_path"))
+        prepare_base_path(base_path=_data_collector_path)
 
     tests_log_file = session.config.getoption("log_file") or "pytest-tests.log"
     if os.path.exists(tests_log_file):
@@ -132,9 +134,9 @@ def pytest_report_teststatus(report, config):
 
 def pytest_sessionfinish(session, exitstatus):
     _session_store = get_fixture_store(session)
-    _data_collector_path = Path(session.config.getoption("data_collector_path"))
-
-    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
+    if not session.config.getoption("skip_data_collector"):
+        _data_collector_path = Path(session.config.getoption("data_collector_path"))
+        collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
 
     if session.config.getoption("skip_teardown"):
         LOGGER.warning("User requested to skip teardown of resources")
@@ -154,8 +156,9 @@ def pytest_collection_modifyitems(session, config, items):
 
 
 def pytest_exception_interact(node, call, report):
-    _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
-    data_collector(client=get_client(), base_path=_data_collector_path, mtv_namespace=py_config["mtv_namespace"])
+    if not node.session.config.getoption("skip_data_collector"):
+        _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
+        data_collector(client=get_client(), base_path=_data_collector_path, mtv_namespace=py_config["mtv_namespace"])
 
 
 def pytest_harvest_xdist_init():
