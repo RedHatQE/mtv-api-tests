@@ -4,6 +4,7 @@ from typing import Any
 
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.migration import Migration
+from ocp_resources.persistent_volume import PersistentVolume
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
 from ocp_resources.resource import ResourceEditor
@@ -99,10 +100,18 @@ def cancel_migrations(migrations: list[Migration]) -> None:
         ).update()
 
         try:
-            plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
+            _target_namespace = plan_instance.spec.targetNamespace
+            plan.wait_for_condition(condition="Canceled", status=_target_namespace)
+
             # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_delete also make sure the pvc is deleted)
-            for _dv in DataVolume.get(dyn_client=plan.client, namespace=plan_instance.spec.targetNamespace):
+            for _dv in DataVolume.get(dyn_client=plan.client, namespace=_target_namespace):
                 _dv.wait_delete()
+
+            for _pv in PersistentVolume.get(dyn_client=plan.client):
+                if _target_namespace in _pv.name:
+                    LOGGER.error(
+                        f"PV {_pv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                    )
 
         except Exception:
             LOGGER.error(f"Failed to cancel migration {migration.name}")
@@ -124,6 +133,7 @@ def archive_plans(plans: list[Plan]) -> None:
 
         try:
             plan.wait_for_condition(condition="Archived", status=plan.Condition.Status.TRUE)
+
             # Make sure pods are deleted after archiving the plan.
             for _pod in Pod.get(dyn_client=plan.client, namespace=plan.instance.spec.targetNamespace):
                 _pod.wait_delete()
