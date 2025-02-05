@@ -1,7 +1,7 @@
 import copy
-import shutil
 import functools
 import multiprocessing
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
@@ -68,6 +68,10 @@ def generate_ca_cert_file(provider_fqdn: dict[str, Any], cert_file: Path) -> Pat
 
 
 def background(func):
+    """
+    use @background above the function you want to run in the background
+    """
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         proc = multiprocessing.Process(target=func, args=args, kwargs=kwargs)
