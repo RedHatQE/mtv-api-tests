@@ -4,6 +4,7 @@ from typing import Any
 
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.migration import Migration
+from ocp_resources.namespace import Namespace
 from ocp_resources.persistent_volume import PersistentVolume
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
@@ -20,28 +21,11 @@ def session_teardown(session_store: dict[str, Any]) -> None:
     session_teardown_resources = session_store["teardown"]
 
     try:
-        cancel_migrations(migrations=session_teardown_resources.get("Migration", []))
-        archive_plans(plans=session_teardown_resources.get("Plan", []))
+        cancel_migrations(migrations=session_teardown_resources.get(Migration.kind, []))
+        archive_plans(plans=session_teardown_resources.get(Plan.kind, []))
 
     finally:
-        namespaces = session_teardown_resources.get("Namespace", [])
-
-        for _kind, _resource_list in session_teardown_resources.items():
-            if _kind == "Namespace":
-                continue
-
-            for _resource in _resource_list:
-                try:
-                    _resource.clean_up(wait=True)
-                except Exception as ex:
-                    LOGGER.error(f"Failed to clean up {_resource.name} due to: {ex}")
-
-        # Namespaces should be deleted last
-        for _namespace in namespaces:
-            try:
-                _namespace.clean_up(wait=True)
-            except Exception as ex:
-                LOGGER.error(f"Failed to clean up {_namespace.name} namespace due to: {ex}")
+        teardown_resources(session_teardown_resources=session_teardown_resources)
 
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
@@ -100,25 +84,32 @@ def cancel_migrations(migrations: list[Migration]) -> None:
             }
         ).update()
 
+        _target_namespace = plan_instance.spec.targetNamespace
+
         try:
-            _target_namespace = plan_instance.spec.targetNamespace
-            plan.wait_for_condition(condition="Canceled", status=plan.Condition.Status.TRUE)
-
-            # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_delete also make sure the pvc is deleted)
-            for _dv in DataVolume.get(dyn_client=migration.client, namespace=_target_namespace):
-                _dv.wait_delete()
-
-            for _pvc in PersistentVolumeClaim.get(dyn_client=migration.client, namespace=_target_namespace):
-                _pvc.wait_delete()
-
-            for _pv in PersistentVolume.get(dyn_client=migration.client):
-                if _target_namespace in _pv.name:
-                    LOGGER.error(
-                        f"PV {_pv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
-                    )
-
-        except Exception:
+            plan.wait_for_condition(condition=plan.Condition.CANCELED, status=plan.Condition.Status.TRUE)
+        except TimeoutExpiredError:
             LOGGER.error(f"Failed to cancel migration {migration.name}")
+            continue
+
+        # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_delete also make sure the pvc is deleted)
+        for _dv in DataVolume.get(dyn_client=migration.client, namespace=_target_namespace):
+            if not _dv.wait_delete():
+                LOGGER.error(
+                    f"DV {_dv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                )
+
+        for _pvc in PersistentVolumeClaim.get(dyn_client=migration.client, namespace=_target_namespace):
+            if not _pvc.wait_delete():
+                LOGGER.error(
+                    f"PVC {_pvc.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                )
+
+        for _pv in PersistentVolume.get(dyn_client=migration.client):
+            if _target_namespace in _pv.name:
+                LOGGER.error(
+                    f"PV {_pv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                )
 
 
 def archive_plans(plans: list[Plan]) -> None:
@@ -136,11 +127,33 @@ def archive_plans(plans: list[Plan]) -> None:
         ).update()
 
         try:
-            plan.wait_for_condition(condition="Archived", status=plan.Condition.Status.TRUE)
-
-            # Make sure pods are deleted after archiving the plan.
-            for _pod in Pod.get(dyn_client=plan.client, namespace=plan.instance.spec.targetNamespace):
-                _pod.wait_delete()
-
+            plan.wait_for_condition(condition=plan.Condition.ARCHIVED, status=plan.Condition.Status.TRUE)
         except TimeoutExpiredError:
             LOGGER.error(f"Failed to archive plan {plan.name}")
+
+        # Make sure pods are deleted after archiving the plan.
+        for _pod in Pod.get(dyn_client=plan.client, namespace=plan.instance.spec.targetNamespace):
+            if not _pod.wait_delete():
+                LOGGER.error(f"Pod {_pod.name} did not cleaned seccessfully after archiving plan {plan.name}")
+
+
+def teardown_resources(session_teardown_resources: dict[str, Any]) -> None:
+    for _kind, _resource_list in session_teardown_resources.items():
+        if _kind == Namespace.kind:
+            continue
+
+        for _resource in _resource_list:
+            if not _resource.clean_up(wait=True):
+                LOGGER.error(f"Failed to clean up {_resource.name}")
+
+    # Namespaces should be deleted last
+    _wait_for_delete_namespaces: list[Any] = []
+    for _namespace in session_teardown_resources.get(Namespace.kind, []):
+        if _namespace.delete():
+            _wait_for_delete_namespaces.append(_namespace)
+        else:
+            LOGGER.error(f"Failed to clean up {_namespace.name} namespace")
+
+    for _namespace in _wait_for_delete_namespaces:
+        if not _namespace.wait_delete():
+            LOGGER.error(f"Failed to delete {_namespace.name} namespace")
