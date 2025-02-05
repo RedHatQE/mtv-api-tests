@@ -4,6 +4,7 @@ from typing import Any
 
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.migration import Migration
+from ocp_resources.persistent_volume import PersistentVolume
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
@@ -108,9 +109,13 @@ def cancel_migrations(migrations: list[Migration]) -> None:
                 _dv.wait_delete()
 
             for _pvc in PersistentVolumeClaim.get(dyn_client=migration.client, namespace=_target_namespace):
-                LOGGER.error(
-                    f"PV {_pvc.name} did not cleaned seccessfully after migration {migration.name} was canceled"
-                )
+                _pvc.wait_delete()
+
+            for _pv in PersistentVolume.get(dyn_client=migration.client):
+                if _target_namespace in _pv.name:
+                    LOGGER.error(
+                        f"PV {_pv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                    )
 
         except Exception:
             LOGGER.error(f"Failed to cancel migration {migration.name}")
