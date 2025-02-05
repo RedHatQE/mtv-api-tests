@@ -26,4 +26,5 @@ def create_and_store_resource(
     _resource.deploy(wait=True)
     LOGGER.info(f"Storing {_resource.kind} {_resource_name} in fixture store")
     fixture_store["teardown"].setdefault(_resource.kind, []).append(_resource)
+
     return _resource

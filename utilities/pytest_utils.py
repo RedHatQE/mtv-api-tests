@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError
 
 LOGGER = get_logger(__name__)
+ERR_MSG = "{kind} {name} did not cleaned seccessfully after {rkind} {rname} was {_type}"
 
 
 def session_teardown(session_store: dict[str, Any]) -> None:
@@ -33,6 +35,7 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
 
     for _resource_kind, _resource_list in session_store["teardown"].items():
         _created_reousrces.setdefault(_resource_kind, [])
+
         for _resource in _resource_list:
             LOGGER.info(f"Collecting data for resource {_resource.name}")
             try:
@@ -56,7 +59,7 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
 
 
 def cancel_migrations(migrations: list[Migration]) -> None:
-    migrations_to_cancel: list[Migration] = migrations
+    migrations_to_cancel: list[Migration] = copy.deepcopy(migrations)
 
     for migration in migrations:
         for condition in migration.instance.status.conditions:
@@ -92,23 +95,29 @@ def cancel_migrations(migrations: list[Migration]) -> None:
             LOGGER.error(f"Failed to cancel migration {migration.name}")
             continue
 
-        # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_delete also make sure the pvc is deleted)
+        # make sure dvs and pvcs are delete after migration is canceled (_dv.wait_deleted also make sure the pvc is deleted)
         for _dv in DataVolume.get(dyn_client=migration.client, namespace=_target_namespace):
-            if not _dv.wait_delete():
+            if not _dv.wait_deleted():
                 LOGGER.error(
-                    f"DV {_dv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                    ERR_MSG.format(
+                        kind=_dv.kind, name=_dv.name, rkind=migration.kind, rname=migration.name, _type="canceled"
+                    )
                 )
 
         for _pvc in PersistentVolumeClaim.get(dyn_client=migration.client, namespace=_target_namespace):
-            if not _pvc.wait_delete():
+            if not _pvc.wait_deleted():
                 LOGGER.error(
-                    f"PVC {_pvc.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                    ERR_MSG.format(
+                        kind=_pvc.kind, name=_pvc.name, rkind=migration.kind, rname=migration.name, _type="canceled"
+                    )
                 )
 
         for _pv in PersistentVolume.get(dyn_client=migration.client):
             if _target_namespace in _pv.name:
                 LOGGER.error(
-                    f"PV {_pv.name} did not cleaned seccessfully after migration {migration.name} was canceled"
+                    ERR_MSG.format(
+                        kind=_pv.kind, name=_pv.name, rkind=migration.kind, rname=migration.name, _type="canceled"
+                    )
                 )
 
 
@@ -130,11 +139,14 @@ def archive_plans(plans: list[Plan]) -> None:
             plan.wait_for_condition(condition=plan.Condition.ARCHIVED, status=plan.Condition.Status.TRUE)
         except TimeoutExpiredError:
             LOGGER.error(f"Failed to archive plan {plan.name}")
+            continue
 
         # Make sure pods are deleted after archiving the plan.
         for _pod in Pod.get(dyn_client=plan.client, namespace=plan.instance.spec.targetNamespace):
-            if not _pod.wait_delete():
-                LOGGER.error(f"Pod {_pod.name} did not cleaned seccessfully after archiving plan {plan.name}")
+            if not _pod.wait_deleted():
+                LOGGER.error(
+                    ERR_MSG.format(kind=_pod.kind, name=_pod.name, rkind=plan.kind, rname=plan.name, _type="archived")
+                )
 
 
 def teardown_resources(session_teardown_resources: dict[str, Any]) -> None:
@@ -148,12 +160,13 @@ def teardown_resources(session_teardown_resources: dict[str, Any]) -> None:
 
     # Namespaces should be deleted last
     _wait_for_delete_namespaces: list[Any] = []
+
     for _namespace in session_teardown_resources.get(Namespace.kind, []):
         if _namespace.delete():
             _wait_for_delete_namespaces.append(_namespace)
         else:
-            LOGGER.error(f"Failed to clean up {_namespace.name} namespace")
+            LOGGER.error(f"Failed to delete {_namespace.name} namespace")
 
     for _namespace in _wait_for_delete_namespaces:
-        if not _namespace.wait_delete():
-            LOGGER.error(f"Failed to delete {_namespace.name} namespace")
+        if not _namespace.wait_deleted():
+            LOGGER.error(f"Failed to wait for {_namespace.name} namespace to be deleted")
