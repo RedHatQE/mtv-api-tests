@@ -63,8 +63,8 @@ source_providers_list = [
     {
         "type": "vsphere",
         "version": "8.0.1",
-        "fqdn": "10.6.46.250",
-        "api_url": "https://10.6.46.250/sdk",
+        "fqdn": "10.6.46.249",
+        "api_url": "https://10.6.46.249/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
         "admin_username": "administrator@vsphere.local",
@@ -86,7 +86,7 @@ source_providers_list = [
             }
         ],
         "networks": [{"name": "VM Network"}, {"name": "Mgmt Network"}],
-        "storages": [{"name": "nfs-us-mtv-v8"}],
+        "storages": [{"name": "nfs-rhos-mtv-v8"}],
     },
     {
         "type": "vsphere",
