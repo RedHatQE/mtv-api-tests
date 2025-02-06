@@ -113,6 +113,7 @@ def migrate_vms(
             "destination_provider_name": destination_provider.ocp_resource.name,
             "destination_provider_namespace": destination_provider.ocp_resource.namespace,
             "fixture_store": fixture_store,
+            "session_uuid": session_uuid,
         }
 
         with run_migration(**run_migration_kwargs) as (plan, migration):
@@ -174,6 +175,7 @@ def run_migration(
     condition_status: str,
     condition_type: str,
     fixture_store: Any,
+    session_uuid: str,
 ) -> Generator[tuple[Resource | NamespacedResource, Resource | NamespacedResource | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -204,6 +206,7 @@ def run_migration(
     """
     plan = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=Plan,
         name=name,
         namespace=namespace,
@@ -228,6 +231,7 @@ def run_migration(
         plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
         migration = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Migration,
             name=f"{name}-migration",
             namespace=namespace,

@@ -214,6 +214,7 @@ def create_source_provider(
         # Creating the source Secret and source Provider CRs
         customized_secret = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Secret,
             client=admin_client,
             name=name,
@@ -224,6 +225,7 @@ def create_source_provider(
 
         ocp_resource_provider = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Provider,
             client=admin_client,
             name=name,
