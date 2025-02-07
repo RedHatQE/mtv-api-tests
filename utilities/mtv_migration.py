@@ -13,12 +13,13 @@ from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import retry
+from timeout_sampler import TimeoutExpiredError, retry
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
+from utilities.migration_utils import archive_plan, cancel_migration
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.utils import generate_name_with_uuid, get_value_from_py_config
@@ -132,7 +133,12 @@ def migrate_vms(
                     run_cut_over(migration=migration)
 
         if migration:
-            wait_for_migration_complate(plan=plan)
+            try:
+                wait_for_migration_complate(plan=plan)
+            except TimeoutExpiredError:
+                cancel_migration(migration=migration)
+                archive_plan(plan=plan)
+                raise
 
             if py_config.get("create_scale_report"):
                 create_migration_scale_report(plan_resource=plan)
