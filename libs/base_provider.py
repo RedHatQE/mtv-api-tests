@@ -4,7 +4,7 @@ import abc
 from logging import Logger
 from typing import Any
 
-from ocp_resources.resource import Resource
+from ocp_resources.provider import Provider
 from simple_logger.logger import get_logger
 
 
@@ -25,7 +25,7 @@ class BaseProvider(abc.ABC):
 
     def __init__(
         self,
-        ocp_resource: type[Resource],
+        ocp_resource: Provider,
         username: str | None = None,
         password: str | None = None,
         host: str | None = None,
