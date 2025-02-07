@@ -133,6 +133,9 @@ def pytest_report_teststatus(report, config):
 
 
 def pytest_sessionfinish(session, exitstatus):
+    if session.config.option.setupplan or session.config.option.collectonly:
+        return
+
     _session_store = get_fixture_store(session)
 
     if not session.config.getoption("skip_data_collector"):
