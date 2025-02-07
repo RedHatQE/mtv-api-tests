@@ -151,7 +151,7 @@ def archive_plans(
     for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace):
         if session_uuid in _pod.name:
             if not _pod.wait_deleted():
-                _append_leftovers(leftovers=leftovers, resource=_pod)
+                leftovers = _append_leftovers(leftovers=leftovers, resource=_pod)
 
     return leftovers
 
@@ -187,27 +187,27 @@ def teardown_resources(
     for migration in migrations:
         migration_obj = Migration(name=migration["name"], namespace=migration["namespace"], client=ocp_client)
         if not migration_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=migration_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=migration_obj)
 
     for plan in plans:
         plan_obj = Plan(name=plan["name"], namespace=plan["namespace"], client=ocp_client)
         if not plan_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=plan_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=plan_obj)
 
     for provider in providers:
         provider_obj = Provider(name=provider["name"], namespace=provider["namespace"], client=ocp_client)
         if not provider_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=provider_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=provider_obj)
 
     for host in hosts:
         host_obj = Host(name=host["name"], namespace=host["namespace"], client=ocp_client)
         if not host_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=host_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=host_obj)
 
     for secret in secrets:
         secret_obj = Secret(name=secret["name"], namespace=secret["namespace"], client=ocp_client)
         if not secret_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=secret_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=secret_obj)
 
     for network_attachment_definition in network_attachment_definitions:
         network_attachment_definition_obj = NetworkAttachmentDefinition(
@@ -216,22 +216,22 @@ def teardown_resources(
             client=ocp_client,
         )
         if not network_attachment_definition_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=network_attachment_definition_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=network_attachment_definition_obj)
 
     for storagemap in storagemaps:
         storagemap_obj = StorageMap(name=storagemap["name"], namespace=storagemap["namespace"], client=ocp_client)
         if not storagemap_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=storagemap_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=storagemap_obj)
 
     for networkmap in networkmaps:
         networkmap_obj = NetworkMap(name=networkmap["name"], namespace=networkmap["namespace"], client=ocp_client)
         if not networkmap_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=networkmap_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=networkmap_obj)
 
     for namespace in namespaces:
         namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
         if not namespace_obj.clean_up(wait=True):
-            _append_leftovers(leftovers=leftovers, resource=namespace_obj)
+            leftovers = _append_leftovers(leftovers=leftovers, resource=namespace_obj)
 
     # Check that resources that was created by running migration are deleted
     for virtual_machine in virtual_machines:
@@ -240,13 +240,13 @@ def teardown_resources(
         )
         if virtual_machine_obj.exists:
             if not virtual_machine_obj.clean_up(wait=True):
-                _append_leftovers(leftovers=leftovers, resource=virtual_machine_obj)
+                leftovers = _append_leftovers(leftovers=leftovers, resource=virtual_machine_obj)
 
     for pod in pods:
         pod_obj = Pod(name=pod["name"], namespace=pod["namespace"], client=ocp_client)
         if pod_obj.exists:
             if not pod_obj.clean_up(wait=True):
-                _append_leftovers(leftovers=leftovers, resource=pod_obj)
+                leftovers = _append_leftovers(leftovers=leftovers, resource=pod_obj)
 
     leftovers = _check_dv_pvc_pv_deleted(
         leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
@@ -272,20 +272,20 @@ def _check_dv_pvc_pv_deleted(
         with contextlib.suppress(NotFoundError):
             if partial_name in _dv.name:
                 if not _dv.wait_deleted():
-                    _append_leftovers(leftovers=leftovers, resource=_dv)
+                    leftovers = _append_leftovers(leftovers=leftovers, resource=_dv)
 
     for _pvc in PersistentVolumeClaim.get(dyn_client=ocp_client, namespace=target_namespace):
         with contextlib.suppress(NotFoundError):
             if partial_name in _pvc.name:
                 if not _pvc.wait_deleted():
-                    _append_leftovers(leftovers=leftovers, resource=_pvc)
+                    leftovers = _append_leftovers(leftovers=leftovers, resource=_pvc)
 
     for _pv in PersistentVolume.get(dyn_client=ocp_client):
         with contextlib.suppress(NotFoundError):
             _pv_spec = _pv.instance.spec.to_dict()
             if partial_name in _pv_spec.get("claimRef", {}).get("name", ""):
                 if not _pv.wait_deleted():
-                    _append_leftovers(leftovers=leftovers, resource=_pv)
+                    leftovers = _append_leftovers(leftovers=leftovers, resource=_pv)
 
     return leftovers
 
