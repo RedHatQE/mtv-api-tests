@@ -7,6 +7,10 @@ from simple_logger.logger import get_logger
 LOGGER = get_logger(__name__)
 
 
+class ResourceNameNotStartedWithSessionUUIDError(Exception):
+    pass
+
+
 def create_and_store_resource(
     fixture_store: dict[str, Any], resource: type[Resource], session_uuid: str, **kwargs: Any
 ) -> Resource | NamespacedResource:
@@ -20,7 +24,9 @@ def create_and_store_resource(
         _resource_name = yaml_data.get("metadata", {}).get("name", "")
 
     if _resource_name and not _resource_name.startswith(session_uuid):
-        LOGGER.error(f"Resource name should start with {session_uuid}: {_resource_name}")
+        raise ResourceNameNotStartedWithSessionUUIDError(
+            f"Resource name should start with {session_uuid}: {_resource_name}"
+        )
 
     _resource = resource(**kwargs)
     _resource.deploy(wait=True)
