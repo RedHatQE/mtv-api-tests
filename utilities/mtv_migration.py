@@ -9,16 +9,17 @@ from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
-from ocp_resources.resource import NamespacedResource, Resource, ResourceEditor
+from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import retry
+from timeout_sampler import TimeoutExpiredError, retry
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
+from utilities.migration_utils import archive_plan, cancel_migration
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.utils import generate_name_with_uuid, get_value_from_py_config
@@ -113,6 +114,7 @@ def migrate_vms(
             "destination_provider_name": destination_provider.ocp_resource.name,
             "destination_provider_namespace": destination_provider.ocp_resource.namespace,
             "fixture_store": fixture_store,
+            "session_uuid": session_uuid,
         }
 
         with run_migration(**run_migration_kwargs) as (plan, migration):
@@ -131,7 +133,12 @@ def migrate_vms(
                     run_cut_over(migration=migration)
 
         if migration:
-            wait_for_migration_complate(plan=plan)
+            try:
+                wait_for_migration_complate(plan=plan)
+            except TimeoutExpiredError:
+                cancel_migration(migration=migration)
+                archive_plan(plan=plan)
+                raise
 
             if py_config.get("create_scale_report"):
                 create_migration_scale_report(plan_resource=plan)
@@ -174,7 +181,8 @@ def run_migration(
     condition_status: str,
     condition_type: str,
     fixture_store: Any,
-) -> Generator[tuple[Resource | NamespacedResource, Resource | NamespacedResource | None], Any, Any]:
+    session_uuid: str,
+) -> Generator[tuple[Plan, Migration | None], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
@@ -204,6 +212,7 @@ def run_migration(
     """
     plan = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=Plan,
         name=name,
         namespace=namespace,
@@ -228,6 +237,7 @@ def run_migration(
         plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
         migration = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Migration,
             name=f"{name}-migration",
             namespace=namespace,

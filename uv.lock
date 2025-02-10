@@ -944,7 +944,7 @@ wheels = [
 
 [[package]]
 name = "openshift-python-wrapper"
-version = "11.0.26"
+version = "11.0.27"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -966,7 +966,7 @@ dependencies = [
     { name = "timeout-sampler" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/f1/8f2fef2d8dd5083ce738e0dcece526699150fa9b3e5e33c63ac663193fa0/openshift_python_wrapper-11.0.26.tar.gz", hash = "sha256:2d58f11a59c3329759b762212f3ed16e82084c9ab080286c58cd057e8c3fcf03", size = 6490711 }
+sdist = { url = "https://files.pythonhosted.org/packages/92/e5/d23f09715f6817e81601aac27e6d6ce7ed425e63a144b8bb764cadcb44f6/openshift_python_wrapper-11.0.27.tar.gz", hash = "sha256:797a0ad1da79f0b3bbb46cd824c3c5878e42c013393eb53698ce1bc1506f2c67", size = 6490733 }
 
 [[package]]
 name = "openstacksdk"

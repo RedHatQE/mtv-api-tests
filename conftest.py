@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import cloudpickle
 import pytest
 import yaml
 from kubernetes.dynamic import DynamicClient
@@ -82,6 +81,7 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionstart(session):
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
+
     if not session.config.getoption("skip_data_collector"):
         _data_collector_path = Path(session.config.getoption("data_collector_path"))
         prepare_base_path(base_path=_data_collector_path)
@@ -133,7 +133,11 @@ def pytest_report_teststatus(report, config):
 
 
 def pytest_sessionfinish(session, exitstatus):
+    if session.config.option.setupplan or session.config.option.collectonly:
+        return
+
     _session_store = get_fixture_store(session)
+
     if not session.config.getoption("skip_data_collector"):
         _data_collector_path = Path(session.config.getoption("data_collector_path"))
         collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
@@ -142,6 +146,7 @@ def pytest_sessionfinish(session, exitstatus):
         LOGGER.warning("User requested to skip teardown of resources")
 
     else:
+        # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
         session_teardown(session_store=_session_store)
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
@@ -159,42 +164,6 @@ def pytest_exception_interact(node, call, report):
     if not node.session.config.getoption("skip_data_collector"):
         _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
         data_collector(client=get_client(), base_path=_data_collector_path, mtv_namespace=py_config["mtv_namespace"])
-
-
-def pytest_harvest_xdist_init():
-    # reset the recipient folder
-    if XDIST_RESULTS_PATH.exists():
-        shutil.rmtree(XDIST_RESULTS_PATH)
-
-    XDIST_RESULTS_PATH.mkdir(exist_ok=False)
-    return True
-
-
-def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
-    # persist session_items and fixture_store in the file system
-    with open(XDIST_RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as fd:
-        try:
-            cloudpickle.dump((session_items, fixture_store), fd)
-        except Exception:
-            LOGGER.warning(f"Error while pickling worker {worker_id}'s harvested results")
-    return True
-
-
-def pytest_harvest_xdist_load():
-    # restore the saved objects from file system
-    workers_saved_material = {}
-
-    for pkl_file in XDIST_RESULTS_PATH.glob("*.pkl"):
-        wid = pkl_file.stem
-        with pkl_file.open("rb") as f:
-            workers_saved_material[wid] = cloudpickle.load(f)
-    return workers_saved_material
-
-
-def pytest_harvest_xdist_cleanup():
-    # delete all temporary pickle files
-    shutil.rmtree(XDIST_RESULTS_PATH)
-    return True
 
 
 # Pytest end
@@ -220,9 +189,11 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs
     unique_namespace_name = f"{session_uuid}{_target_namespace}"[:63]
+    fixture_store["target_namespace"] = unique_namespace_name
 
     namespace = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=Namespace,
         client=ocp_admin_client,
         name=unique_namespace_name,
@@ -265,8 +236,10 @@ def nfs_storage_profile(ocp_admin_client):
 
 
 @pytest.fixture(scope="session")
-def session_uuid():
-    return generate_name_with_uuid(name="mtv-api-tests")
+def session_uuid(fixture_store):
+    _session_uuid = generate_name_with_uuid(name="mtv-api-tests")
+    fixture_store["session_uuid"] = _session_uuid
+    return _session_uuid
 
 
 @pytest.fixture(scope="session")
@@ -456,6 +429,7 @@ def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin
     for client in clients:
         nad = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=NetworkAttachmentDefinition,
             client=client,
             kind_dict=bridge_yaml,
@@ -469,6 +443,7 @@ def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin
 @pytest.fixture(scope="session")
 def network_migration_map_pod_only(
     fixture_store,
+    session_uuid,
     source_provider,
     source_provider_data,
     destination_provider,
@@ -481,6 +456,7 @@ def network_migration_map_pod_only(
     )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=NetworkMap,
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resources.name}-{destination_provider.ocp_resources.name}-network-map-pod",
@@ -497,6 +473,7 @@ def network_migration_map_pod_only(
 @pytest.fixture(scope="session")
 def network_migration_map(
     fixture_store,
+    session_uuid,
     source_provider,
     source_provider_data,
     destination_provider,
@@ -512,6 +489,7 @@ def network_migration_map(
     )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=NetworkMap,
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
@@ -527,7 +505,13 @@ def network_migration_map(
 
 @pytest.fixture(scope="session")
 def storage_migration_map(
-    fixture_store, source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client
+    fixture_store,
+    session_uuid,
+    source_provider,
+    source_provider_data,
+    destination_provider,
+    mtv_namespace,
+    ocp_admin_client,
 ):
     storage_map_list: list[dict[str, Any]] = []
     for storage in source_provider_data["storages"]:
@@ -538,6 +522,7 @@ def storage_migration_map(
 
     storage_map = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=StorageMap,
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
@@ -553,7 +538,13 @@ def storage_migration_map(
 
 @pytest.fixture(scope="session")
 def storage_migration_map_default_settings(
-    fixture_store, source_provider, source_provider_data, destination_provider, mtv_namespace, ocp_admin_client
+    fixture_store,
+    session_uuid,
+    source_provider,
+    source_provider_data,
+    destination_provider,
+    mtv_namespace,
+    ocp_admin_client,
 ):
     storage_map_list: list[dict[str, Any]] = []
     for storage in source_provider_data["storages"]:
@@ -568,6 +559,7 @@ def storage_migration_map_default_settings(
 
     storage_map = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=StorageMap,
         client=ocp_admin_client,
         name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
@@ -585,6 +577,7 @@ def storage_migration_map_default_settings(
 @pytest.fixture(scope="session")
 def network_migration_map_source_admin(
     fixture_store,
+    session_uuid,
     source_provider_admin_user,
     source_provider_data,
     destination_provider,
@@ -601,6 +594,7 @@ def network_migration_map_source_admin(
         )
         network_map = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=NetworkMap,
             client=ocp_admin_client,
             name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
@@ -620,6 +614,7 @@ def network_migration_map_source_admin(
 @pytest.fixture(scope="session")
 def storage_migration_map_source_admin(
     fixture_store,
+    session_uuid,
     source_provider_admin_user,
     source_provider_data,
     destination_provider,
@@ -637,6 +632,7 @@ def storage_migration_map_source_admin(
 
         storage_map = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=StorageMap,
             client=ocp_admin_client,
             name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
@@ -657,6 +653,7 @@ def storage_migration_map_source_admin(
 @pytest.fixture(scope="session")
 def network_migration_map_source_non_admin(
     fixture_store,
+    session_uuid,
     source_provider_non_admin_user,
     source_provider_data,
     destination_provider,
@@ -673,6 +670,7 @@ def network_migration_map_source_non_admin(
         )
         network_map = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=NetworkMap,
             client=ocp_admin_client,
             name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
@@ -692,6 +690,7 @@ def network_migration_map_source_non_admin(
 @pytest.fixture(scope="session")
 def storage_migration_map_source_non_admin(
     fixture_store,
+    session_uuid,
     source_provider_non_admin_user,
     source_provider_data,
     destination_provider,
@@ -709,6 +708,7 @@ def storage_migration_map_source_non_admin(
 
         storage_map = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=StorageMap,
             client=ocp_admin_client,
             name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
@@ -755,6 +755,7 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, mtv_na
 
     secret = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=Secret,
         name=f"{session_uuid}-ocp-secret",
         namespace=mtv_namespace,
@@ -769,6 +770,7 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
     provider_name: str = f"{session_uuid}-ocp-provider"
     provider = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=Provider,
         name=provider_name,
         namespace=mtv_namespace,
@@ -798,6 +800,7 @@ def remote_network_migration_map(
     )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=NetworkMap,
         name=f"{session_uuid}-networkmap",
         namespace=mtv_namespace,
@@ -833,6 +836,7 @@ def remote_storage_migration_map(
 
     storage_map = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=StorageMap,
         name=f"{session_uuid}-storagemap",
         namespace=mtv_namespace,
@@ -875,6 +879,7 @@ def source_provider_host_secret(
         }
         secret = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Secret,
             client=ocp_admin_client,
             name=name,
@@ -888,12 +893,19 @@ def source_provider_host_secret(
 
 @pytest.fixture(scope="session")
 def source_provider_host(
-    fixture_store, source_provider, source_provider_data, mtv_namespace, source_provider_host_secret, ocp_admin_client
+    fixture_store,
+    session_uuid,
+    source_provider,
+    source_provider_data,
+    mtv_namespace,
+    source_provider_host_secret,
+    ocp_admin_client,
 ):
     if source_provider_data.get("host_list"):
         _host = source_provider_data["host_list"][0]
         create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Host,
             client=ocp_admin_client,
             name=f"{source_provider_data['fqdn']}-{_host['migration_host_ip']}-{_host['migration_host_id']}",
@@ -912,10 +924,11 @@ def source_provider_host(
 
 
 @pytest.fixture(scope="session")
-def prehook(fixture_store, ocp_admin_client, mtv_namespace):
+def prehook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
     pre_hook_dict: dict[str, str] = py_config["hook_dict"]["prehook"]
     hook = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=Hook,
         client=ocp_admin_client,
         name=pre_hook_dict["name"],
@@ -926,10 +939,11 @@ def prehook(fixture_store, ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def posthook(fixture_store, ocp_admin_client, mtv_namespace):
+def posthook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
     posthook_dict: dict[str, str] = py_config["hook_dict"]["posthook"]
     hook = create_and_store_resource(
         fixture_store=fixture_store,
+        session_uuid=session_uuid,
         resource=Hook,
         client=ocp_admin_client,
         name=posthook_dict["name"],
@@ -992,17 +1006,24 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
     yield request.param
 
     for vm in virtual_machines:
-        fixture_store["teardown"].setdefault("VirtualMachine", []).append(
-            VirtualMachine(
-                client=ocp_admin_client,
-                name=vm["name"],
-                namespace=target_namespace,
-            )
+        vm_obj = VirtualMachine(
+            client=ocp_admin_client,
+            name=vm["name"],
+            namespace=target_namespace,
         )
+        fixture_store["teardown"].setdefault(vm_obj.kind, []).append({
+            "name": vm_obj.name,
+            "namespace": vm_obj.namespace,
+            "module": vm_obj.__module__,
+        })
 
     for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
         if plan["name"] in pod.name:
-            fixture_store["teardown"].setdefault("Pod", []).append(pod)
+            fixture_store["teardown"].setdefault(pod.kind, []).append({
+                "name": pod.name,
+                "namespace": pod.namespace,
+                "module": pod.__module__,
+            })
 
 
 @pytest.fixture(scope="function")

@@ -1,6 +1,7 @@
 import copy
+import functools
+import multiprocessing
 import shutil
-import threading
 from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
@@ -68,14 +69,15 @@ def generate_ca_cert_file(provider_fqdn: dict[str, Any], cert_file: Path) -> Pat
 
 def background(func):
     """
-    a threading decorator
     use @background above the function you want to run in the background
     """
 
-    def backgrnd_func(*args, **kwargs):
-        threading.Thread(target=func, args=args, kwargs=kwargs).start()
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        proc = multiprocessing.Process(target=func, args=args, kwargs=kwargs)
+        proc.start()
 
-    return backgrnd_func
+    return wrapper
 
 
 def gen_network_map_list(
@@ -212,6 +214,7 @@ def create_source_provider(
         # Creating the source Secret and source Provider CRs
         customized_secret = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Secret,
             client=admin_client,
             name=name,
@@ -222,6 +225,7 @@ def create_source_provider(
 
         ocp_resource_provider = create_and_store_resource(
             fixture_store=fixture_store,
+            session_uuid=session_uuid,
             resource=Provider,
             client=admin_client,
             name=name,
