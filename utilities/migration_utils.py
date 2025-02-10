@@ -112,9 +112,8 @@ def append_leftovers(
 ) -> dict[str, list[dict[str, str]]]:
     _name = resource.name
     _namespace = resource.namespace
-    _kind = resource.kind
 
-    leftovers.setdefault(_kind, []).append({
+    leftovers.setdefault(resource.kind, []).append({
         "name": _name,
         "namespace": _namespace,
     })
