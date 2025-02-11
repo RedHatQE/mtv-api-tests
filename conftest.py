@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -40,9 +39,7 @@ from utilities.utils import (
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
-    rhv_provider,
     start_source_vm_data_upload_vmware,
-    vmware_provider,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -354,65 +351,6 @@ def source_provider(
 
 
 @pytest.fixture(scope="session")
-def source_providers(fixture_store, session_uuid, mtv_namespace, ocp_admin_client, tmp_path_factory):
-    for source_provider_data in py_config["source_providers_list"]:
-        with create_source_provider(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            config=py_config,
-            source_provider_data=source_provider_data,
-            mtv_namespace=mtv_namespace,
-            admin_client=ocp_admin_client,
-            tmp_dir=tmp_path_factory,
-        ) as source_provider_objects:
-            _source_provider = source_provider_objects[0]
-
-        yield _source_provider
-
-
-@pytest.fixture(scope="session")
-def source_provider_admin_user(fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client):
-    if vmware_provider(provider_data=source_provider_data):
-        with create_source_provider(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            config=py_config,
-            source_provider_data=source_provider_data,
-            mtv_namespace=mtv_namespace,
-            admin_client=ocp_admin_client,
-            username=source_provider_data["admin_username"],
-            password=source_provider_data["admin_password"],
-        ) as source_provider_objects:
-            _source_provider = source_provider_objects[0]
-
-        yield _source_provider
-
-    else:
-        yield
-
-
-@pytest.fixture(scope="session")
-def source_provider_non_admin_user(fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client):
-    if vmware_provider(provider_data=source_provider_data):
-        with create_source_provider(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            config=py_config,
-            source_provider_data=source_provider_data,
-            mtv_namespace=mtv_namespace,
-            admin_client=ocp_admin_client,
-            username=source_provider_data["non_admin_username"],
-            password=source_provider_data["non_admin_password"],
-        ) as source_provider_objects:
-            _source_provider = source_provider_objects[0]
-
-        yield _source_provider
-
-    else:
-        yield
-
-
-@pytest.fixture(scope="session")
 def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin_client):
     nad_name: str = ""
     clients: list[DynamicClient] = [ocp_admin_client]
@@ -438,36 +376,6 @@ def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin
         nad_name = nad.name
 
     yield nad_name
-
-
-@pytest.fixture(scope="session")
-def network_migration_map_pod_only(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    source_provider_data,
-    destination_provider,
-    mtv_namespace,
-    ocp_admin_client,
-    target_namespace,
-):
-    network_map_list = gen_network_map_list(
-        target_namespace=target_namespace, source_provider_data=source_provider_data, pod_only=True
-    )
-    network_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=NetworkMap,
-        client=ocp_admin_client,
-        name=f"{source_provider.ocp_resources.name}-{destination_provider.ocp_resources.name}-network-map-pod",
-        namespace=mtv_namespace,
-        mapping=network_map_list,
-        source_provider_name=source_provider.ocp_resources.name,
-        source_provider_namespace=source_provider.ocp_resources.namespace,
-        destination_provider_name=destination_provider.ocp_resource.name,
-        destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    )
-    yield network_map
 
 
 @pytest.fixture(scope="session")
@@ -534,217 +442,6 @@ def storage_migration_map(
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
     yield storage_map
-
-
-@pytest.fixture(scope="session")
-def storage_migration_map_default_settings(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    source_provider_data,
-    destination_provider,
-    mtv_namespace,
-    ocp_admin_client,
-):
-    storage_map_list: list[dict[str, Any]] = []
-    for storage in source_provider_data["storages"]:
-        storage_map_list.append({
-            "destination": {
-                "storageClass": py_config["storage_class"],
-                "accessMode": "ReadWriteOnce",
-                "volumeMode": "Filesystem",
-            },
-            "source": storage,
-        })
-
-    storage_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=StorageMap,
-        client=ocp_admin_client,
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
-        f"-storage-map-default-settings",
-        namespace=mtv_namespace,
-        mapping=storage_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_provider.ocp_resource.name,
-        destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    )
-    yield storage_map
-
-
-@pytest.fixture(scope="session")
-def network_migration_map_source_admin(
-    fixture_store,
-    session_uuid,
-    source_provider_admin_user,
-    source_provider_data,
-    destination_provider,
-    multus_network_name,
-    mtv_namespace,
-    ocp_admin_client,
-    target_namespace,
-):
-    if vmware_provider(provider_data=source_provider_data):
-        network_map_list = gen_network_map_list(
-            target_namespace=target_namespace,
-            source_provider_data=source_provider_data,
-            multus_network_name=multus_network_name,
-        )
-        network_map = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=NetworkMap,
-            client=ocp_admin_client,
-            name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
-            namespace=mtv_namespace,
-            mapping=network_map_list,
-            source_provider_name=source_provider_admin_user.ocp_resource.name,
-            source_provider_namespace=source_provider_admin_user.ocp_resource.namespace,
-            destination_provider_name=destination_provider.ocp_resource.name,
-            destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        )
-        yield network_map
-
-    else:
-        yield
-
-
-@pytest.fixture(scope="session")
-def storage_migration_map_source_admin(
-    fixture_store,
-    session_uuid,
-    source_provider_admin_user,
-    source_provider_data,
-    destination_provider,
-    mtv_namespace,
-    ocp_admin_client,
-):
-    if vmware_provider(provider_data=source_provider_data):
-        storage_map_list: list[dict[str, Any]] = []
-        source_storages = source_provider_admin_user.storages_name
-        for item in source_storages:
-            storage_map_list.append({
-                "destination": {"storageClass": py_config["storage_class"]},
-                "source": {"name": item},
-            })
-
-        storage_map = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=StorageMap,
-            client=ocp_admin_client,
-            name=f"{source_provider_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
-            "-storage-map",
-            namespace=mtv_namespace,
-            mapping=storage_map_list,
-            source_provider_name=source_provider_admin_user.ocp_resource.name,
-            source_provider_namespace=source_provider_admin_user.ocp_resource.namespace,
-            destination_provider_name=destination_provider.ocp_resource.name,
-            destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        )
-        yield storage_map
-
-    else:
-        yield
-
-
-@pytest.fixture(scope="session")
-def network_migration_map_source_non_admin(
-    fixture_store,
-    session_uuid,
-    source_provider_non_admin_user,
-    source_provider_data,
-    destination_provider,
-    multus_network_name,
-    mtv_namespace,
-    ocp_admin_client,
-    target_namespace,
-):
-    if vmware_provider(provider_data=source_provider_data):
-        network_map_list = gen_network_map_list(
-            target_namespace=target_namespace,
-            source_provider_data=source_provider_data,
-            multus_network_name=multus_network_name,
-        )
-        network_map = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=NetworkMap,
-            client=ocp_admin_client,
-            name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
-            namespace=mtv_namespace,
-            mapping=network_map_list,
-            source_provider_name=source_provider_non_admin_user.ocp_resource.name,
-            source_provider_namespace=source_provider_non_admin_user.ocp_resource.namespace,
-            destination_provider_name=destination_provider.ocp_resource.name,
-            destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        )
-        yield network_map
-
-    else:
-        yield
-
-
-@pytest.fixture(scope="session")
-def storage_migration_map_source_non_admin(
-    fixture_store,
-    session_uuid,
-    source_provider_non_admin_user,
-    source_provider_data,
-    destination_provider,
-    mtv_namespace,
-    ocp_admin_client,
-):
-    if vmware_provider(provider_data=source_provider_data):
-        storage_map_list: list[dict[str, Any]] = []
-        source_storages = source_provider_non_admin_user.storages_name
-        for item in source_storages:
-            storage_map_list.append({
-                "destination": {"storageClass": py_config["storage_class"]},
-                "source": {"name": item},
-            })
-
-        storage_map = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=StorageMap,
-            client=ocp_admin_client,
-            name=f"{source_provider_non_admin_user.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}"
-            f"-storage-map",
-            namespace=mtv_namespace,
-            mapping=storage_map_list,
-            source_provider_name=source_provider_non_admin_user.ocp_resource.name,
-            source_provider_namespace=source_provider_non_admin_user.ocp_resource.namespace,
-            destination_provider_name=destination_provider.ocp_resource.name,
-            destination_provider_namespace=destination_provider.ocp_resource.namespace,
-        )
-        yield storage_map
-
-    else:
-        yield
-
-
-@pytest.fixture(scope="session")
-def plans_scale(source_provider):
-    source_vms = source_provider.vms(search=py_config["vm_name_search_pattern"])
-    plans: list[dict[str, Any]] = [
-        {
-            "virtual_machines": [],
-            "warm_migration": get_value_from_py_config("warm_migration"),
-        }
-    ]
-
-    for idx in range(int(py_config["number_of_vms"])):
-        vm_name = source_vms[idx].name
-        plans[0]["virtual_machines"].append({"name": f"{vm_name}"})
-
-        if get_value_from_py_config("turn_on_vms"):
-            source_vm_details = source_provider.vm_dict(name=vm_name)
-            source_provider.start_vm(vm=source_vm_details["provider_vm_api"])
-
-    return plans
 
 
 @pytest.fixture(scope="session")
@@ -850,21 +547,6 @@ def remote_storage_migration_map(
 
 
 @pytest.fixture(scope="session")
-def plans_set():
-    plans: list[dict[str, Any]] = [
-        {
-            "virtual_machines": [],
-            "warm_migration": get_value_from_py_config("warm_migration"),
-        }
-    ]
-
-    for vm_name in py_config["list_of_vms_csv"].split(","):
-        plans[0]["virtual_machines"].append({"name": vm_name})
-
-    return plans
-
-
-@pytest.fixture(scope="session")
 def source_provider_host_secret(
     fixture_store, session_uuid, source_provider, source_provider_data, mtv_namespace, ocp_admin_client
 ):
@@ -954,18 +636,6 @@ def posthook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="function")
-def skip_if_no_vmware(source_provider_data):
-    if not vmware_provider(provider_data=source_provider_data):
-        pytest.skip("Skip testing. VMware only test.")
-
-
-@pytest.fixture(scope="function")
-def skip_if_no_rhv(source_provider_data):
-    if not rhv_provider(provider_data=source_provider_data):
-        pytest.skip("Skip testing. RHV only test.")
-
-
-@pytest.fixture(scope="function")
 def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, request):
     plan: dict[str, Any] = request.param[0]
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
@@ -1024,11 +694,3 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
                 "namespace": pod.namespace,
                 "module": pod.__module__,
             })
-
-
-@pytest.fixture(scope="function")
-def restore_ingress_certificate():
-    yield
-    assert subprocess.run(["/bin/sh", "./utilities/publish.sh", "restore"]).returncode == 0, (
-        "external certification restore check"
-    )
