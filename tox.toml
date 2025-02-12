@@ -23,12 +23,4 @@ deps = ["uv"]
 [env.unused-code]
 description = "Find unused code"
 deps = ["python-utility-scripts"]
-commands = [
-  [
-    "pyutils-unusedcode",
-    "--exclude-files",
-    "conftest.py",
-    "--exclude-function-prefixes",
-    "pytest_",
-  ],
-]
+commands = [["pyutils-unusedcode", "--exclude-function-prefixes", "pytest_"]]
