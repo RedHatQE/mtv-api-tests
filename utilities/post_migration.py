@@ -1,20 +1,22 @@
 from __future__ import annotations
+
+import uuid
+from subprocess import STDOUT, check_output
 from typing import Any
-from ocp_resources.network_map import NetworkMap
-from ocp_resources.resource import get_logger
-from ocp_resources.storage_map import StorageMap
+
 import pytest
+import pytest_check as check
+from ocp_resources.datavolume import DataVolume
+from ocp_resources.network_map import NetworkMap
+from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
+from simple_logger.logger import get_logger
+
 from libs.base_provider import BaseProvider
 from libs.providers.rhv import RHVProvider
 from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
-from subprocess import STDOUT, check_output
-import uuid
-import pytest_check as check
 
 LOGGER = get_logger(name=__name__)
-RWO = "ReadWriteOnce"
-RWX = "ReadWriteMany"
 
 
 def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[str, Any]) -> dict[str, Any] | None:
@@ -76,9 +78,9 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
                 if mapping.source.name in source_vm_disks_storage:
                     # The following condition is for a customer case (BZ#2064936)
                     if mapping.destination.get("accessMode"):
-                        check.equal(destination_disk["storage"]["access_mode"][0], RWO)
+                        check.equal(destination_disk["storage"]["access_mode"][0], DataVolume.AccessMode.RWO)
                     else:
-                        check.equal(destination_disk["storage"]["access_mode"][0], RWX)
+                        check.equal(destination_disk["storage"]["access_mode"][0], DataVolume.AccessMode.RWX)
 
 
 def check_migration_network(source_provider_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
