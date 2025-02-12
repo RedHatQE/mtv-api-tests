@@ -25,6 +25,7 @@ VM_SUFFIX = get_vm_suffix()
 )
 @pytest.mark.tier0
 def test_sanity_cold_mtv_migration(
+    request,
     fixture_store,
     session_uuid,
     target_namespace,
@@ -37,6 +38,7 @@ def test_sanity_cold_mtv_migration(
 ):
     migrate_vms(
         fixture_store=fixture_store,
+        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
