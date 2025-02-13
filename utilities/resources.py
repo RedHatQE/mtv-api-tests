@@ -19,14 +19,18 @@ def create_and_store_resource(
     test_name: str | None = None,
     **kwargs: Any,
 ) -> Resource | NamespacedResource:
-    _resource_name = kwargs.get("name", "")
-    _resource_yaml = kwargs.get("yaml_file", "")
+    _resource_name = kwargs.get("name")
+    _resource_kind_dict = kwargs.get("kind_dict")
+    _resource_yaml = kwargs.get("yaml_file")
 
-    if _resource_yaml:
+    if _resource_kind_dict:
+        _resource_name = _resource_kind_dict.get("metadata", {}).get("name")
+
+    elif _resource_yaml:
         with open(_resource_yaml) as fd:
-            yaml_data = yaml.safe_load(fd)
+            _resource_yaml_data = yaml.safe_load(fd)
 
-        _resource_name = yaml_data.get("metadata", {}).get("name", "")
+        _resource_name = _resource_yaml_data.get("metadata", {}).get("name")
 
     if _resource_name and not _resource_name.startswith(session_uuid):
         raise ResourceNameNotStartedWithSessionUUIDError(
