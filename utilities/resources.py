@@ -20,19 +20,23 @@ def create_and_store_resource(
     **kwargs: Any,
 ) -> Resource | NamespacedResource:
     _resource_name = kwargs.get("name")
-    _resource_kind_dict = kwargs.get("kind_dict")
+    _resource_dict = kwargs.get("kind_dict", {})
     _resource_yaml = kwargs.get("yaml_file")
 
-    if _resource_kind_dict:
-        _resource_name = _resource_kind_dict.get("metadata", {}).get("name")
+    if _resource_yaml and _resource_dict:
+        raise ValueError("Cannot specify both yaml_file and kind_dict")
 
-    elif _resource_yaml:
-        with open(_resource_yaml) as fd:
-            _resource_yaml_data = yaml.safe_load(fd)
+    if not _resource_name:
+        if _resource_yaml:
+            with open(_resource_yaml) as fd:
+                _resource_dict = yaml.safe_load(fd)
 
-        _resource_name = _resource_yaml_data.get("metadata", {}).get("name")
+        _resource_name = _resource_dict.get("metadata", {}).get("name")
 
-    if _resource_name and not _resource_name.startswith(session_uuid):
+    if not _resource_name:
+        raise ValueError("Resource name is required, but not provided. please provide name or yaml_file or kind_dict")
+
+    if not _resource_name.startswith(session_uuid):
         raise ResourceNameNotStartedWithSessionUUIDError(
             f"Resource name should start with {session_uuid}: {_resource_name}"
         )
