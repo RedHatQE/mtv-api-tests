@@ -1,4 +1,6 @@
+import contextlib
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,15 @@ from simple_logger.logger import get_logger
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 
 LOGGER = get_logger(__name__)
+
+
+def prepare_base_path(base_path: Path) -> None:
+    with contextlib.suppress(FileNotFoundError):
+        # When running pytest in parallel (-n) we may get here error even when path exists
+        if base_path.exists():
+            shutil.rmtree(base_path)
+
+    base_path.mkdir(parents=True, exist_ok=True)
 
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
