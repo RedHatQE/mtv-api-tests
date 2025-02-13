@@ -143,6 +143,7 @@ junit-report.xml
 .xdist_harvested
 .xdist_results
 .data-collector
+prof/
 
 # Local develop
 .dev/
