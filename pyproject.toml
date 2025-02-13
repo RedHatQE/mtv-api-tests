@@ -47,4 +47,5 @@ dependencies = [
   "cloudpickle>=3.1.1",
   "pytest-harvest>=1.10.5",
   "pyhelper-utils>=1.0.9",
+  "openshift-python-utilities>=6.0.7",
 ]

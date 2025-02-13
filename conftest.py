@@ -26,12 +26,13 @@ from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pyhelper_utils.shell import run_command
+from ocp_utilities.infra import create_update_secret
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
-from utilities.pytest_utils import collect_created_resources, prepare_base_path, session_teardown
+from utilities.pytest_utils import collect_created_resources, session_teardown, prepare_base_path
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
@@ -178,9 +179,19 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, updated_cluster_pull_secret):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
+
+
+@pytest.fixture(scope="session")
+def updated_cluster_pull_secret(ocp_admin_client):
+    create_update_secret(
+        secret_data_dict={"auths": {"quey.io/rh-openshift-mtv": {"auth": py_config["quey_rh_openshift_mtv_secret"]}}},
+        name="pull-secret",  # pragma: allowlist secret
+        namespace="openshift-config",
+        admin_client=ocp_admin_client,
+    )
 
 
 @pytest.fixture(scope="session")
