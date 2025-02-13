@@ -43,8 +43,6 @@ def session_teardown(session_store: dict[str, Any]) -> None:
 
     ocp_client = get_client()
     session_teardown_resources = session_store["teardown"]
-    target_namespace = session_store["target_namespace"]
-    session_uuid = session_store["session_uuid"]
     leftovers: dict[str, list[dict[str, str]]] = {}
 
     for migration_name in session_teardown_resources.get(Migration.kind, []):
@@ -58,8 +56,8 @@ def session_teardown(session_store: dict[str, Any]) -> None:
     teardown_resources(
         session_teardown_resources=session_teardown_resources,
         ocp_client=ocp_client,
-        target_namespace=target_namespace,
-        session_uuid=session_uuid,
+        target_namespace=session_store.get("target_namespace"),
+        session_uuid=session_store["session_uuid"],
         leftovers=leftovers,
     )
 
@@ -68,8 +66,8 @@ def teardown_resources(
     session_teardown_resources: dict[str, list[dict[str, str]]],
     ocp_client: DynamicClient,
     session_uuid: str,
-    target_namespace: str,
     leftovers: dict[str, list[dict[str, str]]],
+    target_namespace: str | None = None,
 ) -> bool:
     """
     Delete all the resources that was created by the tests.
@@ -156,15 +154,16 @@ def teardown_resources(
             if not pod_obj.clean_up(wait=True):
                 leftovers = append_leftovers(leftovers=leftovers, resource=pod_obj)
 
-    # Make sure all pods related to the test session are deleted
-    for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace):
-        if session_uuid in _pod.name:
-            if not _pod.wait_deleted():
-                leftovers = append_leftovers(leftovers=leftovers, resource=_pod)
+    if target_namespace:
+        # Make sure all pods related to the test session are deleted
+        for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace):
+            if session_uuid in _pod.name:
+                if not _pod.wait_deleted():
+                    leftovers = append_leftovers(leftovers=leftovers, resource=_pod)
 
-    leftovers = check_dv_pvc_pv_deleted(
-        leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
-    )
+        leftovers = check_dv_pvc_pv_deleted(
+            leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
+        )
 
     # Report if we have any leftovers
     if leftovers:
