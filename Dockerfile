@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora:41
+FROM quay.io/fedora/fedora:43
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG APP_DIR=/app
