@@ -19,7 +19,8 @@ source_providers_list = [
         "guest_vm_linux_password": "100yard-",
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "Heslo123!",
-        "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:6.5",
+        "vddk_init_image": "quay.io/qiyuan1/test7",
+        # "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:6.5",
         "host_list": [
             {
                 "migration_host_id": "host-732",
@@ -47,7 +48,8 @@ source_providers_list = [
         "guest_vm_linux_password": "redhat",
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "123qweP",
-        "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:7.0.3",
+        "vddk_init_image": "quay.io/libvirt_v2v_cnv/vddk:7.0.3",
+        # "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:7.0.3",
         "host_list": [
             {
                 "migration_host_id": "host-10",
@@ -75,7 +77,8 @@ source_providers_list = [
         "guest_vm_linux_password": "redhat",
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "123qweP",
-        "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:8.0.1",
+        "vddk_init_image": "quay.io/libvirt_v2v_cnv/vddk:8.0.1",
+        # "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:8.0.1",
         "host_list": [
             {
                 "migration_host_id": "host-8",
@@ -168,7 +171,6 @@ matrix_test = True
 release_test = False
 target_ocp_version = "4.17"
 mount_root = ""
-quey_rh_openshift_mtv_secret = "cmgtb3BlbnNoaWZ0LW10dityaF9vcGVuc2hpZnRfbXR2Okc2MUk2T0U3RzJVMDkzT1gwOUtPTUNYWlJZSDdSSlk1Rk0yTlFJU0NVMTRQNzM5VzRTMERQSDY1WVg5TldMUzI="
 
 for _dir in dir():
     val = locals()[_dir]
