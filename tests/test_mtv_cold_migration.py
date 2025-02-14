@@ -75,6 +75,7 @@ def test_sanity_cold_mtv_migration(
 )
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
 def test_cold_remote_ocp(
+    request,
     fixture_store,
     session_uuid,
     target_namespace,
@@ -87,6 +88,7 @@ def test_cold_remote_ocp(
 ):
     migrate_vms(
         fixture_store=fixture_store,
+        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,

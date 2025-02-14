@@ -34,6 +34,7 @@ VM_SUFFIX = get_vm_suffix()
     ids=["rhel8"],
 )
 def test_sanity_warm_mtv_migration(
+    request,
     fixture_store,
     session_uuid,
     target_namespace,
@@ -47,6 +48,7 @@ def test_sanity_warm_mtv_migration(
 ):
     migrate_vms(
         fixture_store=fixture_store,
+        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -83,6 +85,7 @@ def test_sanity_warm_mtv_migration(
     ids=["MTV-200 rhel"],
 )
 def test_mtv_migration_warm_2disks2nics(
+    request,
     fixture_store,
     session_uuid,
     target_namespace,
@@ -96,6 +99,7 @@ def test_mtv_migration_warm_2disks2nics(
 ):
     migrate_vms(
         fixture_store=fixture_store,
+        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -132,6 +136,7 @@ def test_mtv_migration_warm_2disks2nics(
 )
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
 def test_warm_remote_ocp(
+    request,
     fixture_store,
     session_uuid,
     target_namespace,
@@ -145,6 +150,7 @@ def test_warm_remote_ocp(
 ):
     migrate_vms(
         fixture_store=fixture_store,
+        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
