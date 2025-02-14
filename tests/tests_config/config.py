@@ -168,7 +168,6 @@ matrix_test = True
 release_test = False
 target_ocp_version = "4.17"
 mount_root = ""
-quey_rh_openshift_mtv_secret = "cmgtb3BlbnNoaWZ0LW10dityaF9vcGVuc2hpZnRfbXR2Okc2MUk2T0U3RzJVMDkzT1gwOUtPTUNYWlJZSDdSSlk1Rk0yTlFJU0NVMTRQNzM5VzRTMERQSDY1WVg5TldMUzI="
 
 for _dir in dir():
     val = locals()[_dir]
