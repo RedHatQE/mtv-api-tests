@@ -258,7 +258,7 @@ def mtv_namespace():
 
 
 @pytest.fixture(scope="session")
-def ocp_admin_client(tmp_path_factory):
+def ocp_admin_client():
     """
     OCP client
     """
