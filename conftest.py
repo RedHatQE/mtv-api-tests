@@ -267,7 +267,7 @@ def ocp_admin_client():
 
     if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
         if remote_cluster_name not in _client.configuration.host:
-            raise RemoteClusterAndLocalCluterNamesError("Remote cluster name and local cluster name are different")
+            raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
 
     yield _client
 
