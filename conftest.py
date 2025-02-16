@@ -46,9 +46,11 @@ from utilities.utils import (
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 
-# Define the folder in which temporary worker's results will be stored
-XDIST_RESULTS_PATH = Path("./.xdist_results/")
-XDIST_RESULTS_PATH.mkdir(exist_ok=True)
+
+class RemoteClusterAndLocalCluterNamesError(Exception):
+    pass
+
+
 # Pytest start
 
 
@@ -256,28 +258,18 @@ def mtv_namespace():
 
 
 @pytest.fixture(scope="session")
-def ocp_admin_client(tmp_path_factory):
+def ocp_admin_client():
     """
     OCP client
     """
+    LOGGER.info(msg="Creating OCP admin Client")
+    _client = get_client()
 
     if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
-        LOGGER.info(msg=f"Creating remote OCP admin client for {remote_cluster_name}")
+        if remote_cluster_name not in _client.configuration.host:
+            raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
 
-        mount_root = py_config.get("mount_root") or str(Path.home() / "cnv-qe.rhcloud.com")
-        _remote_kubeconfig_path = f"{mount_root}/{remote_cluster_name}/auth/kubeconfig"
-
-        if not Path(_remote_kubeconfig_path).exists():
-            raise FileNotFoundError(f"Kubeconfig file {_remote_kubeconfig_path} not found")
-
-        remote_kubeconfig_tmp_path = tmp_path_factory.mktemp("kubeconfig")
-        remote_kubeconfig_tmp_file = Path(remote_kubeconfig_tmp_path / "kubeconfig")
-        shutil.copyfile(_remote_kubeconfig_path, remote_kubeconfig_tmp_file)
-
-        yield get_client(config_file=str(remote_kubeconfig_tmp_file))
-    else:
-        LOGGER.info(msg="Creating local OCP admin Client")
-        yield get_client()
+    yield _client
 
 
 @pytest.fixture(scope="session")
