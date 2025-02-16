@@ -270,7 +270,7 @@ def ocp_admin_client(tmp_path_factory):
         if not Path(_remote_kubeconfig_path).exists():
             raise FileNotFoundError(f"Kubeconfig file {_remote_kubeconfig_path} not found")
 
-        remote_kubeconfig_tmp_path = tmp_path_factory.mktemp("kubeconfig")
+        remote_kubeconfig_tmp_path = tmp_path_factory.mktemp(generate_name_with_uuid(name="kubeconfig"))
         remote_kubeconfig_tmp_file = Path(remote_kubeconfig_tmp_path / "kubeconfig")
         shutil.copyfile(_remote_kubeconfig_path, remote_kubeconfig_tmp_file)
 
