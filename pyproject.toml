@@ -48,5 +48,7 @@ dependencies = [
   "pytest-harvest>=1.10.5",
   "pyhelper-utils>=1.0.9",
   "openshift-python-utilities>=6.0.7",
-  "pytest-profiling>=1.8.1"
+  "pytest-profiling>=1.8.1",
+  "semver>=3.0.4",
+  "typer>=0.15.1",
 ]
