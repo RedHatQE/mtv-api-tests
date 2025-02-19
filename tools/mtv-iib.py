@@ -1,4 +1,4 @@
-from typing import Any
+from typing import OrderedDict
 
 import requests
 import semver
@@ -6,14 +6,14 @@ import typer
 from rich.console import Console
 
 
-def main(version: str) -> None:
+def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
     """
     Get the latest MTV IIB for OCP 4/15/16/17
 
     Usage: uv run tools.mtv-iib <version> (only 2 digits version for example 2.8)
     """
-    console = Console()
-    iibs: dict[str, Any] = {}
+
+    iibs: dict[str, dict[str, str]] = OrderedDict({"v4.15": {}, "v4.16": {}, "v4.17": {}})
 
     datagrepper_query_url = (
         "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
@@ -43,15 +43,16 @@ def main(version: str) -> None:
         _ocp_version = _index["ocp_version"]
         _iib = _index["index_image"].rsplit(":", 1)[-1]
 
-        if not iibs.get(_ocp_version):
-            iibs[_ocp_version] = {"MTV": None, "IIB": None}
-
         if semver_bundle > mtv_latest[_ocp_version]:
             mtv_latest[_ocp_version] = semver_bundle
-            iibs[_ocp_version]["MTV"] = _bundle_version
-            iibs[_ocp_version]["IIB"] = _iib
+            iibs[_ocp_version] = {"MTV": _bundle_version, "IIB": _iib}
 
-    console.print(iibs)
+    return iibs
+
+
+def main(version: str) -> None:
+    console = Console()
+    console.print(get_mtv_latest_iib(version=version))
 
 
 if __name__ == "__main__":
