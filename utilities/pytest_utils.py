@@ -57,24 +57,25 @@ def session_teardown(session_store: dict[str, Any]) -> None:
     LOGGER.info("Running teardown to delete all created resources")
 
     ocp_client = get_client()
-    session_teardown_resources = session_store["teardown"]
 
-    for migration_name in session_teardown_resources.get(Migration.kind, []):
-        migration = Migration(name=migration_name["name"], namespace=migration_name["namespace"], client=ocp_client)
-        cancel_migration(migration=migration)
+    # When running in parallel (-n auto) `session_store` can be empty.
+    if session_teardown_resources := session_store.get("teardown"):
+        for migration_name in session_teardown_resources.get(Migration.kind, []):
+            migration = Migration(name=migration_name["name"], namespace=migration_name["namespace"], client=ocp_client)
+            cancel_migration(migration=migration)
 
-    for plan_name in session_teardown_resources.get(Plan.kind, []):
-        plan = Plan(name=plan_name["name"], namespace=plan_name["namespace"], client=ocp_client)
-        archive_plan(plan=plan)
+        for plan_name in session_teardown_resources.get(Plan.kind, []):
+            plan = Plan(name=plan_name["name"], namespace=plan_name["namespace"], client=ocp_client)
+            archive_plan(plan=plan)
 
-    leftovers = teardown_resources(
-        session_teardown_resources=session_teardown_resources,
-        ocp_client=ocp_client,
-        target_namespace=session_store.get("target_namespace"),
-        session_uuid=session_store["session_uuid"],
-    )
-    if leftovers:
-        raise SessionTeardownError(f"Failed to clean up the following resources: {leftovers}")
+        leftovers = teardown_resources(
+            session_teardown_resources=session_teardown_resources,
+            ocp_client=ocp_client,
+            target_namespace=session_store.get("target_namespace"),
+            session_uuid=session_store["session_uuid"],
+        )
+        if leftovers:
+            raise SessionTeardownError(f"Failed to clean up the following resources: {leftovers}")
 
 
 def teardown_resources(
