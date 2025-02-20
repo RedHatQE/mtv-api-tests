@@ -24,6 +24,10 @@ from utilities.migration_utils import append_leftovers, archive_plan, cancel_mig
 LOGGER = get_logger(__name__)
 
 
+class SessionTeardownError(Exception):
+    pass
+
+
 def prepare_base_path(base_path: Path) -> None:
     with contextlib.suppress(FileNotFoundError):
         # When running pytest in parallel (-n) we may get here error even when path exists
@@ -53,38 +57,40 @@ def session_teardown(session_store: dict[str, Any]) -> None:
     LOGGER.info("Running teardown to delete all created resources")
 
     ocp_client = get_client()
-    session_teardown_resources = session_store["teardown"]
-    leftovers: dict[str, list[dict[str, str]]] = {}
 
-    for migration_name in session_teardown_resources.get(Migration.kind, []):
-        migration = Migration(name=migration_name["name"], namespace=migration_name["namespace"], client=ocp_client)
-        cancel_migration(migration=migration)
+    # When running in parallel (-n auto) `session_store` can be empty.
+    if session_teardown_resources := session_store.get("teardown"):
+        for migration_name in session_teardown_resources.get(Migration.kind, []):
+            migration = Migration(name=migration_name["name"], namespace=migration_name["namespace"], client=ocp_client)
+            cancel_migration(migration=migration)
 
-    for plan_name in session_teardown_resources.get(Plan.kind, []):
-        plan = Plan(name=plan_name["name"], namespace=plan_name["namespace"], client=ocp_client)
-        archive_plan(plan=plan)
+        for plan_name in session_teardown_resources.get(Plan.kind, []):
+            plan = Plan(name=plan_name["name"], namespace=plan_name["namespace"], client=ocp_client)
+            archive_plan(plan=plan)
 
-    teardown_resources(
-        session_teardown_resources=session_teardown_resources,
-        ocp_client=ocp_client,
-        target_namespace=session_store.get("target_namespace"),
-        session_uuid=session_store["session_uuid"],
-        leftovers=leftovers,
-    )
+        leftovers = teardown_resources(
+            session_teardown_resources=session_teardown_resources,
+            ocp_client=ocp_client,
+            target_namespace=session_store.get("target_namespace"),
+            session_uuid=session_store["session_uuid"],
+        )
+        if leftovers:
+            raise SessionTeardownError(f"Failed to clean up the following resources: {leftovers}")
 
 
 def teardown_resources(
     session_teardown_resources: dict[str, list[dict[str, str]]],
     ocp_client: DynamicClient,
     session_uuid: str,
-    leftovers: dict[str, list[dict[str, str]]],
     target_namespace: str | None = None,
-) -> bool:
+) -> dict[str, list[dict[str, str]]]:
     """
     Delete all the resources that was created by the tests.
     Check that resources that was created by the migration is deleted
     Report if we have any leftovers in the cluster and return False if any, else return True
     """
+    leftovers: dict[str, list[dict[str, str]]] = {}
+
     # Resources that was created by the tests
     migrations = session_teardown_resources.get(Migration.kind, [])
     plans = session_teardown_resources.get(Plan.kind, [])
@@ -176,9 +182,4 @@ def teardown_resources(
             leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
         )
 
-    # Report if we have any leftovers
-    if leftovers:
-        LOGGER.error(f"Failed to clean up the following resources: {leftovers}")
-        return False
-
-    return True
+    return leftovers

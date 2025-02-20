@@ -46,7 +46,7 @@ def cancel_migration(migration: Migration) -> None:
                 )
             except TimeoutExpiredError:
                 LOGGER.error(f"Failed to cancel migration {migration.name}")
-                return
+                raise
 
 
 def archive_plan(plan: Plan) -> None:
@@ -67,11 +67,11 @@ def archive_plan(plan: Plan) -> None:
         for _pod in Pod.get(dyn_client=plan.client, namespace=plan.instance.spec.targetNamespace):
             if plan.name in _pod.name:
                 if not _pod.wait_deleted():
-                    LOGGER.error(f"Pod was not deleted after plan {plan.name} was archived")
+                    LOGGER.error(f"Pod {_pod.name} was not deleted after plan {plan.name} was archived")
 
     except TimeoutExpiredError:
         LOGGER.error(f"Failed to archive plan {plan.name}")
-        return
+        raise
 
 
 def check_dv_pvc_pv_deleted(

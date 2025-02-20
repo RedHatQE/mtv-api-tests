@@ -13,13 +13,12 @@ from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutExpiredError, retry
+from timeout_sampler import retry
 
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
-from utilities.migration_utils import archive_plan, cancel_migration
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.utils import generate_name_with_uuid, get_value_from_py_config
@@ -27,11 +26,11 @@ from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 LOGGER = get_logger(__name__)
 
 
-class MigrationPlainExecError(Exception):
+class MigrationPlanExecError(Exception):
     pass
 
 
-class MigrationPlainExecStopError(Exception):
+class MigrationPlanExecStopError(Exception):
     pass
 
 
@@ -135,12 +134,7 @@ def migrate_vms(
                     run_cut_over(migration=migration)
 
         if migration:
-            try:
-                wait_for_migration_complate(plan=plan)
-            except TimeoutExpiredError:
-                cancel_migration(migration=migration)
-                archive_plan(plan=plan)
-                raise
+            wait_for_migration_complate(plan=plan)
 
             if py_config.get("create_scale_report"):
                 create_migration_scale_report(plan_resource=plan)
@@ -273,9 +267,7 @@ def get_vm_suffix() -> str:
     return vm_suffix
 
 
-@retry(
-    wait_timeout=int(py_config.get("plan_wait_timeout", 600)), sleep=1, exceptions_dict={MigrationPlainExecError: []}
-)
+@retry(wait_timeout=int(py_config.get("plan_wait_timeout", 600)), sleep=1, exceptions_dict={MigrationPlanExecError: []})
 def wait_for_migration_complate(plan: Plan) -> bool:
     err = "Plan {name} failed to reach the expected condition. \nstatus:\n\t{instance}"
     for cond in plan.instance.status.conditions:
@@ -285,6 +277,6 @@ def wait_for_migration_complate(plan: Plan) -> bool:
                     return True
 
                 elif cond["type"] == "Failed":
-                    raise MigrationPlainExecStopError(err.format(name=plan.name, instance=plan.instance))
+                    raise MigrationPlanExecStopError(err.format(name=plan.name, instance=plan.instance))
 
-    raise MigrationPlainExecError(err.format(name=plan.name, instance=plan.instance))
+    raise MigrationPlanExecError(err.format(name=plan.name, instance=plan.instance))
