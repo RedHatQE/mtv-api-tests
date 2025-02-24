@@ -58,7 +58,7 @@ source_providers_list = [
             }
         ],
         "networks": [{"name": "VM Network"}, {"name": "Mgmt Network"}],
-        "storages": [{"name": "nfs-us-mtv-v7"}],
+        "storages": [{"name": "nfs-rhos-mtv-v7"}],
     },
     {
         "type": "vsphere",
