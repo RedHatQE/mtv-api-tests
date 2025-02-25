@@ -30,6 +30,7 @@ def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
         "v4.15": semver.Version.parse("0.0.0"),
         "v4.16": semver.Version.parse("0.0.0"),
         "v4.17": semver.Version.parse("0.0.0"),
+        "v4.18": semver.Version.parse("0.0.0"),
     }
 
     for raw_msg in json_res["raw_messages"]:
