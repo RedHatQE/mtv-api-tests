@@ -167,7 +167,6 @@ plan_wait_timeout = 3000
 matrix_test = True
 release_test = False
 target_ocp_version = "4.17"
-mount_root = ""
 
 for _dir in dir():
     val = locals()[_dir]

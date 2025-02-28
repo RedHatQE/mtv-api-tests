@@ -51,4 +51,5 @@ dependencies = [
   "pytest-profiling>=1.8.1",
   "semver>=3.0.4",
   "typer>=0.15.1",
+  "pytest-playwright>=0.7.0",
 ]
