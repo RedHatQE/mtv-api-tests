@@ -18,20 +18,32 @@ def cluster_data(ocp_admin_client: DynamicClient) -> tuple[str, str, str]:
 
 
 @pytest.mark.ui
-def test_basic_elements(request: pytest.FixtureRequest, console_page: Page) -> None:
+@pytest.mark.parametrize(
+    "test_id",
+    [
+        "migration-nav-item",
+        "overview",
+        "providers-nav-item",
+        "plans-nav-item",
+        "network-mappings-nav-item",
+        "storage-mappings-nav-item",
+    ],
+    ids=[
+        "Migration-tab",
+        "Overview-sub-tab",
+        "Providers-sub-tab",
+        "Plans-sub-tab",
+        "NetworkMap-sub-tab",
+        "StorageMap-sub-tab",
+    ],
+)
+def test_basic_elements_is_visible(request: pytest.FixtureRequest, console_page: Page, test_id: str) -> None:
     try:
-        # Check the Migration side tab is visible
-        expect(console_page.get_by_test_id("migration-nav-item")).to_be_visible(timeout=20_000)
+        expect(console_page.get_by_test_id(test_id)).to_be_visible(timeout=20_000)
 
-        # Click on Migration tab
-        console_page.get_by_test_id("migration-nav-item").click()
-
-        # Check that Migration all sub tabs is visible
-        # expect(page.get_by_role("link", name="Overview")).to_be_visible(timeout=10_000)
-        expect(console_page.get_by_test_id("providers-nav-item")).to_be_visible(timeout=10_000)
-        expect(console_page.get_by_test_id("plans-nav-item")).to_be_visible(timeout=10_000)
-        expect(console_page.get_by_test_id("network-mappings-nav-item")).to_be_visible(timeout=10_000)
-        expect(console_page.get_by_test_id("network-mappings-nav-item")).to_be_visible(timeout=10_000)
+        if test_id == "migration-nav-item":
+            # Click on Migration tab
+            console_page.get_by_test_id(test_id).click()
 
     except Exception:
         if not request.node.config.getoption("skip_data_collector"):
