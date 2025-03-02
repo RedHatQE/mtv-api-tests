@@ -3,7 +3,7 @@ import os
 import pytest
 from kubernetes.dynamic.client import DynamicClient
 from ocp_resources.console_config_openshift_io import Console
-from playwright.sync_api import Browser, expect
+from playwright.sync_api import Page, expect
 
 
 @pytest.fixture(scope="session")
@@ -18,35 +18,24 @@ def cluster_data(ocp_admin_client: DynamicClient) -> tuple[str, str, str]:
 
 
 @pytest.mark.ui
-def test_basic_elements(request: pytest.FixtureRequest, cluster_data: tuple[str, str, str], browser: Browser) -> None:
-    username, password, console_url = cluster_data
-    context = browser.new_context(ignore_https_errors=True)
-    page = context.new_page()
+def test_basic_elements(request: pytest.FixtureRequest, console_page: Page) -> None:
     try:
-        page.goto(console_url)
-        page.get_by_label("Username").fill(username)
-        page.get_by_label("Password").fill(password)
-        page.get_by_role("button", name="Log in").click()
-        page.wait_for_load_state()
-
-        expect(page).to_have_title("Red Hat OpenShift")
-
         # Check the Migration side tab is visible
-        expect(page.get_by_test_id("migration-nav-item")).to_be_visible(timeout=20_000)
+        expect(console_page.get_by_test_id("migration-nav-item")).to_be_visible(timeout=20_000)
 
         # Click on Migration tab
-        page.get_by_test_id("migration-nav-item").click()
+        console_page.get_by_test_id("migration-nav-item").click()
 
         # Check that Migration all sub tabs is visible
         # expect(page.get_by_role("link", name="Overview")).to_be_visible(timeout=10_000)
-        expect(page.get_by_test_id("providers-nav-item")).to_be_visible(timeout=10_000)
-        expect(page.get_by_test_id("plans-nav-item")).to_be_visible(timeout=10_000)
-        expect(page.get_by_test_id("network-mappings-nav-item")).to_be_visible(timeout=10_000)
-        expect(page.get_by_test_id("network-mappings-nav-item")).to_be_visible(timeout=10_000)
+        expect(console_page.get_by_test_id("providers-nav-item")).to_be_visible(timeout=10_000)
+        expect(console_page.get_by_test_id("plans-nav-item")).to_be_visible(timeout=10_000)
+        expect(console_page.get_by_test_id("network-mappings-nav-item")).to_be_visible(timeout=10_000)
+        expect(console_page.get_by_test_id("network-mappings-nav-item")).to_be_visible(timeout=10_000)
 
     except Exception:
         if not request.node.config.getoption("skip_data_collector"):
-            page.screenshot(
+            console_page.screenshot(
                 path=f"{request.node.config.getoption('data_collector_path')}/{request.node.name}/screenshot.png",
                 full_page=True,
             )
