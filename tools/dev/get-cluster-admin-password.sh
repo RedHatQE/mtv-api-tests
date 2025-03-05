@@ -1,0 +1,33 @@
+#! /usr/bin/env bash
+
+# Function to display usage
+usage() {
+  echo "Usage: $0 <cluster-name>"
+  exit 1
+}
+
+# Check if an argument is provided
+if [ "$#" -lt 1 ]; then
+  usage
+fi
+
+CLUSTER_NAME=$1
+
+MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
+CLUSTER_MOUNT_PATH="$MOUNT_PATH/$CLUSTER_NAME"
+
+if [ ! -d "$CLUSTER_MOUNT_PATH" ]; then
+  echo "Mount path $CLUSTER_MOUNT_PATH does not exist. Exiting."
+  exit 1
+fi
+
+CLUSTER_FILES_PATH="$MOUNT_PATH/$CLUSTER_NAME/auth"
+PASSWORD_FILE="$CLUSTER_FILES_PATH/kubeadmin-password"
+
+if [ ! -f "$PASSWORD_FILE" ]; then
+  echo "Missing password file. Exiting."
+  exit 1
+fi
+
+PASSWORD_CONTENT=$(cat "$PASSWORD_FILE")
+echo "$PASSWORD_CONTENT"
