@@ -19,7 +19,7 @@ fi
 echo "$cmd"
 
 if [ ! -d "$CLUSTER_MOUNT_PATH" ]; then
-  sudo mount -t nfs 10.9.96.21:/rhos_psi_cluster_dirs /mnt/cnv-qe.rhcloud.com
+  sudo mount -t nfs 10.9.96.21:/rhos_psi_cluster_dirs "$MOUNT_PATH"
 fi
 
 if [ ! -d "$CLUSTER_MOUNT_PATH" ]; then
