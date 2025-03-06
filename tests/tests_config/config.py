@@ -35,8 +35,8 @@ source_providers_list = [
     {
         "type": "vsphere",
         "version": "7.0.3",
-        "fqdn": "10.6.46.213",
-        "api_url": "https://10.6.46.213/sdk",
+        "fqdn": "10.6.46.170",
+        "api_url": "https://10.6.46.170/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
         "admin_username": "administrator@vsphere.local",
