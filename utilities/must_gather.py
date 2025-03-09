@@ -11,21 +11,23 @@ from simple_logger.logger import get_logger
 LOGGER = get_logger(__name__)
 
 
-def run_must_gather(data_collector_path: Path, plans: list[str]) -> None:
+def run_must_gather(data_collector_path: Path, plans: list[str] | None = None) -> None:
     ocp_admin_client = get_client()
     mtv_subs = Subscription(client=ocp_admin_client, name="mtv-operator", namespace=py_config["mtv_namespace"])
+
     if not mtv_subs.exists:
         LOGGER.error("Can't find MTV Subscription")
         return
 
     installed_csv = mtv_subs.instance.status.installedCSV
     mtv_csv = ClusterServiceVersion(client=ocp_admin_client, name=installed_csv, namespace=py_config["mtv_namespace"])
+
     if not mtv_csv.exists:
         LOGGER.error(f"Can't find MTV ClusterServiceVersion for {installed_csv}")
         return
 
     must_gather_images = [
-        image["image"] for image in mtv_csv.instance.spec.relatedImages if "must-gather" in image["name"]
+        image["image"] for image in mtv_csv.instance.spec.relatedImages if "must_gather" in image["name"]
     ]
     if not must_gather_images:
         LOGGER.error("Can't find any must-gather image under MTV ClusterServiceVersion")
