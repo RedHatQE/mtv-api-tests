@@ -7,12 +7,14 @@ Deploy [openshif-mtv](https://gitlab.cee.redhat.com/md-migration/mtv-autodeploy)
 ```bash
 # Install the following packages:
 dnf install python3 \
-  python3-devel \
+  install python3-devel \
   install libxml2-devel \
   install libcurl-devel \
   install openssl \
   install openssl-devel \
-  install gcc
+  install gcc \
+  install gcc-c++
+
 
 python3 -m pip install --user pipx
 pipx install uv
