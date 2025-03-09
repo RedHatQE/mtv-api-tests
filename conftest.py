@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 import shutil
 from pathlib import Path
 from typing import Any
@@ -25,12 +24,12 @@ from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
-from pyhelper_utils.shell import run_command
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
+from utilities.musg_gather import run_must_gather
 from utilities.pytest_utils import collect_created_resources, prepare_base_path, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
@@ -164,16 +163,8 @@ def pytest_exception_interact(node, call, report):
     if not node.session.config.getoption("skip_data_collector"):
         _session_store = get_fixture_store(node.session)
         _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
-        _must_gather_base_cmd = (
-            f"oc adm must-gather --image=quay.io/kubev2v/forklift-must-gather:latest --dest-dir={_data_collector_path}"
-        )
         plans = _session_store.get(node.name, {}).get("plans", [])
-
-        if plans:
-            for plan_name in plans:
-                run_command(shlex.split(f"{_must_gather_base_cmd} -- PLAN={plan_name} /usr/bin/targeted"))
-        else:
-            run_command(shlex.split(f"{_must_gather_base_cmd}"))
+        run_must_gather(data_collector_path=_data_collector_path, plans=plans)
 
 
 # Pytest end
