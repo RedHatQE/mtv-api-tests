@@ -29,7 +29,7 @@ from pytest_testconfig import config as py_config
 
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
-from utilities.musg_gather import run_must_gather
+from utilities.must_gather import run_must_gather
 from utilities.pytest_utils import collect_created_resources, prepare_base_path, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
