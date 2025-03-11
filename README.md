@@ -15,6 +15,11 @@ dnf install python3 \
   install gcc \
   install gcc-c++
 
+#  Working with Private quay.io
+1. Create new quay.io user
+2. Make sure you part of rh-openshift-mtv otherwise contact Meni Yakove to add you
+3. Follow the instuction to update open shift cluster:
+https://docs.openshift.com/container-platform/4.18/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets
 
 python3 -m pip install --user pipx
 pipx install uv
