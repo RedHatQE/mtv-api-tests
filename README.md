@@ -2,6 +2,20 @@
 
 ## Pre Requierments
 
+### Working with private quay.io to gain access to VDDK images
+
+The tests require access to a VDDK image, which is stored in a private repository.
+
+1. Make sure you part of `rh-openshift-mtv` otherwise contact Meni Yakove to add you.
+(Create new quay.io user if you don't already have one)
+2. Follow the instruction to for how to `Updating the global cluster pull secret`:
+<https://docs.openshift.com/container-platform/4.18/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets>
+
+Private vddk images
+quay.io/rh-openshift-mtv/vddk-init-image:6.5
+quay.io/rh-openshift-mtv/vddk-init-image:7.0.3
+quay.io/rh-openshift-mtv/vddk-init-image:8.0.1
+
 Deploy [openshif-mtv](https://gitlab.cee.redhat.com/md-migration/mtv-autodeploy)
 
 ```bash
@@ -14,17 +28,6 @@ dnf install python3 \
   install openssl-devel \
   install gcc \
   install gcc-c++
-
-#  Working with private quay.io to gain access to VDDK images
-1. Make sure you part of `rh-openshift-mtv` otherwise contact Meni Yakove to add you.
-(Create new quay.io user if you don't already have one)
-3. Follow the instruction to for how to `Updating the global cluster pull secret`:
-https://docs.openshift.com/container-platform/4.18/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets
-
-# Private vddk images
-quay.io/rh-openshift-mtv/vddk-init-image:6.5
-quay.io/rh-openshift-mtv/vddk-init-image:7.0.3
-quay.io/rh-openshift-mtv/vddk-init-image:8.0.1
 
 python3 -m pip install --user pipx
 pipx install uv
