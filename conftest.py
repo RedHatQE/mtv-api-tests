@@ -32,7 +32,7 @@ from timeout_sampler import TimeoutSampler
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
-from utilities.pytest_utils import collect_created_resources, prepare_base_path, session_teardown
+from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
@@ -152,7 +152,10 @@ def pytest_sessionfinish(session, exitstatus):
 
     else:
         # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
-        session_teardown(session_store=_session_store)
+        try:
+            session_teardown(session_store=_session_store)
+        except SessionTeardownError:
+            run_must_gather(data_collector_path=session.getoption("data_collector_path"))
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
