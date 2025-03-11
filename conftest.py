@@ -27,7 +27,7 @@ from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
-from timeout_sampler import retry
+from timeout_sampler import TimeoutSampler
 
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
@@ -696,15 +696,26 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
             })
 
 
-@retry(sleep=1, wait_timeout=60, exceptions_dict={ForkliftPodsNotRunningError: [], NotFoundError: []})
 @pytest.fixture(scope="session")
 def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
-    not_running_pods: list[str] = []
+    def _get_not_running_pods() -> bool:
+        not_running_pods: list[str] = []
 
-    for pod in Pod.get(dyn_client=ocp_admin_client, namespace=py_config["mtv_namespace"]):
-        if pod.name.startswith("forklift-"):
-            if pod.status not in (pod.Status.RUNNING, pod.Status.SUCCEEDED):
-                not_running_pods.append(pod.name)
+        for pod in Pod.get(dyn_client=ocp_admin_client, namespace=py_config["mtv_namespace"]):
+            if pod.name.startswith("forklift-"):
+                if pod.status not in (pod.Status.RUNNING, pod.Status.SUCCEEDED):
+                    not_running_pods.append(pod.name)
 
-    if not not_running_pods:
-        raise ForkliftPodsNotRunningError(f"Some of the forklift pods are not running: {not_running_pods}")
+        if not_running_pods:
+            raise ForkliftPodsNotRunningError(f"Some of the forklift pods are not running: {not_running_pods}")
+
+        return True
+
+    for sample in TimeoutSampler(
+        func=_get_not_running_pods,
+        sleep=1,
+        wait_timeout=60,
+        exceptions_dict={ForkliftPodsNotRunningError: [], NotFoundError: []},
+    ):
+        if sample:
+            return
