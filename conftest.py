@@ -714,7 +714,7 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
     for sample in TimeoutSampler(
         func=_get_not_running_pods,
         sleep=1,
-        wait_timeout=60,
+        wait_timeout=60 * 5,
         exceptions_dict={ForkliftPodsNotRunningError: [], NotFoundError: []},
     ):
         if sample:
