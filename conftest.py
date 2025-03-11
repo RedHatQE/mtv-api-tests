@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 import yaml
 from kubernetes.dynamic import DynamicClient
+from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.hook import Hook
@@ -26,6 +27,7 @@ from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
+from timeout_sampler import retry
 
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
@@ -47,6 +49,10 @@ BASIC_LOGGER = logging.getLogger("basic")
 
 
 class RemoteClusterAndLocalCluterNamesError(Exception):
+    pass
+
+
+class ForkliftPodsNotRunningError(Exception):
     pass
 
 
@@ -171,7 +177,7 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
@@ -688,3 +694,17 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
                 "namespace": pod.namespace,
                 "module": pod.__module__,
             })
+
+
+@retry(sleep=1, wait_timeout=60, exceptions_dict={ForkliftPodsNotRunningError: [], NotFoundError: []})
+@pytest.fixture(scope="session")
+def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
+    not_running_pods: list[str] = []
+
+    for pod in Pod.get(dyn_client=ocp_admin_client, namespace=py_config["mtv_namespace"]):
+        if pod.name.startswith("forklift-"):
+            if pod.status not in (pod.Status.RUNNING, pod.Status.SUCCEEDED):
+                not_running_pods.append(pod.name)
+
+    if not not_running_pods:
+        raise ForkliftPodsNotRunningError(f"Some of the forklift pods are not running: {not_running_pods}")
