@@ -143,8 +143,9 @@ def pytest_sessionfinish(session, exitstatus):
 
     _session_store = get_fixture_store(session)
 
+    _data_collector_path = Path(session.config.getoption("data_collector_path"))
+
     if not session.config.getoption("skip_data_collector"):
-        _data_collector_path = Path(session.config.getoption("data_collector_path"))
         collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
 
     if session.config.getoption("skip_teardown"):
@@ -156,7 +157,7 @@ def pytest_sessionfinish(session, exitstatus):
             session_teardown(session_store=_session_store)
         except SessionTeardownError:
             if not session.config.getoption("skip_data_collector"):
-                run_must_gather(data_collector_path=session.config.getoption("data_collector_path"))
+                run_must_gather(data_collector_path=_data_collector_path)
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
