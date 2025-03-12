@@ -155,7 +155,8 @@ def pytest_sessionfinish(session, exitstatus):
         try:
             session_teardown(session_store=_session_store)
         except SessionTeardownError:
-            run_must_gather(data_collector_path=session.config.getoption("data_collector_path"))
+            if not session.config.getoption("skip_data_collector"):
+                run_must_gather(data_collector_path=session.config.getoption("data_collector_path"))
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
