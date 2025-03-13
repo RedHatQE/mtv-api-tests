@@ -151,11 +151,6 @@ def teardown_resources(
         if not networkmap_obj.clean_up(wait=True):
             leftovers = append_leftovers(leftovers=leftovers, resource=networkmap_obj)
 
-    for namespace in namespaces:
-        namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
-        if not namespace_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
-
     # Check that resources that was created by running migration are deleted
     for virtual_machine in virtual_machines:
         virtual_machine_obj = VirtualMachine(
@@ -181,5 +176,10 @@ def teardown_resources(
         leftovers = check_dv_pvc_pv_deleted(
             leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
         )
+
+    for namespace in namespaces:
+        namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
+        if not namespace_obj.clean_up(wait=True):
+            leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
 
     return leftovers
