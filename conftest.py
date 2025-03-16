@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 import pytest
 import yaml
@@ -22,6 +22,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
+from ocp_resources.storage_cluster import StorageCluster
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
@@ -175,9 +176,19 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools_enabler):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
+
+
+@pytest.fixture(scope="session")
+def ceph_tools_enabler(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
+    ocs_storagecluster = StorageCluster(
+        client=ocp_admin_client, name="ocs-storagecluster", namespace="openshift-storage"
+    )
+    if ocs_storagecluster.exists:
+        with ResourceEditor(patches={ocs_storagecluster: {"spec": {"enableCephTools": True}}}):
+            yield
 
 
 @pytest.fixture(scope="session")

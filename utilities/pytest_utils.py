@@ -174,6 +174,11 @@ def teardown_resources(
             leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
         )
 
+    if leftovers:
+        LOGGER.error(
+            f"There are some leftovers after tests are done, delete tests namespaces may fail. Leftovers: {leftovers}"
+        )
+
     for namespace in namespaces:
         namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
         if not namespace_obj.clean_up(wait=True):
