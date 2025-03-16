@@ -29,6 +29,7 @@ from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
 
+from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
@@ -46,14 +47,6 @@ from utilities.utils import (
 
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
-
-
-class RemoteClusterAndLocalCluterNamesError(Exception):
-    pass
-
-
-class ForkliftPodsNotRunningError(Exception):
-    pass
 
 
 # Pytest start

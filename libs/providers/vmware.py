@@ -12,17 +12,10 @@ from pyVmomi import vim
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from exceptions.exceptions import NoVmsFoundError, VmMissingVmxError
 from libs.base_provider import BaseProvider
 
 LOGGER = get_logger(__name__)
-
-
-class VmMissingVmxError(Exception):
-    pass
-
-
-class NoVmsFoundError(Exception):
-    pass
 
 
 class VMWareProvider(BaseProvider):

@@ -5,11 +5,9 @@ from ocp_resources.plan import Plan
 from ocp_resources.resource import NamespacedResource, Resource
 from simple_logger.logger import get_logger
 
+from exceptions.exceptions import ResourceNameNotStartedWithSessionUUIDError
+
 LOGGER = get_logger(__name__)
-
-
-class ResourceNameNotStartedWithSessionUUIDError(Exception):
-    pass
 
 
 def create_and_store_resource(

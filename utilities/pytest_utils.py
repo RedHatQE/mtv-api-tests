@@ -19,13 +19,10 @@ from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 
+from exceptions.exceptions import SessionTeardownError
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 
 LOGGER = get_logger(__name__)
-
-
-class SessionTeardownError(Exception):
-    pass
 
 
 def prepare_base_path(base_path: Path) -> None:
