@@ -14,7 +14,10 @@ fi
 CLUSTER_NAME=$1
 
 MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
+export MOUNT_PATH
+
 CLUSTER_MOUNT_PATH="$MOUNT_PATH/$CLUSTER_NAME"
+
 if [ ! -d "$MOUNT_PATH" ]; then
   sudo mkdir -p "$MOUNT_PATH"
 fi
