@@ -15,6 +15,7 @@ pre-defined runs:
     vmware7-ceph
     vmware7-ceph-remote
     vmware8-nfs
+    vmware8-ceph-remote
     openstack-ceph
     ovirt-ceph
     """

@@ -4,11 +4,12 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 import pytest
 import yaml
 from kubernetes.dynamic import DynamicClient
+from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.hook import Hook
@@ -21,16 +22,19 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
+from ocp_resources.storage_cluster import StorageCluster
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
+from timeout_sampler import TimeoutSampler
 
+from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
-from utilities.pytest_utils import collect_created_resources, prepare_base_path, session_teardown
+from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
@@ -44,10 +48,6 @@ from utilities.utils import (
 
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
-
-
-class RemoteClusterAndLocalCluterNamesError(Exception):
-    pass
 
 
 # Pytest start
@@ -137,8 +137,9 @@ def pytest_sessionfinish(session, exitstatus):
 
     _session_store = get_fixture_store(session)
 
+    _data_collector_path = Path(session.config.getoption("data_collector_path"))
+
     if not session.config.getoption("skip_data_collector"):
-        _data_collector_path = Path(session.config.getoption("data_collector_path"))
         collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
 
     if session.config.getoption("skip_teardown"):
@@ -146,7 +147,11 @@ def pytest_sessionfinish(session, exitstatus):
 
     else:
         # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
-        session_teardown(session_store=_session_store)
+        try:
+            session_teardown(session_store=_session_store)
+        except SessionTeardownError:
+            if not session.config.getoption("skip_data_collector"):
+                run_must_gather(data_collector_path=_data_collector_path)
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -171,9 +176,19 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools_enabler):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
+
+
+@pytest.fixture(scope="session")
+def ceph_tools_enabler(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
+    ocs_storagecluster = StorageCluster(
+        client=ocp_admin_client, name="ocs-storagecluster", namespace="openshift-storage"
+    )
+    if ocs_storagecluster.exists:
+        with ResourceEditor(patches={ocs_storagecluster: {"spec": {"enableCephTools": True}}}):
+            yield
 
 
 @pytest.fixture(scope="session")
@@ -688,3 +703,28 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
                 "namespace": pod.namespace,
                 "module": pod.__module__,
             })
+
+
+@pytest.fixture(scope="session")
+def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
+    def _get_not_running_pods() -> bool:
+        not_running_pods: list[str] = []
+
+        for pod in Pod.get(dyn_client=ocp_admin_client, namespace=py_config["mtv_namespace"]):
+            if pod.name.startswith("forklift-"):
+                if pod.status not in (pod.Status.RUNNING, pod.Status.SUCCEEDED):
+                    not_running_pods.append(pod.name)
+
+        if not_running_pods:
+            raise ForkliftPodsNotRunningError(f"Some of the forklift pods are not running: {not_running_pods}")
+
+        return True
+
+    for sample in TimeoutSampler(
+        func=_get_not_running_pods,
+        sleep=1,
+        wait_timeout=60 * 5,
+        exceptions_dict={ForkliftPodsNotRunningError: [], NotFoundError: []},
+    ):
+        if sample:
+            return

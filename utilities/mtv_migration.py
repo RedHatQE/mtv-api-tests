@@ -15,6 +15,7 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import retry
 
+from exceptions.exceptions import MigrationPlanExecError, MigrationPlanExecStopError
 from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
@@ -24,14 +25,6 @@ from utilities.resources import create_and_store_resource
 from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
-
-
-class MigrationPlanExecError(Exception):
-    pass
-
-
-class MigrationPlanExecStopError(Exception):
-    pass
 
 
 def get_cutover_value(current_cutover: bool = False) -> datetime:

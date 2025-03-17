@@ -19,13 +19,10 @@ from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 
+from exceptions.exceptions import SessionTeardownError
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 
 LOGGER = get_logger(__name__)
-
-
-class SessionTeardownError(Exception):
-    pass
 
 
 def prepare_base_path(base_path: Path) -> None:
@@ -151,11 +148,6 @@ def teardown_resources(
         if not networkmap_obj.clean_up(wait=True):
             leftovers = append_leftovers(leftovers=leftovers, resource=networkmap_obj)
 
-    for namespace in namespaces:
-        namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
-        if not namespace_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
-
     # Check that resources that was created by running migration are deleted
     for virtual_machine in virtual_machines:
         virtual_machine_obj = VirtualMachine(
@@ -181,5 +173,15 @@ def teardown_resources(
         leftovers = check_dv_pvc_pv_deleted(
             leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
         )
+
+    if leftovers:
+        LOGGER.error(
+            f"There are some leftovers after tests are done, delete tests namespaces may fail. Leftovers: {leftovers}"
+        )
+
+    for namespace in namespaces:
+        namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
+        if not namespace_obj.clean_up(wait=True):
+            leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
 
     return leftovers

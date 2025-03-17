@@ -41,5 +41,5 @@ def run_must_gather(data_collector_path: Path, plans: list[str] | None = None) -
                 run_command(shlex.split(f"{_must_gather_base_cmd} -- PLAN={plan_name} /usr/bin/targeted"))
         else:
             run_command(shlex.split(f"{_must_gather_base_cmd}"))
-    except Exception:
-        LOGGER.error("Failed to run musg-gather")
+    except Exception as ex:
+        LOGGER.error(f"Failed to run musg-gather. {ex}")
