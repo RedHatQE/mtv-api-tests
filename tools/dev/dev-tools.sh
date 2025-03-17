@@ -22,9 +22,11 @@ fi
 
 CLUSTER_NAME=$1
 ACTION=$2
+MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
+export MOUNT_PATH
+export CLUSTER_NAME
 
 cluster-password() {
-  MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
   export MOUNT_PATH
 
   CLUSTER_MOUNT_PATH="$MOUNT_PATH/$CLUSTER_NAME"
@@ -87,8 +89,8 @@ mtv-resources() {
 }
 
 run-tests() {
-  export CLUSTER_NAME
-  shift 1
+  cluster-login
+  shift 2
 
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
@@ -110,7 +112,6 @@ run-tests() {
   export KUBECONFIG=$KUBECONFIG_FILE
   export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
 
-  cluster-login
   $cmd
 }
 
