@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import os
 import shutil
 from pathlib import Path
@@ -43,6 +44,7 @@ from utilities.utils import (
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
+    prometheus_monitor_deamon,
     start_source_vm_data_upload_vmware,
 )
 
@@ -176,9 +178,20 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools_enabler):
+def autouse_fixtures(
+    source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools_enabler, prometheus_monitor
+):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
+    __import__("ipdb").set_trace()
     yield
+
+
+@pytest.fixture(scope="session")
+def prometheus_monitor(ocp_admin_client):
+    proc = multiprocessing.Process(target=prometheus_monitor_deamon, kwargs={"ocp_admin_client": ocp_admin_client})
+    proc.start()
+    yield
+    proc.kill()
 
 
 @pytest.fixture(scope="session")
