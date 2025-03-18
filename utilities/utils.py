@@ -329,15 +329,13 @@ def prometheus_monitor_deamon(ocp_admin_client: DynamicClient) -> None:
     alerts_to_get: list[str] = ["CephOSDCriticallyFull", "CephClusterErrorState", "CephClusterReadOnly"]
     while True:
         for _alert in alerts_to_get:
-            alerts = prometheus.get_all_alerts_by_alert_name(alert_name=_alert)
+            alerts = prometheus.get_firing_alerts(alert_name=_alert)
             if alerts:
                 last_alert = alerts[0]
-                state = last_alert["state"]
-                if state == "firing":
-                    annotations = last_alert["annotations"]
-                    severity = annotations["severity_level"]
-                    description = annotations["description"]
-                    message = annotations["message"]
+                annotations = last_alert["annotations"]
+                severity = annotations["severity_level"]
+                description = annotations["description"]
+                message = annotations["message"]
 
-                    LOGGER.warning(f"{_alert}: {severity} - {message} - {description}")
+                LOGGER.warning(f"{_alert}: {severity} - {message} - {description}")
         time.sleep(60)
