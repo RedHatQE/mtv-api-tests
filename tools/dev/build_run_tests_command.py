@@ -12,10 +12,12 @@ run-tests-dev.sh <cluster name> <pre-defined> [pytest_args]
 
 pre-defined runs:
     vmware6-csi
+    vmware6-csi-remote
     vmware7-ceph
     vmware7-ceph-remote
     vmware8-nfs
     vmware8-ceph-remote
+    vmware8-csi
     openstack-ceph
     ovirt-ceph
     """
@@ -28,10 +30,12 @@ def main() -> str:
 
     runs_templates: dict[str, dict[str, Any]] = {
         "vmware6-csi": {"provider": "vmware6", "storage": "csi"},
+        "vmware6-csi-remote": {"provider": "vmware6", "storage": "csi", "remote": True},
         "vmware7-ceph": {"provider": "vmware7", "storage": "ceph"},
         "vmware7-ceph-remote": {"provider": "vmware7", "storage": "ceph", "remote": True},
         "vmware8-ceph-remote": {"provider": "vmware8", "storage": "ceph", "remote": True},
         "vmware8-nfs": {"provider": "vmware8", "storage": "nfs"},
+        "vmware8-csi": {"provider": "vmware8", "storage": "csi"},
         "openstack-ceph": {"provider": "openstack", "storage": "ceph"},
         "ovirt-ceph": {"provider": "ovirt", "storage": "ceph"},
     }
