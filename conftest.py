@@ -707,10 +707,10 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
 
 @pytest.fixture(scope="session")
 def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
-    def _get_not_running_pods() -> bool:
+    def _get_not_running_pods(_ocp_admin_client: DynamicClient) -> bool:
         not_running_pods: list[str] = []
 
-        for pod in Pod.get(dyn_client=ocp_admin_client, namespace=py_config["mtv_namespace"]):
+        for pod in Pod.get(dyn_client=_ocp_admin_client, namespace=py_config["mtv_namespace"]):
             if pod.name.startswith("forklift-"):
                 if pod.status not in (pod.Status.RUNNING, pod.Status.SUCCEEDED):
                     not_running_pods.append(pod.name)
@@ -722,6 +722,7 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 
     for sample in TimeoutSampler(
         func=_get_not_running_pods,
+        _ocp_admin_client=ocp_admin_client,
         sleep=1,
         wait_timeout=60 * 5,
         exceptions_dict={ForkliftPodsNotRunningError: [], NotFoundError: []},
