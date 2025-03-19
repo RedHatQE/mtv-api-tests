@@ -60,7 +60,7 @@ cluster-login() {
   PASSWORD=$(cluster-password)
   USERNAME="kubeadmin"
 
-  CMD="oc login https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
+  CMD="oc login --insecure-skip-tls-verify=true https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
 
   if oc whoami &>/dev/null; then
     if oc whoami --show-server | grep "$CLUSTER_NAME" &>/dev/null; then
