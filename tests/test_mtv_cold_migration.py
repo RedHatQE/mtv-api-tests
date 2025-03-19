@@ -23,7 +23,6 @@ VM_SUFFIX = get_vm_suffix()
     indirect=True,
     ids=["rhel8"],
 )
-@pytest.mark.tier0
 def test_sanity_cold_mtv_migration(
     request,
     fixture_store,
@@ -67,7 +66,6 @@ def test_sanity_cold_mtv_migration(
                     "warm_migration": False,
                 }
             ],
-            # TODO fix Polarion ID
         )
     ],
     indirect=True,
@@ -95,6 +93,54 @@ def test_cold_remote_ocp(
         plans=plans,
         network_migration_map=remote_network_migration_map,
         storage_migration_map=remote_storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+    )
+
+
+@pytest.mark.parametrize(
+    "plans",
+    [
+        # MTV-79
+        pytest.param(
+            [
+                {
+                    "virtual_machines": [
+                        {"name": f"mtv-rhel8-79{VM_SUFFIX}"},
+                        {
+                            "name": f"mtv-win2019-79{VM_SUFFIX}",
+                        },
+                    ],
+                    "warm_migration": False,
+                }
+            ],
+        )
+    ],
+    indirect=True,
+    ids=["MTV-79"],
+)
+@pytest.mark.tier0
+def test_cold_migration(
+    request,
+    fixture_store,
+    session_uuid,
+    target_namespace,
+    plans,
+    source_provider,
+    source_provider_data,
+    destination_provider,
+    network_migration_map,
+    storage_migration_map,
+):
+    migrate_vms(
+        fixture_store=fixture_store,
+        test_name=request._pyfuncitem.name,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plans=plans,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
     )

@@ -65,6 +65,7 @@ def main() -> str:
 
     if user_data_from_re:
         data = user_data_from_re.groupdict()
+
     elif user_data_from_template:
         data = user_data_from_template
 
@@ -84,6 +85,7 @@ def main() -> str:
 
     if "vmware" in provider:
         source_provider_type = "--tc=source_provider_type:vsphere"
+
     else:
         source_provider_type = f"--tc=source_provider_type:{provider}"
 
@@ -102,9 +104,12 @@ def main() -> str:
 
     elif provider == "openstack":
         base_cmd += f" {source_provider_type} --tc=source_provider_version:psi {target_namespace}"
+
     # Remote
     if remote:
         base_cmd += f" -m remote --tc=remote_ocp_cluster:{os.environ['CLUSTER_NAME']}"
+    else:
+        base_cmd += " -m tier0"
 
     # Storage
     if storage == "ceph":
