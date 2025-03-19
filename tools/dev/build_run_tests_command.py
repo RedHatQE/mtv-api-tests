@@ -1,5 +1,7 @@
+import json
 import os
 import re
+import subprocess
 import sys
 from typing import Any
 
@@ -23,7 +25,19 @@ pre-defined runs:
     """
 
 
+def get_cluster_version() -> str:
+    res = subprocess.run(["oc", "version", "-o", "json"], capture_output=True, text=True)
+
+    if res.returncode != 0:
+        print(f"Fail to get cluster version. {res.stderr}")
+        sys.exit(1)
+
+    data = json.loads(res.stdout)
+    return data["openshiftVersion"].rsplit(".", 1)[0]
+
+
 def main() -> str:
+    cluster_version = get_cluster_version()
     user_data_from_re = None
     user_data_from_template = None
     data = None
@@ -41,9 +55,9 @@ def main() -> str:
     }
 
     base_cmd = (
-        "uv run pytest -s --tc=matrix_test:true "
-        f"--tc=insecure_verify_skip:true --tc=mount_root:{os.environ['MOUNT_PATH']} "
-        "--skip-data-collector"
+        f"uv run pytest -s --tc=matrix_test:true --tc=target_ocp_version:{cluster_version}"
+        f" --tc=insecure_verify_skip:true --tc=mount_root:{os.environ['MOUNT_PATH']}"
+        " --skip-data-collector"
     )
 
     if len(sys.argv) < 2:
@@ -65,6 +79,7 @@ def main() -> str:
 
     if user_data_from_re:
         data = user_data_from_re.groupdict()
+
     elif user_data_from_template:
         data = user_data_from_template
 
@@ -84,6 +99,7 @@ def main() -> str:
 
     if "vmware" in provider:
         source_provider_type = "--tc=source_provider_type:vsphere"
+
     else:
         source_provider_type = f"--tc=source_provider_type:{provider}"
 
@@ -102,9 +118,12 @@ def main() -> str:
 
     elif provider == "openstack":
         base_cmd += f" {source_provider_type} --tc=source_provider_version:psi {target_namespace}"
+
     # Remote
     if remote:
         base_cmd += f" -m remote --tc=remote_ocp_cluster:{os.environ['CLUSTER_NAME']}"
+    else:
+        base_cmd += " -m tier0"
 
     # Storage
     if storage == "ceph":
