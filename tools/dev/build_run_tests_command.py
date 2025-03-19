@@ -57,7 +57,7 @@ def main() -> str:
     base_cmd = (
         f"uv run pytest -s --tc=matrix_test:true --tc=target_ocp_version:{cluster_version}"
         f" --tc=insecure_verify_skip:true --tc=mount_root:{os.environ['MOUNT_PATH']}"
-        " --skip-data-collector"
+        # " --skip-data-collector"
     )
 
     if len(sys.argv) < 2:
