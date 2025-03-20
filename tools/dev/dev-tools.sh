@@ -57,18 +57,12 @@ cluster-password() {
 }
 
 cluster-login() {
+  oc logout &>/dev/null
   PASSWORD=$(cluster-password)
   USERNAME="kubeadmin"
 
   CMD="oc login --insecure-skip-tls-verify=true https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
-
-  if oc whoami &>/dev/null; then
-    if oc whoami --show-server | grep "$CLUSTER_NAME" &>/dev/null; then
-      printf "Already logged in to %s\n\n" "$CLUSTER_NAME"
-    fi
-  else
-    $CMD &>/dev/null
-  fi
+  $CMD &>/dev/null
 
   printf "Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\n\n" "$USERNAME" "$PASSWORD" "$CMD" "$(oc get console cluster -ojson | jq -r '.status.consoleURL')"
 }
