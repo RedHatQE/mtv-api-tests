@@ -142,7 +142,6 @@ enable-ceph-tools() {
 }
 
 ceph-df() {
-  cluster-login
   enable-ceph-tools
 
   POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
@@ -151,7 +150,6 @@ ceph-df() {
 }
 
 ceph-cleanup() {
-  cluster-login
   enable-ceph-tools
 
   POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
