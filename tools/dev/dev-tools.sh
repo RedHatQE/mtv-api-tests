@@ -127,7 +127,7 @@ run-tests() {
   $cmd
 }
 
-ceph-cleanup() {
+enable-ceph-tools() {
   cluster-login
   oc patch storagecluster ocs-storagecluster -n openshift-storage --type json --patch '[{ "op": "replace", "path": "/spec/enableCephTools", "value": true }]' &>/dev/null
 
@@ -139,9 +139,23 @@ ceph-cleanup() {
       sleep 1
     fi
   done
+}
 
+ceph-df() {
+  cluster-login
+  enable-ceph-tools
+
+  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
+  DF=$($POD_EXEC_CMD -- ceph df)
+  printf "%s\n\n" "$DF"
+}
+
+ceph-cleanup() {
+  cluster-login
+  enable-ceph-tools
+
+  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
   CEPH_POOL="ocs-storagecluster-cephblockpool"
-  POD_EXEC_CMD="oc exec -it -n openshift-storage $TOOLS_POD"
   RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
 
   for SNAP in $RBD_LIST; do
@@ -160,6 +174,8 @@ elif [ "$ACTION" == "run-tests" ]; then
   run-tests "$@"
 elif [ "$ACTION" == "ceph-cleanup" ]; then
   ceph-cleanup
+elif [ "$ACTION" == "ceph-df" ]; then
+  ceph-df
 else
   printf "Unsupported action: %s\n%s" "$ACTION" "$SUPPORTED_ACTIONS"
 fi
