@@ -60,13 +60,25 @@ cluster-login() {
   PASSWORD=$(cluster-password)
   USERNAME="kubeadmin"
 
-  CMD="oc login https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
+  CMD="oc login --insecure-skip-tls-verify=true https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
 
-  if oc whoami &>/dev/null; then
-    if oc whoami --show-server | grep "$CLUSTER_NAME" &>/dev/null; then
-      printf "Already logged in to %s\n\n" "$CLUSTER_NAME"
-    fi
+  loggedin=$(oc whoami &>/dev/null)
+  if [[ $? == 0 ]]; then
+    loggedin=0
   else
+    loggedin=1
+  fi
+  loggedinsameserver=$(oc whoami --show-server | grep -c "$CLUSTER_NAME" &>/dev/null)
+  if [[ $? == 0 ]]; then
+    loggedinsameserver=0
+  else
+    loggedinsameserver=1
+  fi
+
+  if [[ $loggedin == 0 && $loggedinsameserver == 0 ]]; then
+    printf "Already logged in to %s\n\n" "$CLUSTER_NAME"
+  else
+    oc logout &>/dev/null
     $CMD &>/dev/null
   fi
 
@@ -115,7 +127,7 @@ run-tests() {
   $cmd
 }
 
-ceph-cleanup() {
+enable-ceph-tools() {
   cluster-login
   oc patch storagecluster ocs-storagecluster -n openshift-storage --type json --patch '[{ "op": "replace", "path": "/spec/enableCephTools", "value": true }]' &>/dev/null
 
@@ -127,9 +139,21 @@ ceph-cleanup() {
       sleep 1
     fi
   done
+}
 
+ceph-df() {
+  enable-ceph-tools
+
+  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
+  DF=$($POD_EXEC_CMD -- ceph df)
+  printf "%s\n\n" "$DF"
+}
+
+ceph-cleanup() {
+  enable-ceph-tools
+
+  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
   CEPH_POOL="ocs-storagecluster-cephblockpool"
-  POD_EXEC_CMD="oc exec -it -n openshift-storage $TOOLS_POD"
   RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
 
   for SNAP in $RBD_LIST; do
@@ -148,6 +172,8 @@ elif [ "$ACTION" == "run-tests" ]; then
   run-tests "$@"
 elif [ "$ACTION" == "ceph-cleanup" ]; then
   ceph-cleanup
+elif [ "$ACTION" == "ceph-df" ]; then
+  ceph-df
 else
   printf "Unsupported action: %s\n%s" "$ACTION" "$SUPPORTED_ACTIONS"
 fi
