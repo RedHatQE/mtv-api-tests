@@ -184,7 +184,7 @@ def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_st
 
 
 @pytest.fixture(scope="session")
-def prometheus_monitor(ocp_admin_client):
+def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
     try:
         proc = multiprocessing.Process(target=prometheus_monitor_deamon, kwargs={"ocp_admin_client": ocp_admin_client})
         proc.start()
