@@ -79,7 +79,7 @@ source_providers_list = [
         "host_list": [
             {
                 "migration_host_id": "host-8",
-                "migration_host_ip": "10.6.46.30",
+                "migration_host_ip": "10.6.46.29",
                 "user": "root",
                 "password": "123qweP",
                 "default": "True",
