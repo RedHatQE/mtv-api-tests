@@ -217,16 +217,19 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        customized_secret = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=Secret,
-            client=admin_client,
-            name=name,
-            namespace=mtv_namespace,
-            string_data=secret_string_data,
-            label=metadata_labels,
-        )
+        customized_secret = Secret(name=name, namespace=mtv_namespace, client=admin_client)
+
+        if not customized_secret.exists:
+            customized_secret = create_and_store_resource(
+                fixture_store=fixture_store,
+                session_uuid=session_uuid,
+                resource=Secret,
+                client=admin_client,
+                name=name,
+                namespace=mtv_namespace,
+                string_data=secret_string_data,
+                label=metadata_labels,
+            )
 
         ocp_resource_provider = Provider(name=name, namespace=mtv_namespace, client=admin_client)
 
