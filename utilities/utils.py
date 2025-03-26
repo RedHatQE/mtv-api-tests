@@ -152,11 +152,12 @@ def create_source_provider(
         for key, value in kwargs.items():
             source_provider_data_copy[key] = value
 
-        name = provider_cr_name(
+        _name = provider_cr_name(
             session_uuid=session_uuid,
             provider_data=source_provider_data_copy,
             username=source_provider_data_copy["username"],
         )
+        name = generate_name_with_uuid(name=_name)
         secret_string_data = {}
         provider_args = {
             "username": source_provider_data_copy["username"],
