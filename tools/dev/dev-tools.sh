@@ -7,6 +7,7 @@ Supported actions:
   run-tests
   mtv-resources
   ceph-cleanup
+  ceph-df [--watch]
 '''
 # Function to display usage
 usage() {
@@ -145,8 +146,17 @@ ceph-df() {
   enable-ceph-tools
 
   POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
-  DF=$($POD_EXEC_CMD -- ceph df)
-  printf "%s\n\n" "$DF"
+  printf "%s\n\n" "$POD_EXEC_CMD"
+  if [[ $3 == "--watch" ]]; then
+    while true; do
+      DF=$($POD_EXEC_CMD -- ceph df)
+      printf "%s\n\n" "$DF"
+      sleep 10
+    done
+  else
+    DF=$($POD_EXEC_CMD -- ceph df)
+    printf "%s\n\n" "$DF"
+  fi
 }
 
 ceph-cleanup() {
@@ -173,7 +183,8 @@ elif [ "$ACTION" == "run-tests" ]; then
 elif [ "$ACTION" == "ceph-cleanup" ]; then
   ceph-cleanup
 elif [ "$ACTION" == "ceph-df" ]; then
-  ceph-df
+  ceph-df "$@"
 else
-  printf "Unsupported action: %s\n%s" "$ACTION" "$SUPPORTED_ACTIONS"
+  printf "Unsupported action: %s\n" "$ACTION"
+  usage
 fi
