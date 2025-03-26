@@ -152,12 +152,12 @@ def create_source_provider(
         for key, value in kwargs.items():
             source_provider_data_copy[key] = value
 
-        _name = provider_cr_name(
+        name = provider_cr_name(
             session_uuid=session_uuid,
             provider_data=source_provider_data_copy,
             username=source_provider_data_copy["username"],
         )
-        name = generate_name_with_uuid(name=_name)
+
         secret_string_data = {}
         provider_args = {
             "username": source_provider_data_copy["username"],
@@ -228,19 +228,22 @@ def create_source_provider(
             label=metadata_labels,
         )
 
-        ocp_resource_provider = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=Provider,
-            client=admin_client,
-            name=name,
-            namespace=mtv_namespace,
-            secret_name=name,
-            secret_namespace=mtv_namespace,
-            url=source_provider_data_copy["api_url"],
-            provider_type=source_provider_data_copy["type"],
-            vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
-        )
+        ocp_resource_provider = Provider(name=name, namespace=mtv_namespace, client=admin_client)
+
+        if not ocp_resource_provider.exists:
+            ocp_resource_provider = create_and_store_resource(
+                fixture_store=fixture_store,
+                session_uuid=session_uuid,
+                resource=Provider,
+                client=admin_client,
+                name=name,
+                namespace=mtv_namespace,
+                secret_name=name,
+                secret_namespace=mtv_namespace,
+                url=source_provider_data_copy["api_url"],
+                provider_type=source_provider_data_copy["type"],
+                vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
+            )
         ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
         # this is for communication with the provider
