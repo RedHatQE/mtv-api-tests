@@ -558,7 +558,7 @@ def remote_storage_migration_map(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
         resource=StorageMap,
-        name=f"{session_uuid}-storagemap",
+        name=f"{source_provider.ocp_resource.name}-{destination_ocp_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
         namespace=mtv_namespace,
         mapping=storage_map_list,
         source_provider_name=source_provider.ocp_resource.name,

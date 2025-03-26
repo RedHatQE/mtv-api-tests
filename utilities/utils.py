@@ -157,6 +157,7 @@ def create_source_provider(
             provider_data=source_provider_data_copy,
             username=source_provider_data_copy["username"],
         )
+
         secret_string_data = {}
         provider_args = {
             "username": source_provider_data_copy["username"],
@@ -216,30 +217,36 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        customized_secret = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=Secret,
-            client=admin_client,
-            name=name,
-            namespace=mtv_namespace,
-            string_data=secret_string_data,
-            label=metadata_labels,
-        )
+        customized_secret = Secret(name=name, namespace=mtv_namespace, client=admin_client)
 
-        ocp_resource_provider = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=Provider,
-            client=admin_client,
-            name=name,
-            namespace=mtv_namespace,
-            secret_name=name,
-            secret_namespace=mtv_namespace,
-            url=source_provider_data_copy["api_url"],
-            provider_type=source_provider_data_copy["type"],
-            vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
-        )
+        if not customized_secret.exists:
+            customized_secret = create_and_store_resource(
+                fixture_store=fixture_store,
+                session_uuid=session_uuid,
+                resource=Secret,
+                client=admin_client,
+                name=name,
+                namespace=mtv_namespace,
+                string_data=secret_string_data,
+                label=metadata_labels,
+            )
+
+        ocp_resource_provider = Provider(name=name, namespace=mtv_namespace, client=admin_client)
+
+        if not ocp_resource_provider.exists:
+            ocp_resource_provider = create_and_store_resource(
+                fixture_store=fixture_store,
+                session_uuid=session_uuid,
+                resource=Provider,
+                client=admin_client,
+                name=name,
+                namespace=mtv_namespace,
+                secret_name=name,
+                secret_namespace=mtv_namespace,
+                url=source_provider_data_copy["api_url"],
+                provider_type=source_provider_data_copy["type"],
+                vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
+            )
         ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
         # this is for communication with the provider
