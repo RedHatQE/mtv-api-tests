@@ -6,6 +6,7 @@ from typing import Any
 
 import requests
 from ocp_resources.exceptions import MissingResourceResError
+from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource
 from pyVim.connect import Disconnect, SmartConnect
 from pyVmomi import vim
@@ -23,11 +24,12 @@ class VMWareProvider(BaseProvider):
     https://github.com/vmware/vsphere-automation-sdk-python
     """
 
-    def __init__(self, host: str, username: str, password: str, ocp_resource: type[Resource], **kwargs: Any) -> None:
+    def __init__(self, host: str, username: str, password: str, ocp_resource: Provider, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
         if not self.provider_data:
             raise ValueError("provider_data is required, but not provided")
 
+        self.type = Provider.ProviderType.VSPHERE
         self.host = host
         self.username = username
         self.password = password

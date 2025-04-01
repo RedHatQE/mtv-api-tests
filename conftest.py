@@ -32,6 +32,8 @@ from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
 
 from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
+from libs.base_provider import BaseProvider
+from libs.forklift_inventory import ForkliftInventory
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
@@ -367,7 +369,6 @@ def source_provider(
         tmp_dir=tmp_path_factory,
     ) as source_provider_objects:
         _source_provider = source_provider_objects[0]
-
         yield _source_provider
 
     _source_provider.disconnect()
@@ -445,9 +446,10 @@ def storage_migration_map(
     ocp_admin_client,
 ):
     storage_map_list: list[dict[str, Any]] = []
+    storage_map_from_config: str = py_config["storage_class"]
     for storage in source_provider_data["storages"]:
         storage_map_list.append({
-            "destination": {"storageClass": py_config["storage_class"]},
+            "destination": {"storageClass": storage_map_from_config},
             "source": storage,
         })
 
@@ -456,7 +458,7 @@ def storage_migration_map(
         session_uuid=session_uuid,
         resource=StorageMap,
         client=ocp_admin_client,
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
+        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{storage_map_from_config}-storage-map",
         namespace=mtv_namespace,
         mapping=storage_map_list,
         source_provider_name=source_provider.ocp_resource.name,
@@ -659,13 +661,15 @@ def posthook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="function")
-def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, request):
+def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, source_provider_inventory, request):
     plan: dict[str, Any] = request.param[0]
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]
 
-    if py_config["source_provider_type"] != Provider.ProviderType.OVA:
-        openshift_source_provider: bool = py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT
+    # TODO: create networkmap and storagemap from source_provider_inventory dynamically
+
+    if source_provider.type != Provider.ProviderType.OVA:
+        openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
         for vm in virtual_machines:
             if openshift_source_provider:
@@ -743,3 +747,15 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
     ):
         if sample:
             return
+
+
+@pytest.fixture(scope="session")
+def source_provider_inventory(
+    ocp_admin_client: DynamicClient, mtv_namespace: str, _source_provider: BaseProvider
+) -> ForkliftInventory:
+    return ForkliftInventory(
+        client=ocp_admin_client,
+        namespace=mtv_namespace,
+        provider_name=_source_provider.ocp_resource.name,
+        provider_type=_source_provider.type,
+    )

@@ -27,7 +27,7 @@ from libs.base_provider import BaseProvider
 from libs.providers.cnv import CNVProvider
 from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
-from libs.providers.rhv import RHVProvider
+from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.resources import create_and_store_resource
 
@@ -46,7 +46,7 @@ def vmware_provider(provider_data: dict[str, Any]) -> bool:
 
 
 def rhv_provider(provider_data: dict[str, Any]) -> bool:
-    return provider_data["type"] == Provider.ProviderType.RHV
+    return provider_data["type"] == Provider.ProviderType.OVIRT
 
 
 def openstack_provider(provider_data: dict[str, Any]) -> bool:
@@ -185,7 +185,7 @@ def create_source_provider(
             )
             provider_args["host"] = source_provider_data_copy["api_url"]
             provider_args["ca_file"] = str(cert_file)
-            source_provider = RHVProvider
+            source_provider = OvirtProvider
             secret_string_data["user"] = source_provider_data_copy["username"]
             secret_string_data["password"] = source_provider_data_copy["password"]
             secret_string_data["cacert"] = cert_file.read_text()

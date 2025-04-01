@@ -98,3 +98,47 @@ def test_cold_remote_ocp(
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
     )
+
+
+@pytest.mark.parametrize(
+    "plans",
+    [
+        pytest.param(
+            [
+                {
+                    "virtual_machines": [
+                        {"name": "rhel9-efi.ova", "guest_agent": True},
+                    ],
+                    "warm_migration": False,
+                }
+            ],
+        )
+    ],
+    indirect=True,
+    ids=["rhel9-efi.ova"],
+)
+@pytest.mark.ova
+def test_ova_cold_mtv_migration(
+    request,
+    fixture_store,
+    session_uuid,
+    target_namespace,
+    plans,
+    source_provider,
+    source_provider_data,
+    destination_provider,
+    network_migration_map,
+    storage_migration_map,
+):
+    migrate_vms(
+        fixture_store=fixture_store,
+        test_name=request._pyfuncitem.name,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plans=plans,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+    )

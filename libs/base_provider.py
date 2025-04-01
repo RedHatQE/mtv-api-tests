@@ -38,6 +38,7 @@ class BaseProvider(abc.ABC):
         if not self.ocp_resource:
             raise ValueError("ocp_resource is required, but not provided")
 
+        self.type = ""
         self.username = username
         self.password = password
         self.host = host

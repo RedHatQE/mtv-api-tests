@@ -1,21 +1,21 @@
 from __future__ import annotations
-from typing import Any
-from ocp_resources.resource import Resource
-import ovirtsdk4
+
 import copy
+from typing import Any
 
-
+import ovirtsdk4
+from ocp_resources.provider import Provider
+from ocp_resources.resource import Resource
+from ovirtsdk4 import NotFoundError
 from ovirtsdk4.types import VmStatus
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
 
-from ovirtsdk4 import NotFoundError
-
 LOGGER = get_logger(__name__)
 
 
-class RHVProvider(BaseProvider):
+class OvirtProvider(BaseProvider):
     """
     https://github.com/oVirt/ovirt-engine-sdk/tree/master/sdk/examples
     """
@@ -26,7 +26,7 @@ class RHVProvider(BaseProvider):
         username: str,
         password: str,
         ca_file: str,
-        ocp_resource: Resource,
+        ocp_resource: Provider,
         insecure: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -37,16 +37,17 @@ class RHVProvider(BaseProvider):
             password=password,
             **kwargs,
         )
+        self.type = Provider.ProviderType.OVIRT
         self.insecure = insecure
         self.ca_file = ca_file
         self.vm_cash: dict[str, Any] = {}
         self.VM_POWER_OFF_CODE: int = 33
 
     def disconnect(self) -> None:
-        LOGGER.info(f"Disconnecting RHVProvider source provider {self.host}")
+        LOGGER.info(f"Disconnecting OvirtProvider source provider {self.host}")
         self.api.close()
 
-    def connect(self) -> "RHVProvider":
+    def connect(self) -> "OvirtProvider":
         self.api = ovirtsdk4.Connection(
             url=self.host,
             username=self.username,
@@ -149,7 +150,7 @@ class RHVProvider(BaseProvider):
         source_vm = self.vms(search=kwargs["name"])[0]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
-        result_vm_info["provider_type"] = Resource.ProviderType.RHV
+        result_vm_info["provider_type"] = Resource.ProviderType.OVIRT
         result_vm_info["provider_vm_api"] = source_vm
         result_vm_info["name"] = kwargs["name"]
 

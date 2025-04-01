@@ -13,7 +13,7 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
-from libs.providers.rhv import RHVProvider
+from libs.providers.rhv import OvirtProvider
 from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
 
 LOGGER = get_logger(name=__name__)
@@ -134,7 +134,7 @@ def check_guest_agent(destination_vm: dict[str, Any]) -> None:
     check.is_true(destination_vm.get("guest_agent_running"), "checking guest agent.")
 
 
-def check_false_vm_power_off(source_provider: RHVProvider, source_vm: dict[str, Any]) -> None:
+def check_false_vm_power_off(source_provider: OvirtProvider, source_vm: dict[str, Any]) -> None:
     """Checking that USER_STOP_VM (event.code=33) was not performed"""
     check.is_false(
         source_provider.check_for_power_off_event(source_vm["provider_vm_api"]),
@@ -218,5 +218,5 @@ def check_vms(
         if vm_guest_agent:
             check_guest_agent(destination_vm=destination_vm)
 
-        if rhv_provider(source_provider_data) and isinstance(source_provider, RHVProvider):
+        if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):
             check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)

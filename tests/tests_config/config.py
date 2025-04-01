@@ -129,7 +129,7 @@ source_providers_list = [
         "type": "ova",
         "version": "nfs",
         "fqdn": "",
-        "api_url": "f02-h06-000-r640.rdu2.scalelab.redhat.com:/home/nfsshare-test",
+        "api_url": "f02-h06-000-r640.rdu2.scalelab.redhat.com:/home/nfsshare-test/mtv-api-tests",
         "username": "ova",
         "password": "",
         "default": "True",

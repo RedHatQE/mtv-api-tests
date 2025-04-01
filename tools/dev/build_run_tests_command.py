@@ -22,6 +22,7 @@ pre-defined runs:
     vmware8-csi
     openstack-ceph
     ovirt-ceph
+    ova
     """
 
 
@@ -52,6 +53,7 @@ def main() -> str:
         "vmware8-csi": {"provider": "vmware8", "storage": "csi"},
         "openstack-ceph": {"provider": "openstack", "storage": "ceph"},
         "ovirt-ceph": {"provider": "ovirt", "storage": "ceph"},
+        "ova": {"provider": "ova", "storage": "ceph"},
     }
 
     base_cmd = (
@@ -119,9 +121,16 @@ def main() -> str:
     elif provider == "openstack":
         base_cmd += f" {source_provider_type} --tc=source_provider_version:psi {target_namespace}"
 
+    elif provider == "ova":
+        base_cmd += f" {source_provider_type} --tc=source_provider_version:nfs {target_namespace}"
+
     # Remote
     if remote:
         base_cmd += f" -m remote --tc=remote_ocp_cluster:{os.environ['CLUSTER_NAME']}"
+
+    elif provider == "ova":
+        base_cmd += " -m ova"
+
     else:
         base_cmd += " -m tier0"
 
