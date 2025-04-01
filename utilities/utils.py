@@ -46,7 +46,7 @@ def vmware_provider(provider_data: dict[str, Any]) -> bool:
 
 
 def rhv_provider(provider_data: dict[str, Any]) -> bool:
-    return provider_data["type"] == Provider.ProviderType.OVIRT
+    return provider_data["type"] == Provider.ProviderType.RHV
 
 
 def openstack_provider(provider_data: dict[str, Any]) -> bool:

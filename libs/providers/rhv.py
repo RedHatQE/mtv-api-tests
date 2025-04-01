@@ -37,7 +37,7 @@ class OvirtProvider(BaseProvider):
             password=password,
             **kwargs,
         )
-        self.type = Provider.ProviderType.OVIRT
+        self.type = Provider.ProviderType.RHV
         self.insecure = insecure
         self.ca_file = ca_file
         self.vm_cash: dict[str, Any] = {}
@@ -150,7 +150,7 @@ class OvirtProvider(BaseProvider):
         source_vm = self.vms(search=kwargs["name"])[0]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
-        result_vm_info["provider_type"] = Resource.ProviderType.OVIRT
+        result_vm_info["provider_type"] = Resource.ProviderType.RHV
         result_vm_info["provider_vm_api"] = source_vm
         result_vm_info["name"] = kwargs["name"]
 

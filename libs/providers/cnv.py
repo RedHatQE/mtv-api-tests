@@ -21,7 +21,7 @@ LOGGER = get_logger(__name__)
 class CNVProvider(BaseProvider):
     def __init__(self, ocp_resource: Provider, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, **kwargs)
-        self.type = Provider.ProviderType.OVIRT
+        self.type = Provider.ProviderType.RHV
 
     def connect(self) -> "CNVProvider":
         return self

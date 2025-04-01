@@ -667,6 +667,7 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, so
     vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]
 
     # TODO: create networkmap and storagemap from source_provider_inventory dynamically
+    __import__("ipdb").set_trace()
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
@@ -751,11 +752,10 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 
 @pytest.fixture(scope="session")
 def source_provider_inventory(
-    ocp_admin_client: DynamicClient, mtv_namespace: str, _source_provider: BaseProvider
+    ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
     return ForkliftInventory(
         client=ocp_admin_client,
         namespace=mtv_namespace,
-        provider_name=_source_provider.ocp_resource.name,
-        provider_type=_source_provider.type,
+        provider_name=source_provider.ocp_resource.name,
     )
