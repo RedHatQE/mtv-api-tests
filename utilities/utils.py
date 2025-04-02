@@ -24,6 +24,7 @@ from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
+from libs.forklift_inventory import ForkliftInventory
 from libs.providers.cnv import CNVProvider
 from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
@@ -85,8 +86,9 @@ def background(func):
 
 
 def gen_network_map_list(
-    source_provider_data: dict[str, Any],
+    source_provider_inventory: ForkliftInventory,
     target_namespace: str,
+    vms: list[str],
     multus_network_name: str = "",
     pod_only: bool = False,
 ) -> list[dict[str, dict[str, str]]]:
@@ -99,7 +101,7 @@ def gen_network_map_list(
     }
     _destination: dict[str, str] = _destination_pod
 
-    for index, network in enumerate(source_provider_data["networks"]):
+    for index, network in enumerate(source_provider_inventory.vms_networks_mappings(vms=vms)):
         if not pod_only:
             if index > 0:
                 _destination = _destination_multus

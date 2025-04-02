@@ -100,6 +100,9 @@ def check_dv_pvc_pv_deleted(
         with contextlib.suppress(NotFoundError):
             _pv_spec = _pv.instance.spec.to_dict()
             if partial_name in _pv_spec.get("claimRef", {}).get("name", ""):
+                if _pv.instance.status.phase == _pv.Status.RELEASED:
+                    continue
+
                 if not _pv.wait_deleted():
                     if leftovers:
                         leftovers = append_leftovers(leftovers=leftovers, resource=_pv)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from ocp_resources.provider import Provider
@@ -27,4 +28,8 @@ class OVAProvider(BaseProvider):
         return True
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        return {}
+        result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
+        result_vm_info["provider_type"] = self.type
+        result_vm_info["power_state"] = "off"
+
+        return result_vm_info

@@ -1,14 +1,16 @@
+import abc
 from typing import Any
 
 from kubernetes.dynamic.client import DynamicClient
+from ocp_resources.provider import Provider
 from ocp_resources.route import Route
 
 
-class ForkliftInventory:
-    def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
+class ForkliftInventory(abc.ABC):
+    def __init__(self, client: DynamicClient, provider_name: str, namespace: str, provider_type: str) -> None:
         self.route = Route(client=client, name="forklift-inventory", namespace=namespace)
         self.provider_name = provider_name
-        self.provider_type = self._get_type_by_name()
+        self.provider_type = provider_type
         self.provider_id = self._provider_id
         self.provider_url_path = f"{self.provider_type}/{self.provider_id}"
         self.vms_path = f"{self.provider_url_path}/vms"
@@ -19,14 +21,6 @@ class ForkliftInventory:
             url=f"https://{self.route.host}",
             action=f"providers{f'/{url_path}' if url_path else ''}",
         )
-
-    def _get_type_by_name(self) -> str:
-        for _provider_type, _provider_data in self._request().items():
-            for _provider in _provider_data:
-                if _provider["name"] == self.provider_name:
-                    return _provider_type
-
-        raise ValueError(f"Provider {self.provider_name} not found")
 
     @property
     def _provider_id(self) -> str:
@@ -48,7 +42,7 @@ class ForkliftInventory:
             if _vm["name"] == name:
                 return self._request(url_path=f"{self.vms_path}/{_vm['id']}")
 
-        raise ValueError(f"VM {name} not found")
+        raise ValueError(f"VM {name} not found. Available VMs: {self.vms_names}")
 
     @property
     def vms_names(self) -> list[str]:
@@ -57,3 +51,227 @@ class ForkliftInventory:
             _vms.append(_vm["name"])
 
         return _vms
+
+    @property
+    def networks(self) -> list[dict[str, Any]]:
+        return self._request(url_path=f"{self.provider_url_path}/networks")
+
+    @property
+    @abc.abstractmethod
+    def storages(self) -> list[dict[str, Any]]:
+        pass
+
+    @abc.abstractmethod
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        pass
+
+    @abc.abstractmethod
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        pass
+
+
+class OvirtForkliftInventory(ForkliftInventory):
+    def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
+        self.provider_type = Provider.ProviderType.RHV
+        super().__init__(
+            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+        )
+
+    @property
+    def storages(self) -> list[dict[str, Any]]:
+        return self._request(url_path=f"{self.provider_url_path}/storagedomains")
+
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        _mappings: list[dict[str, Any]] = []
+        _storage_id: str | None = None
+        _storages = self.storages
+        if not _storages:
+            raise ValueError(f"Storages not found for provider {self.provider_type}")
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+
+            for _disk in _vm.get("diskAttachments", []):
+                _disk_id = _disk["id"]
+                _disk_id_info = self._request(f"{self.provider_url_path}/disks/{_disk_id}")
+                _storage_id = _disk_id_info["storageDomain"]
+
+        for _storage in _storages:
+            if _storage.get("id") == _storage_id:
+                _mappings.append({"name": _storage["name"]})
+
+        if not _mappings:
+            raise ValueError(f"Storages not found for VMs {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        _mappings: list[dict[str, Any]] = []
+        _network_ids: list[str] = []
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+
+            nic_profiles = self._request(f"{self.provider_url_path}/nicprofiles")
+            for _network in _vm.get("nics", []):
+                _network_profile = _network["profile"]
+
+                for _nic_profile in nic_profiles:
+                    if _nic_profile["id"] in _network_profile:
+                        _selfLink = _nic_profile["selfLink"].replace("providers/", "")
+                        _network_ids.append(self._request(url_path=_selfLink)["network"])
+
+        for _network in self.networks:
+            if _network["id"] in _network_ids:
+                _mappings.append({"name": _network["path"]})
+
+        if not _mappings:
+            raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+
+class OpenstackForliftinventory(ForkliftInventory):
+    def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
+        self.provider_type = Provider.ProviderType.OPENSTACK
+        super().__init__(
+            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+        )
+
+    @property
+    def storages(self) -> list[dict[str, Any]]:
+        return []
+
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        # TODO: find out how to get it from forklift-inventory
+        return [{"name": "tripleo"}]
+
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        _mappings: list[dict[str, Any]] = []
+        _network_ids: list[str] = []
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+
+            for _name in _vm.get("addresses", {}).keys():
+                _mappings.append({"name": _name})
+
+        for _network in self.networks:
+            if _network["id"] in _network_ids:
+                _mappings.append({"name": _network["name"]})
+
+        if not _mappings:
+            raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+
+class VsphereForkliftInventory(ForkliftInventory):
+    def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
+        self.provider_type = Provider.ProviderType.VSPHERE
+        super().__init__(
+            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+        )
+
+    @property
+    def storages(self) -> list[dict[str, Any]]:
+        return self._request(url_path=f"{self.provider_url_path}/datastores")
+
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        _mappings: list[dict[str, Any]] = []
+        _storage_id: str | None = None
+        _storages = self.storages
+        if not _storages:
+            raise ValueError(f"Storages not found for provider {self.provider_type}")
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+            for _disk in _vm.get("disks", []):
+                _storage_id = _disk.get("datastore", {}).get("id")
+
+        for _storage in _storages:
+            if _storage.get("id") == _storage_id:
+                _mappings.append({"name": _storage["name"]})
+
+        if not _mappings:
+            raise ValueError(f"Storages not found for VMs {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        _mappings: list[dict[str, Any]] = []
+        _network_ids: list[str] = []
+        _network_id: str | None = None
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+            for _network in _vm.get("networks", []):
+                if _network_id := _network.get("id"):
+                    _network_ids.append(_network_id)
+
+        for _network in self.networks:
+            if _network["id"] in _network_ids:
+                _mappings.append({"name": _network["name"]})
+
+        if not _mappings:
+            raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+
+class OvaForkliftInventory(ForkliftInventory):
+    def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
+        self.provider_type = Provider.ProviderType.OVA
+        super().__init__(
+            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+        )
+
+    @property
+    def storages(self) -> list[dict[str, Any]]:
+        return self._request(url_path=f"{self.provider_url_path}/storages")
+
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        _storages = self.storages
+        if not _storages:
+            raise ValueError(f"Storages not found for provider {self.provider_type}")
+
+        return [{"name": _storages[0]["name"]}]
+
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        _mappings: list[dict[str, Any]] = []
+        _network_ids: list[str] = []
+        _network_id: str | None = None
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+
+            for _network in _vm.get("networks", []):
+                if _network_id := _network.get("ID"):
+                    _network_ids.append(_network_id)
+
+        for _network in self.networks:
+            if _network["id"] in _network_ids:
+                _mappings.append({"name": _network["name"]})
+
+        if not _mappings:
+            raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+
+class OpenshiftForkliftInventory(ForkliftInventory):
+    def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
+        self.provider_type = Provider.ProviderType.OPENSHIFT
+        super().__init__(
+            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+        )
+
+    @property
+    def storages(self) -> list[dict[str, Any]]:
+        return self._request(url_path=f"{self.provider_url_path}/storageclasses")
+
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        return []
+
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+        return []

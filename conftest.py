@@ -17,14 +17,12 @@ from ocp_resources.hook import Hook
 from ocp_resources.host import Host
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
-from ocp_resources.network_map import NetworkMap
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_cluster import StorageCluster
-from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
@@ -33,7 +31,13 @@ from timeout_sampler import TimeoutSampler
 
 from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
 from libs.base_provider import BaseProvider
-from libs.forklift_inventory import ForkliftInventory
+from libs.forklift_inventory import (
+    ForkliftInventory,
+    OpenshiftForkliftInventory,
+    OvaForkliftInventory,
+    OvirtForkliftInventory,
+    VsphereForkliftInventory,
+)
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
@@ -42,7 +46,6 @@ from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
     create_source_provider,
-    gen_network_map_list,
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
@@ -403,73 +406,6 @@ def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin
 
 
 @pytest.fixture(scope="session")
-def network_migration_map(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    source_provider_data,
-    destination_provider,
-    multus_network_name,
-    mtv_namespace,
-    ocp_admin_client,
-    target_namespace,
-):
-    network_map_list = gen_network_map_list(
-        target_namespace=target_namespace,
-        source_provider_data=source_provider_data,
-        multus_network_name=multus_network_name,
-    )
-    network_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=NetworkMap,
-        client=ocp_admin_client,
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
-        namespace=mtv_namespace,
-        mapping=network_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_provider.ocp_resource.name,
-        destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    )
-    yield network_map
-
-
-@pytest.fixture(scope="session")
-def storage_migration_map(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    source_provider_data,
-    destination_provider,
-    mtv_namespace,
-    ocp_admin_client,
-):
-    storage_map_list: list[dict[str, Any]] = []
-    storage_map_from_config: str = py_config["storage_class"]
-    for storage in source_provider_data["storages"]:
-        storage_map_list.append({
-            "destination": {"storageClass": storage_map_from_config},
-            "source": storage,
-        })
-
-    storage_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=StorageMap,
-        client=ocp_admin_client,
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{storage_map_from_config}-storage-map",
-        namespace=mtv_namespace,
-        mapping=storage_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_provider.ocp_resource.name,
-        destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    )
-    yield storage_map
-
-
-@pytest.fixture(scope="session")
 def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, mtv_namespace):
     api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
     if not api_key:
@@ -502,73 +438,6 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
     yield CNVProvider(ocp_resource=provider)
-
-
-@pytest.fixture(scope="session")
-def remote_network_migration_map(
-    fixture_store,
-    source_provider,
-    source_provider_data,
-    destination_ocp_provider,
-    session_uuid,
-    multus_network_name,
-    mtv_namespace,
-    target_namespace,
-):
-    network_map_list = gen_network_map_list(
-        target_namespace=target_namespace,
-        source_provider_data=source_provider_data,
-        multus_network_name=multus_network_name,
-    )
-    network_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=NetworkMap,
-        name=f"{session_uuid}-networkmap",
-        namespace=mtv_namespace,
-        mapping=network_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_ocp_provider.ocp_resource.name,
-        destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
-    )
-    yield network_map
-
-
-@pytest.fixture(scope="session")
-def remote_storage_migration_map(
-    fixture_store,
-    source_provider,
-    source_provider_data,
-    destination_ocp_provider,
-    session_uuid,
-    mtv_namespace,
-    ocp_admin_client,
-):
-    storage_map_list: list[dict[str, Any]] = []
-    for storage in source_provider_data["storages"]:
-        if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-            storage_class = StorageClass(name=storage["name"], client=ocp_admin_client)
-            storage.update({"id": storage_class.instance.metadata.uid})
-
-        storage_map_list.append({
-            "destination": {"storageClass": py_config["storage_class"]},
-            "source": storage,
-        })
-
-    storage_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=StorageMap,
-        name=f"{source_provider.ocp_resource.name}-{destination_ocp_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
-        namespace=mtv_namespace,
-        mapping=storage_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_ocp_provider.ocp_resource.name,
-        destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
-    )
-    yield storage_map
 
 
 @pytest.fixture(scope="session")
@@ -661,13 +530,10 @@ def posthook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="function")
-def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, source_provider_inventory, request):
+def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, request):
     plan: dict[str, Any] = request.param[0]
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]
-
-    # TODO: create networkmap and storagemap from source_provider_inventory dynamically
-    __import__("ipdb").set_trace()
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
@@ -716,12 +582,11 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, so
         })
 
     for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
-        if plan["name"] in pod.name:
-            fixture_store["teardown"].setdefault(pod.kind, []).append({
-                "name": pod.name,
-                "namespace": pod.namespace,
-                "module": pod.__module__,
-            })
+        fixture_store["teardown"].setdefault(pod.kind, []).append({
+            "name": pod.name,
+            "namespace": pod.namespace,
+            "module": pod.__module__,
+        })
 
 
 @pytest.fixture(scope="session")
@@ -754,8 +619,27 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 def source_provider_inventory(
     ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
-    return ForkliftInventory(
-        client=ocp_admin_client,
-        namespace=mtv_namespace,
-        provider_name=source_provider.ocp_resource.name,
-    )
+    _kwargs = {
+        "client": ocp_admin_client,
+        "namespace": mtv_namespace,
+        "provider_name": source_provider.ocp_resource.name,
+        "provider_type": source_provider.type,
+    }
+
+    if source_provider.type != Provider.ProviderType.OVA:
+        return OvaForkliftInventory(**_kwargs)
+
+    elif source_provider.type == Provider.ProviderType.RHV:
+        return OvirtForkliftInventory(**_kwargs)
+
+    elif source_provider.type == Provider.ProviderType.VSPHERE:
+        return VsphereForkliftInventory(**_kwargs)
+
+    elif source_provider.type == Provider.ProviderType.OPENSHIFT:
+        return OpenshiftForkliftInventory(**_kwargs)
+
+    elif source_provider.type == Provider.ProviderType.OPENSTACK:
+        return OpenshiftForkliftInventory(**_kwargs)
+
+    else:
+        raise ValueError(f"Provider type {source_provider.type} not supported")

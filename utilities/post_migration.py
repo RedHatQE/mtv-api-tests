@@ -13,6 +13,7 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
+from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
 from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
 
@@ -33,7 +34,9 @@ def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[s
         else:
             if map_item.source.id and map_item.source.id == source_vm_nic["network"].get("id", None):
                 return result
-            if map_item.source.name and map_item.source.name == source_vm_nic["network"].get("name", None):
+            if map_item.source.name and map_item.source.name.split("/")[-1] == source_vm_nic["network"].get(
+                "name", None
+            ):
                 return result
 
     return None
@@ -166,13 +169,16 @@ def check_vms(
     storage_map_resource: StorageMap,
     source_provider_data: dict[str, Any],
     target_namespace: str,
+    source_provider_inventory: ForkliftInventory | None = None,
     source_provider_host: dict[str, Any] | None = None,
 ) -> None:
     virtual_machines = plan["virtual_machines"]
 
     for vm in virtual_machines:
         vm_name = vm["name"]
-        source_vm = source_provider.vm_dict(name=vm_name, namespace=target_namespace, source=True)
+        source_vm = source_provider.vm_dict(
+            name=vm_name, namespace=target_namespace, source=True, source_provider_inventory=source_provider_inventory
+        )
         vm_guest_agent = vm.get("guest_agent")
         destination_vm = destination_provider.vm_dict(
             wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=destination_namespace

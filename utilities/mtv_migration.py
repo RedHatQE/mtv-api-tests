@@ -17,12 +17,13 @@ from timeout_sampler import retry
 
 from exceptions.exceptions import MigrationPlanExecError, MigrationPlanExecStopError
 from libs.base_provider import BaseProvider
+from libs.forklift_inventory import ForkliftInventory
 from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
-from utilities.utils import generate_name_with_uuid, get_value_from_py_config
+from utilities.utils import gen_network_map_list, generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -56,6 +57,7 @@ def migrate_vms(
     session_uuid: str,
     fixture_store: Any,
     test_name: str,
+    source_provider_inventory: ForkliftInventory | None = None,
     source_provider_host: dict[str, Any] | None = None,
     cut_over: datetime | None = None,
     pre_hook_name: str | None = None,
@@ -143,6 +145,7 @@ def migrate_vms(
             storage_map_resource=storage_migration_map,
             source_provider_host=source_provider_host,
             target_namespace=target_namespace,
+            source_provider_inventory=source_provider_inventory,
         )
 
 
@@ -273,3 +276,78 @@ def wait_for_migration_complate(plan: Plan) -> bool:
                     raise MigrationPlanExecStopError(err.format(name=plan.name, instance=plan.instance))
 
     raise MigrationPlanExecError(err.format(name=plan.name, instance=plan.instance))
+
+
+def get_storage_migration_map(
+    fixture_store,
+    session_uuid,
+    source_provider,
+    destination_provider,
+    mtv_namespace,
+    ocp_admin_client,
+    source_provider_inventory,
+    vms,
+):
+    storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
+    storage_map_list: list[dict[str, Any]] = []
+    storage_map_from_config: str = py_config["storage_class"]
+    for storage in storage_migration_map:
+        storage_map_list.append({
+            "destination": {"storageClass": storage_map_from_config},
+            "source": storage,
+        })
+
+    name = generate_name_with_uuid(
+        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{storage_map_from_config}-storage-map"
+    )
+    storage_map = create_and_store_resource(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        resource=StorageMap,
+        client=ocp_admin_client,
+        name=name,
+        namespace=mtv_namespace,
+        mapping=storage_map_list,
+        source_provider_name=source_provider.ocp_resource.name,
+        source_provider_namespace=source_provider.ocp_resource.namespace,
+        destination_provider_name=destination_provider.ocp_resource.name,
+        destination_provider_namespace=destination_provider.ocp_resource.namespace,
+    )
+    return storage_map
+
+
+def get_network_migration_map(
+    fixture_store,
+    session_uuid,
+    source_provider,
+    destination_provider,
+    multus_network_name,
+    mtv_namespace,
+    ocp_admin_client,
+    target_namespace,
+    source_provider_inventory,
+    vms,
+):
+    network_map_list = gen_network_map_list(
+        target_namespace=target_namespace,
+        source_provider_inventory=source_provider_inventory,
+        multus_network_name=multus_network_name,
+        vms=vms,
+    )
+    name = generate_name_with_uuid(
+        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map"
+    )
+    network_map = create_and_store_resource(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        resource=NetworkMap,
+        client=ocp_admin_client,
+        name=name,
+        namespace=mtv_namespace,
+        mapping=network_map_list,
+        source_provider_name=source_provider.ocp_resource.name,
+        source_provider_namespace=source_provider.ocp_resource.namespace,
+        destination_provider_name=destination_provider.ocp_resource.name,
+        destination_provider_namespace=destination_provider.ocp_resource.namespace,
+    )
+    return network_map
