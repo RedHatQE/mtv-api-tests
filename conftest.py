@@ -620,26 +620,18 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 def source_provider_inventory(
     ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
-    _kwargs = {
-        "client": ocp_admin_client,
-        "namespace": mtv_namespace,
-        "provider_name": source_provider.ocp_resource.name,
+    providers = {
+        Provider.ProviderType.OVA: OvaForkliftInventory,
+        Provider.ProviderType.RHV: OvirtForkliftInventory,
+        Provider.ProviderType.VSPHERE: VsphereForkliftInventory,
+        Provider.ProviderType.OPENSHIFT: OpenshiftForkliftInventory,
+        Provider.ProviderType.OPENSTACK: OpenstackForliftinventory,
     }
+    provider_instance = providers.get(source_provider.type)
 
-    if source_provider.type == Provider.ProviderType.OVA:
-        return OvaForkliftInventory(**_kwargs)
+    if not provider_instance:
+        raise ValueError(f"Provider {source_provider.type} not implemented")
 
-    elif source_provider.type == Provider.ProviderType.RHV:
-        return OvirtForkliftInventory(**_kwargs)
-
-    elif source_provider.type == Provider.ProviderType.VSPHERE:
-        return VsphereForkliftInventory(**_kwargs)
-
-    elif source_provider.type == Provider.ProviderType.OPENSHIFT:
-        return OpenshiftForkliftInventory(**_kwargs)
-
-    elif source_provider.type == Provider.ProviderType.OPENSTACK:
-        return OpenstackForliftinventory(**_kwargs)
-
-    else:
-        raise ValueError(f"Provider type {source_provider.type} not supported")
+    return provider_instance(  # type: ignore
+        client=ocp_admin_client, namespace=mtv_namespace, provider_name=source_provider.ocp_resource.name
+    )
