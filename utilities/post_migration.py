@@ -5,7 +5,6 @@ from subprocess import STDOUT, check_output
 from typing import Any
 
 import pytest
-import pytest_check as check
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.storage_map import StorageMap
@@ -29,11 +28,13 @@ def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[s
         if map_item.source.type:
             if map_item.source.type == source_vm_nic["network"]:
                 return result
+
             if map_item.source.name and map_item.source.name.split("/")[1] == source_vm_nic["network"]:
                 return result
         else:
             if map_item.source.id and map_item.source.id == source_vm_nic["network"].get("id", None):
                 return result
+
             if map_item.source.name and map_item.source.name.split("/")[-1] == source_vm_nic["network"].get(
                 "name", None
             ):
@@ -43,12 +44,12 @@ def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[s
 
 
 def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
-    check.equal(source_vm["cpu"]["num_cores"], destination_vm["cpu"]["num_cores"])
-    check.equal(source_vm["cpu"]["num_sockets"], destination_vm["cpu"]["num_sockets"])
+    assert source_vm["cpu"]["num_cores"] == destination_vm["cpu"]["num_cores"]
+    assert source_vm["cpu"]["num_sockets"] == destination_vm["cpu"]["num_sockets"]
 
 
 def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
-    check.equal(source_vm["memory_in_mb"], destination_vm["memory_in_mb"])
+    assert source_vm["memory_in_mb"] == destination_vm["memory_in_mb"]
 
 
 def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, Any]:
@@ -67,28 +68,28 @@ def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], net
             nics=destination_vm["network_interfaces"], mac_address=source_vm_nic["macAddress"]
         )
 
-        check.equal(destination_vm_nic["network"], expected_network_name)
+        assert destination_vm_nic["network"] == expected_network_name
 
 
 def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], storage_map_resource: StorageMap) -> None:
     destination_disks = destination_vm["disks"]
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
-    check.equal(len(destination_disks), len(source_vm["disks"]), "disks count")
+    assert len(destination_disks) == len(source_vm["disks"]), "disks count"
     for destination_disk in destination_disks:
-        check.equal(destination_disk["storage"]["name"], py_config["storage_class"], "storage class")
+        assert destination_disk["storage"]["name"] == py_config["storage_class"], "storage class"
         if destination_disk["storage"]["name"] == "ocs-storagecluster-ceph-rbd":
             for mapping in storage_map_resource.instance.spec.map:
                 if mapping.source.name in source_vm_disks_storage:
                     # The following condition is for a customer case (BZ#2064936)
                     if mapping.destination.get("accessMode"):
-                        check.equal(destination_disk["storage"]["access_mode"][0], DataVolume.AccessMode.RWO)
+                        assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWO
                     else:
-                        check.equal(destination_disk["storage"]["access_mode"][0], DataVolume.AccessMode.RWX)
+                        assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
 
 
 def check_migration_network(source_provider_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
     for disk in destination_vm["disks"]:
-        check.is_in(source_provider_data["host_list"][0]["migration_host_ip"], disk["vddk_url"])
+        assert source_provider_data["host_list"][0]["migration_host_ip"] in disk["vddk_url"]
 
 
 def check_data_integrity(
@@ -121,27 +122,27 @@ def check_data_integrity(
     LOGGER.info(data)
     str_data: list[str] = data.decode("utf8").split("-1")[1].split("|")
     for i in range(1, len(str_data)):
-        check.equal(str_data[i], str(i), "data integrity check.")
-    check.greater_equal(len(str_data) - 1, min_number_of_snapshots, "data integrity check.")
+        assert str_data[i] == str(i), "data integrity check."
+
+    assert len(str_data) - 1 >= min_number_of_snapshots, "data integrity check."
 
 
 def check_vms_power_state(
     source_vm: dict[str, Any], destination_vm: dict[str, Any], source_power_before_migration: bool
 ) -> None:
-    check.equal(source_vm["power_state"], "off", "Checking source VM is off")
+    assert source_vm["power_state"] == "off", "Checking source VM is off"
     if source_power_before_migration:
-        check.equal(destination_vm["power_state"], source_power_before_migration)
+        assert destination_vm["power_state"] == source_power_before_migration
 
 
 def check_guest_agent(destination_vm: dict[str, Any]) -> None:
-    check.is_true(destination_vm.get("guest_agent_running"), "checking guest agent.")
+    assert destination_vm.get("guest_agent_running"), "checking guest agent."
 
 
 def check_false_vm_power_off(source_provider: OvirtProvider, source_vm: dict[str, Any]) -> None:
     """Checking that USER_STOP_VM (event.code=33) was not performed"""
-    check.is_false(
-        source_provider.check_for_power_off_event(source_vm["provider_vm_api"]),
-        "Checking RHV VM power off was not performed (event.code=33)",
+    assert not source_provider.check_for_power_off_event(source_vm["provider_vm_api"]), (
+        "Checking RHV VM power off was not performed (event.code=33)"
     )
 
 

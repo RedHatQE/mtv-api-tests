@@ -2,9 +2,8 @@ import pytest
 from pytest_testconfig import py_config
 
 from utilities.mtv_migration import (
+    create_storagemap_and_networkmap,
     get_cutover_value,
-    get_network_migration_map,
-    get_storage_migration_map,
     get_vm_suffix,
     migrate_vms,
 )
@@ -54,18 +53,7 @@ def test_sanity_warm_mtv_migration(
     destination_provider,
     precopy_interval_forkliftcontroller,
 ):
-    vms = [vm["name"] for vm in plans[0]["virtual_machines"]]
-    storage_migration_map = get_storage_migration_map(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
-        ocp_admin_client=ocp_admin_client,
-        vms=vms,
-    )
-    network_migration_map = get_network_migration_map(
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
         source_provider=source_provider,
@@ -75,7 +63,7 @@ def test_sanity_warm_mtv_migration(
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        vms=vms,
+        plan=plans[0],
     )
 
     migrate_vms(
@@ -131,18 +119,7 @@ def test_mtv_migration_warm_2disks2nics(
     destination_provider,
     precopy_interval_forkliftcontroller,
 ):
-    vms = [vm["name"] for vm in plans[0]["virtual_machines"]]
-    storage_migration_map = get_storage_migration_map(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
-        ocp_admin_client=ocp_admin_client,
-        vms=vms,
-    )
-    network_migration_map = get_network_migration_map(
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
         source_provider=source_provider,
@@ -152,8 +129,9 @@ def test_mtv_migration_warm_2disks2nics(
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        vms=vms,
+        plan=plans[0],
     )
+
     migrate_vms(
         fixture_store=fixture_store,
         test_name=request._pyfuncitem.name,
@@ -207,18 +185,7 @@ def test_warm_remote_ocp(
     destination_ocp_provider,
     precopy_interval_forkliftcontroller,
 ):
-    vms = [vm["name"] for vm in plans[0]["virtual_machines"]]
-    remote_storage_migration_map = get_storage_migration_map(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        source_provider=source_provider,
-        destination_provider=destination_ocp_provider,
-        source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
-        ocp_admin_client=ocp_admin_client,
-        vms=vms,
-    )
-    remote_network_migration_map = get_network_migration_map(
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
         source_provider=source_provider,
@@ -228,8 +195,9 @@ def test_warm_remote_ocp(
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        vms=vms,
+        plan=plans[0],
     )
+
     migrate_vms(
         fixture_store=fixture_store,
         test_name=request._pyfuncitem.name,
@@ -237,8 +205,8 @@ def test_warm_remote_ocp(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,
-        network_migration_map=remote_network_migration_map,
-        storage_migration_map=remote_storage_migration_map,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any, Generator
 
 import pytz
+from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -279,15 +280,15 @@ def wait_for_migration_complate(plan: Plan) -> bool:
 
 
 def get_storage_migration_map(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    destination_provider,
-    mtv_namespace,
-    ocp_admin_client,
-    source_provider_inventory,
-    vms,
-):
+    fixture_store: dict[str, Any],
+    session_uuid: str,
+    source_provider: BaseProvider,
+    destination_provider: BaseProvider,
+    mtv_namespace: str,
+    ocp_admin_client: DynamicClient,
+    source_provider_inventory: ForkliftInventory,
+    vms: list[str],
+) -> StorageMap:
     storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
     storage_map_list: list[dict[str, Any]] = []
     storage_map_from_config: str = py_config["storage_class"]
@@ -317,17 +318,17 @@ def get_storage_migration_map(
 
 
 def get_network_migration_map(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    destination_provider,
-    multus_network_name,
-    mtv_namespace,
-    ocp_admin_client,
-    target_namespace,
-    source_provider_inventory,
-    vms,
-):
+    fixture_store: dict[str, Any],
+    session_uuid: str,
+    source_provider: BaseProvider,
+    destination_provider: BaseProvider,
+    multus_network_name: str,
+    mtv_namespace: str,
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    source_provider_inventory: ForkliftInventory,
+    vms: list[str],
+) -> NetworkMap:
     network_map_list = gen_network_map_list(
         target_namespace=target_namespace,
         source_provider_inventory=source_provider_inventory,
@@ -351,3 +352,42 @@ def get_network_migration_map(
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
     return network_map
+
+
+def create_storagemap_and_networkmap(
+    plan: dict,
+    fixture_store: dict[str, Any],
+    session_uuid: str,
+    source_provider: BaseProvider,
+    destination_provider: BaseProvider,
+    source_provider_inventory: ForkliftInventory,
+    mtv_namespace: str,
+    ocp_admin_client: DynamicClient,
+    multus_network_name: str,
+    target_namespace: str,
+) -> tuple[StorageMap, NetworkMap]:
+    vms = [vm["name"] for vm in plan["virtual_machines"]]
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        mtv_namespace=mtv_namespace,
+        ocp_admin_client=ocp_admin_client,
+        vms=vms,
+    )
+
+    network_migration_map = get_network_migration_map(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        mtv_namespace=mtv_namespace,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        vms=vms,
+    )
+    return storage_migration_map, network_migration_map

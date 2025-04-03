@@ -95,6 +95,9 @@ def main() -> str:
         print(f"{usage()}\nPlease specify provider and storage type")
         sys.exit(1)
 
+    if pytest_args and "--tc=release_test:true" in pytest_args:
+        base_cmd = base_cmd.replace("--tc=matrix_test:true", "")
+
     target_namespace = f"--tc=target_namespace:mtv-api-tests-{provider}-{os.environ['USER']}"
 
     source_provider_type = None

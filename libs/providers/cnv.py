@@ -96,7 +96,7 @@ class CNVProvider(BaseProvider):
 
     def vm_dict(self, wait_for_guest_agent: bool = False, **kwargs: Any) -> dict[str, Any]:
         dynamic_client = self.ocp_resource.client
-        source = kwargs.get("source", False)
+        _source = kwargs.get("source", False)
 
         cnv_vm_name = kwargs["name"]
         cnv_vm_namespace = kwargs["namespace"]
@@ -117,9 +117,9 @@ class CNVProvider(BaseProvider):
         result_vm_info["provider_vm_api"] = cnv_vm
 
         # Power state
-        result_vm_info["power_state"] = "on" if cnv_vm.instance.spec.running else "off"
+        result_vm_info["power_state"] = "on" if cnv_vm.instance.spec.runStrategy == cnv_vm.RunStrategy.ALWAYS else "off"
 
-        if not source:
+        if not _source:
             # This step is required to check some of the vm_signals.
             self.start_vm(cnv_vm)
 
@@ -135,12 +135,12 @@ class CNVProvider(BaseProvider):
             result_vm_info["network_interfaces"].append({
                 "name": interface.name,
                 "macAddress": interface.macAddress,
-                "ip": self.get_ip_by_mac_address(mac_address=interface.macAddress, vm=cnv_vm) if not source else "",
+                "ip": self.get_ip_by_mac_address(mac_address=interface.macAddress, vm=cnv_vm) if not _source else "",
                 "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[1],
             })
 
         for pvc in cnv_vm.instance.spec.template.spec.volumes:
-            if not source:
+            if not _source:
                 name = pvc.persistentVolumeClaim.claimName
             else:
                 if pvc.name == "cloudinitdisk":
@@ -172,7 +172,7 @@ class CNVProvider(BaseProvider):
             / 1024
             / 1024
         )
-        if not source and result_vm_info["power_state"] == "off":
+        if not _source and result_vm_info["power_state"] == "off":
             self.log.info("Restoring VM Power State (turning off)")
             self.stop_vm(cnv_vm)
 
