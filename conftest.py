@@ -34,6 +34,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
     OpenshiftForkliftInventory,
+    OpenstackForliftinventory,
     OvaForkliftInventory,
     OvirtForkliftInventory,
     VsphereForkliftInventory,
@@ -625,7 +626,7 @@ def source_provider_inventory(
         "provider_name": source_provider.ocp_resource.name,
     }
 
-    if source_provider.type != Provider.ProviderType.OVA:
+    if source_provider.type == Provider.ProviderType.OVA:
         return OvaForkliftInventory(**_kwargs)
 
     elif source_provider.type == Provider.ProviderType.RHV:
@@ -638,7 +639,7 @@ def source_provider_inventory(
         return OpenshiftForkliftInventory(**_kwargs)
 
     elif source_provider.type == Provider.ProviderType.OPENSTACK:
-        return OpenshiftForkliftInventory(**_kwargs)
+        return OpenstackForliftinventory(**_kwargs)
 
     else:
         raise ValueError(f"Provider type {source_provider.type} not supported")
