@@ -623,7 +623,6 @@ def source_provider_inventory(
         "client": ocp_admin_client,
         "namespace": mtv_namespace,
         "provider_name": source_provider.ocp_resource.name,
-        "provider_type": source_provider.type,
     }
 
     if source_provider.type != Provider.ProviderType.OVA:
