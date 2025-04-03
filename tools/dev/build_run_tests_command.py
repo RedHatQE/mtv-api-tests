@@ -38,6 +38,7 @@ def get_cluster_version() -> str:
 
 
 def main() -> str:
+    usage_msg = f"Please specify provider and storage type.\n\n{usage()}"
     cluster_version = get_cluster_version()
     user_data_from_re = None
     user_data_from_template = None
@@ -53,17 +54,17 @@ def main() -> str:
         "vmware8-csi": {"provider": "vmware8", "storage": "csi"},
         "openstack-ceph": {"provider": "openstack", "storage": "ceph"},
         "ovirt-ceph": {"provider": "ovirt", "storage": "ceph"},
-        "ova": {"provider": "ova", "storage": "ceph"},
+        "ova-ceph": {"provider": "ova", "storage": "ceph"},
     }
 
     base_cmd = (
-        f"uv run pytest -s --tc=matrix_test:true --tc=target_ocp_version:{cluster_version}"
+        f"uv run pytest -s --tc=target_ocp_version:{cluster_version}"
         f" --tc=insecure_verify_skip:true --tc=mount_root:{os.environ['MOUNT_PATH']}"
         " --skip-data-collector"
     )
 
     if len(sys.argv) < 2:
-        print(f"{usage()}\nPlease specify provider and storage type")
+        print(usage_msg)
         sys.exit(1)
 
     template = sys.argv[1]
@@ -89,14 +90,14 @@ def main() -> str:
         provider = data["provider"]
         storage = data["storage"]
         remote = data.get("remote")
-        pytest_args = data.get("others")
+        pytest_args = data.get("others", "")
 
     else:
-        print(f"{usage()}\nPlease specify provider and storage type")
+        print(usage_msg)
         sys.exit(1)
 
-    if pytest_args and "--tc=release_test:true" in pytest_args:
-        base_cmd = base_cmd.replace("--tc=matrix_test:true", "")
+    if "--tc=release_test:true" not in pytest_args:
+        base_cmd += "--tc=matrix_test:true"
 
     target_namespace = f"--tc=target_namespace:mtv-api-tests-{provider}-{os.environ['USER']}"
 
@@ -130,9 +131,6 @@ def main() -> str:
     # Remote
     if remote:
         base_cmd += f" -m remote --tc=remote_ocp_cluster:{os.environ['CLUSTER_NAME']}"
-
-    elif provider == "ova":
-        base_cmd += " -m ova"
 
     else:
         base_cmd += " -m tier0"

@@ -83,8 +83,8 @@ class OvirtForkliftInventory(ForkliftInventory):
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         _mappings: list[dict[str, Any]] = []
-        _storage_id: str | None = None
         _storages = self.storages
+
         if not _storages:
             raise ValueError(f"Storages not found for provider {self.provider_type}")
 
@@ -95,10 +95,8 @@ class OvirtForkliftInventory(ForkliftInventory):
                 _disk_id = _disk["id"]
                 _disk_id_info = self._request(f"{self.provider_url_path}/disks/{_disk_id}")
                 _storage_id = _disk_id_info["storageDomain"]
-
-        for _storage in _storages:
-            if _storage.get("id") == _storage_id:
-                _mappings.append({"name": _storage["name"]})
+                if _storage_name_match := [_stg["name"] for _stg in _storages if _storage_id == _stg["id"]]:
+                    _mappings.append({"name": _storage_name_match[0]})
 
         if not _mappings:
             raise ValueError(f"Storages not found for VMs {vms} on provider {self.provider_type}")
@@ -107,7 +105,6 @@ class OvirtForkliftInventory(ForkliftInventory):
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         _mappings: list[dict[str, Any]] = []
-        _network_ids: list[str] = []
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
@@ -119,11 +116,9 @@ class OvirtForkliftInventory(ForkliftInventory):
                 for _nic_profile in nic_profiles:
                     if _nic_profile["id"] in _network_profile:
                         _selfLink = _nic_profile["selfLink"].replace("providers/", "")
-                        _network_ids.append(self._request(url_path=_selfLink)["network"])
-
-        for _network in self.networks:
-            if _network["id"] in _network_ids:
-                _mappings.append({"name": _network["path"]})
+                        _network_id = self._request(url_path=_selfLink)["network"]
+                        if _network_name_match := [_net["path"] for _net in self.networks if _network_id == _net["id"]]:
+                            _mappings.append({"name": _network_name_match[0]})
 
         if not _mappings:
             raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
@@ -140,7 +135,7 @@ class OpenstackForliftinventory(ForkliftInventory):
 
     @property
     def storages(self) -> list[dict[str, Any]]:
-        return []
+        return [{}]
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         # TODO: find out how to get it from forklift-inventory
@@ -148,17 +143,13 @@ class OpenstackForliftinventory(ForkliftInventory):
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         _mappings: list[dict[str, Any]] = []
-        _network_ids: list[str] = []
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
 
             for _name in _vm.get("addresses", {}).keys():
-                _mappings.append({"name": _name})
-
-        for _network in self.networks:
-            if _network["id"] in _network_ids:
-                _mappings.append({"name": _network["name"]})
+                if _network_id_match := [_net["id"] for _net in self.networks if _name == _net["name"]]:
+                    _mappings.append({"id": _network_id_match[0], "name": _name})
 
         if not _mappings:
             raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
@@ -179,19 +170,17 @@ class VsphereForkliftInventory(ForkliftInventory):
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         _mappings: list[dict[str, Any]] = []
-        _storage_id: str | None = None
         _storages = self.storages
+
         if not _storages:
             raise ValueError(f"Storages not found for provider {self.provider_type}")
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
             for _disk in _vm.get("disks", []):
-                _storage_id = _disk.get("datastore", {}).get("id")
-
-        for _storage in _storages:
-            if _storage.get("id") == _storage_id:
-                _mappings.append({"name": _storage["name"]})
+                if _storage_id := _disk.get("datastore", {}).get("id"):
+                    if _storage_name_match := [_stg["name"] for _stg in _storages if _storage_id == _stg["id"]]:
+                        _mappings.append({"name": _storage_name_match[0]})
 
         if not _mappings:
             raise ValueError(f"Storages not found for VMs {vms} on provider {self.provider_type}")
@@ -200,18 +189,13 @@ class VsphereForkliftInventory(ForkliftInventory):
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         _mappings: list[dict[str, Any]] = []
-        _network_ids: list[str] = []
-        _network_id: str | None = None
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
             for _network in _vm.get("networks", []):
                 if _network_id := _network.get("id"):
-                    _network_ids.append(_network_id)
-
-        for _network in self.networks:
-            if _network["id"] in _network_ids:
-                _mappings.append({"name": _network["name"]})
+                    if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
+                        _mappings.append({"name": _network_name_match[0]})
 
         if not _mappings:
             raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
@@ -232,6 +216,7 @@ class OvaForkliftInventory(ForkliftInventory):
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         _storages = self.storages
+
         if not _storages:
             raise ValueError(f"Storages not found for provider {self.provider_type}")
 
@@ -239,19 +224,14 @@ class OvaForkliftInventory(ForkliftInventory):
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
         _mappings: list[dict[str, Any]] = []
-        _network_ids: list[str] = []
-        _network_id: str | None = None
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
 
             for _network in _vm.get("networks", []):
                 if _network_id := _network.get("ID"):
-                    _network_ids.append(_network_id)
-
-        for _network in self.networks:
-            if _network["id"] in _network_ids:
-                _mappings.append({"name": _network["name"]})
+                    if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
+                        _mappings.append({"name": _network_name_match[0]})
 
         if not _mappings:
             raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
@@ -271,7 +251,7 @@ class OpenshiftForkliftInventory(ForkliftInventory):
         return self._request(url_path=f"{self.provider_url_path}/storageclasses")
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        return []
+        return [{}]
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        return []
+        return [{}]
