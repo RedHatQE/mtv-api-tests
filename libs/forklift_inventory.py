@@ -62,11 +62,11 @@ class ForkliftInventory(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         pass
 
     @abc.abstractmethod
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         pass
 
 
@@ -81,8 +81,8 @@ class OvirtForkliftInventory(ForkliftInventory):
     def storages(self) -> list[dict[str, Any]]:
         return self._request(url_path=f"{self.provider_url_path}/storagedomains")
 
-    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        _mappings: list[dict[str, Any]] = []
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        _mappings: list[dict[str, str]] = []
         _storages = self.storages
 
         if not _storages:
@@ -103,8 +103,8 @@ class OvirtForkliftInventory(ForkliftInventory):
 
         return _mappings
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        _mappings: list[dict[str, Any]] = []
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
@@ -140,12 +140,12 @@ class OpenstackForliftinventory(ForkliftInventory):
     def storages(self) -> list[dict[str, Any]]:
         return [{}]
 
-    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         # TODO: find out how to get it from forklift-inventory
         return [{"name": "tripleo"}]
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        _mappings: list[dict[str, Any]] = []
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
@@ -174,8 +174,8 @@ class VsphereForkliftInventory(ForkliftInventory):
     def storages(self) -> list[dict[str, Any]]:
         return self._request(url_path=f"{self.provider_url_path}/datastores")
 
-    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        _mappings: list[dict[str, Any]] = []
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        _mappings: list[dict[str, str]] = []
         _storages = self.storages
 
         if not _storages:
@@ -193,8 +193,8 @@ class VsphereForkliftInventory(ForkliftInventory):
 
         return _mappings
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        _mappings: list[dict[str, Any]] = []
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
@@ -223,7 +223,7 @@ class OvaForkliftInventory(ForkliftInventory):
     def storages(self) -> list[dict[str, Any]]:
         return self._request(url_path=f"{self.provider_url_path}/storages")
 
-    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         _storages = self.storages
 
         if not _storages:
@@ -231,8 +231,8 @@ class OvaForkliftInventory(ForkliftInventory):
 
         return [{"name": _storages[0]["name"]}]
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
-        _mappings: list[dict[str, Any]] = []
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
@@ -262,8 +262,8 @@ class OpenshiftForkliftInventory(ForkliftInventory):
     def storages(self) -> list[dict[str, Any]]:
         return self._request(url_path=f"{self.provider_url_path}/storageclasses")
 
-    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         return [{}]
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, Any]]:
+    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         return [{}]
