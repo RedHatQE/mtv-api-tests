@@ -132,14 +132,16 @@ enable-ceph-tools() {
   cluster-login
   oc patch storagecluster ocs-storagecluster -n openshift-storage --type json --patch '[{ "op": "replace", "path": "/spec/enableCephTools", "value": true }]' &>/dev/null
 
-  for _ in $(seq 1 10); do
-    TOOLS_POD=$(oc get pod -n openshift-storage | grep rook-ceph-tools | awk -F" " '{print$1}')
-    if [ "$TOOLS_POD" != "" ]; then
-      break
-    else
-      sleep 1
-    fi
-  done
+  TOOLS_POD=$(oc get pods -n openshift-storage -l app=rook-ceph-tools -o name)
+
+  # for _ in $(seq 1 10); do
+  #   TOOLS_POD=$(oc get pod -n openshift-storage | grep rook-ceph-tools | awk -F" " '{print$1}')
+  #   if [ "$TOOLS_POD" != "" ]; then
+  #     break
+  #   else
+  #     sleep 1
+  #   fi
+  # done
 }
 
 ceph-df() {
@@ -164,18 +166,39 @@ ceph-cleanup() {
 
   POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
   CEPH_POOL="ocs-storagecluster-cephblockpool"
-  RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
+  echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.90
 
+  RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
   for SNAP_AND_VOL in $RBD_LIST; do
     SNAP_AND_VOL_PATH="$CEPH_POOL/$SNAP_AND_VOL"
-    if "snap" in "$SNAP_AND_VOL"; then
-      echo "$POD_EXEC_CMD" -- rbd snap rm "$SNAP_AND_VOL_PATH"
+    if grep -q "snap" <<<"$SNAP_AND_VOL"; then
+      echo "$POD_EXEC_CMD" -- rbd snap purge "$SNAP_AND_VOL_PATH"
     fi
-
-    if "vol" in "$SNAP_AND_VOL"; then
-      echo "$POD_EXEC_CMD" -- rbd rm "$SNAP_AND_VOL_PATH"
+    if grep -q "vol" <<<"$SNAP_AND_VOL"; then
+      echo "$POD_EXEC_CMD" -- rbd snap list "$SNAP_AND_VOL_PATH"
     fi
   done
+
+  RBD_TRASH_LIST=$($POD_EXEC_CMD -- rbd trash list "$CEPH_POOL" | awk -F" " '{print$1}')
+  for TRASH in $RBD_TRASH_LIST; do
+    TRASH_ITEM_PATH="$CEPH_POOL/$TRASH"
+    echo "$POD_EXEC_CMD" -- rbd trash remove "$TRASH_ITEM_PATH"
+  done
+
+  echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.85
+
+  # RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
+  #
+  # for SNAP_AND_VOL in $RBD_LIST; do
+  #   SNAP_AND_VOL_PATH="$CEPH_POOL/$SNAP_AND_VOL"
+  #   if grep -q "snap" <<<"$SNAP_AND_VOL"; then
+  #     echo "$POD_EXEC_CMD" -- rbd snap rm "$SNAP_AND_VOL_PATH"
+  #   fi
+  #
+  #   if grep -q "vol" <<<"$SNAP_AND_VOL"; then
+  #     echo "$POD_EXEC_CMD" -- rbd rm "$SNAP_AND_VOL_PATH"
+  #   fi
+  # done
 }
 
 if [ "$ACTION" == "cluster-password" ]; then
