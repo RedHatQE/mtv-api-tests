@@ -118,6 +118,9 @@ class OvirtForkliftInventory(ForkliftInventory):
                         _selfLink = _nic_profile["selfLink"].replace("providers/", "")
                         _network_id = self._request(url_path=_selfLink)["network"]
                         if _network_name_match := [_net["path"] for _net in self.networks if _network_id == _net["id"]]:
+                            if [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
+                                continue
+
                             _mappings.append({"name": _network_name_match[0]})
 
         if not _mappings:
@@ -149,6 +152,9 @@ class OpenstackForliftinventory(ForkliftInventory):
 
             for _name in _vm.get("addresses", {}).keys():
                 if _network_id_match := [_net["id"] for _net in self.networks if _name == _net["name"]]:
+                    if [_map for _map in _mappings if _map.get("id") == _network_id_match[0]]:
+                        continue
+
                     _mappings.append({"id": _network_id_match[0], "name": _name})
 
         if not _mappings:
@@ -195,6 +201,9 @@ class VsphereForkliftInventory(ForkliftInventory):
             for _network in _vm.get("networks", []):
                 if _network_id := _network.get("id"):
                     if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
+                        if [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
+                            continue
+
                         _mappings.append({"name": _network_name_match[0]})
 
         if not _mappings:
@@ -231,6 +240,9 @@ class OvaForkliftInventory(ForkliftInventory):
             for _network in _vm.get("networks", []):
                 if _network_id := _network.get("ID"):
                     if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
+                        if [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
+                            continue
+
                         _mappings.append({"name": _network_name_match[0]})
 
         if not _mappings:

@@ -103,10 +103,10 @@ def gen_network_map_list(
 
     for index, network in enumerate(source_provider_inventory.vms_networks_mappings(vms=vms)):
         if not pod_only:
-            if index > 0:
-                _destination = _destination_multus
-            else:
+            if index == 0:
                 _destination = _destination_pod
+            else:
+                _destination = _destination_multus
 
         network_map_list.append({
             "destination": _destination,

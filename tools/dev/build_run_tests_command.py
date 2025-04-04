@@ -96,8 +96,10 @@ def main() -> str:
         print(usage_msg)
         sys.exit(1)
 
-    if "--tc=release_test:true" not in pytest_args:
-        base_cmd += " --tc=matrix_test:true"
+    not_release_tests = "--tc=release_test:true" not in pytest_args
+
+    if not_release_tests:
+        base_cmd += " --tc=matrix_test:true -m tier0"
 
     target_namespace = f"--tc=target_namespace:mtv-api-tests-{provider}-{os.environ['USER']}"
 
@@ -131,9 +133,6 @@ def main() -> str:
     # Remote
     if remote:
         base_cmd += f" -m remote --tc=remote_ocp_cluster:{os.environ['CLUSTER_NAME']}"
-
-    else:
-        base_cmd += " -m tier0"
 
     # Storage
     if storage == "ceph":
