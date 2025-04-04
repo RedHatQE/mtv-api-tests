@@ -166,9 +166,15 @@ ceph-cleanup() {
   CEPH_POOL="ocs-storagecluster-cephblockpool"
   RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
 
-  for SNAP in $RBD_LIST; do
-    SNAP_PATH="$CEPH_POOL/$SNAP"
-    echo "$POD_EXEC_CMD" -- rbd snap purge "$SNAP_PATH"
+  for SNAP_AND_VOL in $RBD_LIST; do
+    SNAP_AND_VOL_PATH="$CEPH_POOL/$SNAP_AND_VOL"
+    if "snap" in "$SNAP_AND_VOL"; then
+      echo "$POD_EXEC_CMD" -- rbd snap rm "$SNAP_AND_VOL_PATH"
+    fi
+
+    if "vol" in "$SNAP_AND_VOL"; then
+      echo "$POD_EXEC_CMD" -- rbd rm "$SNAP_AND_VOL_PATH"
+    fi
   done
 }
 
