@@ -64,12 +64,16 @@ BASIC_LOGGER = logging.getLogger("basic")
 def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
+    openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
     )
     teardown_group.addoption(
         "--skip-teardown", action="store_true", help="Do not teardown resource created by the tests"
+    )
+    openshift_python_wrapper_group.addoption(
+        "--openshift-python-wrapper-log-debug", action="store_true", help="Enable debug logging in the wrapper"
     )
 
 
@@ -97,9 +101,17 @@ def pytest_sessionstart(session):
     if os.path.exists(tests_log_file):
         Path(tests_log_file).unlink(missing_ok=True)
 
+    _log_level: int = session.config.getoption("log_cli_level") or logging.INFO
+
+    if isinstance(_log_level, str):
+        _log_level = logging.getLevelNamesMapping()[_log_level]
+
+    if session.config.getoption("openshift_python_wrapper_log_debug"):
+        os.environ["OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL"] = "DEBUG"
+
     session.config.option.log_listener = setup_logging(
         log_file=tests_log_file,
-        log_level=session.config.getoption("log_cli_level") or logging.INFO,
+        log_level=_log_level,
     )
 
 
@@ -157,7 +169,8 @@ def pytest_sessionfinish(session, exitstatus):
         # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
         try:
             session_teardown(session_store=_session_store)
-        except SessionTeardownError:
+        except SessionTeardownError as exp:
+            LOGGER.error(f"the following resources was left after tests are finished: {exp}")
             if not session.config.getoption("skip_data_collector"):
                 run_must_gather(data_collector_path=_data_collector_path)
 

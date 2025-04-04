@@ -97,7 +97,7 @@ def main() -> str:
         sys.exit(1)
 
     if "--tc=release_test:true" not in pytest_args:
-        base_cmd += "--tc=matrix_test:true"
+        base_cmd += " --tc=matrix_test:true"
 
     target_namespace = f"--tc=target_namespace:mtv-api-tests-{provider}-{os.environ['USER']}"
 
