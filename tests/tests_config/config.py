@@ -29,8 +29,6 @@ source_providers_list = [
                 "default": "True",
             }
         ],
-        "networks": [{"name": "VM Network"}, {"name": "Mgmt Network"}],
-        "storages": [{"name": "rhv-v2v-performance-testing"}],
     },
     {
         "type": "vsphere",
@@ -57,8 +55,6 @@ source_providers_list = [
                 "default": "True",
             }
         ],
-        "networks": [{"name": "VM Network"}, {"name": "Mgmt Network"}],
-        "storages": [{"name": "nfs-rhos-mtv-v7"}],
     },
     {
         "type": "vsphere",
@@ -85,8 +81,6 @@ source_providers_list = [
                 "default": "True",
             }
         ],
-        "networks": [{"name": "VM Network"}, {"name": "Mgmt Network"}],
-        "storages": [{"name": "nfs-rhos-mtv-v8"}],
     },
     {
         "type": "ovirt",
@@ -97,8 +91,6 @@ source_providers_list = [
         "password": "qum5net",
         "cluster_name": "",
         "default": "True",
-        "networks": [{"id": "4b389d67-36ed-4984-8854-82d0d72be966"}, {"id": "adbe17e1-9424-4454-8d59-a74b8c5486f7"}],
-        "storages": [{"name": "nfs_mtv_0"}],
     },
     {
         "type": "openstack",
@@ -115,8 +107,6 @@ source_providers_list = [
         "default": "True",
         "guest_vm_linux_user": "root",
         "guest_vm_linux_password": "redhat123456",
-        "networks": [{"id": "316eeb47-1498-46b4-b39e-00ddf73bd2a5"}],
-        "storages": [{"name": "tripleo"}],
     },
     {
         "type": "openshift",
@@ -129,12 +119,10 @@ source_providers_list = [
         "type": "ova",
         "version": "nfs",
         "fqdn": "",
-        "api_url": "f02-h06-000-r640.rdu2.scalelab.redhat.com:/home/nfsshare-test",
+        "api_url": "f02-h06-000-r640.rdu2.scalelab.redhat.com:/home/nfsshare-test/mtv-api-tests",
         "username": "ova",
         "password": "",
         "default": "True",
-        "networks": [{"type": "pod"}, {"type": "multus", "name": "mtv-api-tests-ocp/mybridge"}],
-        "storages": [{"name": "Dummy storage for source provider ova"}],
     },
 ]
 hook_dict = {

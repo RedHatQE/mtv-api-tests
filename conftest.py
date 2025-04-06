@@ -17,14 +17,12 @@ from ocp_resources.hook import Hook
 from ocp_resources.host import Host
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
-from ocp_resources.network_map import NetworkMap
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_cluster import StorageCluster
-from ocp_resources.storage_map import StorageMap
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
@@ -32,6 +30,15 @@ from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
 
 from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
+from libs.base_provider import BaseProvider
+from libs.forklift_inventory import (
+    ForkliftInventory,
+    OpenshiftForkliftInventory,
+    OpenstackForliftinventory,
+    OvaForkliftInventory,
+    OvirtForkliftInventory,
+    VsphereForkliftInventory,
+)
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
@@ -40,7 +47,6 @@ from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
     create_source_provider,
-    gen_network_map_list,
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
@@ -58,12 +64,16 @@ BASIC_LOGGER = logging.getLogger("basic")
 def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
+    openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
     )
     teardown_group.addoption(
         "--skip-teardown", action="store_true", help="Do not teardown resource created by the tests"
+    )
+    openshift_python_wrapper_group.addoption(
+        "--openshift-python-wrapper-log-debug", action="store_true", help="Enable debug logging in the wrapper"
     )
 
 
@@ -91,9 +101,17 @@ def pytest_sessionstart(session):
     if os.path.exists(tests_log_file):
         Path(tests_log_file).unlink(missing_ok=True)
 
+    _log_level: int | str = session.config.getoption("log_cli_level") or logging.INFO
+
+    if isinstance(_log_level, str):
+        _log_level = logging.getLevelNamesMapping()[_log_level]
+
+    if session.config.getoption("openshift_python_wrapper_log_debug"):
+        os.environ["OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL"] = "DEBUG"
+
     session.config.option.log_listener = setup_logging(
         log_file=tests_log_file,
-        log_level=session.config.getoption("log_cli_level") or logging.INFO,
+        log_level=_log_level,
     )
 
 
@@ -151,7 +169,8 @@ def pytest_sessionfinish(session, exitstatus):
         # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
         try:
             session_teardown(session_store=_session_store)
-        except SessionTeardownError:
+        except SessionTeardownError as exp:
+            LOGGER.error(f"the following resources was left after tests are finished: {exp}")
             if not session.config.getoption("skip_data_collector"):
                 run_must_gather(data_collector_path=_data_collector_path)
 
@@ -367,7 +386,6 @@ def source_provider(
         tmp_dir=tmp_path_factory,
     ) as source_provider_objects:
         _source_provider = source_provider_objects[0]
-
         yield _source_provider
 
     _source_provider.disconnect()
@@ -399,72 +417,6 @@ def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin
         nad_name = nad.name
 
     yield nad_name
-
-
-@pytest.fixture(scope="session")
-def network_migration_map(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    source_provider_data,
-    destination_provider,
-    multus_network_name,
-    mtv_namespace,
-    ocp_admin_client,
-    target_namespace,
-):
-    network_map_list = gen_network_map_list(
-        target_namespace=target_namespace,
-        source_provider_data=source_provider_data,
-        multus_network_name=multus_network_name,
-    )
-    network_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=NetworkMap,
-        client=ocp_admin_client,
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map",
-        namespace=mtv_namespace,
-        mapping=network_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_provider.ocp_resource.name,
-        destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    )
-    yield network_map
-
-
-@pytest.fixture(scope="session")
-def storage_migration_map(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    source_provider_data,
-    destination_provider,
-    mtv_namespace,
-    ocp_admin_client,
-):
-    storage_map_list: list[dict[str, Any]] = []
-    for storage in source_provider_data["storages"]:
-        storage_map_list.append({
-            "destination": {"storageClass": py_config["storage_class"]},
-            "source": storage,
-        })
-
-    storage_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=StorageMap,
-        client=ocp_admin_client,
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
-        namespace=mtv_namespace,
-        mapping=storage_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_provider.ocp_resource.name,
-        destination_provider_namespace=destination_provider.ocp_resource.namespace,
-    )
-    yield storage_map
 
 
 @pytest.fixture(scope="session")
@@ -500,73 +452,6 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
     yield CNVProvider(ocp_resource=provider)
-
-
-@pytest.fixture(scope="session")
-def remote_network_migration_map(
-    fixture_store,
-    source_provider,
-    source_provider_data,
-    destination_ocp_provider,
-    session_uuid,
-    multus_network_name,
-    mtv_namespace,
-    target_namespace,
-):
-    network_map_list = gen_network_map_list(
-        target_namespace=target_namespace,
-        source_provider_data=source_provider_data,
-        multus_network_name=multus_network_name,
-    )
-    network_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=NetworkMap,
-        name=f"{session_uuid}-networkmap",
-        namespace=mtv_namespace,
-        mapping=network_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_ocp_provider.ocp_resource.name,
-        destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
-    )
-    yield network_map
-
-
-@pytest.fixture(scope="session")
-def remote_storage_migration_map(
-    fixture_store,
-    source_provider,
-    source_provider_data,
-    destination_ocp_provider,
-    session_uuid,
-    mtv_namespace,
-    ocp_admin_client,
-):
-    storage_map_list: list[dict[str, Any]] = []
-    for storage in source_provider_data["storages"]:
-        if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-            storage_class = StorageClass(name=storage["name"], client=ocp_admin_client)
-            storage.update({"id": storage_class.instance.metadata.uid})
-
-        storage_map_list.append({
-            "destination": {"storageClass": py_config["storage_class"]},
-            "source": storage,
-        })
-
-    storage_map = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=StorageMap,
-        name=f"{source_provider.ocp_resource.name}-{destination_ocp_provider.ocp_resource.name}-{py_config['storage_class']}-storage-map",
-        namespace=mtv_namespace,
-        mapping=storage_map_list,
-        source_provider_name=source_provider.ocp_resource.name,
-        source_provider_namespace=source_provider.ocp_resource.namespace,
-        destination_provider_name=destination_ocp_provider.ocp_resource.name,
-        destination_provider_namespace=destination_ocp_provider.ocp_resource.namespace,
-    )
-    yield storage_map
 
 
 @pytest.fixture(scope="session")
@@ -664,8 +549,8 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]
 
-    if py_config["source_provider_type"] != Provider.ProviderType.OVA:
-        openshift_source_provider: bool = py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT
+    if source_provider.type != Provider.ProviderType.OVA:
+        openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
         for vm in virtual_machines:
             if openshift_source_provider:
@@ -711,12 +596,11 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
         })
 
     for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
-        if plan["name"] in pod.name:
-            fixture_store["teardown"].setdefault(pod.kind, []).append({
-                "name": pod.name,
-                "namespace": pod.namespace,
-                "module": pod.__module__,
-            })
+        fixture_store["teardown"].setdefault(pod.kind, []).append({
+            "name": pod.name,
+            "namespace": pod.namespace,
+            "module": pod.__module__,
+        })
 
 
 @pytest.fixture(scope="session")
@@ -743,3 +627,24 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
     ):
         if sample:
             return
+
+
+@pytest.fixture(scope="session")
+def source_provider_inventory(
+    ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
+) -> ForkliftInventory:
+    providers = {
+        Provider.ProviderType.OVA: OvaForkliftInventory,
+        Provider.ProviderType.RHV: OvirtForkliftInventory,
+        Provider.ProviderType.VSPHERE: VsphereForkliftInventory,
+        Provider.ProviderType.OPENSHIFT: OpenshiftForkliftInventory,
+        Provider.ProviderType.OPENSTACK: OpenstackForliftinventory,
+    }
+    provider_instance = providers.get(source_provider.type)
+
+    if not provider_instance:
+        raise ValueError(f"Provider {source_provider.type} not implemented")
+
+    return provider_instance(  # type: ignore
+        client=ocp_admin_client, namespace=mtv_namespace, provider_name=source_provider.ocp_resource.name
+    )

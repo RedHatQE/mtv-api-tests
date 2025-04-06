@@ -1,7 +1,12 @@
 import pytest
 from pytest_testconfig import py_config
 
-from utilities.mtv_migration import get_cutover_value, get_vm_suffix, migrate_vms
+from utilities.mtv_migration import (
+    create_storagemap_and_networkmap,
+    get_cutover_value,
+    get_vm_suffix,
+    migrate_vms,
+)
 from utilities.utils import get_value_from_py_config
 
 if py_config["source_provider_type"] in ["openstack", "openshift"]:
@@ -37,15 +42,30 @@ def test_sanity_warm_mtv_migration(
     request,
     fixture_store,
     session_uuid,
+    ocp_admin_client,
+    mtv_namespace,
+    multus_network_name,
+    source_provider_inventory,
     target_namespace,
     plans,
     source_provider,
     source_provider_data,
     destination_provider,
     precopy_interval_forkliftcontroller,
-    network_migration_map,
-    storage_migration_map,
 ):
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        mtv_namespace=mtv_namespace,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        plan=plans[0],
+    )
+
     migrate_vms(
         fixture_store=fixture_store,
         test_name=request._pyfuncitem.name,
@@ -88,15 +108,30 @@ def test_mtv_migration_warm_2disks2nics(
     request,
     fixture_store,
     session_uuid,
+    ocp_admin_client,
+    mtv_namespace,
+    multus_network_name,
+    source_provider_inventory,
     target_namespace,
     plans,
     source_provider,
     source_provider_data,
     destination_provider,
     precopy_interval_forkliftcontroller,
-    network_migration_map,
-    storage_migration_map,
 ):
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        mtv_namespace=mtv_namespace,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        plan=plans[0],
+    )
+
     migrate_vms(
         fixture_store=fixture_store,
         test_name=request._pyfuncitem.name,
@@ -139,15 +174,30 @@ def test_warm_remote_ocp(
     request,
     fixture_store,
     session_uuid,
+    ocp_admin_client,
+    mtv_namespace,
+    multus_network_name,
+    source_provider_inventory,
     target_namespace,
     plans,
     source_provider,
     source_provider_data,
     destination_ocp_provider,
     precopy_interval_forkliftcontroller,
-    remote_network_migration_map,
-    remote_storage_migration_map,
 ):
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_ocp_provider,
+        source_provider_inventory=source_provider_inventory,
+        mtv_namespace=mtv_namespace,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        plan=plans[0],
+    )
+
     migrate_vms(
         fixture_store=fixture_store,
         test_name=request._pyfuncitem.name,
@@ -155,8 +205,8 @@ def test_warm_remote_ocp(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,
-        network_migration_map=remote_network_migration_map,
-        storage_migration_map=remote_storage_migration_map,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,

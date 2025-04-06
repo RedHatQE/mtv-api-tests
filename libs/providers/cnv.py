@@ -7,6 +7,7 @@ from typing import Any
 import humanfriendly
 from kubernetes.client import ApiException
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
+from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource
 from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
@@ -18,8 +19,9 @@ LOGGER = get_logger(__name__)
 
 
 class CNVProvider(BaseProvider):
-    def __init__(self, ocp_resource: Resource, **kwargs: Any) -> None:
+    def __init__(self, ocp_resource: Provider, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, **kwargs)
+        self.type = Provider.ProviderType.RHV
 
     def connect(self) -> "CNVProvider":
         return self

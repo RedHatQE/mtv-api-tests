@@ -1,9 +1,11 @@
 from __future__ import annotations
-from typing import Any
-from ocp_resources.resource import Resource
-from openstack.connection import Connection
+
 import copy
+from typing import Any
+
 import glanceclient.v2.client as glclient
+from ocp_resources.provider import Provider
+from openstack.connection import Connection
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
@@ -27,7 +29,7 @@ class OpenStackProvider(BaseProvider):
         region_name: str,
         user_domain_id: str,
         project_domain_id: str,
-        ocp_resource: Resource,
+        ocp_resource: Provider,
         insecure: bool = False,
         **kwargs: Any,
     ):
@@ -38,6 +40,7 @@ class OpenStackProvider(BaseProvider):
             password=password,
             **kwargs,
         )
+        self.type = Provider.ProviderType.OPENSTACK
         self.insecure = insecure
         self.auth_url = auth_url
         self.project_name = project_name

@@ -1,6 +1,10 @@
 import pytest as pytest
 
-from utilities.mtv_migration import get_vm_suffix, migrate_vms
+from utilities.mtv_migration import (
+    create_storagemap_and_networkmap,
+    get_vm_suffix,
+    migrate_vms,
+)
 from utilities.utils import get_value_from_py_config
 
 VM_SUFFIX = get_vm_suffix()
@@ -28,14 +32,29 @@ def test_sanity_cold_mtv_migration(
     request,
     fixture_store,
     session_uuid,
+    ocp_admin_client,
+    mtv_namespace,
     target_namespace,
     plans,
     source_provider,
     source_provider_data,
     destination_provider,
-    network_migration_map,
-    storage_migration_map,
+    multus_network_name,
+    source_provider_inventory,
 ):
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        mtv_namespace=mtv_namespace,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        plan=plans[0],
+    )
+
     migrate_vms(
         fixture_store=fixture_store,
         test_name=request._pyfuncitem.name,
@@ -78,14 +97,29 @@ def test_cold_remote_ocp(
     request,
     fixture_store,
     session_uuid,
+    ocp_admin_client,
     target_namespace,
+    mtv_namespace,
+    source_provider_inventory,
     plans,
     source_provider,
     source_provider_data,
     destination_ocp_provider,
-    remote_network_migration_map,
-    remote_storage_migration_map,
+    multus_network_name,
 ):
+    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        source_provider=source_provider,
+        destination_provider=destination_ocp_provider,
+        source_provider_inventory=source_provider_inventory,
+        mtv_namespace=mtv_namespace,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        plan=plans[0],
+    )
+
     migrate_vms(
         fixture_store=fixture_store,
         test_name=request._pyfuncitem.name,
@@ -93,8 +127,8 @@ def test_cold_remote_ocp(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plans=plans,
-        network_migration_map=remote_network_migration_map,
-        storage_migration_map=remote_storage_migration_map,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
     )

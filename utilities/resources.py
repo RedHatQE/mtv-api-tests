@@ -2,7 +2,7 @@ from typing import Any
 
 import yaml
 from ocp_resources.plan import Plan
-from ocp_resources.resource import NamespacedResource, Resource
+from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import ResourceNameNotStartedWithSessionUUIDError
@@ -16,7 +16,7 @@ def create_and_store_resource(
     session_uuid: str,
     test_name: str | None = None,
     **kwargs: Any,
-) -> Resource | NamespacedResource:
+) -> Any:
     _resource_name = kwargs.get("name")
     _resource_dict = kwargs.get("kind_dict", {})
     _resource_yaml = kwargs.get("yaml_file")
