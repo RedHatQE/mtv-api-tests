@@ -101,7 +101,7 @@ def pytest_sessionstart(session):
     if os.path.exists(tests_log_file):
         Path(tests_log_file).unlink(missing_ok=True)
 
-    _log_level: int = session.config.getoption("log_cli_level") or logging.INFO
+    _log_level: int | str = session.config.getoption("log_cli_level") or logging.INFO
 
     if isinstance(_log_level, str):
         _log_level = logging.getLevelNamesMapping()[_log_level]
