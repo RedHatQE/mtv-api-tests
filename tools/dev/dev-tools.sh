@@ -186,6 +186,7 @@ ceph-cleanup() {
   done
 
   echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.85
+  echo "$POD_EXEC_CMD" -- ceph df
 
   # RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
   #
