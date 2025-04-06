@@ -188,18 +188,6 @@ ceph-cleanup() {
   echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.85
   echo "$POD_EXEC_CMD" -- ceph df
 
-  # RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
-  #
-  # for SNAP_AND_VOL in $RBD_LIST; do
-  #   SNAP_AND_VOL_PATH="$CEPH_POOL/$SNAP_AND_VOL"
-  #   if grep -q "snap" <<<"$SNAP_AND_VOL"; then
-  #     echo "$POD_EXEC_CMD" -- rbd snap rm "$SNAP_AND_VOL_PATH"
-  #   fi
-  #
-  #   if grep -q "vol" <<<"$SNAP_AND_VOL"; then
-  #     echo "$POD_EXEC_CMD" -- rbd rm "$SNAP_AND_VOL_PATH"
-  #   fi
-  # done
 }
 
 if [ "$ACTION" == "cluster-password" ]; then
