@@ -175,7 +175,7 @@ ceph-cleanup() {
       echo "$POD_EXEC_CMD" -- rbd snap purge "$SNAP_AND_VOL_PATH"
     fi
     if grep -q "vol" <<<"$SNAP_AND_VOL"; then
-      echo "$POD_EXEC_CMD" -- rbd snap list "$SNAP_AND_VOL_PATH"
+      echo "$POD_EXEC_CMD" -- rbd rm "$SNAP_AND_VOL_PATH"
     fi
   done
 
