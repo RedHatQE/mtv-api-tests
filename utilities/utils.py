@@ -3,7 +3,6 @@ import functools
 import multiprocessing
 import shlex
 import shutil
-import time
 from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
@@ -15,7 +14,7 @@ import shortuuid
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.provider import Provider
-from ocp_resources.resource import NamespacedResource, Resource
+from ocp_resources.resource import NamespacedResource, Resource, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_utilities.monitoring import Prometheus
@@ -331,23 +330,30 @@ def get_source_provider_data() -> dict[str, Any]:
     return _source_provider[0]
 
 
-def prometheus_monitor_deamon(ocp_admin_client: DynamicClient) -> None:
+@functools.lru_cache()
+def get_prometheus_instance() -> Prometheus:
     token_command = "oc create token prometheus-k8s -n openshift-monitoring --duration=999999s"
     _, token, _ = run_command(command=shlex.split(token_command), verify_stderr=False)
-    prometheus = Prometheus(client=ocp_admin_client, verify_ssl=False, bearer_token=token)
-    alerts_to_get: list[str] = ["CephOSDCriticallyFull", "CephClusterErrorState", "CephClusterReadOnly"]
-    while True:
-        for _alert in alerts_to_get:
-            alerts = prometheus.get_firing_alerts(alert_name=_alert)
-            if alerts:
-                last_alert = alerts[0]
-                annotations = last_alert["annotations"]
-                severity = annotations["severity_level"]
-                description = annotations["description"]
-                message = annotations["message"]
+    return Prometheus(client=get_client(), verify_ssl=False, bearer_token=token)
 
-                LOGGER.warning(f"{_alert}: {severity} - {message} - {description}")
-                if _alert == "CephClusterReadOnly":
-                    pytest.exit("Ceph storage is in read-only state, Exiting.")
 
-        time.sleep(60)
+# def prometheus_monitor_deamon(ocp_admin_client: DynamicClient) -> None:
+#     token_command = "oc create token prometheus-k8s -n openshift-monitoring --duration=999999s"
+#     _, token, _ = run_command(command=shlex.split(token_command), verify_stderr=False)
+#     prometheus = Prometheus(client=ocp_admin_client, verify_ssl=False, bearer_token=token)
+#     alerts_to_get: list[str] = ["CephOSDCriticallyFull", "CephClusterErrorState", "CephClusterReadOnly"]
+#     while True:
+#         for _alert in alerts_to_get:
+#             alerts = prometheus.get_firing_alerts(alert_name=_alert)
+#             if alerts:
+#                 last_alert = alerts[0]
+#                 annotations = last_alert["annotations"]
+#                 severity = annotations["severity_level"]
+#                 description = annotations["description"]
+#                 message = annotations["message"]
+#
+#                 LOGGER.warning(f"{_alert}: {severity} - {message} - {description}")
+#                 if _alert == "CephClusterReadOnly":
+#                     pytest.exit("Ceph storage is in read-only state, Exiting.")
+#
+#         time.sleep(60)

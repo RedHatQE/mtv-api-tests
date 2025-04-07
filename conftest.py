@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import multiprocessing
 import os
 import shutil
 from pathlib import Path
@@ -42,7 +41,13 @@ from libs.forklift_inventory import (
 from libs.providers.cnv import CNVProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
-from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
+from utilities.pytest_utils import (
+    SessionTeardownError,
+    collect_created_resources,
+    exit_on_ceph_read_only,
+    prepare_base_path,
+    session_teardown,
+)
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vm,
@@ -50,7 +55,6 @@ from utilities.utils import (
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
-    prometheus_monitor_deamon,
     start_source_vm_data_upload_vmware,
 )
 
@@ -116,6 +120,7 @@ def pytest_sessionstart(session):
 
 
 def pytest_fixture_setup(fixturedef, request):
+    exit_on_ceph_read_only()
     LOGGER.info(f"Executing {fixturedef.scope} fixture: {fixturedef.argname}")
 
 
@@ -200,18 +205,6 @@ def pytest_exception_interact(node, call, report):
 def autouse_fixtures(prometheus_monitor, source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
-
-
-@pytest.fixture(scope="session")
-def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
-    try:
-        proc = multiprocessing.Process(target=prometheus_monitor_deamon, kwargs={"ocp_admin_client": ocp_admin_client})
-        proc.start()
-        yield
-        proc.kill()
-    except Exception as ex:
-        LOGGER.error(f"Failed to start prometheus monitor due to: {ex}")
-        yield
 
 
 @pytest.fixture(scope="session")
