@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+import pytest
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.host import Host
 from ocp_resources.migration import Migration
@@ -21,6 +22,7 @@ from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
+from utilities.utils import get_prometheus_instance
 
 LOGGER = get_logger(__name__)
 
@@ -185,3 +187,18 @@ def teardown_resources(
             leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
 
     return leftovers
+
+
+def exit_on_ceph_read_only() -> None:
+    prometheus = get_prometheus_instance()
+    _ceph_read_only = "CephClusterReadOnly"
+    alerts = prometheus.get_firing_alerts(alert_name=_ceph_read_only)
+    if alerts:
+        last_alert = alerts[0]
+        annotations = last_alert["annotations"]
+        severity = annotations["severity_level"]
+        description = annotations["description"]
+        message = annotations["message"]
+
+        LOGGER.warning(f"{_ceph_read_only}: {severity} - {message} - {description}")
+        pytest.exit("Ceph storage is in read-only state, Exiting.")
