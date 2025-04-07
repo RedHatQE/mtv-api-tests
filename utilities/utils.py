@@ -347,4 +347,7 @@ def prometheus_monitor_deamon(ocp_admin_client: DynamicClient) -> None:
                 message = annotations["message"]
 
                 LOGGER.warning(f"{_alert}: {severity} - {message} - {description}")
+                if _alert == "CephClusterReadOnly":
+                    pytest.exit("Ceph storage is in read-only state, Exiting.")
+
         time.sleep(60)
