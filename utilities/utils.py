@@ -126,7 +126,7 @@ def provider_cr_name(session_uuid: str, provider_data: dict[str, Any], username:
 def create_source_provider(
     config: dict[str, Any],
     source_provider_data: dict[str, Any],
-    mtv_namespace: str,
+    namespace: str,
     admin_client: DynamicClient,
     session_uuid: str,
     fixture_store: dict[str, Any],
@@ -138,7 +138,7 @@ def create_source_provider(
     source_provider_data_copy = copy.deepcopy(source_provider_data)
 
     if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        provider = Provider(name="host", namespace=mtv_namespace, client=admin_client)
+        provider = Provider(name="host", namespace=namespace, client=admin_client)
         if not provider.exists:
             raise MissingResourceResError(f"Provider {provider.name} not found")
 
@@ -219,7 +219,7 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        customized_secret = Secret(name=name, namespace=mtv_namespace, client=admin_client)
+        customized_secret = Secret(name=name, namespace=namespace, client=admin_client)
 
         if not customized_secret.exists:
             customized_secret = create_and_store_resource(
@@ -228,12 +228,12 @@ def create_source_provider(
                 resource=Secret,
                 client=admin_client,
                 name=name,
-                namespace=mtv_namespace,
+                namespace=namespace,
                 string_data=secret_string_data,
                 label=metadata_labels,
             )
 
-        ocp_resource_provider = Provider(name=name, namespace=mtv_namespace, client=admin_client)
+        ocp_resource_provider = Provider(name=name, namespace=namespace, client=admin_client)
 
         if not ocp_resource_provider.exists:
             ocp_resource_provider = create_and_store_resource(
@@ -242,9 +242,9 @@ def create_source_provider(
                 resource=Provider,
                 client=admin_client,
                 name=name,
-                namespace=mtv_namespace,
+                namespace=namespace,
                 secret_name=name,
-                secret_namespace=mtv_namespace,
+                secret_namespace=namespace,
                 url=source_provider_data_copy["api_url"],
                 provider_type=source_provider_data_copy["type"],
                 vddk_init_image=source_provider_data_copy.get("vddk_init_image"),

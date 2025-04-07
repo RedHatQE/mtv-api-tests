@@ -89,7 +89,6 @@ def migrate_vms(
 
         run_migration_kwargs: dict[str, Any] = {
             "name": plan_name,
-            "namespace": py_config["mtv_namespace"],
             "source_provider_name": source_provider.ocp_resource.name,
             "source_provider_namespace": source_provider.ocp_resource.namespace,
             "virtual_machines_list": virtual_machines_list,
@@ -153,7 +152,6 @@ def migrate_vms(
 @contextmanager
 def run_migration(
     name: str,
-    namespace: str,
     source_provider_name: str,
     source_provider_namespace: str,
     destination_provider_name: str,
@@ -182,7 +180,6 @@ def run_migration(
 
     Args:
          name (str): A prefix to use in MTV Resource names.
-         namespace (str): MTV namespace.
          source_provider_name (str): Source Provider Resource Name.
          source_provider_namespace (str): Source Provider Resource Namespace.
          destination_provider_name (str): Destination Provider Resource Name.
@@ -210,11 +207,11 @@ def run_migration(
         session_uuid=session_uuid,
         resource=Plan,
         name=name,
-        namespace=namespace,
+        namespace=target_namespace,
         source_provider_name=source_provider_name,
-        source_provider_namespace=source_provider_namespace or namespace,
+        source_provider_namespace=source_provider_namespace or target_namespace,
         destination_provider_name=destination_provider_name,
-        destination_provider_namespace=destination_provider_namespace or namespace,
+        destination_provider_namespace=destination_provider_namespace or target_namespace,
         storage_map_name=storage_map_name,
         storage_map_namespace=storage_map_namespace,
         network_map_name=network_map_name,
@@ -235,9 +232,9 @@ def run_migration(
             session_uuid=session_uuid,
             resource=Migration,
             name=f"{name}-migration",
-            namespace=namespace,
+            namespace=target_namespace,
             plan_name=plan.name,
-            plan_namespace=namespace,
+            plan_namespace=plan.namespace,
             cut_over=cut_over,
         )
         yield plan, migration
@@ -282,9 +279,9 @@ def wait_for_migration_complate(plan: Plan) -> bool:
 def get_storage_migration_map(
     fixture_store: dict[str, Any],
     session_uuid: str,
+    target_namespace: str,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
-    mtv_namespace: str,
     ocp_admin_client: DynamicClient,
     source_provider_inventory: ForkliftInventory,
     vms: list[str],
@@ -307,7 +304,7 @@ def get_storage_migration_map(
         resource=StorageMap,
         client=ocp_admin_client,
         name=name,
-        namespace=mtv_namespace,
+        namespace=target_namespace,
         mapping=storage_map_list,
         source_provider_name=source_provider.ocp_resource.name,
         source_provider_namespace=source_provider.ocp_resource.namespace,
@@ -323,7 +320,6 @@ def get_network_migration_map(
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
     multus_network_name: str,
-    mtv_namespace: str,
     ocp_admin_client: DynamicClient,
     target_namespace: str,
     source_provider_inventory: ForkliftInventory,
@@ -344,7 +340,7 @@ def get_network_migration_map(
         resource=NetworkMap,
         client=ocp_admin_client,
         name=name,
-        namespace=mtv_namespace,
+        namespace=target_namespace,
         mapping=network_map_list,
         source_provider_name=source_provider.ocp_resource.name,
         source_provider_namespace=source_provider.ocp_resource.namespace,
@@ -361,7 +357,6 @@ def create_storagemap_and_networkmap(
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
-    mtv_namespace: str,
     ocp_admin_client: DynamicClient,
     multus_network_name: str,
     target_namespace: str,
@@ -370,10 +365,10 @@ def create_storagemap_and_networkmap(
     storage_migration_map = get_storage_migration_map(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
+        target_namespace=target_namespace,
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
         ocp_admin_client=ocp_admin_client,
         vms=vms,
     )
@@ -384,7 +379,6 @@ def create_storagemap_and_networkmap(
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,

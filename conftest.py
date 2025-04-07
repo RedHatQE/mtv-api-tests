@@ -352,9 +352,9 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def destination_provider(ocp_admin_client, mtv_namespace):
+def destination_provider(ocp_admin_client, target_namespace):
     provider = Provider(
-        name=py_config.get("destination_provider_name", "host"), namespace=mtv_namespace, client=ocp_admin_client
+        name=py_config.get("destination_provider_name", "host"), namespace=target_namespace, client=ocp_admin_client
     )
     if not provider.exists:
         raise MissingResourceResError(f"Provider {provider.name} not found")
@@ -374,14 +374,14 @@ def source_provider_data():
 
 @pytest.fixture(scope="session")
 def source_provider(
-    fixture_store, session_uuid, source_provider_data, mtv_namespace, ocp_admin_client, tmp_path_factory
+    fixture_store, session_uuid, source_provider_data, target_namespace, ocp_admin_client, tmp_path_factory
 ):
     with create_source_provider(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
         config=py_config,
         source_provider_data=source_provider_data,
-        mtv_namespace=mtv_namespace,
+        namespace=target_namespace,
         admin_client=ocp_admin_client,
         tmp_dir=tmp_path_factory,
     ) as source_provider_objects:
@@ -420,7 +420,7 @@ def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin
 
 
 @pytest.fixture(scope="session")
-def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, mtv_namespace):
+def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, target_namespace):
     api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
     if not api_key:
         raise ValueError("API key not found in configuration, please login with `oc login` first")
@@ -430,7 +430,7 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, mtv_na
         session_uuid=session_uuid,
         resource=Secret,
         name=f"{session_uuid}-ocp-secret",
-        namespace=mtv_namespace,
+        namespace=target_namespace,
         # API key format: 'Bearer sha256~<token>', split it to get token.
         string_data={"token": api_key.split()[-1], "insecureSkipVerify": "true"},
     )
@@ -438,14 +438,14 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, mtv_na
 
 
 @pytest.fixture(scope="session")
-def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_client, session_uuid, mtv_namespace):
+def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_client, session_uuid, target_namespace):
     provider_name: str = f"{session_uuid}-ocp-provider"
     provider = create_and_store_resource(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
         resource=Provider,
         name=provider_name,
-        namespace=mtv_namespace,
+        namespace=target_namespace,
         secret_name=destination_ocp_secret.name,
         secret_namespace=destination_ocp_secret.namespace,
         url=ocp_admin_client.configuration.host,
@@ -456,7 +456,7 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
 
 @pytest.fixture(scope="session")
 def source_provider_host_secret(
-    fixture_store, session_uuid, source_provider, source_provider_data, mtv_namespace, ocp_admin_client
+    fixture_store, session_uuid, source_provider, source_provider_data, target_namespace, ocp_admin_client
 ):
     if source_provider_data.get("host_list"):
         host = source_provider_data["host_list"][0]
@@ -473,7 +473,7 @@ def source_provider_host_secret(
             resource=Secret,
             client=ocp_admin_client,
             name=name,
-            namespace=mtv_namespace,
+            namespace=target_namespace,
             string_data=string_data,
         )
         yield secret
@@ -487,7 +487,7 @@ def source_provider_host(
     session_uuid,
     source_provider,
     source_provider_data,
-    mtv_namespace,
+    target_namespace,
     source_provider_host_secret,
     ocp_admin_client,
 ):
@@ -499,7 +499,7 @@ def source_provider_host(
             resource=Host,
             client=ocp_admin_client,
             name=f"{source_provider_data['fqdn']}-{_host['migration_host_ip']}-{_host['migration_host_id']}",
-            namespace=mtv_namespace,
+            namespace=target_namespace,
             ip_address=_host["migration_host_ip"],
             host_id=_host["migration_host_id"],
             provider_name=source_provider.ocp_resource.name,
@@ -514,7 +514,7 @@ def source_provider_host(
 
 
 @pytest.fixture(scope="session")
-def prehook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
+def prehook(fixture_store, session_uuid, ocp_admin_client, target_namespace):
     pre_hook_dict: dict[str, str] = py_config["hook_dict"]["prehook"]
     hook = create_and_store_resource(
         fixture_store=fixture_store,
@@ -522,14 +522,14 @@ def prehook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
         resource=Hook,
         client=ocp_admin_client,
         name=pre_hook_dict["name"],
-        namespace=mtv_namespace,
+        namespace=target_namespace,
         playbook=pre_hook_dict["payload"],
     )
     yield hook
 
 
 @pytest.fixture(scope="session")
-def posthook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
+def posthook(fixture_store, session_uuid, ocp_admin_client, target_namespace):
     posthook_dict: dict[str, str] = py_config["hook_dict"]["posthook"]
     hook = create_and_store_resource(
         fixture_store=fixture_store,
@@ -537,7 +537,7 @@ def posthook(fixture_store, session_uuid, ocp_admin_client, mtv_namespace):
         resource=Hook,
         client=ocp_admin_client,
         name=posthook_dict["name"],
-        namespace=mtv_namespace,
+        namespace=target_namespace,
         playbook=posthook_dict["payload"],
     )
     yield hook
@@ -631,7 +631,7 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 
 @pytest.fixture(scope="session")
 def source_provider_inventory(
-    ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
+    ocp_admin_client: DynamicClient, target_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
     providers = {
         Provider.ProviderType.OVA: OvaForkliftInventory,
@@ -646,5 +646,5 @@ def source_provider_inventory(
         raise ValueError(f"Provider {source_provider.type} not implemented")
 
     return provider_instance(  # type: ignore
-        client=ocp_admin_client, namespace=mtv_namespace, provider_name=source_provider.ocp_resource.name
+        client=ocp_admin_client, namespace=target_namespace, provider_name=source_provider.ocp_resource.name
     )
