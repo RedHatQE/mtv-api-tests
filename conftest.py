@@ -202,7 +202,7 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(prometheus_monitor, source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
