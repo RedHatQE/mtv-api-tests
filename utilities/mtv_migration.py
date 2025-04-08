@@ -63,7 +63,6 @@ def migrate_vms(
     session_uuid: str,
     fixture_store: Any,
     source_provider_inventory: ForkliftInventory | None = None,
-    source_provider_host: dict[str, Any] | None = None,
     cut_over: datetime | None = None,
     pre_hook_name: str | None = None,
     pre_hook_namespace: str | None = None,
@@ -140,7 +139,6 @@ def migrate_vms(
                 destination_namespace=target_namespace,
                 network_map_resource=network_migration_map,
                 storage_map_resource=storage_migration_map,
-                source_provider_host=source_provider_host,
                 target_namespace=target_namespace,
                 source_provider_inventory=source_provider_inventory,
             )

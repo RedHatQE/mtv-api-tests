@@ -171,7 +171,6 @@ def check_vms(
     source_provider_data: dict[str, Any],
     target_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
-    source_provider_host: dict[str, Any] | None = None,
 ) -> None:
     virtual_machines = plan["virtual_machines"]
 
@@ -197,8 +196,6 @@ def check_vms(
             network_migration_map=network_map_resource,
         )
         check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
-        if source_provider_host and source_provider_data:
-            check_migration_network(source_provider_data=source_provider_data, destination_vm=destination_vm)
 
         plan_pre_copies_before_cut_over = plan.get("pre_copies_before_cut_over")
 
