@@ -21,7 +21,6 @@ vm_name_search_pattern = "automation-dc65-iscsi-scalevm-50gb-70usage"
 number_of_vms = 20
 warm_migration = False
 check_vms_signals = False
-turn_on_vms = False
 create_scale_report = True
 plan_wait_timeout = 3600
 
