@@ -197,7 +197,9 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(prometheus_monitor, source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools):
+def autouse_fixtures(
+    prometheus_monitor, source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_tools_pod
+):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
@@ -215,7 +217,7 @@ def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, 
 
 
 @pytest.fixture(scope="session")
-def ceph_tools(ocp_admin_client: DynamicClient) -> Generator[Pod, Any, Any]:
+def ceph_tools_pod(ocp_admin_client: DynamicClient) -> Generator[Pod, Any, Any]:
     openshift_storage_namespace: str = "openshift-storage"
     ocs_storagecluster = StorageCluster(
         client=ocp_admin_client,
