@@ -215,13 +215,21 @@ def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, 
 
 
 @pytest.fixture(scope="session")
-def ceph_tools(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
+def ceph_tools(ocp_admin_client: DynamicClient) -> Generator[Pod, Any, Any]:
+    openshift_storage_namespace: str = "openshift-storage"
     ocs_storagecluster = StorageCluster(
-        client=ocp_admin_client, name="ocs-storagecluster", namespace="openshift-storage"
+        client=ocp_admin_client,
+        name="ocs-storagecluster",
+        namespace=openshift_storage_namespace,
     )
     if ocs_storagecluster.exists:
         with ResourceEditor(patches={ocs_storagecluster: {"spec": {"enableCephTools": True}}}):
-            yield
+            for _sample in TimeoutSampler(
+                wait_timeout=60, sleep=1, func=Pod.get, namespace=openshift_storage_namespace
+            ):
+                for _pod in _sample:
+                    if _pod.labels.get("app") == "rook-ceph-tools":
+                        yield _pod
 
 
 @pytest.fixture(scope="session")
