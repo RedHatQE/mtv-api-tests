@@ -150,7 +150,6 @@ turn_on_vms = False
 remote_ocp_cluster = ""
 snapshots_interval = 2
 mins_before_cutover = 5
-skip_migration = False
 plan_wait_timeout = 3600
 matrix_test = True
 release_test = False

@@ -11,7 +11,7 @@ from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
-from ocp_resources.resource import Resource, ResourceEditor
+from ocp_resources.resource import ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import py_config
@@ -68,73 +68,66 @@ def migrate_vms(
     pre_hook_namespace: str | None = None,
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
-    expected_plan_ready: bool = True,
-    condition_status: str = Resource.Condition.Status.TRUE,
-    condition_type: str = Resource.Status.SUCCEEDED,
 ) -> None:
     try:
-        if not get_value_from_py_config("skip_migration"):
-            plan_warm_migration = plans[0].get("warm_migration")
-            _source_provider_type = py_config.get("source_provider_type")
-            _plan_name = (
-                f"{target_namespace}{'-remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
-                f"-{'warm' if plan_warm_migration else 'cold'}"
-            )
-            plan_name = generate_name_with_uuid(name=_plan_name)
-            plans[0]["name"] = plan_name
+        plan_warm_migration = plans[0].get("warm_migration")
+        _source_provider_type = py_config.get("source_provider_type")
+        _plan_name = (
+            f"{target_namespace}{'-remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
+            f"-{'warm' if plan_warm_migration else 'cold'}"
+        )
+        plan_name = generate_name_with_uuid(name=_plan_name)
+        plans[0]["name"] = plan_name
 
-            # Plan CR accepts only VM name/id
-            virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
-            if _source_provider_type == Provider.ProviderType.OPENSHIFT:
-                for idx in range(len(virtual_machines_list)):
-                    virtual_machines_list[idx].update({"namespace": target_namespace})
+        # Plan CR accepts only VM name/id
+        virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
+        if _source_provider_type == Provider.ProviderType.OPENSHIFT:
+            for idx in range(len(virtual_machines_list)):
+                virtual_machines_list[idx].update({"namespace": target_namespace})
 
-            run_migration_kwargs: dict[str, Any] = {
-                "name": plan_name,
-                "source_provider_name": source_provider.ocp_resource.name,
-                "source_provider_namespace": source_provider.ocp_resource.namespace,
-                "virtual_machines_list": virtual_machines_list,
-                "warm_migration": plan_warm_migration or get_value_from_py_config("warm_migration"),
-                "network_map_name": network_migration_map.name,
-                "network_map_namespace": network_migration_map.namespace,
-                "storage_map_name": storage_migration_map.name,
-                "storage_map_namespace": storage_migration_map.namespace,
-                "target_namespace": target_namespace,
-                "pre_hook_name": pre_hook_name,
-                "pre_hook_namespace": pre_hook_namespace,
-                "after_hook_name": after_hook_name,
-                "after_hook_namespace": after_hook_namespace,
-                "cut_over": cut_over,
-                "expected_plan_ready": expected_plan_ready,
-                "condition_status": condition_status,
-                "condition_type": condition_type,
-                "destination_provider_name": destination_provider.ocp_resource.name,
-                "destination_provider_namespace": destination_provider.ocp_resource.namespace,
-                "fixture_store": fixture_store,
-                "session_uuid": session_uuid,
-                "test_name": test_name,
-            }
+        run_migration_kwargs: dict[str, Any] = {
+            "name": plan_name,
+            "source_provider_name": source_provider.ocp_resource.name,
+            "source_provider_namespace": source_provider.ocp_resource.namespace,
+            "virtual_machines_list": virtual_machines_list,
+            "warm_migration": plan_warm_migration or get_value_from_py_config("warm_migration"),
+            "network_map_name": network_migration_map.name,
+            "network_map_namespace": network_migration_map.namespace,
+            "storage_map_name": storage_migration_map.name,
+            "storage_map_namespace": storage_migration_map.namespace,
+            "target_namespace": target_namespace,
+            "pre_hook_name": pre_hook_name,
+            "pre_hook_namespace": pre_hook_namespace,
+            "after_hook_name": after_hook_name,
+            "after_hook_namespace": after_hook_namespace,
+            "cut_over": cut_over,
+            "destination_provider_name": destination_provider.ocp_resource.name,
+            "destination_provider_namespace": destination_provider.ocp_resource.namespace,
+            "fixture_store": fixture_store,
+            "session_uuid": session_uuid,
+            "test_name": test_name,
+        }
 
-            with run_migration(**run_migration_kwargs) as (plan, migration):
-                # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
-                if (
-                    plans[0].get("pre_copies_before_cut_over")
-                    and not cut_over
-                    and plan_warm_migration
-                    and isinstance(source_provider, VMWareProvider)
-                ):
-                    source_provider.wait_for_snapshots(
-                        vm_names_list=virtual_machines_list,
-                        number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
-                    )
-                    if migration:
-                        run_cut_over(migration=migration)
+        with run_migration(**run_migration_kwargs) as (plan, migration):
+            # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
+            if (
+                plans[0].get("pre_copies_before_cut_over")
+                and not cut_over
+                and plan_warm_migration
+                and isinstance(source_provider, VMWareProvider)
+            ):
+                source_provider.wait_for_snapshots(
+                    vm_names_list=virtual_machines_list,
+                    number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
+                )
+                if migration:
+                    run_cut_over(migration=migration)
 
-            if migration:
-                wait_for_migration_complate(plan=plan)
+        if migration:
+            wait_for_migration_complate(plan=plan)
 
-                if py_config.get("create_scale_report"):
-                    create_migration_scale_report(plan_resource=plan)
+            if py_config.get("create_scale_report"):
+                create_migration_scale_report(plan_resource=plan)
 
         if get_value_from_py_config("check_vms_signals") and plans[0].get("check_vms_signals", True):
             check_vms(
@@ -173,13 +166,10 @@ def run_migration(
     after_hook_name: str,
     after_hook_namespace: str,
     cut_over: datetime,
-    expected_plan_ready: bool,
-    condition_status: str,
-    condition_type: str,
     fixture_store: Any,
     session_uuid: str,
     test_name: str,
-) -> Generator[tuple[Plan, Migration | None], Any, Any]:
+) -> Generator[tuple[Plan, Migration], Any, Any]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
@@ -230,22 +220,18 @@ def run_migration(
         after_hook_namespace=after_hook_namespace,
     )
 
-    if expected_plan_ready:
-        plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
-        migration = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=Migration,
-            name=f"{name}-migration",
-            namespace=target_namespace,
-            plan_name=plan.name,
-            plan_namespace=plan.namespace,
-            cut_over=cut_over,
-        )
-        yield plan, migration
-    else:
-        plan.wait_for_condition(status=condition_status, condition=condition_type, timeout=300)
-        yield plan, None
+    plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
+    migration = create_and_store_resource(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        resource=Migration,
+        name=f"{name}-migration",
+        namespace=target_namespace,
+        plan_name=plan.name,
+        plan_namespace=plan.namespace,
+        cut_over=cut_over,
+    )
+    yield plan, migration
 
 
 def get_vm_suffix() -> str:
