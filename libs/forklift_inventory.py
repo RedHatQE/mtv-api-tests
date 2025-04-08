@@ -7,8 +7,8 @@ from ocp_resources.route import Route
 
 
 class ForkliftInventory(abc.ABC):
-    def __init__(self, client: DynamicClient, provider_name: str, namespace: str, provider_type: str) -> None:
-        self.route = Route(client=client, name="forklift-inventory", namespace=namespace)
+    def __init__(self, client: DynamicClient, provider_name: str, mtv_namespace: str, provider_type: str) -> None:
+        self.route = Route(client=client, name="forklift-inventory", namespace=mtv_namespace)
         self.provider_name = provider_name
         self.provider_type = provider_type
         self.provider_id = self._provider_id
@@ -74,7 +74,7 @@ class OvirtForkliftInventory(ForkliftInventory):
     def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
         self.provider_type = Provider.ProviderType.RHV
         super().__init__(
-            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+            client=client, provider_name=provider_name, mtv_namespace=namespace, provider_type=self.provider_type
         )
 
     @property
@@ -133,7 +133,7 @@ class OpenstackForliftinventory(ForkliftInventory):
     def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
         self.provider_type = Provider.ProviderType.OPENSTACK
         super().__init__(
-            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+            client=client, provider_name=provider_name, mtv_namespace=namespace, provider_type=self.provider_type
         )
 
     @property
@@ -167,7 +167,7 @@ class VsphereForkliftInventory(ForkliftInventory):
     def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
         self.provider_type = Provider.ProviderType.VSPHERE
         super().__init__(
-            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+            client=client, provider_name=provider_name, mtv_namespace=namespace, provider_type=self.provider_type
         )
 
     @property
@@ -216,7 +216,7 @@ class OvaForkliftInventory(ForkliftInventory):
     def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
         self.provider_type = Provider.ProviderType.OVA
         super().__init__(
-            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+            client=client, provider_name=provider_name, mtv_namespace=namespace, provider_type=self.provider_type
         )
 
     @property
@@ -255,7 +255,7 @@ class OpenshiftForkliftInventory(ForkliftInventory):
     def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
         self.provider_type = Provider.ProviderType.OPENSHIFT
         super().__init__(
-            client=client, provider_name=provider_name, namespace=namespace, provider_type=self.provider_type
+            client=client, provider_name=provider_name, mtv_namespace=namespace, provider_type=self.provider_type
         )
 
     @property

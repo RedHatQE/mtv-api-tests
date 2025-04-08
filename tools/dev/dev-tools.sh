@@ -115,14 +115,14 @@ run-tests() {
 
   echo "$cmd"
 
-  KUBECONFIG_FILE="$MOUNT_PATH/$CLUSTER_NAME/auth/kubeconfig"
+  # KUBECONFIG_FILE="$MOUNT_PATH/$CLUSTER_NAME/auth/kubeconfig"
 
-  if [ ! -f "$KUBECONFIG_FILE" ]; then
-    echo "Missing kubeconfig file. Exiting."
-    exit 1
-  fi
+  # if [ ! -f "$KUBECONFIG_FILE" ]; then
+  #   echo "Missing kubeconfig file. Exiting."
+  #   exit 1
+  # fi
 
-  export KUBECONFIG=$KUBECONFIG_FILE
+  # export KUBECONFIG=$KUBECONFIG_FILE
   export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
 
   $cmd

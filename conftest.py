@@ -352,9 +352,9 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def destination_provider(ocp_admin_client, target_namespace):
+def destination_provider(ocp_admin_client, mtv_namespace):
     provider = Provider(
-        name=py_config.get("destination_provider_name", "host"), namespace=target_namespace, client=ocp_admin_client
+        name=py_config.get("destination_provider_name", "host"), namespace=mtv_namespace, client=ocp_admin_client
     )
     if not provider.exists:
         raise MissingResourceResError(f"Provider {provider.name} not found")
@@ -631,7 +631,7 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 
 @pytest.fixture(scope="session")
 def source_provider_inventory(
-    ocp_admin_client: DynamicClient, target_namespace: str, source_provider: BaseProvider
+    ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
     providers = {
         Provider.ProviderType.OVA: OvaForkliftInventory,
@@ -646,5 +646,5 @@ def source_provider_inventory(
         raise ValueError(f"Provider {source_provider.type} not implemented")
 
     return provider_instance(  # type: ignore
-        client=ocp_admin_client, namespace=target_namespace, provider_name=source_provider.ocp_resource.name
+        client=ocp_admin_client, namespace=mtv_namespace, provider_name=source_provider.ocp_resource.name
     )
