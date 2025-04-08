@@ -41,7 +41,6 @@ def test_sanity_cold_mtv_migration(
     multus_network_name,
     source_provider_inventory,
 ):
-    __import__("ipdb").set_trace()
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
