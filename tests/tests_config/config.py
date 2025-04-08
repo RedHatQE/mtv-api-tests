@@ -140,7 +140,6 @@ source_provider_type = "vsphere"
 source_provider_version = "7.0.3"
 insecure_verify_skip = "true"
 number_of_vms = 1
-warm_migration = False
 check_vms_signals = True
 target_namespace = "mtv-api-tests"
 mtv_namespace = "openshift-mtv"

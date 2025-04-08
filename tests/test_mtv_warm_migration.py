@@ -65,8 +65,8 @@ def test_sanity_warm_mtv_migration(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -130,8 +130,8 @@ def test_mtv_migration_warm_2disks2nics(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -195,8 +195,8 @@ def test_warm_remote_ocp(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,

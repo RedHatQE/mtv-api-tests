@@ -19,7 +19,6 @@ target_namespace = "openshift-mtv"
 mtv_namespace = "openshift-mtv"
 vm_name_search_pattern = "automation-dc67-iscsi-warm-mig-50fb-70usage"
 number_of_vms = 20
-warm_migration = True
 check_vms_signals = False
 create_scale_report = True
 plan_wait_timeout = 3600

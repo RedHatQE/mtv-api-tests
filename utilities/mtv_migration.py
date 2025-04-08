@@ -14,6 +14,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
+from pytest import FixtureRequest
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import retry
@@ -50,6 +51,7 @@ def run_cut_over(migration: Migration) -> None:
 
 
 def migrate_vms(
+    request: FixtureRequest,
     ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
     destination_provider: CNVProvider,
@@ -60,7 +62,6 @@ def migrate_vms(
     target_namespace: str,
     session_uuid: str,
     fixture_store: Any,
-    test_name: str,
     source_provider_inventory: ForkliftInventory | None = None,
     source_provider_host: dict[str, Any] | None = None,
     cut_over: datetime | None = None,
@@ -70,6 +71,7 @@ def migrate_vms(
     after_hook_namespace: str | None = None,
 ) -> None:
     try:
+        test_name = request._pyfuncitem.name
         plan_warm_migration = plans[0].get("warm_migration")
         _source_provider_type = py_config.get("source_provider_type")
         _plan_name = (
@@ -90,7 +92,7 @@ def migrate_vms(
             "source_provider_name": source_provider.ocp_resource.name,
             "source_provider_namespace": source_provider.ocp_resource.namespace,
             "virtual_machines_list": virtual_machines_list,
-            "warm_migration": plan_warm_migration or get_value_from_py_config("warm_migration"),
+            "warm_migration": plan_warm_migration,
             "network_map_name": network_migration_map.name,
             "network_map_namespace": network_migration_map.namespace,
             "storage_map_name": storage_migration_map.name,
@@ -143,8 +145,9 @@ def migrate_vms(
                 source_provider_inventory=source_provider_inventory,
             )
     finally:
-        # delete all vms created by the migration to free up space on ceph storage.
-        delete_all_vms(ocp_admin_client=ocp_admin_client, namespace=target_namespace)
+        if not request.session.config.getoption("skip_teardown"):
+            # delete all vms created by the migration to free up space on ceph storage.
+            delete_all_vms(ocp_admin_client=ocp_admin_client, namespace=target_namespace)
 
 
 @contextmanager

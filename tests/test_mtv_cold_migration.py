@@ -1,4 +1,4 @@
-import pytest as pytest
+import pytest
 
 from utilities.mtv_migration import (
     create_storagemap_and_networkmap,
@@ -41,6 +41,7 @@ def test_sanity_cold_mtv_migration(
     multus_network_name,
     source_provider_inventory,
 ):
+    __import__("ipdb").set_trace()
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
@@ -54,8 +55,8 @@ def test_sanity_cold_mtv_migration(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -118,8 +119,8 @@ def test_cold_remote_ocp(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
