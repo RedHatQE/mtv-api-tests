@@ -1,3 +1,4 @@
+import json
 import shlex
 import time
 
@@ -10,6 +11,7 @@ LOGGER = get_logger(__name__)
 
 def run_ceph_cleanup(ceph_tools_pod: Pod) -> None:
     LOGGER.info("Running ceph cleanup")
+    sleep_time = 60 * 5
 
     try:
         while True:
@@ -17,6 +19,10 @@ def run_ceph_cleanup(ceph_tools_pod: Pod) -> None:
                 snaps: list[str] = []
                 vols: list[str] = []
                 ceph_pool_name = "ocs-storagecluster-cephblockpool"
+                if get_ceph_pool_percent_used(ceph_tools_pod, ceph_pool_name) < 60:
+                    time.sleep(sleep_time)
+                    continue
+
                 ceph_tools_pod.execute(command=shlex.split("ceph osd set-full-ratio 0.90"), ignore_rc=True)
 
                 for line in ceph_tools_pod.execute(
@@ -44,9 +50,19 @@ def run_ceph_cleanup(ceph_tools_pod: Pod) -> None:
                         command=shlex.split(f"rbd trash remove {ceph_pool_name}/{_trash_name}"), ignore_rc=True
                     )
 
-                time.sleep(60 * 5)
+                time.sleep(sleep_time)
             except ExecOnPodError:
                 continue
 
     finally:
         ceph_tools_pod.execute(command=shlex.split("ceph osd set-full-ratio 0.85"), ignore_rc=True)
+
+
+def get_ceph_pool_percent_used(ceph_tools_pod: Pod, pool_name: str) -> int | float:
+    _df = json.loads(ceph_tools_pod.execute(command=shlex.split("ceph df -f json"), ignore_rc=True))
+    for pool in _df["pools"]:
+        if pool["name"] == pool_name:
+            percent_used: int | float = pool["stats"]["percent_used"]
+            return percent_used
+
+    return 0
