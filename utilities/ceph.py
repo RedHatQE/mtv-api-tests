@@ -1,55 +1,52 @@
-"""
-POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
-  CEPH_POOL="ocs-storagecluster-cephblockpool"
-  echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.90
-
-  RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
-  for SNAP_AND_VOL in $RBD_LIST; do
-    SNAP_AND_VOL_PATH="$CEPH_POOL/$SNAP_AND_VOL"
-    if grep -q "snap" <<<"$SNAP_AND_VOL"; then
-      echo "$POD_EXEC_CMD" -- rbd snap purge "$SNAP_AND_VOL_PATH"
-    fi
-    if grep -q "vol" <<<"$SNAP_AND_VOL"; then
-      echo "$POD_EXEC_CMD" -- rbd rm "$SNAP_AND_VOL_PATH"
-    fi
-  done
-
-  RBD_TRASH_LIST=$($POD_EXEC_CMD -- rbd trash list "$CEPH_POOL" | awk -F" " '{print$1}')
-  for TRASH in $RBD_TRASH_LIST; do
-    TRASH_ITEM_PATH="$CEPH_POOL/$TRASH"
-    echo "$POD_EXEC_CMD" -- rbd trash remove "$TRASH_ITEM_PATH"
-  done
-
-  echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.85
-  echo "$POD_EXEC_CMD" -- ceph df
-"""
-
 import shlex
+import time
 
+from ocp_resources.exceptions import ExecOnPodError
 from ocp_resources.pod import Pod
+from simple_logger.logger import get_logger
+
+LOGGER = get_logger(__name__)
 
 
-def ceph_cleanup(ceph_tools_pod: Pod) -> None:
+def run_ceph_cleanup(ceph_tools_pod: Pod) -> None:
+    LOGGER.info("Running ceph cleanup")
+
     try:
-        snaps: list[str] = []
-        vols: list[str] = []
-        ceph_pool_name = "ocs-storagecluster-cephblockpool"
-        ceph_tools_pod.execute(command=shlex.split("ceph osd set-full-ratio 0.90"))
-        for line in ceph_tools_pod.execute(command=shlex.split(f"rbd ls {ceph_pool_name}")).splitlines():
-            if "snap" in line:
-                snaps.append(line)
+        while True:
+            try:
+                snaps: list[str] = []
+                vols: list[str] = []
+                ceph_pool_name = "ocs-storagecluster-cephblockpool"
+                ceph_tools_pod.execute(command=shlex.split("ceph osd set-full-ratio 0.90"), ignore_rc=True)
 
-            elif "vol" in line:
-                vols.append(line)
+                for line in ceph_tools_pod.execute(
+                    command=shlex.split(f"rbd ls {ceph_pool_name}"), ignore_rc=True
+                ).splitlines():
+                    if "snap" in line:
+                        snaps.append(line)
 
-        for _snap in snaps:
-            ceph_tools_pod.execute(command=shlex.split(f"rbd snap purge {ceph_pool_name}/{_snap}"))
+                    elif "vol" in line:
+                        vols.append(line)
 
-        for _vol in vols:
-            ceph_tools_pod.execute(command=shlex.split(f"rbd rm {ceph_pool_name}/{_vol}"))
+                for _snap in snaps:
+                    ceph_tools_pod.execute(
+                        command=shlex.split(f"rbd snap purge {ceph_pool_name}/{_snap}"), ignore_rc=True
+                    )
 
-        for _trash in ceph_tools_pod.execute(command=shlex.split(f"rbd trash list {ceph_pool_name}")).splitlines():
-            _trash_name = _trash.split()[0]
-            ceph_tools_pod.execute(command=shlex.split(f"rbd trash remove {ceph_pool_name}/{_trash_name}"))
+                for _vol in vols:
+                    ceph_tools_pod.execute(command=shlex.split(f"rbd rm {ceph_pool_name}/{_vol}"), ignore_rc=True)
+
+                for _trash in ceph_tools_pod.execute(
+                    command=shlex.split(f"rbd trash list {ceph_pool_name}"), ignore_rc=True
+                ).splitlines():
+                    _trash_name = _trash.split()[0]
+                    ceph_tools_pod.execute(
+                        command=shlex.split(f"rbd trash remove {ceph_pool_name}/{_trash_name}"), ignore_rc=True
+                    )
+
+                time.sleep(60 * 5)
+            except ExecOnPodError:
+                continue
+
     finally:
-        ceph_tools_pod.execute(command=shlex.split("ceph osd set-full-ratio 0.85"))
+        ceph_tools_pod.execute(command=shlex.split("ceph osd set-full-ratio 0.85"), ignore_rc=True)
