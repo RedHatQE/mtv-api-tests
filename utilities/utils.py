@@ -6,14 +6,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
 from time import sleep
-from typing import Any, Generator, Tuple
+from typing import Any, Generator
 
 import pytest
 import shortuuid
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.provider import Provider
-from ocp_resources.resource import NamespacedResource, Resource
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
@@ -128,7 +127,7 @@ def create_source_provider(
     fixture_store: dict[str, Any],
     tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
-) -> Generator[Tuple[BaseProvider, Resource | NamespacedResource | None | None], None, None]:
+) -> Generator[BaseProvider, None, None]:
     # common
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
@@ -138,12 +137,9 @@ def create_source_provider(
         if not provider.exists:
             raise MissingResourceResError(f"Provider {provider.name} not found")
 
-        yield (
-            CNVProvider(
-                ocp_resource=provider,
-                provider_data=source_provider_data_copy,
-            ),
-            None,
+        yield CNVProvider(
+            ocp_resource=provider,
+            provider_data=source_provider_data_copy,
         )
 
     else:
@@ -254,7 +250,7 @@ def create_source_provider(
             if not _source_provider.test:
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
-            yield _source_provider, customized_secret
+            yield _source_provider
 
 
 @background

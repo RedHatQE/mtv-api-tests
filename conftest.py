@@ -398,11 +398,10 @@ def source_provider(
         namespace=target_namespace,
         admin_client=ocp_admin_client,
         tmp_dir=tmp_path_factory,
-    ) as source_provider_objects:
-        _source_provider = source_provider_objects[0]
-        yield _source_provider
+    ) as source_provider:
+        yield source_provider
 
-    _source_provider.disconnect()
+    source_provider.disconnect()
 
 
 @pytest.fixture(scope="session")
