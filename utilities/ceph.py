@@ -32,7 +32,7 @@ def run_ceph_cleanup(ceph_tools_pod: Pod) -> None:
         set_full_ratio_cmd = "ceph osd set-full-ratio"
 
         try:
-            LOGGER.warning("Cleaning up ceph storage")
+            LOGGER.warning("Cleaning ceph storage")
             ceph_tools_pod.execute(command=shlex.split(f"{set_full_ratio_cmd} 0.90"), ignore_rc=True)
 
             for line in ceph_tools_pod.execute(

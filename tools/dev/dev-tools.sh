@@ -138,17 +138,12 @@ enable-ceph-tools() {
 ceph-df() {
   enable-ceph-tools
 
-  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
-  printf "%s\n\n" "$POD_EXEC_CMD"
+  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD -- ceph df"
   if [[ $3 == "--watch" ]]; then
-    while true; do
-      DF=$($POD_EXEC_CMD -- ceph df)
-      printf "%s\n\n" "$DF"
-      sleep 10
-    done
+    watch -n 10 "$POD_EXEC_CMD"
   else
-    DF=$($POD_EXEC_CMD -- ceph df)
-    printf "%s\n\n" "$DF"
+    DF=$($POD_EXEC_CMD)
+    printf "%s" "$DF"
   fi
 }
 
