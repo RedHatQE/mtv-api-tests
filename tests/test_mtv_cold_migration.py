@@ -1,4 +1,4 @@
-import pytest as pytest
+import pytest
 
 from utilities.mtv_migration import (
     create_storagemap_and_networkmap,
@@ -33,7 +33,6 @@ def test_sanity_cold_mtv_migration(
     fixture_store,
     session_uuid,
     ocp_admin_client,
-    mtv_namespace,
     target_namespace,
     plans,
     source_provider,
@@ -48,7 +47,6 @@ def test_sanity_cold_mtv_migration(
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
@@ -56,8 +54,8 @@ def test_sanity_cold_mtv_migration(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -66,6 +64,7 @@ def test_sanity_cold_mtv_migration(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
+        ocp_admin_client=ocp_admin_client,
     )
 
 
@@ -99,7 +98,6 @@ def test_cold_remote_ocp(
     session_uuid,
     ocp_admin_client,
     target_namespace,
-    mtv_namespace,
     source_provider_inventory,
     plans,
     source_provider,
@@ -113,7 +111,6 @@ def test_cold_remote_ocp(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
@@ -121,8 +118,8 @@ def test_cold_remote_ocp(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
@@ -131,4 +128,5 @@ def test_cold_remote_ocp(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
+        ocp_admin_client=ocp_admin_client,
     )

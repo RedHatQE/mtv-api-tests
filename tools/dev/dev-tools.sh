@@ -115,14 +115,14 @@ run-tests() {
 
   echo "$cmd"
 
-  KUBECONFIG_FILE="$MOUNT_PATH/$CLUSTER_NAME/auth/kubeconfig"
+  # KUBECONFIG_FILE="$MOUNT_PATH/$CLUSTER_NAME/auth/kubeconfig"
 
-  if [ ! -f "$KUBECONFIG_FILE" ]; then
-    echo "Missing kubeconfig file. Exiting."
-    exit 1
-  fi
+  # if [ ! -f "$KUBECONFIG_FILE" ]; then
+  #   echo "Missing kubeconfig file. Exiting."
+  #   exit 1
+  # fi
 
-  export KUBECONFIG=$KUBECONFIG_FILE
+  # export KUBECONFIG=$KUBECONFIG_FILE
   export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
 
   $cmd
@@ -133,31 +133,17 @@ enable-ceph-tools() {
   oc patch storagecluster ocs-storagecluster -n openshift-storage --type json --patch '[{ "op": "replace", "path": "/spec/enableCephTools", "value": true }]' &>/dev/null
 
   TOOLS_POD=$(oc get pods -n openshift-storage -l app=rook-ceph-tools -o name)
-
-  # for _ in $(seq 1 10); do
-  #   TOOLS_POD=$(oc get pod -n openshift-storage | grep rook-ceph-tools | awk -F" " '{print$1}')
-  #   if [ "$TOOLS_POD" != "" ]; then
-  #     break
-  #   else
-  #     sleep 1
-  #   fi
-  # done
 }
 
 ceph-df() {
   enable-ceph-tools
 
-  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
-  printf "%s\n\n" "$POD_EXEC_CMD"
+  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD -- ceph df"
   if [[ $3 == "--watch" ]]; then
-    while true; do
-      DF=$($POD_EXEC_CMD -- ceph df)
-      printf "%s\n\n" "$DF"
-      sleep 10
-    done
+    watch -n 10 "$POD_EXEC_CMD"
   else
-    DF=$($POD_EXEC_CMD -- ceph df)
-    printf "%s\n\n" "$DF"
+    DF=$($POD_EXEC_CMD)
+    printf "%s" "$DF"
   fi
 }
 

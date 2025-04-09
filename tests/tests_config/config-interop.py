@@ -25,7 +25,6 @@ source_providers_list = [
 storage_class = "nfs"
 source_provider_type = "ovirt"
 source_provider_version = "4.4.9"
-warm_migration = False
 check_vms_signals = False
 target_namespace = "mtv-api-tests"
 delete_target_namespace = True

@@ -87,11 +87,6 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
 
 
-def check_migration_network(source_provider_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
-    for disk in destination_vm["disks"]:
-        assert source_provider_data["host_list"][0]["migration_host_ip"] in disk["vddk_url"]
-
-
 def check_data_integrity(
     source_vm_dict: dict[str, Any],
     destination_vm_dict: dict[str, Any],
@@ -171,7 +166,6 @@ def check_vms(
     source_provider_data: dict[str, Any],
     target_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
-    source_provider_host: dict[str, Any] | None = None,
 ) -> None:
     virtual_machines = plan["virtual_machines"]
 
@@ -197,8 +191,6 @@ def check_vms(
             network_migration_map=network_map_resource,
         )
         check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
-        if source_provider_host and source_provider_data:
-            check_migration_network(source_provider_data=source_provider_data, destination_vm=destination_vm)
 
         plan_pre_copies_before_cut_over = plan.get("pre_copies_before_cut_over")
 

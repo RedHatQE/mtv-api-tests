@@ -1,25 +1,20 @@
 import copy
 import functools
 import multiprocessing
-import shlex
 import shutil
-import time
 from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
 from time import sleep
-from typing import Any, Generator, Tuple
+from typing import Any, Generator
 
 import pytest
 import shortuuid
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.provider import Provider
-from ocp_resources.resource import NamespacedResource, Resource
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
-from ocp_utilities.monitoring import Prometheus
-from pyhelper_utils.shell import run_command
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
@@ -126,28 +121,25 @@ def provider_cr_name(session_uuid: str, provider_data: dict[str, Any], username:
 def create_source_provider(
     config: dict[str, Any],
     source_provider_data: dict[str, Any],
-    mtv_namespace: str,
+    namespace: str,
     admin_client: DynamicClient,
     session_uuid: str,
     fixture_store: dict[str, Any],
     tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
-) -> Generator[Tuple[BaseProvider, Resource | NamespacedResource | None | None], None, None]:
+) -> Generator[BaseProvider, None, None]:
     # common
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
 
     if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        provider = Provider(name="host", namespace=mtv_namespace, client=admin_client)
+        provider = Provider(name="host", namespace=namespace, client=admin_client)
         if not provider.exists:
             raise MissingResourceResError(f"Provider {provider.name} not found")
 
-        yield (
-            CNVProvider(
-                ocp_resource=provider,
-                provider_data=source_provider_data_copy,
-            ),
-            None,
+        yield CNVProvider(
+            ocp_resource=provider,
+            provider_data=source_provider_data_copy,
         )
 
     else:
@@ -219,7 +211,7 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        customized_secret = Secret(name=name, namespace=mtv_namespace, client=admin_client)
+        customized_secret = Secret(name=name, namespace=namespace, client=admin_client)
 
         if not customized_secret.exists:
             customized_secret = create_and_store_resource(
@@ -228,12 +220,12 @@ def create_source_provider(
                 resource=Secret,
                 client=admin_client,
                 name=name,
-                namespace=mtv_namespace,
+                namespace=namespace,
                 string_data=secret_string_data,
                 label=metadata_labels,
             )
 
-        ocp_resource_provider = Provider(name=name, namespace=mtv_namespace, client=admin_client)
+        ocp_resource_provider = Provider(name=name, namespace=namespace, client=admin_client)
 
         if not ocp_resource_provider.exists:
             ocp_resource_provider = create_and_store_resource(
@@ -242,9 +234,9 @@ def create_source_provider(
                 resource=Provider,
                 client=admin_client,
                 name=name,
-                namespace=mtv_namespace,
+                namespace=namespace,
                 secret_name=name,
-                secret_namespace=mtv_namespace,
+                secret_namespace=namespace,
                 url=source_provider_data_copy["api_url"],
                 provider_type=source_provider_data_copy["type"],
                 vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
@@ -258,7 +250,7 @@ def create_source_provider(
             if not _source_provider.test:
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
-            yield _source_provider, customized_secret
+            yield _source_provider
 
 
 @background
@@ -329,22 +321,3 @@ def get_source_provider_data() -> dict[str, Any]:
     ]
 
     return _source_provider[0]
-
-
-def prometheus_monitor_deamon(ocp_admin_client: DynamicClient) -> None:
-    token_command = "oc create token prometheus-k8s -n openshift-monitoring --duration=999999s"
-    _, token, _ = run_command(command=shlex.split(token_command), verify_stderr=False)
-    prometheus = Prometheus(client=ocp_admin_client, verify_ssl=False, bearer_token=token)
-    alerts_to_get: list[str] = ["CephOSDCriticallyFull", "CephClusterErrorState", "CephClusterReadOnly"]
-    while True:
-        for _alert in alerts_to_get:
-            alerts = prometheus.get_firing_alerts(alert_name=_alert)
-            if alerts:
-                last_alert = alerts[0]
-                annotations = last_alert["annotations"]
-                severity = annotations["severity_level"]
-                description = annotations["description"]
-                message = annotations["message"]
-
-                LOGGER.warning(f"{_alert}: {severity} - {message} - {description}")
-        time.sleep(60)

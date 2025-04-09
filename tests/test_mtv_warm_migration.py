@@ -43,7 +43,6 @@ def test_sanity_warm_mtv_migration(
     fixture_store,
     session_uuid,
     ocp_admin_client,
-    mtv_namespace,
     multus_network_name,
     source_provider_inventory,
     target_namespace,
@@ -59,7 +58,6 @@ def test_sanity_warm_mtv_migration(
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
@@ -67,8 +65,8 @@ def test_sanity_warm_mtv_migration(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -78,6 +76,7 @@ def test_sanity_warm_mtv_migration(
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
+        ocp_admin_client=ocp_admin_client,
     )
 
 
@@ -109,7 +108,6 @@ def test_mtv_migration_warm_2disks2nics(
     fixture_store,
     session_uuid,
     ocp_admin_client,
-    mtv_namespace,
     multus_network_name,
     source_provider_inventory,
     target_namespace,
@@ -125,7 +123,6 @@ def test_mtv_migration_warm_2disks2nics(
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
@@ -133,8 +130,8 @@ def test_mtv_migration_warm_2disks2nics(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -144,6 +141,7 @@ def test_mtv_migration_warm_2disks2nics(
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
+        ocp_admin_client=ocp_admin_client,
     )
 
 
@@ -175,7 +173,6 @@ def test_warm_remote_ocp(
     fixture_store,
     session_uuid,
     ocp_admin_client,
-    mtv_namespace,
     multus_network_name,
     source_provider_inventory,
     target_namespace,
@@ -191,7 +188,6 @@ def test_warm_remote_ocp(
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         source_provider_inventory=source_provider_inventory,
-        mtv_namespace=mtv_namespace,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
@@ -199,8 +195,8 @@ def test_warm_remote_ocp(
     )
 
     migrate_vms(
+        request=request,
         fixture_store=fixture_store,
-        test_name=request._pyfuncitem.name,
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
@@ -210,4 +206,5 @@ def test_warm_remote_ocp(
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
+        ocp_admin_client=ocp_admin_client,
     )
