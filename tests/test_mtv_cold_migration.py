@@ -40,6 +40,7 @@ def test_sanity_cold_mtv_migration(
     destination_provider,
     multus_network_name,
     source_provider_inventory,
+    ceph_clean,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -104,6 +105,7 @@ def test_cold_remote_ocp(
     source_provider_data,
     destination_ocp_provider,
     multus_network_name,
+    ceph_clean,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,

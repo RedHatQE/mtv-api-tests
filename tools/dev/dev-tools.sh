@@ -133,15 +133,6 @@ enable-ceph-tools() {
   oc patch storagecluster ocs-storagecluster -n openshift-storage --type json --patch '[{ "op": "replace", "path": "/spec/enableCephTools", "value": true }]' &>/dev/null
 
   TOOLS_POD=$(oc get pods -n openshift-storage -l app=rook-ceph-tools -o name)
-
-  # for _ in $(seq 1 10); do
-  #   TOOLS_POD=$(oc get pod -n openshift-storage | grep rook-ceph-tools | awk -F" " '{print$1}')
-  #   if [ "$TOOLS_POD" != "" ]; then
-  #     break
-  #   else
-  #     sleep 1
-  #   fi
-  # done
 }
 
 ceph-df() {

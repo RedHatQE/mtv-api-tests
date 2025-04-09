@@ -40,6 +40,7 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.cnv import CNVProvider
+from utilities.ceph import ceph_cleanup
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
 from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
@@ -658,3 +659,9 @@ def source_provider_inventory(
     return provider_instance(  # type: ignore
         client=ocp_admin_client, namespace=mtv_namespace, provider_name=source_provider.ocp_resource.name
     )
+
+
+@pytest.fixture
+def ceph_clean(ceph_tools_pod: Pod) -> Generator[None, Any, Any]:
+    yield
+    ceph_cleanup(ceph_tools_pod=ceph_tools_pod)
