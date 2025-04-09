@@ -19,7 +19,7 @@ def run_ceph_cleanup(ceph_tools_pod: Pod) -> None:
                 snaps: list[str] = []
                 vols: list[str] = []
                 ceph_pool_name = "ocs-storagecluster-cephblockpool"
-                if get_ceph_pool_percent_used(ceph_tools_pod, ceph_pool_name) < 60:
+                if get_ceph_pool_percent_used(ceph_tools_pod, ceph_pool_name) < 80:
                     time.sleep(sleep_time)
                     continue
 

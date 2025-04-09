@@ -216,7 +216,7 @@ def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, 
 
 
 @pytest.fixture(scope="session")
-def ceph_cleanup(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
+def ceph_tools(ocp_admin_client: DynamicClient) -> Generator[Pod, Any, Any]:
     openshift_storage_namespace: str = "openshift-storage"
     ocs_storagecluster = StorageCluster(
         client=ocp_admin_client,
@@ -224,20 +224,25 @@ def ceph_cleanup(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
         namespace=openshift_storage_namespace,
     )
     if ocs_storagecluster.exists:
-        with ResourceEditor(patches={ocs_storagecluster: {"spec": {"enableCephTools": True}}}):
-            for _sample in TimeoutSampler(
-                wait_timeout=60, sleep=1, func=Pod.get, namespace=openshift_storage_namespace
-            ):
-                for _pod in _sample:
-                    if _pod.labels.get("app") == "rook-ceph-tools":
-                        try:
-                            proc = multiprocessing.Process(target=run_ceph_cleanup, kwargs={"ceph_tools_pod": _pod})
-                            proc.start()
-                            yield
-                            proc.kill()
-                        except Exception as ex:
-                            LOGGER.error(f"Failed to start ceph cleanup due to: {ex}")
-                            yield
+        if not ocs_storagecluster.instance.spec.enableCephTools:
+            ResourceEditor(patches={ocs_storagecluster: {"spec": {"enableCephTools": True}}}).update()
+
+        for _sample in TimeoutSampler(wait_timeout=60, sleep=1, func=Pod.get, namespace=openshift_storage_namespace):
+            for _pod in _sample:
+                if _pod.labels.get("app") == "rook-ceph-tools":
+                    yield _pod
+
+
+@pytest.fixture(scope="session")
+def ceph_cleanup(ceph_tools: Pod) -> Generator[None, Any, Any]:
+    try:
+        proc = multiprocessing.Process(target=run_ceph_cleanup, kwargs={"ceph_tools_pod": ceph_tools})
+        proc.start()
+        yield
+        proc.kill()
+    except Exception as ex:
+        LOGGER.error(f"Failed to start ceph cleanup due to: {ex}")
+        yield
 
 
 @pytest.fixture(scope="session")
