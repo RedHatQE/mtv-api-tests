@@ -87,11 +87,6 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
 
 
-def check_migration_network(source_provider_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
-    for disk in destination_vm["disks"]:
-        assert source_provider_data["host_list"][0]["migration_host_ip"] in disk["vddk_url"]
-
-
 def check_data_integrity(
     source_vm_dict: dict[str, Any],
     destination_vm_dict: dict[str, Any],

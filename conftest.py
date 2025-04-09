@@ -14,7 +14,6 @@ from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.hook import Hook
-from ocp_resources.host import Host
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.pod import Pod
@@ -40,7 +39,7 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.cnv import CNVProvider
-from utilities.ceph import run_ceph_cleanup
+from utilities.ceph import ceph_cleanup_deamon
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
 from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
@@ -51,7 +50,6 @@ from utilities.utils import (
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
-    prometheus_monitor_deamon,
     start_source_vm_data_upload_vmware,
 )
 
@@ -198,25 +196,13 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(prometheus_monitor, source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_cleanup):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_cleanup_monitor):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
 
 @pytest.fixture(scope="session")
-def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
-    try:
-        proc = multiprocessing.Process(target=prometheus_monitor_deamon, kwargs={"ocp_admin_client": ocp_admin_client})
-        proc.start()
-        yield
-        proc.kill()
-    except Exception as ex:
-        LOGGER.error(f"Failed to start prometheus monitor due to: {ex}")
-        yield
-
-
-@pytest.fixture(scope="session")
-def ceph_tools(ocp_admin_client: DynamicClient) -> Generator[Pod, Any, Any]:
+def ceph_tools_pod(ocp_admin_client: DynamicClient) -> Pod | None:
     openshift_storage_namespace: str = "openshift-storage"
     ocs_storagecluster = StorageCluster(
         client=ocp_admin_client,
@@ -230,19 +216,51 @@ def ceph_tools(ocp_admin_client: DynamicClient) -> Generator[Pod, Any, Any]:
         for _sample in TimeoutSampler(wait_timeout=60, sleep=1, func=Pod.get, namespace=openshift_storage_namespace):
             for _pod in _sample:
                 if _pod.labels.get("app") == "rook-ceph-tools":
-                    yield _pod
+                    return _pod
+
+    return None
 
 
 @pytest.fixture(scope="session")
-def ceph_cleanup(ceph_tools: Pod) -> Generator[None, Any, Any]:
-    try:
-        proc = multiprocessing.Process(target=run_ceph_cleanup, kwargs={"ceph_tools_pod": ceph_tools})
-        proc.start()
+def ceph_cleanup_monitor(ocp_admin_client: DynamicClient, ceph_tools_pod: Pod) -> Generator[None, Any, Any]:
+    if ceph_tools_pod:
+        try:
+            proc = multiprocessing.Process(
+                target=ceph_cleanup_deamon,
+                kwargs={"ocp_admin_client": ocp_admin_client, "ceph_tools_pod": ceph_tools_pod},
+            )
+            proc.start()
+            yield
+            proc.kill()
+        except Exception:
+            yield
+    else:
         yield
-        proc.kill()
-    except Exception as ex:
-        LOGGER.error(f"Failed to start ceph cleanup due to: {ex}")
-        yield
+
+
+# @pytest.fixture(scope="session")
+# def ceph_cleanup(ceph_tools: Pod) -> Generator[None, Any, Any]:
+#     if ceph_tools:
+#         try:
+#             proc = multiprocessing.Process(
+#                 target=prometheus_monitor_deamon, kwargs={"ocp_admin_client": ocp_admin_client}
+#             )
+#             proc.start()
+#             yield
+#             proc.kill()
+#         except Exception as ex:
+#             LOGGER.error(f"Failed to start prometheus monitor due to: {ex}")
+#             yield
+#         try:
+#             proc = multiprocessing.Process(target=run_ceph_cleanup, kwargs={"ceph_tools_pod": ceph_tools})
+#             proc.start()
+#             yield
+#             proc.kill()
+#         except Exception as ex:
+#             LOGGER.error(f"Failed to start ceph cleanup due to: {ex}")
+#             yield
+#     else:
+#         yield
 
 
 @pytest.fixture(scope="session")
@@ -473,65 +491,6 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
     yield CNVProvider(ocp_resource=provider)
-
-
-@pytest.fixture(scope="session")
-def source_provider_host_secret(
-    fixture_store, session_uuid, source_provider, source_provider_data, target_namespace, ocp_admin_client
-):
-    if source_provider_data.get("host_list"):
-        host = source_provider_data["host_list"][0]
-        name = generate_name_with_uuid(
-            name=f"{session_uuid}-{source_provider_data['fqdn']}-{host['migration_host_ip']}-{host['migration_host_id']}"
-        )
-        string_data: dict[str, str] = {
-            "user": host["user"],
-            "password": host["password"],
-        }
-        secret = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=Secret,
-            client=ocp_admin_client,
-            name=name,
-            namespace=target_namespace,
-            string_data=string_data,
-        )
-        yield secret
-    else:
-        yield
-
-
-@pytest.fixture(scope="session")
-def source_provider_host(
-    fixture_store,
-    session_uuid,
-    source_provider,
-    source_provider_data,
-    target_namespace,
-    source_provider_host_secret,
-    ocp_admin_client,
-):
-    if source_provider_data.get("host_list"):
-        _host = source_provider_data["host_list"][0]
-        create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=Host,
-            client=ocp_admin_client,
-            name=f"{source_provider_data['fqdn']}-{_host['migration_host_ip']}-{_host['migration_host_id']}",
-            namespace=target_namespace,
-            ip_address=_host["migration_host_ip"],
-            host_id=_host["migration_host_id"],
-            provider_name=source_provider.ocp_resource.name,
-            provider_namespace=source_provider.ocp_resource.namespace,
-            secret_name=source_provider_host_secret.name,
-            secret_namespace=source_provider_host_secret.namespace,
-        )
-        yield _host
-
-    else:
-        yield
 
 
 @pytest.fixture(scope="session")
