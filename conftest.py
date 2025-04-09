@@ -238,31 +238,6 @@ def ceph_cleanup_monitor(ocp_admin_client: DynamicClient, ceph_tools_pod: Pod) -
         yield
 
 
-# @pytest.fixture(scope="session")
-# def ceph_cleanup(ceph_tools: Pod) -> Generator[None, Any, Any]:
-#     if ceph_tools:
-#         try:
-#             proc = multiprocessing.Process(
-#                 target=prometheus_monitor_deamon, kwargs={"ocp_admin_client": ocp_admin_client}
-#             )
-#             proc.start()
-#             yield
-#             proc.kill()
-#         except Exception as ex:
-#             LOGGER.error(f"Failed to start prometheus monitor due to: {ex}")
-#             yield
-#         try:
-#             proc = multiprocessing.Process(target=run_ceph_cleanup, kwargs={"ceph_tools_pod": ceph_tools})
-#             proc.start()
-#             yield
-#             proc.kill()
-#         except Exception as ex:
-#             LOGGER.error(f"Failed to start ceph cleanup due to: {ex}")
-#             yield
-#     else:
-#         yield
-
-
 @pytest.fixture(scope="session")
 def target_namespace(fixture_store, session_uuid, ocp_admin_client):
     """create the target namespace for MTV migrations"""

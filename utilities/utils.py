@@ -325,22 +325,3 @@ def get_source_provider_data() -> dict[str, Any]:
     ]
 
     return _source_provider[0]
-
-
-# def prometheus_monitor_deamon(ocp_admin_client: DynamicClient) -> None:
-#     token_command = "oc create token prometheus-k8s -n openshift-monitoring --duration=999999s"
-#     _, token, _ = run_command(command=shlex.split(token_command), verify_stderr=False)
-#     prometheus = Prometheus(client=ocp_admin_client, verify_ssl=False, bearer_token=token)
-#     alerts_to_get: list[str] = ["CephOSDCriticallyFull", "CephClusterErrorState", "CephClusterReadOnly"]
-#     while True:
-#         for _alert in alerts_to_get:
-#             alerts = prometheus.get_firing_alerts(alert_name=_alert)
-#             if alerts:
-#                 last_alert = alerts[0]
-#                 annotations = last_alert["annotations"]
-#                 severity = annotations["severity_level"]
-#                 description = annotations["description"]
-#                 message = annotations["message"]
-#
-#                 LOGGER.warning(f"{_alert}: {severity} - {message} - {description}")
-#         time.sleep(60 * 5)
