@@ -39,7 +39,7 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.cnv import CNVProvider
-from utilities.ceph import ceph_cleanup_deamon
+from utilities.ceph import ceph_monitor_deamon
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
 from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
@@ -196,7 +196,7 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_cleanup_monitor):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_monitor):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
@@ -222,11 +222,11 @@ def ceph_tools_pod(ocp_admin_client: DynamicClient) -> Pod | None:
 
 
 @pytest.fixture(scope="session")
-def ceph_cleanup_monitor(ocp_admin_client: DynamicClient, ceph_tools_pod: Pod) -> Generator[None, Any, Any]:
+def ceph_monitor(ocp_admin_client: DynamicClient, ceph_tools_pod: Pod) -> Generator[None, Any, Any]:
     if ceph_tools_pod:
         try:
             proc = multiprocessing.Process(
-                target=ceph_cleanup_deamon,
+                target=ceph_monitor_deamon,
                 kwargs={"ocp_admin_client": ocp_admin_client, "ceph_tools_pod": ceph_tools_pod},
             )
             proc.start()
