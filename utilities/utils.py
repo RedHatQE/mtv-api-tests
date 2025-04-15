@@ -110,11 +110,12 @@ def gen_network_map_list(
     return network_map_list
 
 
-def provider_cr_name(session_uuid: str, provider_data: dict[str, Any], username: str) -> str:
-    return (
+def generated_provider_name(session_uuid: str, provider_data: dict[str, Any], username: str) -> str:
+    _name = (
         f"{session_uuid}-{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
         f"{provider_data['fqdn'].split('.')[0]}-{username.split('@')[0]}"
     )
+    return generate_name_with_uuid(name=_name)
 
 
 @contextmanager
@@ -146,7 +147,7 @@ def create_source_provider(
         for key, value in kwargs.items():
             source_provider_data_copy[key] = value
 
-        name = provider_cr_name(
+        source_provider_name = generated_provider_name(
             session_uuid=session_uuid,
             provider_data=source_provider_data_copy,
             username=source_provider_data_copy["username"],
@@ -211,7 +212,7 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        customized_secret = Secret(name=name, namespace=namespace, client=admin_client)
+        customized_secret = Secret(name=source_provider_name, namespace=namespace, client=admin_client)
 
         if not customized_secret.exists:
             customized_secret = create_and_store_resource(
@@ -219,13 +220,13 @@ def create_source_provider(
                 session_uuid=session_uuid,
                 resource=Secret,
                 client=admin_client,
-                name=name,
+                name=source_provider_name,
                 namespace=namespace,
                 string_data=secret_string_data,
                 label=metadata_labels,
             )
 
-        ocp_resource_provider = Provider(name=name, namespace=namespace, client=admin_client)
+        ocp_resource_provider = Provider(name=source_provider_name, namespace=namespace, client=admin_client)
 
         if not ocp_resource_provider.exists:
             ocp_resource_provider = create_and_store_resource(
@@ -233,9 +234,9 @@ def create_source_provider(
                 session_uuid=session_uuid,
                 resource=Provider,
                 client=admin_client,
-                name=name,
+                name=source_provider_name,
                 namespace=namespace,
-                secret_name=name,
+                secret_name=source_provider_name,
                 secret_namespace=namespace,
                 url=source_provider_data_copy["api_url"],
                 provider_type=source_provider_data_copy["type"],
