@@ -952,7 +952,7 @@ wheels = [
 
 [[package]]
 name = "mtv-api-tests"
-version = "2.7.1"
+version = "2.8.1"
 source = { virtual = "." }
 dependencies = [
     { name = "click" },
