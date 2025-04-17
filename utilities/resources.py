@@ -40,7 +40,11 @@ def create_and_store_resource(
         )
 
     _resource = resource(**kwargs)
-    _resource.deploy(wait=True)
+
+    if _resource.exists:
+        LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
+    else:
+        _resource.deploy(wait=True)
 
     LOGGER.info(f"Storing {_resource.kind} {_resource_name} in fixture store")
     _resource_dict = {"name": _resource.name, "namespace": _resource.namespace, "module": _resource.__module__}
