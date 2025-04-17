@@ -230,7 +230,7 @@ def create_source_provider(
             client=admin_client,
             name=source_provider_name,
             namespace=namespace,
-            secret_name=source_provider_secret,
+            secret_name=source_provider_secret.name,
             secret_namespace=namespace,
             url=source_provider_data_copy["api_url"],
             provider_type=source_provider_data_copy["type"],
