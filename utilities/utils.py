@@ -217,7 +217,7 @@ def create_source_provider(
             session_uuid=session_uuid,
             resource=Secret,
             client=admin_client,
-            name=source_provider_name,
+            name=generate_name_with_uuid(name=source_provider_name),
             namespace=namespace,
             string_data=secret_string_data,
             label=metadata_labels,
