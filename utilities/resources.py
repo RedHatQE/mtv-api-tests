@@ -44,6 +44,7 @@ def create_and_store_resource(
     # if _resource.exists and _resource.name:
     #     LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
     # else:
+    LOGGER.info(f"Deploying {_resource.kind} {_resource.name}")
     _resource.deploy(wait=True)
 
     LOGGER.info(f"Storing {_resource.kind} {_resource.name} in fixture store")
