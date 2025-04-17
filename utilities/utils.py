@@ -212,7 +212,7 @@ def create_source_provider(
             raise ValueError("Failed to get source provider data")
 
         # Creating the source Secret and source Provider CRs
-        create_and_store_resource(
+        source_provider_secret = create_and_store_resource(
             fixture_store=fixture_store,
             session_uuid=session_uuid,
             resource=Secret,
@@ -230,7 +230,7 @@ def create_source_provider(
             client=admin_client,
             name=source_provider_name,
             namespace=namespace,
-            secret_name=source_provider_name,
+            secret_name=source_provider_secret,
             secret_namespace=namespace,
             url=source_provider_data_copy["api_url"],
             provider_type=source_provider_data_copy["type"],
