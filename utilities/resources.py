@@ -44,7 +44,10 @@ def create_and_store_resource(
     # if _resource.exists and _resource.name:
     #     LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
     # else:
-    LOGGER.info(f"Deploying {_resource.kind} {_resource.name}")
+    LOGGER.info(f"Deploying {_resource.kind} {_resource.name} in {_resource.namespace} namespace")
+    for rcs in resource.get(dyn_client=kwargs["client"]):
+        LOGGER.error(f"{rcs.kind} {rcs.name} {rcs.namespace}")
+
     _resource.deploy(wait=True)
 
     LOGGER.info(f"Storing {_resource.kind} {_resource.name} in fixture store")
