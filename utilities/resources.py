@@ -1,6 +1,7 @@
 from typing import Any
 
 import yaml
+from kubernetes.dynamic.exceptions import ConflictError
 from ocp_resources.plan import Plan
 from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
@@ -41,14 +42,11 @@ def create_and_store_resource(
 
     _resource = resource(**kwargs)
 
-    # if _resource.exists and _resource.name:
-    #     LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
-    # else:
-    LOGGER.info(f"Deploying {_resource.kind} {_resource.name} in {_resource.namespace} namespace")
-    for rcs in resource.get(dyn_client=kwargs["client"]):
-        LOGGER.error(f"{rcs.kind} {rcs.name} {rcs.namespace}")
-
-    _resource.deploy(wait=True)
+    try:
+        _resource.deploy(wait=True)
+    except ConflictError:
+        LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
+        _resource.wait()
 
     LOGGER.info(f"Storing {_resource.kind} {_resource.name} in fixture store")
     _resource_dict = {"name": _resource.name, "namespace": _resource.namespace, "module": _resource.__module__}
