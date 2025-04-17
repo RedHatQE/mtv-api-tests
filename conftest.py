@@ -196,7 +196,7 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state, ceph_monitor):
+def autouse_fixtures(source_provider_data, ceph_monitor, nfs_storage_profile, forklift_pods_state):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
@@ -398,36 +398,29 @@ def source_provider(
         namespace=target_namespace,
         admin_client=ocp_admin_client,
         tmp_dir=tmp_path_factory,
-    ) as source_provider:
-        yield source_provider
+    ) as _source_provider:
+        yield _source_provider
 
-    source_provider.disconnect()
+    _source_provider.disconnect()
 
 
 @pytest.fixture(scope="session")
 def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin_client):
-    nad_name: str = ""
-    clients: list[DynamicClient] = [ocp_admin_client]
-
-    if py_config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        clients.append(ocp_admin_client)
-
     with open("tests/manifests/second_network.yaml") as fd:
-        bridge_yaml = yaml.safe_load(fd)
+        bridge_dict = yaml.safe_load(fd)
 
-    bridge_name = bridge_yaml["metadata"]["name"]
-    bridge_yaml["metadata"]["name"] = f"{session_uuid}-{bridge_name}"
+    bridge_name = bridge_dict["metadata"]["name"]
+    bridge_dict["metadata"]["name"] = f"{session_uuid}-{generate_name_with_uuid(name=bridge_name)}"
 
-    for client in clients:
-        nad = create_and_store_resource(
-            fixture_store=fixture_store,
-            session_uuid=session_uuid,
-            resource=NetworkAttachmentDefinition,
-            client=client,
-            kind_dict=bridge_yaml,
-            namespace=target_namespace,
-        )
-        nad_name = nad.name
+    nad = create_and_store_resource(
+        fixture_store=fixture_store,
+        session_uuid=session_uuid,
+        resource=NetworkAttachmentDefinition,
+        client=ocp_admin_client,
+        kind_dict=bridge_dict,
+        namespace=target_namespace,
+    )
+    nad_name = nad.name
 
     yield nad_name
 

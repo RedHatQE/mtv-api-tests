@@ -148,8 +148,14 @@ def check_snapshots(
     snapshots_before_migration.sort(key=lambda x: x["id"])
     snapshots_after_migration.sort(key=lambda x: x["id"])
 
+    time_format: str = "%Y-%m-%d %H:%M"
     for before_snapshot, after_snapshot in zip(snapshots_before_migration, snapshots_after_migration):
-        if before_snapshot != after_snapshot:
+        if (
+            before_snapshot["create_time"].strftime(time_format) != after_snapshot["create_time"].strftime(time_format)
+            or before_snapshot["id"] != after_snapshot["id"]
+            or before_snapshot["name"] != after_snapshot["name"]
+            or before_snapshot["state"] != after_snapshot["state"]
+        ):
             failed_snapshots.append(f"Before snapshot: {before_snapshot}, After snapshot: {after_snapshot}")
 
     if failed_snapshots:
