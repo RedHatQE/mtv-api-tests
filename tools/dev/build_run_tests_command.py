@@ -8,9 +8,9 @@ from typing import Any
 
 def usage() -> str:
     return """Usage:
-run-tests-dev.sh <cluster name> --provider=<provider> --storage=<storage> [--remote] [pytest_args]
+run-tests-dev.sh <cluster name> --provider=<provider> --storage=<storage> [--remote] [pytest_args] [--data-collect]
 or
-run-tests-dev.sh <cluster name> <pre-defined> [pytest_args]
+run-tests-dev.sh <cluster name> <pre-defined> [pytest_args] [--data-collect]
 
 pre-defined runs:
     vmware6-csi
@@ -60,7 +60,6 @@ def main() -> str:
     base_cmd = (
         f"uv run pytest -s --tc=target_ocp_version:{cluster_version}"
         f" --tc=insecure_verify_skip:true --tc=mount_root:{os.environ['MOUNT_PATH']}"
-        " --skip-data-collector"
     )
 
     if len(sys.argv) < 2:
@@ -95,6 +94,9 @@ def main() -> str:
     else:
         print(usage_msg)
         sys.exit(1)
+
+    if "--data-collect" not in pytest_args:
+        base_cmd += " --skip-data-collector"
 
     not_release_tests = "--tc=release_test:true" not in pytest_args
 
