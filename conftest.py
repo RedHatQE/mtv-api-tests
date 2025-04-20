@@ -21,7 +21,6 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor, get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
-from ocp_resources.storage_cluster import StorageCluster
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
@@ -39,9 +38,9 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.cnv import CNVProvider
-from utilities.ceph import ceph_monitor_deamon
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
+from utilities.prometheus import prometheus_monitor_deamon
 from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
@@ -200,45 +199,24 @@ def pytest_exception_interact(node, call, report):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, ceph_monitor, nfs_storage_profile, forklift_pods_state):
+def autouse_fixtures(source_provider_data, prometheus_monitor, nfs_storage_profile, forklift_pods_state):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
 
 @pytest.fixture(scope="session")
-def ceph_tools_pod(ocp_admin_client: DynamicClient) -> Pod | None:
-    openshift_storage_namespace: str = "openshift-storage"
-    ocs_storagecluster = StorageCluster(
-        client=ocp_admin_client,
-        name="ocs-storagecluster",
-        namespace=openshift_storage_namespace,
-    )
-    if ocs_storagecluster.exists:
-        if not ocs_storagecluster.instance.spec.enableCephTools:
-            ResourceEditor(patches={ocs_storagecluster: {"spec": {"enableCephTools": True}}}).update()
+def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
+    try:
+        proc = multiprocessing.Process(
+            target=prometheus_monitor_deamon,
+            kwargs={"ocp_admin_client": ocp_admin_client},
+        )
 
-        for _sample in TimeoutSampler(wait_timeout=60, sleep=1, func=Pod.get, namespace=openshift_storage_namespace):
-            for _pod in _sample:
-                if _pod.labels.get("app") == "rook-ceph-tools":
-                    return _pod
+        proc.start()
+        yield
+        proc.kill()
 
-    return None
-
-
-@pytest.fixture(scope="session")
-def ceph_monitor(ocp_admin_client: DynamicClient, ceph_tools_pod: Pod) -> Generator[None, Any, Any]:
-    if ceph_tools_pod:
-        try:
-            proc = multiprocessing.Process(
-                target=ceph_monitor_deamon,
-                kwargs={"ocp_admin_client": ocp_admin_client, "ceph_tools_pod": ceph_tools_pod},
-            )
-            proc.start()
-            yield
-            proc.kill()
-        except Exception:
-            yield
-    else:
+    except Exception:
         yield
 
 
