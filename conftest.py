@@ -188,8 +188,12 @@ def pytest_exception_interact(node, call, report):
     if not node.session.config.getoption("skip_data_collector"):
         _session_store = get_fixture_store(node.session)
         _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
-        plans = _session_store.get(node.name, {}).get("plans", [])
-        run_must_gather(data_collector_path=_data_collector_path, plans=plans)
+        test_name = node._pyfuncitem.name
+        plans = _session_store["teardown"].get("Plan", [])
+        plan = [plan for plan in plans if plan["test_name"] == test_name]
+        plan = plan[0] if plan else None
+
+        run_must_gather(data_collector_path=_data_collector_path, plan=plan)
 
 
 # Pytest end
