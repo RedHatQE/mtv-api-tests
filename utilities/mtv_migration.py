@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 import contextlib
-from contextlib import contextmanager
-from datetime import datetime, timedelta
-from typing import Any, Generator
+from datetime import datetime
+from typing import Any
 
-import pytz
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
-from ocp_resources.provider import Provider
-from ocp_resources.resource import ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest import FixtureRequest
@@ -25,29 +21,12 @@ from libs.forklift_inventory import ForkliftInventory
 from libs.providers.cnv import CNVProvider
 from libs.providers.vmware import VMWareProvider
 from report import create_migration_scale_report
+from utilities.migration_utils import prepare_migration_for_tests, run_cutover
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list, generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
-
-
-def get_cutover_value(current_cutover: bool = False) -> datetime:
-    datetime_utc = datetime.now(pytz.utc)
-    if current_cutover:
-        return datetime_utc
-
-    return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))
-
-
-def run_cut_over(migration: Migration) -> None:
-    ResourceEditor(
-        patches={
-            migration: {
-                "spec": {"cutover": get_cutover_value(current_cutover=True).strftime(format="%Y-%m-%dT%H:%M:%SZ")},
-            }
-        }
-    ).update()
 
 
 def migrate_vms(
@@ -69,70 +48,48 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> None:
+    plan_from_test = plans[0]
+    virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plan_from_test["virtual_machines"]]
+    warm_migration = plan_from_test.get("warm_migration", False)
+
+    run_migration_kwargs = prepare_migration_for_tests(
+        plan=plan_from_test,
+        warm_migration=warm_migration,
+        request=request,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        target_namespace=target_namespace,
+        session_uuid=session_uuid,
+        fixture_store=fixture_store,
+        cut_over=cut_over,
+        pre_hook_name=pre_hook_name,
+        pre_hook_namespace=pre_hook_namespace,
+        after_hook_name=after_hook_name,
+        after_hook_namespace=after_hook_namespace,
+    )
     try:
-        test_name = request._pyfuncitem.name
-        plan_warm_migration = plans[0].get("warm_migration")
-        _source_provider_type = py_config.get("source_provider_type")
-        _plan_name = (
-            f"{target_namespace}{'-remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
-            f"-{'warm' if plan_warm_migration else 'cold'}"
-        )
-        plan_name = generate_name_with_uuid(name=_plan_name)
-        plans[0]["name"] = plan_name
+        migration_plan, migration = run_migration(**run_migration_kwargs)
 
-        # Plan CR accepts only VM name/id
-        virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plans[0]["virtual_machines"]]
-        if _source_provider_type == Provider.ProviderType.OPENSHIFT:
-            for idx in range(len(virtual_machines_list)):
-                virtual_machines_list[idx].update({"namespace": target_namespace})
+        # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
+        if isinstance(source_provider, VMWareProvider):
+            run_cutover(
+                migration=migration,
+                plan=plan_from_test,
+                warm_migration=warm_migration,
+                vmware_provider=source_provider,
+                virtual_machines_list=virtual_machines_list,
+            )
 
-        run_migration_kwargs: dict[str, Any] = {
-            "name": plan_name,
-            "source_provider_name": source_provider.ocp_resource.name,
-            "source_provider_namespace": source_provider.ocp_resource.namespace,
-            "virtual_machines_list": virtual_machines_list,
-            "warm_migration": plan_warm_migration,
-            "network_map_name": network_migration_map.name,
-            "network_map_namespace": network_migration_map.namespace,
-            "storage_map_name": storage_migration_map.name,
-            "storage_map_namespace": storage_migration_map.namespace,
-            "target_namespace": target_namespace,
-            "pre_hook_name": pre_hook_name,
-            "pre_hook_namespace": pre_hook_namespace,
-            "after_hook_name": after_hook_name,
-            "after_hook_namespace": after_hook_namespace,
-            "cut_over": cut_over,
-            "destination_provider_name": destination_provider.ocp_resource.name,
-            "destination_provider_namespace": destination_provider.ocp_resource.namespace,
-            "fixture_store": fixture_store,
-            "session_uuid": session_uuid,
-            "test_name": test_name,
-        }
+        wait_for_migration_complate(plan=migration_plan)
 
-        with run_migration(**run_migration_kwargs) as (plan, migration):
-            # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
-            if (
-                plans[0].get("pre_copies_before_cut_over")
-                and not cut_over
-                and plan_warm_migration
-                and isinstance(source_provider, VMWareProvider)
-            ):
-                source_provider.wait_for_snapshots(
-                    vm_names_list=virtual_machines_list,
-                    number_of_snapshots=plans[0].get("pre_copies_before_cut_over"),
-                )
-                if migration:
-                    run_cut_over(migration=migration)
+        if py_config.get("create_scale_report"):
+            create_migration_scale_report(plan_resource=plan_from_test)
 
-        if migration:
-            wait_for_migration_complate(plan=plan)
-
-            if py_config.get("create_scale_report"):
-                create_migration_scale_report(plan_resource=plan)
-
-        if get_value_from_py_config("check_vms_signals") and plans[0].get("check_vms_signals", True):
+        if get_value_from_py_config("check_vms_signals") and plan_from_test.get("check_vms_signals", True):
             check_vms(
-                plan=plans[0],
+                plan=plan_from_test,
                 source_provider=source_provider,
                 source_provider_data=source_provider_data,
                 destination_provider=destination_provider,
@@ -148,7 +105,6 @@ def migrate_vms(
             delete_all_vms(ocp_admin_client=ocp_admin_client, namespace=target_namespace)
 
 
-@contextmanager
 def run_migration(
     name: str,
     source_provider_name: str,
@@ -170,7 +126,7 @@ def run_migration(
     fixture_store: Any,
     session_uuid: str,
     test_name: str,
-) -> Generator[tuple[Plan, Migration], Any, Any]:
+) -> tuple[Plan, Migration]:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
@@ -232,7 +188,7 @@ def run_migration(
         plan_namespace=plan.namespace,
         cut_over=cut_over,
     )
-    yield plan, migration
+    return plan, migration
 
 
 def get_vm_suffix() -> str:

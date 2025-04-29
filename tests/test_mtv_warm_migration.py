@@ -1,9 +1,9 @@
 import pytest
 from pytest_testconfig import py_config
 
+from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_storagemap_and_networkmap,
-    get_cutover_value,
     get_vm_suffix,
     migrate_vms,
 )
