@@ -1,16 +1,29 @@
 import contextlib
+from datetime import datetime, timedelta
+from typing import Any
 
+import pytz
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.migration import Migration
+from ocp_resources.network_map import NetworkMap
 from ocp_resources.persistent_volume import PersistentVolume
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
+from ocp_resources.provider import Provider
 from ocp_resources.resource import NamespacedResource, Resource, ResourceEditor
+from ocp_resources.storage_map import StorageMap
+from pytest import FixtureRequest
+from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError
+
+from libs.base_provider import BaseProvider
+from libs.providers.cnv import CNVProvider
+from libs.providers.vmware import VMWareProvider
+from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -122,3 +135,89 @@ def append_leftovers(
     })
 
     return leftovers
+
+
+def prepare_migration_for_tests(
+    plan: dict[str, Any],
+    warm_migration: bool,
+    request: FixtureRequest,
+    source_provider: BaseProvider,
+    destination_provider: CNVProvider,
+    network_migration_map: NetworkMap,
+    storage_migration_map: StorageMap,
+    target_namespace: str,
+    session_uuid: str,
+    fixture_store: Any,
+    cut_over: datetime | None = None,
+    pre_hook_name: str | None = None,
+    pre_hook_namespace: str | None = None,
+    after_hook_name: str | None = None,
+    after_hook_namespace: str | None = None,
+) -> dict[str, Any]:
+    test_name = request._pyfuncitem.name
+    _source_provider_type = py_config.get("source_provider_type")
+    _plan_name = (
+        f"{target_namespace}{'-remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
+        f"-{'warm' if warm_migration else 'cold'}"
+    )
+    plan_name = generate_name_with_uuid(name=_plan_name)
+    plan["name"] = plan_name
+
+    # Plan CR accepts only VM name/id
+    virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plan["virtual_machines"]]
+    if _source_provider_type == Provider.ProviderType.OPENSHIFT:
+        for idx in range(len(virtual_machines_list)):
+            virtual_machines_list[idx].update({"namespace": target_namespace})
+
+    return {
+        "name": plan_name,
+        "source_provider_name": source_provider.ocp_resource.name,
+        "source_provider_namespace": source_provider.ocp_resource.namespace,
+        "virtual_machines_list": virtual_machines_list,
+        "warm_migration": warm_migration,
+        "network_map_name": network_migration_map.name,
+        "network_map_namespace": network_migration_map.namespace,
+        "storage_map_name": storage_migration_map.name,
+        "storage_map_namespace": storage_migration_map.namespace,
+        "target_namespace": target_namespace,
+        "pre_hook_name": pre_hook_name,
+        "pre_hook_namespace": pre_hook_namespace,
+        "after_hook_name": after_hook_name,
+        "after_hook_namespace": after_hook_namespace,
+        "cut_over": cut_over,
+        "destination_provider_name": destination_provider.ocp_resource.name,
+        "destination_provider_namespace": destination_provider.ocp_resource.namespace,
+        "fixture_store": fixture_store,
+        "session_uuid": session_uuid,
+        "test_name": test_name,
+    }
+
+
+def run_cutover(
+    migration: Migration,
+    plan: dict[str, Any],
+    warm_migration: bool,
+    vmware_provider: VMWareProvider,
+    virtual_machines_list: list[dict[str, str]],
+    cut_over: datetime | None = None,
+) -> None:
+    if plan.get("pre_copies_before_cut_over", False) and not cut_over and warm_migration:
+        vmware_provider.wait_for_snapshots(
+            vm_names_list=virtual_machines_list,
+            number_of_snapshots=plan.get("pre_copies_before_cut_over"),
+        )
+        ResourceEditor(
+            patches={
+                migration: {
+                    "spec": {"cutover": get_cutover_value(current_cutover=True).strftime(format="%Y-%m-%dT%H:%M:%SZ")},
+                }
+            }
+        ).update()
+
+
+def get_cutover_value(current_cutover: bool = False) -> datetime:
+    datetime_utc = datetime.now(pytz.utc)
+    if current_cutover:
+        return datetime_utc
+
+    return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))

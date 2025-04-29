@@ -18,6 +18,7 @@ RUN dnf -y --disableplugin=subscription-manager install \
   openssl-devel \
   libcurl-devel \
   gcc \
+  clang \
   python3-devel \
   && dnf clean all \
   && rm -rf /var/cache/dnf \
