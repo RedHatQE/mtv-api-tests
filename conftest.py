@@ -49,7 +49,6 @@ from utilities.utils import (
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
-    start_source_vm_data_upload_vmware,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -476,7 +475,6 @@ def posthook(fixture_store, session_uuid, ocp_admin_client, target_namespace):
 def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, request):
     plan: dict[str, Any] = request.param[0]
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
-    vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
@@ -497,18 +495,6 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
                     source_provider.stop_vm(provider_vm_api)
                 else:
                     source_provider.power_off_vm(provider_vm_api)
-
-    # Uploading Data to the source guest vm that may be validated later
-    # The source VM is required to be running
-    # Once there are no more running VMs the thread is terminated.
-    # skip if pre_copies_before_cut_over is not set
-    if (
-        plan.get("warm_migration")
-        and all([vm.get("source_vm_power") == "on" for vm in virtual_machines])
-        and plan.get("pre_copies_before_cut_over")
-    ):
-        LOGGER.info("Starting Data Upload to source VMs")
-        start_source_vm_data_upload_vmware(vmware_provider=source_provider, vm_names_list=vm_names_list)
 
     yield request.param
 

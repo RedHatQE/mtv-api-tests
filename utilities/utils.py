@@ -5,7 +5,6 @@ import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
-from time import sleep
 from typing import Any, Generator
 
 import pytest
@@ -246,14 +245,6 @@ def create_source_provider(
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
             yield _source_provider
-
-
-@background
-def start_source_vm_data_upload_vmware(vmware_provider: VMWareProvider, vm_names_list: list[str]) -> None:
-    print("start data generation")
-    vmware_provider.clear_vm_data(vm_names_list=vm_names_list)
-    while vmware_provider.upload_data_to_vms(vm_names_list=vm_names_list):
-        sleep(1)
 
 
 def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str) -> None:

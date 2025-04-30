@@ -198,16 +198,6 @@ def check_vms(
         )
         check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
 
-        plan_pre_copies_before_cut_over = plan.get("pre_copies_before_cut_over")
-
-        if plan.get("warm_migration") and plan_pre_copies_before_cut_over:
-            check_data_integrity(
-                destination_vm_dict=destination_vm,
-                source_vm_dict=source_vm,
-                source_provider_data=source_provider_data,
-                min_number_of_snapshots=plan_pre_copies_before_cut_over,
-            )
-
         snapshots_before_migration = vm.get("snapshots_before_migration")
 
         if (
