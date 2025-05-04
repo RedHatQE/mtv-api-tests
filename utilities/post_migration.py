@@ -19,12 +19,13 @@ from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provi
 LOGGER = get_logger(name=__name__)
 
 
-def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[str, Any]) -> dict[str, Any] | None:
+def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[str, Any]) -> dict[str, Any]:
     """
     Get the source_name's (Network Or Storage) destination_name in a migration map.
     """
     for map_item in map_resource.instance.spec.map:
         result = {"name": "pod"} if map_item.destination.type == "pod" else map_item.destination
+
         if map_item.source.type:
             if map_item.source.type == source_vm_nic["network"]:
                 return result
@@ -40,12 +41,30 @@ def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[s
             ):
                 return result
 
-    return None
+    return {}
 
 
 def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
-    assert source_vm["cpu"]["num_cores"] == destination_vm["cpu"]["num_cores"]
-    assert source_vm["cpu"]["num_sockets"] == destination_vm["cpu"]["num_sockets"]
+    failed_checks = {}
+
+    src_vm_num_cores = source_vm["cpu"]["num_cores"]
+    dst_vm_num_cores = destination_vm["cpu"]["num_cores"]
+
+    src_vm_num_sockets = source_vm["cpu"]["num_sockets"]
+    dst_vm_num_sockets = destination_vm["cpu"]["num_sockets"]
+
+    if not src_vm_num_cores == dst_vm_num_cores:
+        failed_checks["cpu number of cores"] = (
+            f"source_vm cpu cores: {src_vm_num_cores} != destination_vm cpu cores: {dst_vm_num_cores}"
+        )
+
+    if not src_vm_num_sockets == dst_vm_num_sockets:
+        failed_checks["cpu number of sockets"] = (
+            f"source_vm cpu sockets: {src_vm_num_sockets} != destination_vm cpu sockets: {dst_vm_num_sockets}"
+        )
+
+    if failed_checks:
+        pytest.fail(f"CPU failed checks: {failed_checks}")
 
 
 def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
@@ -58,10 +77,10 @@ def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, An
 
 def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], network_migration_map: NetworkMap) -> None:
     for source_vm_nic in source_vm["network_interfaces"]:
-        # for rhv we use networks ids instead of names
-        # TODO: Use datacenter/name format for rhv
         expected_network = get_destination(network_migration_map, source_vm_nic)
+
         assert expected_network, "Network not found in migration map"
+
         expected_network_name = expected_network["name"]
 
         destination_vm_nic = get_nic_by_mac(
@@ -74,7 +93,9 @@ def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], net
 def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], storage_map_resource: StorageMap) -> None:
     destination_disks = destination_vm["disks"]
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
+
     assert len(destination_disks) == len(source_vm["disks"]), "disks count"
+
     for destination_disk in destination_disks:
         assert destination_disk["storage"]["name"] == py_config["storage_class"], "storage class"
         if destination_disk["storage"]["name"] == "ocs-storagecluster-ceph-rbd":
@@ -116,6 +137,7 @@ def check_data_integrity(
     # we expect: -1|1|2|3|.|n|.|.| n>= the underlined minimum number of snapshots
     LOGGER.info(data)
     str_data: list[str] = data.decode("utf8").split("-1")[1].split("|")
+
     for i in range(1, len(str_data)):
         assert str_data[i] == str(i), "data integrity check."
 
@@ -126,6 +148,7 @@ def check_vms_power_state(
     source_vm: dict[str, Any], destination_vm: dict[str, Any], source_power_before_migration: bool
 ) -> None:
     assert source_vm["power_state"] == "off", "Checking source VM is off"
+
     if source_power_before_migration:
         assert destination_vm["power_state"] == source_power_before_migration
 
@@ -149,6 +172,7 @@ def check_snapshots(
     snapshots_after_migration.sort(key=lambda x: x["id"])
 
     time_format: str = "%Y-%m-%d %H:%M"
+
     for before_snapshot, after_snapshot in zip(snapshots_before_migration, snapshots_after_migration):
         if (
             before_snapshot["create_time"].strftime(time_format) != after_snapshot["create_time"].strftime(time_format)
@@ -156,7 +180,9 @@ def check_snapshots(
             or before_snapshot["name"] != after_snapshot["name"]
             or before_snapshot["state"] != after_snapshot["state"]
         ):
-            failed_snapshots.append(f"Before snapshot: {before_snapshot}, After snapshot: {after_snapshot}")
+            failed_snapshots.append(
+                f"snapshot before migration: {before_snapshot}, snapshot after migration: {after_snapshot}"
+            )
 
     if failed_snapshots:
         pytest.fail(f"Some of the VM snapshots did not match: {failed_snapshots}")

@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
+import pickle
 import shutil
 from pathlib import Path
+from shutil import rmtree
 from typing import Any, Generator
 
 import pytest
@@ -51,6 +53,8 @@ from utilities.utils import (
     get_value_from_py_config,
 )
 
+RESULTS_PATH = Path("./.xdist_results/")
+RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 
@@ -192,6 +196,46 @@ def pytest_exception_interact(node, call, report):
         plan = plan[0] if plan else None
 
         run_must_gather(data_collector_path=_data_collector_path, plan=plan)
+
+
+# https://smarie.github.io/python-pytest-harvest/#pytest-x-dist
+def pytest_harvest_xdist_init():
+    # reset the recipient folder
+    if RESULTS_PATH.exists():
+        rmtree(RESULTS_PATH)
+
+    RESULTS_PATH.mkdir(exist_ok=False)
+    return True
+
+
+def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
+    # persist session_items and fixture_store in the file system
+    with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:
+        try:
+            pickle.dump((session_items, fixture_store), f)
+        except Exception as exp:
+            LOGGER.warning(f"Error while pickling worker {worker_id}'s harvested results: [{exp.__class__}] {exp}")
+
+    return True
+
+
+def pytest_harvest_xdist_load():
+    # restore the saved objects from file system
+    workers_saved_material = {}
+
+    for pkl_file in RESULTS_PATH.glob("*.pkl"):
+        wid = pkl_file.stem
+
+        with pkl_file.open("rb") as f:
+            workers_saved_material[wid] = pickle.load(f)
+
+    return workers_saved_material
+
+
+def pytest_harvest_xdist_cleanup():
+    # delete all temporary pickle files
+    rmtree(RESULTS_PATH)
+    return True
 
 
 # Pytest end
