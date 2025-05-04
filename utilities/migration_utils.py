@@ -21,7 +21,7 @@ from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError
 
 from libs.base_provider import BaseProvider
-from libs.providers.cnv import CNVProvider
+from libs.providers.openshift import OCPProvider
 from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
@@ -141,7 +141,7 @@ def prepare_migration_for_tests(
     warm_migration: bool,
     request: FixtureRequest,
     source_provider: BaseProvider,
-    destination_provider: CNVProvider,
+    destination_provider: OCPProvider,
     network_migration_map: NetworkMap,
     storage_migration_map: StorageMap,
     target_namespace: str,

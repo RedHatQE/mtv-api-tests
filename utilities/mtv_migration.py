@@ -18,7 +18,7 @@ from timeout_sampler import retry
 from exceptions.exceptions import MigrationPlanExecError, MigrationPlanExecStopError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
-from libs.providers.cnv import CNVProvider
+from libs.providers.openshift import OCPProvider
 from report import create_migration_scale_report
 from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
@@ -32,7 +32,7 @@ def migrate_vms(
     request: FixtureRequest,
     ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
-    destination_provider: CNVProvider,
+    destination_provider: OCPProvider,
     plans: list[dict[str, Any]],
     network_migration_map: NetworkMap,
     storage_migration_map: StorageMap,

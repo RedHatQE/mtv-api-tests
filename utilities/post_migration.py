@@ -173,9 +173,7 @@ def check_vms(
     target_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
 ) -> None:
-    virtual_machines = plan["virtual_machines"]
-
-    for vm in virtual_machines:
+    for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
         source_vm = source_provider.vm_dict(
             name=vm_name, namespace=target_namespace, source=True, source_provider_inventory=source_provider_inventory

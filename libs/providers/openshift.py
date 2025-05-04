@@ -18,16 +18,16 @@ from libs.base_provider import BaseProvider
 LOGGER = get_logger(__name__)
 
 
-class CNVProvider(BaseProvider):
+class OCPProvider(BaseProvider):
     def __init__(self, ocp_resource: Provider, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, **kwargs)
-        self.type = Provider.ProviderType.RHV
+        self.type = Provider.ProviderType.OPENSHIFT
 
-    def connect(self) -> "CNVProvider":
+    def connect(self) -> "OCPProvider":
         return self
 
     def disconnect(self) -> None:
-        LOGGER.info("Disconnecting CNVProvider source provider")
+        LOGGER.info("Disconnecting from OCPProvider source provider")
         pass
 
     @property

@@ -37,7 +37,7 @@ from libs.forklift_inventory import (
     OvirtForkliftInventory,
     VsphereForkliftInventory,
 )
-from libs.providers.cnv import CNVProvider
+from libs.providers.openshift import OCPProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
 from utilities.prometheus import prometheus_monitor_deamon
@@ -354,7 +354,7 @@ def destination_provider(ocp_admin_client, mtv_namespace):
     if not provider.exists:
         raise MissingResourceResError(f"Provider {provider.name} not found")
 
-    return CNVProvider(ocp_resource=provider)
+    return OCPProvider(ocp_resource=provider)
 
 
 @pytest.fixture(scope="session")
@@ -438,7 +438,7 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         url=ocp_admin_client.configuration.host,
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
-    yield CNVProvider(ocp_resource=provider)
+    yield OCPProvider(ocp_resource=provider)
 
 
 @pytest.fixture(scope="session")

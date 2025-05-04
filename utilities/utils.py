@@ -19,7 +19,7 @@ from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
-from libs.providers.cnv import CNVProvider
+from libs.providers.openshift import OCPProvider
 from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
@@ -137,7 +137,7 @@ def create_source_provider(
         if not provider.exists:
             raise MissingResourceResError(f"Provider {provider.name} not found")
 
-        yield CNVProvider(
+        yield OCPProvider(
             ocp_resource=provider,
             provider_data=source_provider_data_copy,
         )
