@@ -5,7 +5,6 @@ import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
-from time import sleep
 from typing import Any, Generator
 
 import pytest
@@ -20,7 +19,7 @@ from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
-from libs.providers.cnv import CNVProvider
+from libs.providers.openshift import OCPProvider
 from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
@@ -28,13 +27,6 @@ from libs.providers.vmware import VMWareProvider
 from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
-
-
-def get_guest_os_credentials(provider_data: dict[str, str], vm_dict: dict[str, str]) -> tuple[str, str]:
-    win_os = vm_dict["win_os"]
-    user = provider_data["guest_vm_win_user"] if win_os else provider_data["guest_vm_linux_user"]
-    password = provider_data["guest_vm_win_password"] if win_os else provider_data["guest_vm_linux_password"]
-    return user, password
 
 
 def vmware_provider(provider_data: dict[str, Any]) -> bool:
@@ -138,7 +130,7 @@ def create_source_provider(
         if not provider.exists:
             raise MissingResourceResError(f"Provider {provider.name} not found")
 
-        yield CNVProvider(
+        yield OCPProvider(
             ocp_resource=provider,
             provider_data=source_provider_data_copy,
         )
@@ -246,14 +238,6 @@ def create_source_provider(
                 pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
 
             yield _source_provider
-
-
-@background
-def start_source_vm_data_upload_vmware(vmware_provider: VMWareProvider, vm_names_list: list[str]) -> None:
-    print("start data generation")
-    vmware_provider.clear_vm_data(vm_names_list=vm_names_list)
-    while vmware_provider.upload_data_to_vms(vm_names_list=vm_names_list):
-        sleep(1)
 
 
 def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str) -> None:

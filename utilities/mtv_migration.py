@@ -18,10 +18,9 @@ from timeout_sampler import retry
 from exceptions.exceptions import MigrationPlanExecError, MigrationPlanExecStopError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
-from libs.providers.cnv import CNVProvider
-from libs.providers.vmware import VMWareProvider
+from libs.providers.openshift import OCPProvider
 from report import create_migration_scale_report
-from utilities.migration_utils import prepare_migration_for_tests, run_cutover
+from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list, generate_name_with_uuid, get_value_from_py_config
@@ -33,7 +32,7 @@ def migrate_vms(
     request: FixtureRequest,
     ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
-    destination_provider: CNVProvider,
+    destination_provider: OCPProvider,
     plans: list[dict[str, Any]],
     network_migration_map: NetworkMap,
     storage_migration_map: StorageMap,
@@ -49,7 +48,6 @@ def migrate_vms(
     after_hook_namespace: str | None = None,
 ) -> None:
     plan_from_test = plans[0]
-    virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plan_from_test["virtual_machines"]]
     warm_migration = plan_from_test.get("warm_migration", False)
 
     run_migration_kwargs = prepare_migration_for_tests(
@@ -70,17 +68,7 @@ def migrate_vms(
         after_hook_namespace=after_hook_namespace,
     )
     try:
-        migration_plan, migration = run_migration(**run_migration_kwargs)
-
-        # Warm Migration: Run cut-over after all vms in the plan have more than the underlined number of pre-copies
-        if isinstance(source_provider, VMWareProvider):
-            run_cutover(
-                migration=migration,
-                plan=plan_from_test,
-                warm_migration=warm_migration,
-                vmware_provider=source_provider,
-                virtual_machines_list=virtual_machines_list,
-            )
+        migration_plan = run_migration(**run_migration_kwargs)
 
         wait_for_migration_complate(plan=migration_plan)
 
@@ -126,7 +114,7 @@ def run_migration(
     fixture_store: Any,
     session_uuid: str,
     test_name: str,
-) -> tuple[Plan, Migration]:
+) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
 
@@ -178,7 +166,7 @@ def run_migration(
     )
 
     plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
-    migration = create_and_store_resource(
+    create_and_store_resource(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
         resource=Migration,
@@ -188,7 +176,7 @@ def run_migration(
         plan_namespace=plan.namespace,
         cut_over=cut_over,
     )
-    return plan, migration
+    return plan
 
 
 def get_vm_suffix() -> str:
