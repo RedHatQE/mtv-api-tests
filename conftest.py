@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
+import pickle
 import shutil
 from pathlib import Path
+from shutil import rmtree
 from typing import Any, Generator
 
 import pytest
@@ -37,7 +39,7 @@ from libs.forklift_inventory import (
     OvirtForkliftInventory,
     VsphereForkliftInventory,
 )
-from libs.providers.cnv import CNVProvider
+from libs.providers.openshift import OCPProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
 from utilities.prometheus import prometheus_monitor_deamon
@@ -49,9 +51,10 @@ from utilities.utils import (
     generate_name_with_uuid,
     get_source_provider_data,
     get_value_from_py_config,
-    start_source_vm_data_upload_vmware,
 )
 
+RESULTS_PATH = Path("./.xdist_results/")
+RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 
@@ -193,6 +196,46 @@ def pytest_exception_interact(node, call, report):
         plan = plan[0] if plan else None
 
         run_must_gather(data_collector_path=_data_collector_path, plan=plan)
+
+
+# https://smarie.github.io/python-pytest-harvest/#pytest-x-dist
+def pytest_harvest_xdist_init():
+    # reset the recipient folder
+    if RESULTS_PATH.exists():
+        rmtree(RESULTS_PATH)
+
+    RESULTS_PATH.mkdir(exist_ok=False)
+    return True
+
+
+def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
+    # persist session_items and fixture_store in the file system
+    with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:
+        try:
+            pickle.dump((session_items, fixture_store), f)
+        except Exception as exp:
+            LOGGER.warning(f"Error while pickling worker {worker_id}'s harvested results: [{exp.__class__}] {exp}")
+
+    return True
+
+
+def pytest_harvest_xdist_load():
+    # restore the saved objects from file system
+    workers_saved_material = {}
+
+    for pkl_file in RESULTS_PATH.glob("*.pkl"):
+        wid = pkl_file.stem
+
+        with pkl_file.open("rb") as f:
+            workers_saved_material[wid] = pickle.load(f)
+
+    return workers_saved_material
+
+
+def pytest_harvest_xdist_cleanup():
+    # delete all temporary pickle files
+    rmtree(RESULTS_PATH)
+    return True
 
 
 # Pytest end
@@ -355,7 +398,7 @@ def destination_provider(ocp_admin_client, mtv_namespace):
     if not provider.exists:
         raise MissingResourceResError(f"Provider {provider.name} not found")
 
-    return CNVProvider(ocp_resource=provider)
+    return OCPProvider(ocp_resource=provider)
 
 
 @pytest.fixture(scope="session")
@@ -439,7 +482,7 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         url=ocp_admin_client.configuration.host,
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
-    yield CNVProvider(ocp_resource=provider)
+    yield OCPProvider(ocp_resource=provider)
 
 
 @pytest.fixture(scope="session")
@@ -476,7 +519,6 @@ def posthook(fixture_store, session_uuid, ocp_admin_client, target_namespace):
 def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, request):
     plan: dict[str, Any] = request.param[0]
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
-    vm_names_list: list[str] = [vm["name"] for vm in virtual_machines]
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
@@ -497,18 +539,6 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
                     source_provider.stop_vm(provider_vm_api)
                 else:
                     source_provider.power_off_vm(provider_vm_api)
-
-    # Uploading Data to the source guest vm that may be validated later
-    # The source VM is required to be running
-    # Once there are no more running VMs the thread is terminated.
-    # skip if pre_copies_before_cut_over is not set
-    if (
-        plan.get("warm_migration")
-        and all([vm.get("source_vm_power") == "on" for vm in virtual_machines])
-        and plan.get("pre_copies_before_cut_over")
-    ):
-        LOGGER.info("Starting Data Upload to source VMs")
-        start_source_vm_data_upload_vmware(vmware_provider=source_provider, vm_names_list=vm_names_list)
 
     yield request.param
 

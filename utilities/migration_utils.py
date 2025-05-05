@@ -21,8 +21,7 @@ from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError
 
 from libs.base_provider import BaseProvider
-from libs.providers.cnv import CNVProvider
-from libs.providers.vmware import VMWareProvider
+from libs.providers.openshift import OCPProvider
 from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
@@ -142,7 +141,7 @@ def prepare_migration_for_tests(
     warm_migration: bool,
     request: FixtureRequest,
     source_provider: BaseProvider,
-    destination_provider: CNVProvider,
+    destination_provider: OCPProvider,
     network_migration_map: NetworkMap,
     storage_migration_map: StorageMap,
     target_namespace: str,
@@ -191,28 +190,6 @@ def prepare_migration_for_tests(
         "session_uuid": session_uuid,
         "test_name": test_name,
     }
-
-
-def run_cutover(
-    migration: Migration,
-    plan: dict[str, Any],
-    warm_migration: bool,
-    vmware_provider: VMWareProvider,
-    virtual_machines_list: list[dict[str, str]],
-    cut_over: datetime | None = None,
-) -> None:
-    if plan.get("pre_copies_before_cut_over", False) and not cut_over and warm_migration:
-        vmware_provider.wait_for_snapshots(
-            vm_names_list=virtual_machines_list,
-            number_of_snapshots=plan.get("pre_copies_before_cut_over"),
-        )
-        ResourceEditor(
-            patches={
-                migration: {
-                    "spec": {"cutover": get_cutover_value(current_cutover=True).strftime(format="%Y-%m-%dT%H:%M:%SZ")},
-                }
-            }
-        ).update()
 
 
 def get_cutover_value(current_cutover: bool = False) -> datetime:
