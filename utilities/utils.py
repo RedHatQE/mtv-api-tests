@@ -29,13 +29,6 @@ from utilities.resources import create_and_store_resource
 LOGGER = get_logger(__name__)
 
 
-def get_guest_os_credentials(provider_data: dict[str, str], vm_dict: dict[str, str]) -> tuple[str, str]:
-    win_os = vm_dict["win_os"]
-    user = provider_data["guest_vm_win_user"] if win_os else provider_data["guest_vm_linux_user"]
-    password = provider_data["guest_vm_win_password"] if win_os else provider_data["guest_vm_linux_password"]
-    return user, password
-
-
 def vmware_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.VSPHERE
 
