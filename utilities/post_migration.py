@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import uuid
-from subprocess import STDOUT, check_output
 from typing import Any
 
 import pytest
@@ -14,7 +12,7 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
-from utilities.utils import get_guest_os_credentials, rhv_provider, vmware_provider
+from utilities.utils import rhv_provider, vmware_provider
 
 LOGGER = get_logger(name=__name__)
 
@@ -106,42 +104,6 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWO
                     else:
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
-
-
-def check_data_integrity(
-    source_vm_dict: dict[str, Any],
-    destination_vm_dict: dict[str, Any],
-    source_provider_data: dict[str, Any],
-    min_number_of_snapshots: int,
-) -> None:
-    """
-    Reads the content of the data file that was generated during the test on the source vm
-    And Verify the integrity of the  data generated after each snapshot
-    Note: Only works when MTV and the Target Provider are deployed on the same cluster
-    """
-    ip_address = destination_vm_dict["network_interfaces"][0]["ip"]
-    os_user, os_password = get_guest_os_credentials(provider_data=source_provider_data, vm_dict=source_vm_dict)
-
-    pod_name = f"worker-{str(uuid.uuid4())[:5]}"
-    cli = f'"python" "./main.py"  "--ip={ip_address}"   "--username={os_user}" "--password={os_password}"'
-    data = check_output(
-        [
-            "/bin/sh",
-            "-c",
-            f"oc project {py_config['target_namespace']} && oc run {pod_name} --image=quay.io/mtvqe/python-runner \
-             --command -- {cli}  && sleep 10 && oc logs pod/{pod_name} && oc delete pod/{pod_name}&>/dev/null &",
-        ],
-        stderr=STDOUT,
-    )
-
-    # we expect: -1|1|2|3|.|n|.|.| n>= the underlined minimum number of snapshots
-    LOGGER.info(data)
-    str_data: list[str] = data.decode("utf8").split("-1")[1].split("|")
-
-    for i in range(1, len(str_data)):
-        assert str_data[i] == str(i), "data integrity check."
-
-    assert len(str_data) - 1 >= min_number_of_snapshots, "data integrity check."
 
 
 def check_vms_power_state(
