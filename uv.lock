@@ -899,6 +899,7 @@ dev = [
     { name = "ipython", version = "8.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "ipython", version = "8.36.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "ipython", version = "9.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "python-jenkins" },
 ]
 
 [package.metadata]
@@ -933,7 +934,14 @@ requires-dist = [
 dev = [
     { name = "ipdb", specifier = ">=0.13.13" },
     { name = "ipython", specifier = ">=8.12.3" },
+    { name = "python-jenkins", specifier = ">=1.8.2" },
 ]
+
+[[package]]
+name = "multi-key-dict"
+version = "2.0.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/97/2e9c47ca1bbde6f09cb18feb887d5102e8eacd82fbc397c77b221f27a2ab/multi_key_dict-2.0.3.tar.gz", hash = "sha256:deebdec17aa30a1c432cb3f437e81f8621e1c0542a0c0617a74f71e232e9939e", size = 8429, upload-time = "2015-09-20T19:38:19.749Z" }
 
 [[package]]
 name = "netaddr"
@@ -1688,6 +1696,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9d/55/996a756318b17f162665cbc9f7e6219d6dc56875684693f07a60c02d7148/python_glanceclient-4.8.0.tar.gz", hash = "sha256:f85b6fc81f27b34da1c87484b3097659db0529abd1c67595d2f0fe7cb159036c", size = 208444, upload-time = "2025-02-28T14:47:27.692Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/82/f8/c695f7db0e54d1d117e95949424bb04cc6784301686b8bd370209856449f/python_glanceclient-4.8.0-py3-none-any.whl", hash = "sha256:11b5e6abae24f0536cce3d4cf432725f3a6ee9e9a38059201c9bc234f8460587", size = 206965, upload-time = "2025-02-28T14:47:26.273Z" },
+]
+
+[[package]]
+name = "python-jenkins"
+version = "1.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "multi-key-dict" },
+    { name = "pbr" },
+    { name = "requests" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/45/ac/2bc1d844609302f7f907594961ffba7d6edd5848705f958683a9c2d87901/python-jenkins-1.8.2.tar.gz", hash = "sha256:56e7dabb0607bdb8e1d6fc6d2d4301abedbed9165da2b206facbd3071cb6eecb", size = 66548, upload-time = "2023-11-09T10:20:09.366Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/8f/ba846ae570e6d8a3830e9755e7cbb9bc67332bdc2da502bcac4d35f97ed3/python_jenkins-1.8.2-py3-none-any.whl", hash = "sha256:585c9a25042892ce224dcddb1d4b9ff29755ca63da03ac2ce96537d373c0233e", size = 29091, upload-time = "2023-11-09T10:20:07.826Z" },
 ]
 
 [[package]]
