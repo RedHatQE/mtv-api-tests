@@ -715,6 +715,15 @@ wheels = [
 ]
 
 [[package]]
+name = "kerberos"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/cd/f98699a6e806b9d974ea1d3376b91f09edcb90415adbf31e3b56ee99ba64/kerberos-1.3.1.tar.gz", hash = "sha256:cdd046142a4e0060f96a00eb13d82a5d9ebc0f2d7934393ed559bac773460a2c", size = 19126, upload-time = "2021-01-09T06:43:46.862Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/9a/d10386fa7da4588e61fdafdbac2953576f7de6f693d112c74f09a9749fb6/kerberos-1.3.1-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:2002b3b1541fc51e2c081ee7048f55e5d9ca63dd09f0d7b951c263920db3a0bb", size = 20248, upload-time = "2021-01-09T06:43:45.915Z" },
+]
+
+[[package]]
 name = "keystoneauth1"
 version = "5.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -899,6 +908,7 @@ dev = [
     { name = "ipython", version = "8.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "ipython", version = "8.36.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "ipython", version = "9.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "kerberos" },
     { name = "python-jenkins" },
 ]
 
@@ -934,6 +944,7 @@ requires-dist = [
 dev = [
     { name = "ipdb", specifier = ">=0.13.13" },
     { name = "ipython", specifier = ">=8.12.3" },
+    { name = "kerberos", specifier = ">=1.3.1" },
     { name = "python-jenkins", specifier = ">=1.8.2" },
 ]
 
