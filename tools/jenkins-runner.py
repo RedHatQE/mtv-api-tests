@@ -9,7 +9,9 @@ from mtv_iib import get_mtv_latest_iib
 
 
 def main(
-    job_name: str,
+    user: str,
+    password: str,
+    job: str,
     cluster: str,
     iib: bool = False,
     deploy_ocp: bool = False,
@@ -18,7 +20,7 @@ def main(
 ) -> None:
     os.environ["PYTHONHTTPSVERIFY"] = "0"
     url = "https://jenkins-csb-mtv-qe-main.dno.corp.redhat.com"
-    api = jenkins_api.Jenkins(url=url)
+    api = jenkins_api.Jenkins(url=url, username=user, password=password)
 
     supported_jobs: list[str] = [
         "mtv-2.8-ocp-4.18-test-release-gate",
@@ -29,16 +31,16 @@ def main(
         "mtv-2.8-ocp-4.16-test-stage-gate",
     ]
 
-    if job_name not in supported_jobs:
-        print(f"Job {job_name} is not supported")
+    if job not in supported_jobs:
+        print(f"Job {job} is not supported")
         sys.exit(1)
 
-    ocp_version = re.findall(r"ocp-(\d.\d+)", job_name)
+    ocp_version = re.findall(r"ocp-(\d.\d+)", job)
     if not ocp_version:
         print("No OCP version found in job name")
         sys.exit(1)
 
-    mtv_version = re.findall(r"mtv-(\d.\d+)", job_name)
+    mtv_version = re.findall(r"mtv-(\d.\d+)", job)
     if not mtv_version:
         print("No MTV version found in job name")
         sys.exit(1)
@@ -62,8 +64,8 @@ def main(
         params["IIB_NO"] = iib_dict["IIB"]
         params["MTV_VERSION"] = iib_dict["MTV"].split("-")[0]
 
-    api.build_job(name=job_name, parameters=params)
-    print(f"{url}/{job_name}")
+    api.build_job(name=job, parameters=params)
+    print(f"{url}/job/{job}")
 
 
 if __name__ == "__main__":
@@ -71,7 +73,9 @@ if __name__ == "__main__":
         prog="Jenkins job runner",
         description="Run MTV Jenkins jobs",
     )
-    parser.add_argument("-j", "--job-name", help="Jenkins job name", required=True)
+    parser.add_argument("-u", "--user", help="Jenkins user name", required=True)
+    parser.add_argument("-p", "--password", help="Jenkins password (Use token)", required=True)
+    parser.add_argument("-j", "--job", help="Jenkins job name", required=True)
     parser.add_argument("-c", "--cluster", help="Cluster name", required=True)
     parser.add_argument("--iib", help="install MTV using IIB", action="store_true")
     parser.add_argument("--deploy", help="Deploy the OCP cluster", action="store_true")
@@ -80,7 +84,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(
-        job_name=args.job_name,
+        user=args.user,
+        password=args.password,
+        job=args.job,
         cluster=args.cluster,
         iib=args.iib,
         deploy_ocp=args.deploy,
