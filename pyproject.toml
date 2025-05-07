@@ -52,8 +52,5 @@ dependencies = [
   "typer>=0.15.1",
 ]
 
-[dependency-groups]
-dev = [
-    "kerberos>=1.3.1",
-    "python-jenkins>=1.8.2",
-]
+[project.optional-dependencies]
+dev = ["kerberos>=1.3.1", "python-jenkins>=1.8.2"]
