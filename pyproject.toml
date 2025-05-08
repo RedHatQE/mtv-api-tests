@@ -4,8 +4,8 @@ line-length = 120
 fix = true
 output-format = "grouped"
 
-[tool.ruff.format]
-exclude = [".git", ".venv", ".mypy_cache", ".tox", "__pycache__"]
+  [tool.ruff.format]
+  exclude = [ ".git", ".venv", ".mypy_cache", ".tox", "__pycache__" ]
 
 [tool.mypy]
 disallow_any_generics = false
@@ -15,14 +15,14 @@ show_error_codes = true
 warn_unused_ignores = true
 
 [tool.uv]
-dev-dependencies = ["ipdb>=0.13.13", "ipython>=8.12.3"]
+dev-dependencies = [ "ipdb>=0.13.13", "ipython>=8.12.3" ]
 
 [project]
 requires-python = ">=3.9"
 name = "mtv-api-tests"
-version = "2.8.1"
+version = "2.8.3"
 description = "MTV API Tests"
-authors = []
+authors = [ ]
 license = "Apache Software License"
 readme = "README.md"
 dependencies = [
@@ -47,8 +47,8 @@ dependencies = [
   "pytest-profiling>=1.8.1",
   "semver>=3.0.4",
   "typer>=0.15.1",
-  "openshift-python-wrapper>=11.0.53",
+  "openshift-python-wrapper>=11.0.53"
 ]
 
-[project.optional-dependencies]
-dev = ["python-jenkins>=1.8.2"]
+  [project.optional-dependencies]
+  dev = [ "python-jenkins>=1.8.2" ]
