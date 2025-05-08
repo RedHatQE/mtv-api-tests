@@ -28,7 +28,6 @@ readme = "README.md"
 dependencies = [
   "click>=8.1.7",
   "humanfriendly>=10.0",
-  "openshift-python-wrapper>=11.0.13",
   "openstacksdk>=4.0.0",
   "ovirt-python-sdk>=1.2.0",
   "pytest>=8.3.3",
@@ -39,7 +38,6 @@ dependencies = [
   "pyvmomi>=8.0.3.0.1",
   "python-simple-logger>=2.0.0",
   "shortuuid>=1.0.13",
-  "openshift-python-wrapper>=11.0.12",
   "pytest-xdist>=3.6.1",
   "setuptools>=75.8.0",
   "pandas>=2.2.3",
@@ -50,9 +48,8 @@ dependencies = [
   "pytest-profiling>=1.8.1",
   "semver>=3.0.4",
   "typer>=0.15.1",
+  "openshift-python-wrapper>=11.0.53",
 ]
 
 [project.optional-dependencies]
-dev = [
- "python-jenkins>=1.8.2",
-]
+dev = ["python-jenkins>=1.8.2"]
