@@ -868,7 +868,6 @@ name = "mtv-api-tests"
 version = "2.8.1"
 source = { virtual = "." }
 dependencies = [
-    { name = "click" },
     { name = "cloudpickle" },
     { name = "humanfriendly" },
     { name = "openshift-python-utilities" },
@@ -908,7 +907,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.1.7" },
     { name = "cloudpickle", specifier = ">=3.1.1" },
     { name = "humanfriendly", specifier = ">=10.0" },
     { name = "openshift-python-utilities", specifier = ">=6.0.7" },

@@ -26,7 +26,6 @@ authors = []
 license = "Apache Software License"
 readme = "README.md"
 dependencies = [
-  "click>=8.1.7",
   "humanfriendly>=10.0",
   "openstacksdk>=4.0.0",
   "ovirt-python-sdk>=1.2.0",
