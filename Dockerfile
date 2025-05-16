@@ -1,5 +1,4 @@
 FROM quay.io/fedora/fedora:41
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG APP_DIR=/app
 
@@ -11,7 +10,7 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_NO_SYNC=1
 ENV UV_CACHE_DIR=${APP_DIR}/.cache
 
-RUN dnf -y --disableplugin=subscription-manager install \
+RUN dnf -y install \
   libxml2-devel \
   libcurl-devel \
   openssl \
@@ -45,7 +44,6 @@ ARG OPENSHIFT_PYTHON_UTILITIES_COMMIT=''
 RUN uv sync --locked\
   && if [ -n "${OPENSHIFT_PYTHON_WRAPPER_COMMIT}" ]; then uv pip install git+https://github.com/RedHatQE/openshift-python-wrapper.git@$OPENSHIFT_PYTHON_WRAPPER_COMMIT; fi \
   && if [ -n "${OPENSHIFT_PYTHON_UTILITIES_COMMIT}" ]; then uv pip install git+https://github.com/RedHatQE/openshift-python-utilities.git@$OPENSHIFT_PYTHON_UTILITIES_COMMIT; fi \
-  && uv export --no-hashes \
   && find ${APP_DIR}/ -type d -name "__pycache__" -print0 | xargs -0 rm -rfv \
   && rm -rf ${APP_DIR}/.cache
 
