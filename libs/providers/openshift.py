@@ -109,10 +109,8 @@ class OCPProvider(BaseProvider):
             client=dynamic_client,
             name=cnv_vm_name,
             namespace=cnv_vm_namespace,
+            ensure_exists=True,
         )
-
-        if not cnv_vm.exists:
-            raise ValueError(f"VM {cnv_vm_name} does not exist in namespace {cnv_vm_namespace}")
 
         result_vm_info["provider_vm_api"] = cnv_vm
 

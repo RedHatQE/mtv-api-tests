@@ -12,32 +12,28 @@ LOGGER = get_logger(__name__)
 
 
 def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = None) -> None:
-    # https://github.com/kubev2v/forklift-must-gather
-    ocp_admin_client = get_client()
-    mtv_namespace = py_config["mtv_namespace"]
-    mtv_subs = Subscription(client=ocp_admin_client, name="mtv-operator", namespace=mtv_namespace)
-
-    if not mtv_subs.exists:
-        LOGGER.error("Can't find MTV Subscription")
-        return
-
-    installed_csv = mtv_subs.instance.status.installedCSV
-    mtv_csv = ClusterServiceVersion(client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace)
-
-    if not mtv_csv.exists:
-        LOGGER.error(f"Can't find MTV ClusterServiceVersion for {installed_csv}")
-        return
-
-    must_gather_images = [
-        image["image"] for image in mtv_csv.instance.spec.relatedImages if "must_gather" in image["name"]
-    ]
-    if not must_gather_images:
-        LOGGER.error("Can't find any must-gather image under MTV ClusterServiceVersion")
-        return
-
-    _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_images[0]} --dest-dir={data_collector_path}"
-
     try:
+        # https://github.com/kubev2v/forklift-must-gather
+        ocp_admin_client = get_client()
+        mtv_namespace = py_config["mtv_namespace"]
+        mtv_subs = Subscription(
+            client=ocp_admin_client, name="mtv-operator", namespace=mtv_namespace, ensure_exists=True
+        )
+
+        installed_csv = mtv_subs.instance.status.installedCSV
+        mtv_csv = ClusterServiceVersion(
+            client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
+        )
+
+        must_gather_images = [
+            image["image"] for image in mtv_csv.instance.spec.relatedImages if "must_gather" in image["name"]
+        ]
+        if not must_gather_images:
+            LOGGER.error("Can't find any must-gather image under MTV ClusterServiceVersion")
+            return
+
+        _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_images[0]} --dest-dir={data_collector_path}"
+
         if plan:
             plan_name = plan["name"]
             plan_namespace = plan["namespace"]
