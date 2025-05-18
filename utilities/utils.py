@@ -10,7 +10,6 @@ from typing import Any, Generator
 import pytest
 import shortuuid
 from kubernetes.dynamic import DynamicClient
-from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
@@ -126,9 +125,7 @@ def create_source_provider(
     source_provider_data_copy = copy.deepcopy(source_provider_data)
 
     if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        provider = Provider(name="host", namespace=namespace, client=admin_client)
-        if not provider.exists:
-            raise MissingResourceResError(f"Provider {provider.name} not found")
+        provider = Provider(name="host", namespace=namespace, client=admin_client, ensure_exists=True)
 
         yield OCPProvider(
             ocp_resource=provider,

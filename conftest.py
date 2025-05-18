@@ -13,7 +13,6 @@ import pytest
 import yaml
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
-from ocp_resources.exceptions import MissingResourceResError
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.hook import Hook
 from ocp_resources.namespace import Namespace
@@ -299,9 +298,7 @@ def nfs_storage_profile(ocp_admin_client):
     """
     nfs = StorageClass.Types.NFS
     if py_config["storage_class"] == nfs:
-        storage_profile = StorageProfile(client=ocp_admin_client, name=nfs)
-        if not storage_profile.exists:
-            raise MissingResourceResError(f"StorageProfile {nfs} not found")
+        storage_profile = StorageProfile(client=ocp_admin_client, name=nfs, ensure_exists=True)
 
         with ResourceEditor(
             patches={
@@ -356,10 +353,11 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
     Set the snapshots interval in the forklift-controller ForkliftController
     """
     forklift_controller = ForkliftController(
-        client=ocp_admin_client, name="forklift-controller", namespace=mtv_namespace
+        client=ocp_admin_client,
+        name="forklift-controller",
+        namespace=mtv_namespace,
+        ensure_exists=True,
     )
-    if not forklift_controller.exists:
-        raise MissingResourceResError(f"ForkliftController {forklift_controller.name} not found")
 
     snapshots_interval = py_config["snapshots_interval"]
     forklift_controller.wait_for_condition(
@@ -393,10 +391,11 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
 @pytest.fixture(scope="session")
 def destination_provider(ocp_admin_client, mtv_namespace):
     provider = Provider(
-        name=py_config.get("destination_provider_name", "host"), namespace=mtv_namespace, client=ocp_admin_client
+        name=py_config.get("destination_provider_name", "host"),
+        namespace=mtv_namespace,
+        client=ocp_admin_client,
+        ensure_exists=True,
     )
-    if not provider.exists:
-        raise MissingResourceResError(f"Provider {provider.name} not found")
 
     return OCPProvider(ocp_resource=provider)
 
