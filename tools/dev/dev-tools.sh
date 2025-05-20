@@ -83,7 +83,11 @@ cluster-login() {
     $CMD &>/dev/null
   fi
 
-  printf "Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\n\n" "$USERNAME" "$PASSWORD" "$CMD" "$(oc get console cluster -ojson | jq -r '.status.consoleURL')"
+  CONSOLE=$(oc get console cluster -o jsonpath='{.status.consoleURL}')
+  MTV_VERSION=$(oc get csv -n openshift-mtv -o jsonpath='{.items[*].spec.version}')
+  OCP_VERSION=$(oc get clusterversion -o jsonpath='{.items[*].status.desired.version}')
+
+  printf "Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nMTV version: %s\nOCP version: %s\n\n" "$USERNAME" "$PASSWORD" "$CMD" "$CONSOLE" "$MTV_VERSION" "$OCP_VERSION"
 }
 
 mtv-resources() {
