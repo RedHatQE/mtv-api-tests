@@ -87,7 +87,15 @@ cluster-login() {
   MTV_VERSION=$(oc get csv -n openshift-mtv -o jsonpath='{.items[*].spec.version}')
   OCP_VERSION=$(oc get clusterversion -o jsonpath='{.items[*].status.desired.version}')
 
+  XSEL_EXISTS=$(command -v xsel &>/dev/null)
+  if ${XSEL_EXISTS}; then
+    xsel -bi <<<"$PASSWORD"
+  fi
+
   printf "Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nMTV version: %s\nOCP version: %s\n\n" "$USERNAME" "$PASSWORD" "$CMD" "$CONSOLE" "$MTV_VERSION" "$OCP_VERSION"
+  if ${XSEL_EXISTS}; then
+    printf "Password copied to clipboard.\n"
+  fi
 }
 
 mtv-resources() {
