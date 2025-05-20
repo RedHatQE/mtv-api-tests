@@ -10,6 +10,7 @@ from ovirtsdk4 import NotFoundError
 from ovirtsdk4.types import VmStatus
 from simple_logger.logger import get_logger
 
+from exceptions.exceptions import OvirtMTVDatacenterNotFoundError, OvirtMTVDatacenterStatusError
 from libs.base_provider import BaseProvider
 
 LOGGER = get_logger(__name__)
@@ -57,6 +58,8 @@ class OvirtProvider(BaseProvider):
             log=self.log,
             insecure=self.insecure,
         )
+        if not self.is_mtv_datacenter_ok:
+            raise OvirtMTVDatacenterStatusError()
         return self
 
     @property
@@ -78,6 +81,10 @@ class OvirtProvider(BaseProvider):
     @property
     def storage_services(self) -> ovirtsdk4.services.StorageDomainsService:
         return self.api.system_service().storage_domains_service()
+
+    @property
+    def data_center_service(self) -> ovirtsdk4.services.DataCentersService:
+        return self.api.system_service().data_centers_service()
 
     def events_service(self) -> ovirtsdk4.services.EventsService:
         return self.api.system_service().events_service()
@@ -205,3 +212,15 @@ class OvirtProvider(BaseProvider):
             if event.code == self.VM_POWER_OFF_CODE:
                 return True
         return False
+
+    @property
+    def mtv_datacenter(self) -> ovirtsdk4.types.DataCenter:
+        for dc in self.data_center_service.list():
+            if dc.name == "MTV-CNV":
+                return dc
+
+        raise OvirtMTVDatacenterNotFoundError()
+
+    @property
+    def is_mtv_datacenter_ok(self) -> bool:
+        return self.mtv_datacenter.status.value == ""

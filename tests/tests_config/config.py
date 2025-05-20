@@ -1,98 +1,56 @@
+from typing import Any
+
 global config
 
-source_providers_list = [
-    {
+source_providers_dict: dict[str, dict[str, Any]] = {
+    "vsphere-6.5": {
         "type": "vsphere",
         "version": "6.5",
         "fqdn": "rhev-node-05.rdu2.scalelab.redhat.com",
         "api_url": "https://rhev-node-05.rdu2.scalelab.redhat.com/sdk",
         "username": "mtv@vsphere.local",
         "password": "Heslo123!",
-        "admin_username": "administrator@vsphere.local",
-        "admin_password": "Heslo123!",
-        "non_admin_username": "nonadmin@vsphere.local",
-        "non_admin_password": "Heslo123!",
-        "cluster_name": "",
-        "default": "True",
-        "vm_folder": "mtv-func-qe-api-automation",
         "guest_vm_linux_user": "root",
         "guest_vm_linux_password": "100yard-",
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "Heslo123!",
         "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:6.5",
-        "host_list": [
-            {
-                "migration_host_id": "host-732",
-                "migration_host_ip": "172.16.11.6",
-                "user": "root",
-                "password": "Mypassw0rd",
-                "default": "True",
-            }
-        ],
     },
-    {
+    "vsphere-7.0.3": {
         "type": "vsphere",
         "version": "7.0.3",
         "fqdn": "10.6.46.170",
         "api_url": "https://10.6.46.170/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
-        "admin_username": "administrator@vsphere.local",
-        "admin_password": "VCENTER@redhat2023",
-        "cluster_name": "",
-        "default": "True",
         "guest_vm_linux_user": "root",
         "guest_vm_linux_password": "redhat",
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "123qweP",
         "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:7.0.3",
-        "host_list": [
-            {
-                "migration_host_id": "host-10",
-                "migration_host_ip": "10.6.46.28",
-                "user": "root",
-                "password": "123qweP",
-                "default": "True",
-            }
-        ],
     },
-    {
+    "vsphere-8.0.1": {
         "type": "vsphere",
         "version": "8.0.1",
         "fqdn": "10.6.46.249",
         "api_url": "https://10.6.46.249/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
-        "admin_username": "administrator@vsphere.local",
-        "admin_password": "VCENTER@redhat2023",
-        "cluster_name": "",
-        "default": "True",
         "guest_vm_linux_user": "root",
         "guest_vm_linux_password": "redhat",
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "123qweP",
         "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:8.0.1",
-        "host_list": [
-            {
-                "migration_host_id": "host-8",
-                "migration_host_ip": "10.6.46.30",
-                "user": "root",
-                "password": "123qweP",
-                "default": "True",
-            }
-        ],
     },
-    {
+    "ovirt-4.4.9": {
         "type": "ovirt",
         "version": "4.4.9",
         "fqdn": "rhev-red-02.rdu2.scalelab.redhat.com",
         "api_url": "https://rhev-red-02.rdu2.scalelab.redhat.com/ovirt-engine/api",
         "username": "admin@internal",
         "password": "qum5net",
-        "cluster_name": "",
-        "default": "True",
     },
-    {
+    "openstack-psi": {
         "type": "openstack",
         "version": "psi",
         "fqdn": "rhos-d.infra.prod.upshift.rdu2.redhat.com",
@@ -104,54 +62,43 @@ source_providers_list = [
         "project_name": "mtv-qe-infra",
         "user_domain_id": "62cf1b5ec006489db99e2b0ebfb55f57",
         "project_domain_id": "62cf1b5ec006489db99e2b0ebfb55f57",
-        "default": "True",
         "guest_vm_linux_user": "root",
         "guest_vm_linux_password": "redhat123456",
     },
-    {
+    "openshift-localhost": {
         "type": "openshift",
         "version": "localhost",
-        "default": "True",
         "networks": [{"type": "pod"}, {"type": "multus", "name": "mtv-api-tests-ocp/mybridge"}],
         "storages": [{"name": "hostpath-csi-basic"}, {"name": "ocs-storagecluster-ceph-rbd"}],
     },
-    {
+    "ova-nfs": {
         "type": "ova",
         "version": "nfs",
         "fqdn": "",
         "api_url": "f02-h06-000-r640.rdu2.scalelab.redhat.com:/home/nfsshare-test/mtv-api-tests",
         "username": "ova",
         "password": "",
-        "default": "True",
-    },
-]
-hook_dict = {
-    "prehook": {
-        "name": "prehook-ansible",
-        "payload": "LS0tCi0gbmFtZTogTWFpbgogIGhvc3RzOiBsb2NhbGhvc3QKICB0YXNrczoKICAtIG5hbWU6IExvYWQgUGxhbgogICAgaW5jbHVkZV92YXJzOgogICAgICBmaWxlOiBwbGFuLnltbAogICAgICBuYW1lOiBwbGFuCiAgLSBuYW1lOiBMb2FkIFdvcmtsb2FkCiAgICBpbmNsdWRlX3ZhcnM6CiAgICAgIGZpbGU6IHdvcmtsb2FkLnltbAogICAgICBuYW1lOiB3b3JrbG9hZAoK",
-    },
-    "posthook": {
-        "name": "posthook-ansible",
-        "payload": "LS0tCi0gbmFtZTogTWFpbgogIGhvc3RzOiBsb2NhbGhvc3QKICB0YXNrczoKICAtIG5hbWU6IExvYWQgUGxhbgogICAgaW5jbHVkZV92YXJzOgogICAgICBmaWxlOiBwbGFuLnltbAogICAgICBuYW1lOiBwbGFuCiAgLSBuYW1lOiBMb2FkIFdvcmtsb2FkCiAgICBpbmNsdWRlX3ZhcnM6CiAgICAgIGZpbGU6IHdvcmtsb2FkLnltbAogICAgICBuYW1lOiB3b3JrbG9hZAoK",
+        # "default": "True",
     },
 }
-storage_class = "nfs"
-source_provider_type = "vsphere"
-source_provider_version = "7.0.3"
-insecure_verify_skip = "true"
-number_of_vms = 1
-check_vms_signals = True
-target_namespace = "mtv-api-tests"
-mtv_namespace = "openshift-mtv"
-vm_name_search_pattern = ""
-remote_ocp_cluster = ""
-snapshots_interval = 2
-mins_before_cutover = 5
-plan_wait_timeout = 3600
-matrix_test = True
-release_test = False
-target_ocp_version = "4.17"
-mount_root = ""
+
+storage_class: str = "nfs"
+source_provider_type: str = "vsphere"
+source_provider_version: str = "7.0.3"
+insecure_verify_skip: str = "true"
+number_of_vms: int = 1
+check_vms_signals: bool = True
+target_namespace: str = "mtv-api-tests"
+mtv_namespace: str = "openshift-mtv"
+vm_name_search_pattern: str = ""
+remote_ocp_cluster: str = ""
+snapshots_interval: int = 2
+mins_before_cutover: int = 5
+plan_wait_timeout: int = 3600
+matrix_test: bool = True
+release_test: bool = False
+target_ocp_version: str = "4.17"
+mount_root: str = ""
 
 for _dir in dir():
     val = locals()[_dir]

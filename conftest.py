@@ -14,7 +14,6 @@ import yaml
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.forklift_controller import ForkliftController
-from ocp_resources.hook import Hook
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.pod import Pod
@@ -48,7 +47,6 @@ from utilities.utils import (
     create_source_cnv_vm,
     create_source_provider,
     generate_name_with_uuid,
-    get_source_provider_data,
     get_value_from_py_config,
 )
 
@@ -402,7 +400,8 @@ def destination_provider(ocp_admin_client, mtv_namespace):
 
 @pytest.fixture(scope="session")
 def source_provider_data():
-    _source_provider = get_source_provider_data()
+    _source_provider_key = f"{py_config['source_provider_type']}-{py_config['source_provider_version']}"
+    _source_provider = py_config["source_providers_dict"][_source_provider_key]
 
     if not _source_provider:
         raise ValueError(f"Source provider {_source_provider['type']}-{_source_provider['version']} not found")
@@ -482,36 +481,6 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
     yield OCPProvider(ocp_resource=provider)
-
-
-@pytest.fixture(scope="session")
-def prehook(fixture_store, session_uuid, ocp_admin_client, target_namespace):
-    pre_hook_dict: dict[str, str] = py_config["hook_dict"]["prehook"]
-    hook = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=Hook,
-        client=ocp_admin_client,
-        name=pre_hook_dict["name"],
-        namespace=target_namespace,
-        playbook=pre_hook_dict["payload"],
-    )
-    yield hook
-
-
-@pytest.fixture(scope="session")
-def posthook(fixture_store, session_uuid, ocp_admin_client, target_namespace):
-    posthook_dict: dict[str, str] = py_config["hook_dict"]["posthook"]
-    hook = create_and_store_resource(
-        fixture_store=fixture_store,
-        session_uuid=session_uuid,
-        resource=Hook,
-        client=ocp_admin_client,
-        name=posthook_dict["name"],
-        namespace=target_namespace,
-        playbook=posthook_dict["payload"],
-    )
-    yield hook
 
 
 @pytest.fixture(scope="function")

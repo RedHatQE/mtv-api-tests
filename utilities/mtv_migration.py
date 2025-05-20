@@ -184,6 +184,7 @@ def get_vm_suffix() -> str:
 
     if get_value_from_py_config("matrix_test"):
         storage_name = py_config["storage_class"]
+
         if "ceph-rbd" in storage_name:
             vm_suffix = "-ceph-rbd"
 
