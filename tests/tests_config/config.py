@@ -46,15 +46,15 @@ source_providers_list = [
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "123qweP",
         "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:7.0.3",
-        # "host_list": [
-        #     {
-        #         "migration_host_id": "host-10",
-        #         "migration_host_ip": "10.6.46.28",
-        #         "user": "root",
-        #         "password": "123qweP",
-        #         "default": "True",
-        #     }
-        # ],
+        "host_list": [
+            {
+                "migration_host_id": "host-10",
+                "migration_host_ip": "10.6.46.28",
+                "user": "root",
+                "password": "123qweP",
+                "default": "True",
+            }
+        ],
     },
     {
         "type": "vsphere",
@@ -72,15 +72,15 @@ source_providers_list = [
         "guest_vm_win_user": "Administrator",
         "guest_vm_win_password": "123qweP",
         "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:8.0.1",
-        # "host_list": [
-        #     {
-        #         "migration_host_id": "host-8",
-        #         "migration_host_ip": "10.6.46.30",
-        #         "user": "root",
-        #         "password": "123qweP",
-        #         "default": "True",
-        #     }
-        # ],
+        "host_list": [
+            {
+                "migration_host_id": "host-8",
+                "migration_host_ip": "10.6.46.30",
+                "user": "root",
+                "password": "123qweP",
+                "default": "True",
+            }
+        ],
     },
     {
         "type": "ovirt",
