@@ -111,10 +111,12 @@ class VMWareProvider(BaseProvider):
             return result
 
         vms_with_missing_vmx = [vm.name for vm in vms if self.is_vm_missing_vmx_file(vm=vm)]
+
         if vms_with_missing_vmx:
             raise VmMissingVmxError(vms=vms_with_missing_vmx)
 
         vms_with_bad_datastore = [vm.name for vm in vms if self.is_vm_with_bad_datastore(vm=vm)]
+
         if vms_with_bad_datastore:
             raise VmBadDatastoreError(vms=vms_with_missing_vmx)
 
@@ -505,12 +507,18 @@ class VMWareProvider(BaseProvider):
                     vm_names_list.remove(vm_name)
 
     def is_vm_missing_vmx_file(self, vm: vim.VirtualMachine) -> bool:
+        if not vm.datastore:
+            self.log.error(f"VM {vm.name} is inaccessible due to datastore error")
+            return True
+
         vm_datastore_info = vm.datastore[0].browser.Search(vm.config.files.vmPathName)
         if vm_datastore_info.info.state == "error":
             _error = vm_datastore_info.info.error.msg
+
             if "vmx was not found" in _error:
                 self.log.error(f"VM {vm.name} is inaccessible due to datastore error: {_error}")
                 return True
+
         return False
 
     def is_vm_with_bad_datastore(self, vm: vim.VirtualMachine) -> bool:
