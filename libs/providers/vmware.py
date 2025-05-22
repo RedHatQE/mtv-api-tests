@@ -13,7 +13,7 @@ from pyVmomi import vim
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import NoVmsFoundError, VmMissingVmxError
+from exceptions.exceptions import NoVmsFoundError, VmBadDatastoreError, VmMissingVmxError
 from libs.base_provider import BaseProvider
 
 LOGGER = get_logger(__name__)
@@ -86,22 +86,39 @@ class VMWareProvider(BaseProvider):
             result: list[vim.VirtualMachine] = []
             pat = re.compile(query, re.IGNORECASE)
 
-            vms_with_missing_vmx: list[bool] = []
+            vms_with_missing_vmx: list[str] = []
+            vms_with_bad_datastore: list[str] = []
+
             for vm in vms:
                 if pat.search(vm.name) is not None:
-                    vms_with_missing_vmx.append(self.is_vm_missing_vmx_file(vm=vm))
+                    if self.is_vm_missing_vmx_file(vm=vm):
+                        vms_with_missing_vmx.append(vm.name)
+
+                    if self.is_vm_with_bad_datastore(vm=vm):
+                        vms_with_bad_datastore.append(vm.name)
+
                     result.append(vm)
 
             if any(vms_with_missing_vmx):
-                raise VmMissingVmxError()
+                raise VmMissingVmxError(vms=vms_with_missing_vmx)
+
+            if any(vms_with_bad_datastore):
+                raise VmBadDatastoreError(vms=vms_with_bad_datastore)
 
             if not result:
                 raise NoVmsFoundError(f"No VMs found. {query=}. [{self.host}]")
 
             return result
 
-        if any([self.is_vm_missing_vmx_file(vm=vm) for vm in vms]):
-            raise VmMissingVmxError()
+        vms_with_missing_vmx = [vm.name for vm in vms if self.is_vm_missing_vmx_file(vm=vm)]
+
+        if vms_with_missing_vmx:
+            raise VmMissingVmxError(vms=vms_with_missing_vmx)
+
+        vms_with_bad_datastore = [vm.name for vm in vms if self.is_vm_with_bad_datastore(vm=vm)]
+
+        if vms_with_bad_datastore:
+            raise VmBadDatastoreError(vms=vms_with_missing_vmx)
 
         return vms
 
@@ -490,10 +507,22 @@ class VMWareProvider(BaseProvider):
                     vm_names_list.remove(vm_name)
 
     def is_vm_missing_vmx_file(self, vm: vim.VirtualMachine) -> bool:
+        if not vm.datastore:
+            self.log.error(f"VM {vm.name} is inaccessible due to datastore error")
+            return True
+
         vm_datastore_info = vm.datastore[0].browser.Search(vm.config.files.vmPathName)
         if vm_datastore_info.info.state == "error":
             _error = vm_datastore_info.info.error.msg
+
             if "vmx was not found" in _error:
                 self.log.error(f"VM {vm.name} is inaccessible due to datastore error: {_error}")
                 return True
+
+        return False
+
+    def is_vm_with_bad_datastore(self, vm: vim.VirtualMachine) -> bool:
+        if vm.summary.runtime.connectionState == "inaccessible":
+            self.log.error(f"VM {vm.name} is inaccessible due to connection error")
+            return True
         return False

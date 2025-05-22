@@ -7,7 +7,19 @@ class ForkliftPodsNotRunningError(Exception):
 
 
 class VmMissingVmxError(Exception):
-    pass
+    def __init__(self, vms: list[str]) -> None:
+        self.vms = vms
+
+    def __str__(self) -> str:
+        return f"Some VMs are missing VMX file: {self.vms}"
+
+
+class VmBadDatastoreError(Exception):
+    def __init__(self, vms: list[str]) -> None:
+        self.vms = vms
+
+    def __str__(self) -> str:
+        return f"Some VMs have bad datastore status: {self.vms}"
 
 
 class NoVmsFoundError(Exception):
@@ -27,4 +39,12 @@ class SessionTeardownError(Exception):
 
 
 class ResourceNameNotStartedWithSessionUUIDError(Exception):
+    pass
+
+
+class OvirtMTVDatacenterNotFoundError(Exception):
+    pass
+
+
+class OvirtMTVDatacenterStatusError(Exception):
     pass
