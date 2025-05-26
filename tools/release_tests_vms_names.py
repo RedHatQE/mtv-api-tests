@@ -1,5 +1,8 @@
 from typing import Any, Generator
 
+from pyVim.connect import SmartConnect
+from pyVmomi import vim
+
 
 def get_value_from_py_config(value: str, config: dict[str, Any]) -> Any:
     config_value = config.get(value)
@@ -78,11 +81,66 @@ def get_vms_names() -> dict[str, list[str]]:
     return vms
 
 
+def get_missing_vms_in_vmware(vms: dict[str, list[str]]) -> dict[str, list[str]]:
+    vmware_servers_config = {
+        "vsphere-6.5": {
+            "fqdn": "rhev-node-05.rdu2.scalelab.redhat.com",
+            "username": "mtv@vsphere.local",
+            "password": "Heslo123!",
+        },
+        "vsphere-7.0.3": {
+            "fqdn": "10.6.46.170",
+            "username": "administrator@vsphere.local",
+            "password": "VCENTER@redhat2023",
+        },
+        "vsphere-8.0.1": {
+            "fqdn": "10.6.46.249",
+            "username": "administrator@vsphere.local",
+            "password": "VCENTER@redhat2023",
+        },
+    }
+
+    missing_vms: dict[str, list[str]] = {}
+    required_vms: list[str] = []
+    for list_vms in vms.values():
+        required_vms.extend(list_vms)
+
+    for server, data in vmware_servers_config.items():
+        api = SmartConnect(  # ssl cert check is not required
+            host=data["fqdn"],
+            user=data["username"],
+            pwd=data["password"],
+            port=443,
+            disableSslCertValidation=True,
+        )
+        content = api.RetrieveContent()
+        view_manager = content.viewManager
+        datacenters = content.rootFolder.childEntity
+        container_view = view_manager.CreateContainerView(
+            container=datacenters[0].vmFolder, type=[vim.VirtualMachine], recursive=True
+        )
+        server_vms = [vm.name for vm in container_view.view]
+        for vm in required_vms:
+            if vm not in server_vms:
+                missing_vms.setdefault(server, []).append(vm)
+
+    return missing_vms
+
+
 if __name__ == "__main__":
     vms = get_vms_names()
+    missing_vms = get_missing_vms_in_vmware(vms=vms)
 
-    for base_vm, names in vms.items():
-        print(f"{base_vm}:")
+    # for base_vm, names in vms.items():
+    #     print(f"{base_vm}:")
+    #
+    #     for name in names:
+    #         print(f"    {name}")
+    #
+    #     print(f"{'*' * 80}\n")
+
+    for vmware, names in missing_vms.items():
+        print(f"{vmware}:")
 
         for name in names:
             print(f"    {name}")
