@@ -19,6 +19,8 @@ spec:
           resources:
             requests:
               storage: 30Gi
+          storageClassName: ocs-storagecluster-ceph-rbd
+
     - metadata:
         name: vmname-second-disk
       spec:

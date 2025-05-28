@@ -33,13 +33,14 @@ def migrate_vms(
     ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
     destination_provider: OCPProvider,
-    plans: list[dict[str, Any]],
+    plan: dict[str, Any],
     network_migration_map: NetworkMap,
     storage_migration_map: StorageMap,
     source_provider_data: dict[str, Any],
     target_namespace: str,
     session_uuid: str,
     fixture_store: Any,
+    source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
     cut_over: datetime | None = None,
     pre_hook_name: str | None = None,
@@ -47,11 +48,10 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> None:
-    plan_from_test = plans[0]
-    warm_migration = plan_from_test.get("warm_migration", False)
+    warm_migration = plan.get("warm_migration", False)
 
     run_migration_kwargs = prepare_migration_for_tests(
-        plan=plan_from_test,
+        plan=plan,
         warm_migration=warm_migration,
         request=request,
         source_provider=source_provider,
@@ -66,6 +66,7 @@ def migrate_vms(
         pre_hook_namespace=pre_hook_namespace,
         after_hook_name=after_hook_name,
         after_hook_namespace=after_hook_namespace,
+        source_vms_namespace=source_vms_namespace,
     )
     try:
         migration_plan = run_migration(**run_migration_kwargs)
@@ -73,11 +74,11 @@ def migrate_vms(
         wait_for_migration_complate(plan=migration_plan)
 
         if py_config.get("create_scale_report"):
-            create_migration_scale_report(plan_resource=plan_from_test)
+            create_migration_scale_report(plan_resource=plan)
 
-        if get_value_from_py_config("check_vms_signals") and plan_from_test.get("check_vms_signals", True):
+        if get_value_from_py_config("check_vms_signals") and plan.get("check_vms_signals", True):
             check_vms(
-                plan=plan_from_test,
+                plan=plan,
                 source_provider=source_provider,
                 source_provider_data=source_provider_data,
                 destination_provider=destination_provider,

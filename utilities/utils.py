@@ -1,7 +1,6 @@
 import copy
 import functools
 import multiprocessing
-import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from subprocess import STDOUT, check_output
@@ -9,6 +8,7 @@ from typing import Any, Generator
 
 import pytest
 import shortuuid
+import yaml
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
@@ -101,10 +101,10 @@ def gen_network_map_list(
     return network_map_list
 
 
-def generated_provider_name(session_uuid: str, provider_data: dict[str, Any], username: str) -> str:
+def generated_provider_name(session_uuid: str, provider_data: dict[str, Any]) -> str:
     _name = (
         f"{session_uuid}-{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
-        f"{provider_data['fqdn'].split('.')[0]}-{username.split('@')[0]}"
+        f"{provider_data['fqdn'].split('.')[0]}-{provider_data['username'].split('@')[0]}"
     )
     return generate_name_with_uuid(name=_name)
 
@@ -117,6 +117,9 @@ def create_source_provider(
     admin_client: DynamicClient,
     session_uuid: str,
     fixture_store: dict[str, Any],
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    destination_ocp_secret: Secret,
     tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
 ) -> Generator[BaseProvider, None, None]:
@@ -124,8 +127,23 @@ def create_source_provider(
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
 
+    source_provider_name = generated_provider_name(
+        session_uuid=session_uuid,
+        provider_data=source_provider_data_copy,
+    )
+
     if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        provider = Provider(name="host", namespace=namespace, client=admin_client, ensure_exists=True)
+        provider = create_and_store_resource(
+            fixture_store=fixture_store,
+            session_uuid=session_uuid,
+            resource=Provider,
+            name=source_provider_name,
+            namespace=target_namespace,
+            secret_name=destination_ocp_secret.name,
+            secret_namespace=destination_ocp_secret.namespace,
+            url=ocp_admin_client.configuration.host,
+            provider_type=Provider.ProviderType.OPENSHIFT,
+        )
 
         yield OCPProvider(
             ocp_resource=provider,
@@ -135,12 +153,6 @@ def create_source_provider(
     else:
         for key, value in kwargs.items():
             source_provider_data_copy[key] = value
-
-        source_provider_name = generated_provider_name(
-            session_uuid=session_uuid,
-            provider_data=source_provider_data_copy,
-            username=source_provider_data_copy["username"],
-        )
 
         secret_string_data = {}
         provider_args = {
@@ -237,25 +249,44 @@ def create_source_provider(
             yield _source_provider
 
 
-def create_source_cnv_vm(dyn_client: DynamicClient, vm_name: str, namespace: str) -> None:
-    vm_file = f"{vm_name}.yaml"
-    shutil.copyfile("tests/manifests/cnv-vm.yaml", vm_file)
+def create_source_cnv_vms(
+    fixture_store: Any,
+    dyn_client: DynamicClient,
+    vms: list[dict[str, Any]],
+    namespace: str,
+    network_name: str,
+) -> None:
+    vms_to_create: list[VirtualMachine] = []
 
-    with open(vm_file, "r") as fd:
-        content = fd.read()
+    for vm_dict in vms:
+        with open("tests/manifests/cnv-vm.yaml", "r") as fd:
+            content = fd.read()
 
-    content = content.replace("vmname", vm_name)
-    content = content.replace("vm-namespace", namespace)
+        content = content.replace("vmname", vm_dict["name"])
+        content = content.replace("vm-namespace", namespace)
+        content = content.replace("mybridge", network_name)
 
-    with open(vm_file, "w") as fd:
-        fd.write(content)
+        yaml_dict = yaml.safe_load(content)
 
-    cnv_vm = VirtualMachine(client=dyn_client, yaml_file=vm_file, namespace=namespace)
-    if not cnv_vm.exists:
-        cnv_vm.deploy(wait=True)
+        cnv_vm = VirtualMachine(client=dyn_client, kind_dict=yaml_dict, namespace=namespace)
 
-    if not cnv_vm.ready:
-        cnv_vm.start(wait=True)
+        # Needed to build the resource body
+        cnv_vm.to_dict()
+
+        if not cnv_vm.exists:
+            cnv_vm.deploy()
+            LOGGER.info(f"Storing {cnv_vm.kind} {cnv_vm.name} in fixture store")
+            _resource_dict = {"name": cnv_vm.name, "namespace": cnv_vm.namespace, "module": VirtualMachine.__module__}
+            fixture_store["teardown"].setdefault(VirtualMachine, []).append(_resource_dict)
+
+        vms_to_create.append(cnv_vm)
+
+    for vm in vms_to_create:
+        if not vm.ready:
+            vm.start()
+
+    for vm in vms_to_create:
+        vm.wait_for_ready_status(status=True)
 
 
 def generate_name_with_uuid(name: str) -> str:

@@ -300,7 +300,7 @@ class VMWareProvider(BaseProvider):
         if vm.runtime.powerState != vm.runtime.powerState.poweredOn:
             self.wait_task(task=vm.PowerOn())
 
-    def power_off_vm(self, vm):
+    def stop_vm(self, vm):
         if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
             self.wait_task(task=vm.PowerOff())
 

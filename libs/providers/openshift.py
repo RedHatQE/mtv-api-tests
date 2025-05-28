@@ -162,14 +162,16 @@ class OCPProvider(BaseProvider):
         result_vm_info["cpu"]["num_cores"] = cnv_vm.instance.spec.template.spec.domain.cpu.cores
         result_vm_info["cpu"]["num_sockets"] = cnv_vm.instance.spec.template.spec.domain.cpu.sockets
 
-        result_vm_info["memory_in_mb"] = int(
-            humanfriendly.parse_size(
-                cnv_vm.instance.spec.template.spec.domain.memory.guest,
-                binary=True,
+        if cnv_vm.instance.spec.template.spec.domain.memory:
+            result_vm_info["memory_in_mb"] = int(
+                humanfriendly.parse_size(
+                    cnv_vm.instance.spec.template.spec.domain.memory.guest,
+                    binary=True,
+                )
+                / 1024
+                / 1024
             )
-            / 1024
-            / 1024
-        )
+
         if not _source and result_vm_info["power_state"] == "off":
             self.log.info("Restoring VM Power State (turning off)")
             self.stop_vm(cnv_vm)

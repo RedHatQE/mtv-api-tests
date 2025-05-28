@@ -147,6 +147,7 @@ def prepare_migration_for_tests(
     target_namespace: str,
     session_uuid: str,
     fixture_store: Any,
+    source_vms_namespace: str,
     cut_over: datetime | None = None,
     pre_hook_name: str | None = None,
     pre_hook_namespace: str | None = None,
@@ -155,18 +156,20 @@ def prepare_migration_for_tests(
 ) -> dict[str, Any]:
     test_name = request._pyfuncitem.name
     _source_provider_type = py_config.get("source_provider_type")
+
     _plan_name = (
         f"{target_namespace}{'-remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
         f"-{'warm' if warm_migration else 'cold'}"
     )
+
     plan_name = generate_name_with_uuid(name=_plan_name)
-    plan["name"] = plan_name
 
     # Plan CR accepts only VM name/id
     virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plan["virtual_machines"]]
+
     if _source_provider_type == Provider.ProviderType.OPENSHIFT:
         for idx in range(len(virtual_machines_list)):
-            virtual_machines_list[idx].update({"namespace": target_namespace})
+            virtual_machines_list[idx].update({"namespace": source_vms_namespace})
 
     return {
         "name": plan_name,

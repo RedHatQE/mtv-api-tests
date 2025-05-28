@@ -2,13 +2,15 @@ import abc
 from typing import Any
 
 from kubernetes.dynamic.client import DynamicClient
+from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.provider import Provider
 from ocp_resources.route import Route
 
 
 class ForkliftInventory(abc.ABC):
     def __init__(self, client: DynamicClient, provider_name: str, mtv_namespace: str, provider_type: str) -> None:
-        self.route = Route(client=client, name="forklift-inventory", namespace=mtv_namespace)
+        self.client = client
+        self.route = Route(client=self.client, name="forklift-inventory", namespace=mtv_namespace)
         self.provider_name = provider_name
         self.provider_type = provider_type
         self.provider_id = self._provider_id
@@ -263,7 +265,51 @@ class OpenshiftForkliftInventory(ForkliftInventory):
         return self._request(url_path=f"{self.provider_url_path}/storageclasses")
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
-        return [{}]
+        _mappings: list[dict[str, str]] = []
+
+        for vm in vms:
+            _vm = self.get_vm(name=vm)
+            _namespace = _vm["object"]["metadata"]["namespace"]
+
+            for _volume in _vm["object"]["spec"]["template"]["spec"]["volumes"]:
+                if data_volume := _volume.get("dataVolume"):
+                    _pvc = PersistentVolumeClaim(
+                        name=data_volume["name"], namespace=_namespace, client=self.client, ensure_exists=True
+                    )
+                    _storage_class = _pvc.instance.spec.storageClassName
+
+                    if [_map for _map in _mappings if _map.get("name") == _storage_class]:
+                        continue
+
+                    _mappings.append({"name": _storage_class})
+
+        if not _mappings:
+            raise ValueError(f"Storages not found for VMs {vms} on provider {self.provider_type}")
+
+        return _mappings
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
-        return [{}]
+        _mappings: list[dict[str, str]] = []
+
+        for vm in vms:
+            _vm = self.get_vm(name=vm)
+
+            for _network in _vm["object"]["spec"]["template"]["spec"]["networks"]:
+                _network_map = None
+
+                if _multus := _network.get("multus"):
+                    _network_map = {"name": _multus.get("networkName")}
+
+                elif isinstance(_network.get("pod"), dict):
+                    _network_map = {"type": "pod"}
+
+                if _network_map:
+                    if [_map for _map in _mappings if _map == _network_map]:
+                        continue
+
+                    _mappings.append(_network_map)
+
+        if not _mappings:
+            raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
+
+        return _mappings

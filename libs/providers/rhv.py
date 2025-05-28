@@ -126,7 +126,7 @@ class OvirtProvider(BaseProvider):
             self.vms_services.vm_service(vm.id).start()
 
     # TODO: change the function definition to shutdown_vm once we will have the same for VMware
-    def power_off_vm(self, vm: Any) -> None:
+    def stop_vm(self, vm: Any) -> None:
         if vm.status == VmStatus.UP:
             self.vms_services.vm_service(vm.id).shutdown()
 
