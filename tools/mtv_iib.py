@@ -9,13 +9,12 @@ from rich.tree import Tree
 
 def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
     """
-    Get the latest MTV IIB for OCP 4/15/16/17
+    Get the latest MTV IIB for OCP versions
 
     Usage: uv run tools.mtv-iib <version> (only 2 digits version for example 2.8)
     """
 
     iibs: dict[str, dict[str, str]] = OrderedDict({
-        "v4.15": {},
         "v4.16": {},
         "v4.17": {},
         "v4.18": {},
@@ -35,7 +34,6 @@ def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
 
     json_res = res.json()
     mtv_latest: dict[str, semver.Version] = {
-        "v4.15": semver.Version.parse("0.0.0"),
         "v4.16": semver.Version.parse("0.0.0"),
         "v4.17": semver.Version.parse("0.0.0"),
         "v4.18": semver.Version.parse("0.0.0"),
