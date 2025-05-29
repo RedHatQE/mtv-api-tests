@@ -13,7 +13,14 @@ def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
     Usage: uv run tools.mtv-iib <version> (only 2 digits version for example 2.8)
     """
 
-    iibs: dict[str, dict[str, str]] = OrderedDict({"v4.15": {}, "v4.16": {}, "v4.17": {}})
+    iibs: dict[str, dict[str, str]] = OrderedDict({
+        "v4.15": {},
+        "v4.16": {},
+        "v4.17": {},
+        "v4.18": {},
+        "v4.19": {},
+        "v4.20": {},
+    })
 
     datagrepper_query_url = (
         "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
@@ -31,6 +38,8 @@ def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
         "v4.16": semver.Version.parse("0.0.0"),
         "v4.17": semver.Version.parse("0.0.0"),
         "v4.18": semver.Version.parse("0.0.0"),
+        "v4.19": semver.Version.parse("0.0.0"),
+        "v4.20": semver.Version.parse("0.0.0"),
     }
 
     for raw_msg in json_res["raw_messages"]:
