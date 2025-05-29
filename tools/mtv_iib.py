@@ -4,6 +4,7 @@ import requests
 import semver
 import typer
 from rich.console import Console
+from rich.tree import Tree
 
 
 def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
@@ -61,10 +62,7 @@ def get_mtv_latest_iib(version: str) -> dict[str, dict[str, str]]:
 
 
 def main(version: str) -> None:
-    from rich.tree import Tree
-
     tree = Tree("MTV IIBs")
-
     console = Console()
 
     for ocp_version, iib in get_mtv_latest_iib(version=version).items():
