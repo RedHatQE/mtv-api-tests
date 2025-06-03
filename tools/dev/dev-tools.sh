@@ -17,13 +17,6 @@ usage() {
   exit 1
 }
 
-# Check if an argument is provided
-# if [ "$#" -lt 2 ]; then
-#   if "$1" != "list-clusters"; then
-#     usage
-#   fi
-# fi
-
 ACTION=$1
 CLUSTER_NAME=$2
 MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
@@ -80,7 +73,7 @@ cluster-login() {
 
   CMD="oc login --insecure-skip-tls-verify=true https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
 
-  loggedin=$(oc whoami &>/dev/null)
+  loggedin=$(timeout 5s oc whoami &>/dev/null)
   if [[ $? == 0 ]]; then
     loggedin=0
   else
@@ -96,7 +89,7 @@ cluster-login() {
   if [[ $loggedin == 0 && $loggedinsameserver == 0 ]]; then
     printf "Already logged in to %s\n\n" "$CLUSTER_NAME"
   else
-    oc logout &>/dev/null
+    timeout 5s oc logout &>/dev/null
     $CMD &>/dev/null
     loggedin=$(oc whoami &>/dev/null)
     if [[ $? != 0 ]]; then
