@@ -178,9 +178,8 @@ ceph-cleanup() {
   enable-ceph-tools
   local POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
   local CEPH_POOL="ocs-storagecluster-cephblockpool"
-  local logged_commands="" # Initialize an empty string to collect command logs
+  local logged_commands=""
 
-  # Declare other variables used in loops etc. as local
   local RBD_LIST
   local SNAP_AND_VOL
   local SNAP_AND_VOL_PATH
@@ -188,7 +187,6 @@ ceph-cleanup() {
   local TRASH
   local TRASH_ITEM_PATH
 
-  # 1. First command to log
   logged_commands+="$POD_EXEC_CMD -- ceph osd set-full-ratio 0.90"$'\n'
 
   RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
@@ -209,9 +207,9 @@ ceph-cleanup() {
   done
 
   logged_commands+="$POD_EXEC_CMD -- ceph osd set-full-ratio 0.85"$'\n'
-  logged_commands+="$POD_EXEC_CMD -- ceph df"$'\n' # Ensure the last command also ends with a newline
+  logged_commands+="$POD_EXEC_CMD -- ceph df"$'\n'
 
-  if [ -n "$logged_commands" ]; then # Only print if there's something logged
+  if [ -n "$logged_commands" ]; then
     printf "%s" "$logged_commands"
   fi
   XSEL_EXISTS=$(command -v xsel &>/dev/null)
