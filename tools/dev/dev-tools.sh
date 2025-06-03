@@ -91,9 +91,10 @@ cluster-login() {
   else
     timeout 5s oc logout &>/dev/null
     $CMD &>/dev/null
-    loggedin=$(oc whoami &>/dev/null)
-    if [[ $? != 0 ]]; then
+    # loggedin=$(oc whoami &>/dev/null)
+    if ! oc whoami &>/dev/null; then
       echo "Failed to login to $CLUSTER_NAME. Exiting."
+      exit 1
     fi
   fi
 
@@ -101,13 +102,20 @@ cluster-login() {
   MTV_VERSION=$(oc get csv -n openshift-mtv -o jsonpath='{.items[*].spec.version}')
   OCP_VERSION=$(oc get clusterversion -o jsonpath='{.items[*].status.desired.version}')
 
+  format_string="Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nMTV version: %s\nOCP version: %s\n\n"
+  printf -v res "$format_string" \
+    "$USERNAME" \
+    "$PASSWORD" \
+    "$CMD" \
+    "$CONSOLE" \
+    "$MTV_VERSION" \
+    "$OCP_VERSION"
+
+  print-cluster-data-tree "$res"
+
   XSEL_EXISTS=$(command -v xsel &>/dev/null)
   if ${XSEL_EXISTS}; then
     xsel -bi <<<"$PASSWORD"
-  fi
-
-  printf "Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nMTV version: %s\nOCP version: %s\n\n" "$USERNAME" "$PASSWORD" "$CMD" "$CONSOLE" "$MTV_VERSION" "$OCP_VERSION"
-  if ${XSEL_EXISTS}; then
     printf "Password copied to clipboard.\n"
   fi
 }
@@ -199,9 +207,55 @@ list-clusters() {
   for cluster_path in "$MOUNT_PATH"/qemtv-*; do
     export CLUSTER_NAME="${cluster_path##*/}"
     res=$(cluster-login)
-    echo "$res"
-  done
+    process_this_data_block=true
 
+    if [[ "$res" == "Failed to login"* ]]; then
+      process_this_data_block=false
+    fi
+
+    if [ "$process_this_data_block" = true ]; then
+      print-cluster-data-tree "$res"
+
+    fi
+  done
+}
+
+print-cluster-data-tree() {
+  res=$1
+  filtered_data=$(echo "$res" | grep -v "Password copied to clipboard")
+  num_lines=$(echo "$filtered_data" | wc -l | awk '{print $1}')
+
+  # Print a root label for your tree
+  echo "OpenShift Cluster Info -- [$CLUSTER_NAME]"
+
+  # Process the data with awk to print in a tree structure
+  echo "$filtered_data" | awk -v total_lines="$num_lines" '
+    BEGIN {
+        # Define the field separator for parsing key and value.
+        # This separates on the first occurrence of ": ".
+        FS = ": "
+        OFS = ": " # Output field separator
+    }
+    {
+        # Extract the key (everything before the first ": ")
+        key = $1
+
+        # Extract the value (everything after the first ": ")
+        # This handles cases where the value itself might contain colons.
+        value_start = index($0, ": ") + 2 # Find start of value
+        value = substr($0, value_start)  # Extract value
+
+        # Determine the prefix based on whether it is the last line
+        if (NR < total_lines) {
+            prefix = "├── "
+        } else {
+            prefix = "└── "
+        }
+
+        # Print the formatted line
+        print prefix key OFS value
+    }'
+  echo ""
 }
 if [ "$ACTION" == "cluster-password" ]; then
   cluster-password
