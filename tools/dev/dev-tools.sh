@@ -8,26 +8,33 @@ Supported actions:
   mtv-resources
   ceph-cleanup
   ceph-df [--watch]
+  list-clusters
 '''
 # Function to display usage
 usage() {
-  printf "Usage: %s <cluster-name> <action>\n" "$0"
+  printf "Usage: %s <action> [<cluster-name>]\n" "$0"
   printf "%s" "$SUPPORTED_ACTIONS"
   exit 1
 }
 
 # Check if an argument is provided
-if [ "$#" -lt 2 ]; then
-  usage
-fi
+# if [ "$#" -lt 2 ]; then
+#   if "$1" != "list-clusters"; then
+#     usage
+#   fi
+# fi
 
-CLUSTER_NAME=$1
-ACTION=$2
+ACTION=$1
+CLUSTER_NAME=$2
 MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
 export MOUNT_PATH
 export CLUSTER_NAME
 
 cluster-password() {
+  if [ -z "$CLUSTER_NAME" ]; then
+    echo "Cluster name is required. Exiting."
+    usage
+  fi
   export MOUNT_PATH
 
   CLUSTER_MOUNT_PATH="$MOUNT_PATH/$CLUSTER_NAME"
@@ -58,7 +65,17 @@ cluster-password() {
 }
 
 cluster-login() {
+  if [ -z "$CLUSTER_NAME" ]; then
+    echo "Cluster name is required. Exiting."
+    usage
+  fi
+
   PASSWORD=$(cluster-password)
+  if [[ $? != 0 ]]; then
+    echo "Password for $CLUSTER_NAME not found. Exiting."
+    exit 1
+  fi
+
   USERNAME="kubeadmin"
 
   CMD="oc login --insecure-skip-tls-verify=true https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
@@ -81,6 +98,10 @@ cluster-login() {
   else
     oc logout &>/dev/null
     $CMD &>/dev/null
+    loggedin=$(oc whoami &>/dev/null)
+    if [[ $? != 0 ]]; then
+      echo "Failed to login to $CLUSTER_NAME. Exiting."
+    fi
   fi
 
   CONSOLE=$(oc get console cluster -o jsonpath='{.status.consoleURL}')
@@ -126,13 +147,6 @@ run-tests() {
   fi
 
   echo "$cmd"
-
-  # KUBECONFIG_FILE="$MOUNT_PATH/$CLUSTER_NAME/auth/kubeconfig"
-
-  # if [ ! -f "$KUBECONFIG_FILE" ]; then
-  #   echo "Missing kubeconfig file. Exiting."
-  #   exit 1
-  # fi
 
   # export KUBECONFIG=$KUBECONFIG_FILE
   export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
@@ -188,6 +202,14 @@ ceph-cleanup() {
 
 }
 
+list-clusters() {
+  for cluster_path in "$MOUNT_PATH"/qemtv-*; do
+    export CLUSTER_NAME="${cluster_path##*/}"
+    res=$(cluster-login)
+    echo "$res"
+  done
+
+}
 if [ "$ACTION" == "cluster-password" ]; then
   cluster-password
 elif [ "$ACTION" == "cluster-login" ]; then
@@ -200,6 +222,8 @@ elif [ "$ACTION" == "ceph-cleanup" ]; then
   ceph-cleanup
 elif [ "$ACTION" == "ceph-df" ]; then
   ceph-df "$@"
+elif [ "$ACTION" == "list-clusters" ]; then
+  list-clusters
 else
   printf "Unsupported action: %s\n" "$ACTION"
   usage
