@@ -176,31 +176,47 @@ ceph-df() {
 
 ceph-cleanup() {
   enable-ceph-tools
+  local POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
+  local CEPH_POOL="ocs-storagecluster-cephblockpool"
+  local logged_commands=""
 
-  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
-  CEPH_POOL="ocs-storagecluster-cephblockpool"
-  echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.90
+  local RBD_LIST
+  local SNAP_AND_VOL
+  local SNAP_AND_VOL_PATH
+  local RBD_TRASH_LIST
+  local TRASH
+  local TRASH_ITEM_PATH
+
+  logged_commands+="$POD_EXEC_CMD -- ceph osd set-full-ratio 0.90"$'\n'
 
   RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
   for SNAP_AND_VOL in $RBD_LIST; do
     SNAP_AND_VOL_PATH="$CEPH_POOL/$SNAP_AND_VOL"
     if grep -q "snap" <<<"$SNAP_AND_VOL"; then
-      echo "$POD_EXEC_CMD" -- rbd snap purge "$SNAP_AND_VOL_PATH"
+      logged_commands+="$POD_EXEC_CMD -- rbd snap purge $SNAP_AND_VOL_PATH"$'\n'
     fi
     if grep -q "vol" <<<"$SNAP_AND_VOL"; then
-      echo "$POD_EXEC_CMD" -- rbd rm "$SNAP_AND_VOL_PATH"
+      logged_commands+="$POD_EXEC_CMD -- rbd rm $SNAP_AND_VOL_PATH"$'\n'
     fi
   done
 
   RBD_TRASH_LIST=$($POD_EXEC_CMD -- rbd trash list "$CEPH_POOL" | awk -F" " '{print$1}')
   for TRASH in $RBD_TRASH_LIST; do
     TRASH_ITEM_PATH="$CEPH_POOL/$TRASH"
-    echo "$POD_EXEC_CMD" -- rbd trash remove "$TRASH_ITEM_PATH"
+    logged_commands+="$POD_EXEC_CMD -- rbd trash remove $TRASH_ITEM_PATH"$'\n'
   done
 
-  echo "$POD_EXEC_CMD" -- ceph osd set-full-ratio 0.85
-  echo "$POD_EXEC_CMD" -- ceph df
+  logged_commands+="$POD_EXEC_CMD -- ceph osd set-full-ratio 0.85"$'\n'
+  logged_commands+="$POD_EXEC_CMD -- ceph df"$'\n'
 
+  if [ -n "$logged_commands" ]; then
+    printf "%s" "$logged_commands"
+  fi
+  XSEL_EXISTS=$(command -v xsel &>/dev/null)
+  if ${XSEL_EXISTS}; then
+    xsel -bi <<<"$logged_commands"
+    printf "Content copied to clipboard.\n"
+  fi
 }
 
 list-clusters() {
