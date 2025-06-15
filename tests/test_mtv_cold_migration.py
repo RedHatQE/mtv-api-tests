@@ -63,7 +63,6 @@ def test_sanity_cold_mtv_migration(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
         source_vms_namespace=source_vms_namespace,
     )
 
@@ -127,6 +126,5 @@ def test_cold_remote_ocp(
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
         source_vms_namespace=source_vms_namespace,
     )

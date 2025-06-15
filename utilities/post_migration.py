@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.network_map import NetworkMap
+from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -24,20 +25,19 @@ def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[s
     for map_item in map_resource.instance.spec.map:
         result = {"name": "pod"} if map_item.destination.type == "pod" else map_item.destination
 
-        if map_item.source.type:
-            if map_item.source.type == source_vm_nic["network"]:
-                return result
+        source_vm_network = source_vm_nic["network"]
 
-            if map_item.source.name and map_item.source.name.split("/")[1] == source_vm_nic["network"]:
-                return result
-        else:
-            if map_item.source.id and map_item.source.id == source_vm_nic["network"].get("id", None):
-                return result
+        if isinstance(source_vm_network, dict):
+            source_vm_network = source_vm_network.get("name", source_vm_network.get("id", None))
 
-            if map_item.source.name and map_item.source.name.split("/")[-1] == source_vm_nic["network"].get(
-                "name", None
-            ):
-                return result
+        if map_item.source.type and map_item.source.type == source_vm_network:
+            return result
+
+        if map_item.source.name and map_item.source.name.split("/")[1] == source_vm_network:
+            return result
+
+        if map_item.source.id and map_item.source.id == source_vm_network:
+            return result
 
     return {}
 
@@ -158,13 +158,16 @@ def check_vms(
     network_map_resource: NetworkMap,
     storage_map_resource: StorageMap,
     source_provider_data: dict[str, Any],
-    target_namespace: str,
+    source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
 ) -> None:
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
         source_vm = source_provider.vm_dict(
-            name=vm_name, namespace=target_namespace, source=True, source_provider_inventory=source_provider_inventory
+            name=vm_name,
+            namespace=source_vms_namespace,
+            source=True,
+            source_provider_inventory=source_provider_inventory,
         )
         vm_guest_agent = vm.get("guest_agent")
         destination_vm = destination_provider.vm_dict(
@@ -177,11 +180,15 @@ def check_vms(
 
         check_cpu(source_vm=source_vm, destination_vm=destination_vm)
         check_memory(source_vm=source_vm, destination_vm=destination_vm)
-        check_network(
-            source_vm=source_vm,
-            destination_vm=destination_vm,
-            network_migration_map=network_map_resource,
-        )
+
+        # TODO: Remove when OCP to OCP migration is done with 2 clusters
+        if source_provider.type != Provider.ProviderType.OPENSHIFT:
+            check_network(
+                source_vm=source_vm,
+                destination_vm=destination_vm,
+                network_migration_map=network_map_resource,
+            )
+
         check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
 
         snapshots_before_migration = vm.get("snapshots_before_migration")

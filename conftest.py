@@ -266,6 +266,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
     label: dict[str, str] = {
         "pod-security.kubernetes.io/enforce": "restricted",
         "pod-security.kubernetes.io/enforce-version": "latest",
+        "mutatevirtualmachines.kubemacpool.io": "ignore",
     }
     _target_namespace: str = py_config["target_namespace"]
 
@@ -606,6 +607,7 @@ def source_vms_namespace(source_provider, fixture_store, ocp_admin_client, sessi
             session_uuid=fixture_store["session_uuid"],
             client=ocp_admin_client,
             name=f"{session_uuid}-source-vms",
+            label={"mutatevirtualmachines.kubemacpool.io": "ignore"},
         )
         return namespace.name
 
@@ -613,6 +615,20 @@ def source_vms_namespace(source_provider, fixture_store, ocp_admin_client, sessi
 @pytest.fixture(scope="session")
 def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, fixture_store, session_uuid):
     if source_provider.type == Provider.ProviderType.OPENSHIFT:
+        ceph_virtualization_sc = StorageClass(
+            client=ocp_admin_client, name="ocs-storagecluster-ceph-rbd-virtualization", ensure_exists=True
+        )
+        ResourceEditor(
+            patches={
+                ceph_virtualization_sc: {
+                    "metadata": {
+                        "annotations": {StorageClass.Annotations.IS_DEFAULT_VIRT_CLASS: "true"},
+                        "name": ceph_virtualization_sc.name,
+                    }
+                }
+            }
+        ).update()
+
         bridge_type_and_name = "cnv-bridge"
         config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}
         config_json = json.dumps(config)

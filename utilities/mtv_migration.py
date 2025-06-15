@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from datetime import datetime
 from typing import Any
 
@@ -9,7 +8,6 @@ from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
-from ocp_resources.virtual_machine import VirtualMachine
 from pytest import FixtureRequest
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -30,7 +28,6 @@ LOGGER = get_logger(__name__)
 
 def migrate_vms(
     request: FixtureRequest,
-    ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
     destination_provider: OCPProvider,
     plan: dict[str, Any],
@@ -68,30 +65,25 @@ def migrate_vms(
         after_hook_namespace=after_hook_namespace,
         source_vms_namespace=source_vms_namespace,
     )
-    try:
-        migration_plan = run_migration(**run_migration_kwargs)
+    migration_plan = run_migration(**run_migration_kwargs)
 
-        wait_for_migration_complate(plan=migration_plan)
+    wait_for_migration_complate(plan=migration_plan)
 
-        if py_config.get("create_scale_report"):
-            create_migration_scale_report(plan_resource=plan)
+    if py_config.get("create_scale_report"):
+        create_migration_scale_report(plan_resource=plan)
 
-        if get_value_from_py_config("check_vms_signals") and plan.get("check_vms_signals", True):
-            check_vms(
-                plan=plan,
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                destination_provider=destination_provider,
-                destination_namespace=target_namespace,
-                network_map_resource=network_migration_map,
-                storage_map_resource=storage_migration_map,
-                target_namespace=target_namespace,
-                source_provider_inventory=source_provider_inventory,
-            )
-    finally:
-        if not request.session.config.getoption("skip_teardown"):
-            # delete all vms created by the migration to free up space on ceph storage.
-            delete_all_vms(ocp_admin_client=ocp_admin_client, namespace=target_namespace)
+    if get_value_from_py_config("check_vms_signals") and plan.get("check_vms_signals", True):
+        check_vms(
+            plan=plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+            destination_provider=destination_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=network_migration_map,
+            storage_map_resource=storage_migration_map,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+        )
 
 
 def run_migration(
@@ -323,9 +315,3 @@ def create_storagemap_and_networkmap(
         vms=vms,
     )
     return storage_migration_map, network_migration_map
-
-
-def delete_all_vms(ocp_admin_client: DynamicClient, namespace: str) -> None:
-    for vm in VirtualMachine.get(dyn_client=ocp_admin_client, namespace=namespace):
-        with contextlib.suppress(Exception):
-            vm.clean_up(wait=True)

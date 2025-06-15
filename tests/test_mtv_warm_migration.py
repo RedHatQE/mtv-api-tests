@@ -73,7 +73,6 @@ def test_sanity_warm_mtv_migration(
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
         source_vms_namespace=source_vms_namespace,
     )
 
@@ -136,7 +135,6 @@ def test_mtv_migration_warm_2disks2nics(
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
         source_vms_namespace=source_vms_namespace,
     )
 
@@ -199,6 +197,5 @@ def test_warm_remote_ocp(
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
         source_vms_namespace=source_vms_namespace,
     )

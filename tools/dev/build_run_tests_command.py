@@ -23,7 +23,7 @@ pre-defined runs:
     openstack-ceph
     ovirt-ceph
     ova
-    openshift
+    openshift-ceph-remote
     """
 
 

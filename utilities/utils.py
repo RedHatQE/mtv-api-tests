@@ -1,7 +1,7 @@
 import copy
 import functools
 import multiprocessing
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from subprocess import STDOUT, check_output
 from typing import Any, Generator
@@ -313,3 +313,9 @@ def get_value_from_py_config(value: str) -> Any:
 
     else:
         return config_value
+
+
+def delete_all_vms(ocp_admin_client: DynamicClient, namespace: str) -> None:
+    for vm in VirtualMachine.get(dyn_client=ocp_admin_client, namespace=namespace):
+        with suppress(Exception):
+            vm.clean_up(wait=True)

@@ -32,6 +32,7 @@ spec:
             requests:
               storage: 10Gi
           storageClassName: ocs-storagecluster-ceph-rbd
+
   running: false
   template:
     metadata:

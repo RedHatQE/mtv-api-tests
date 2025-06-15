@@ -77,7 +77,8 @@ class OCPProvider(BaseProvider):
             sleep(5)
             it_num = it_num - 1
 
-        return [interface["ipAddress"] for interface in vm.vmi.interfaces if interface["mac"] == mac_address][0]
+        res = [interface["ipAddress"] for interface in vm.vmi.interfaces if interface["mac"] == mac_address]
+        return res[0] if res else ""
 
     @staticmethod
     def start_vm(vm_api: VirtualMachine) -> None:
@@ -96,7 +97,7 @@ class OCPProvider(BaseProvider):
 
     def vm_dict(self, wait_for_guest_agent: bool = False, **kwargs: Any) -> dict[str, Any]:
         dynamic_client = self.ocp_resource.client
-        _source = kwargs.get("source", False)
+        _is_source_vm = kwargs.get("source", False)
 
         cnv_vm_name = kwargs["name"]
         cnv_vm_namespace = kwargs["namespace"]
@@ -117,7 +118,7 @@ class OCPProvider(BaseProvider):
         # Power state
         result_vm_info["power_state"] = "on" if cnv_vm.instance.spec.runStrategy == cnv_vm.RunStrategy.ALWAYS else "off"
 
-        if not _source:
+        if not _is_source_vm:
             # This step is required to check some of the vm_signals.
             self.start_vm(cnv_vm)
 
@@ -133,18 +134,21 @@ class OCPProvider(BaseProvider):
             result_vm_info["network_interfaces"].append({
                 "name": interface.name,
                 "macAddress": interface.macAddress,
-                "ip": self.get_ip_by_mac_address(mac_address=interface.macAddress, vm=cnv_vm) if not _source else "",
+                "ip": self.get_ip_by_mac_address(mac_address=interface.macAddress, vm=cnv_vm)
+                if not _is_source_vm
+                else "",
                 "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[1],
             })
 
         for pvc in cnv_vm.instance.spec.template.spec.volumes:
-            if not _source:
+            if not _is_source_vm:
                 name = pvc.persistentVolumeClaim.claimName
+
+            elif pvc.name == "cloudinitdisk":
+                continue
+
             else:
-                if pvc.name == "cloudinitdisk":
-                    continue
-                else:
-                    name = pvc.dataVolume.name
+                name = pvc.dataVolume.name
 
             _pvc = PersistentVolumeClaim(
                 namespace=cnv_vm.namespace,
@@ -172,7 +176,7 @@ class OCPProvider(BaseProvider):
                 / 1024
             )
 
-        if not _source and result_vm_info["power_state"] == "off":
+        if not _is_source_vm and result_vm_info["power_state"] == "off":
             self.log.info("Restoring VM Power State (turning off)")
             self.stop_vm(cnv_vm)
 
