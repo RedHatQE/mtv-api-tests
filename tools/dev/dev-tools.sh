@@ -102,7 +102,10 @@ cluster-login() {
   MTV_VERSION=$(oc get csv -n openshift-mtv -o jsonpath='{.items[*].spec.version}')
   CNV_VERSION=$(oc get csv -n openshift-cnv -o jsonpath='{.items[*].spec.version}')
   OCP_VERSION=$(oc get clusterversion -o jsonpath='{.items[*].status.desired.version}')
-  IIB=$(oc get catalogsource -n openshift-marketplace --sort-by='metadata.creationTimestamp' | grep redhat-osbs-on-pr-7 | head | awk '{print$1}')
+  IIB=$(oc get catalogsource -n openshift-marketplace --sort-by='metadata.creationTimestamp' | grep redhat-osbs-on-pr- | head | awk '{print$1}')
+  if [ -z "$IIB" ]; then
+    IIB=$(oc get catalogsource -n openshift-marketplace --sort-by='metadata.creationTimestamp' | grep redhat-osbs- | head | awk '{print$1}')
+  fi
 
   format_string="Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nOCP version: %s\nMTV version: %s (%s)\nCNV version: %s\n\n"
   printf -v res "$format_string" \
