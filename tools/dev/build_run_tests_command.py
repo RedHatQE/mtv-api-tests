@@ -21,7 +21,10 @@ pre-defined runs:
     vmware8-ceph-remote
     vmware8-csi
     openstack-ceph
+    openstack-csi
     ovirt-ceph
+    ovirt-csi
+    ovirt-csi-remote
     ova
     """
 
@@ -53,7 +56,10 @@ def main() -> str:
         "vmware8-nfs": {"provider": "vmware8", "storage": "nfs"},
         "vmware8-csi": {"provider": "vmware8", "storage": "csi"},
         "openstack-ceph": {"provider": "openstack", "storage": "ceph"},
+        "openstack-csi": {"provider": "openstack", "storage": "csi"},
         "ovirt-ceph": {"provider": "ovirt", "storage": "ceph"},
+        "ovirt-csi": {"provider": "ovirt", "storage": "csi"},
+        "ovirt-csi-remote": {"provider": "ovirt", "storage": "csi", "remote": True},
         "ova-ceph": {"provider": "ova", "storage": "ceph"},
     }
 

@@ -100,16 +100,18 @@ cluster-login() {
 
   CONSOLE=$(oc get console cluster -o jsonpath='{.status.consoleURL}')
   MTV_VERSION=$(oc get csv -n openshift-mtv -o jsonpath='{.items[*].spec.version}')
+  CNV_VERSION=$(oc get csv -n openshift-cnv -o jsonpath='{.items[*].spec.version}')
   OCP_VERSION=$(oc get clusterversion -o jsonpath='{.items[*].status.desired.version}')
 
-  format_string="Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nMTV version: %s\nOCP version: %s\n\n"
+  format_string="Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nOCP version: %s\nMTV version: %s\nCNV version: %s\n\n"
   printf -v res "$format_string" \
     "$USERNAME" \
     "$PASSWORD" \
     "$CMD" \
     "$CONSOLE" \
+    "$OCP_VERSION" \
     "$MTV_VERSION" \
-    "$OCP_VERSION"
+    "$CNV_VERSION"
 
   print-cluster-data-tree "$res"
 
