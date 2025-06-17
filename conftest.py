@@ -438,10 +438,8 @@ def source_provider(
 
 
 @pytest.fixture(scope="session")
-def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin_client):
+def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin_client, multus_cni_config):
     bridge_type_and_name = "cnv-bridge"
-    config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}
-    config_json = json.dumps(config)
 
     create_and_store_resource(
         fixture_store=fixture_store,
@@ -451,7 +449,7 @@ def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin
         name=bridge_type_and_name,
         cni_type=bridge_type_and_name,
         namespace=target_namespace,
-        config=config_json,
+        config=multus_cni_config,
     )
 
     yield bridge_type_and_name
@@ -613,7 +611,9 @@ def source_vms_namespace(source_provider, fixture_store, ocp_admin_client, sessi
 
 
 @pytest.fixture(scope="session")
-def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, fixture_store, session_uuid):
+def source_vms_network(
+    source_provider, source_vms_namespace, ocp_admin_client, fixture_store, session_uuid, multus_cni_config
+):
     if source_provider.type == Provider.ProviderType.OPENSHIFT:
         ceph_virtualization_sc = StorageClass(
             client=ocp_admin_client, name="ocs-storagecluster-ceph-rbd-virtualization", ensure_exists=True
@@ -630,8 +630,6 @@ def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, 
         ).update()
 
         bridge_type_and_name = "cnv-bridge"
-        config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}
-        config_json = json.dumps(config)
 
         create_and_store_resource(
             fixture_store=fixture_store,
@@ -641,7 +639,14 @@ def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, 
             name=bridge_type_and_name,
             cni_type=bridge_type_and_name,
             namespace=source_vms_namespace,
-            config=config_json,
+            config=multus_cni_config,
         )
 
         return bridge_type_and_name
+
+
+@pytest.fixture(scope="session")
+def multus_cni_config() -> str:
+    bridge_type_and_name = "cnv-bridge"
+    config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}
+    return json.dumps(config)
