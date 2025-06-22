@@ -9,6 +9,7 @@ Supported actions:
   ceph-cleanup
   ceph-df [--watch]
   list-clusters
+  csi-nfs-df
 '''
 # Function to display usage
 usage() {
@@ -291,6 +292,9 @@ elif [ "$ACTION" == "ceph-df" ]; then
   ceph-df "$@"
 elif [ "$ACTION" == "list-clusters" ]; then
   list-clusters
+elif [ "$ACTION" == "csi-nfs-df" ]; then
+  cluster-login
+  "$SCRIPT_DIR/check_nfs_csi_space.sh"
 else
   printf "Unsupported action: %s\n" "$ACTION"
   usage

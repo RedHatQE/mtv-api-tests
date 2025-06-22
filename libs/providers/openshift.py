@@ -5,7 +5,6 @@ from time import sleep
 from typing import Any
 
 import humanfriendly
-from kubernetes.client import ApiException
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource
@@ -77,18 +76,12 @@ class OCPProvider(BaseProvider):
             sleep(5)
             it_num = it_num - 1
 
-        res = [interface["ipAddress"] for interface in vm.vmi.interfaces if interface["mac"] == mac_address]
-        return res[0] if res else ""
+        return [interface["ipAddress"] for interface in vm.vmi.interfaces if interface["mac"] == mac_address][0]
 
     @staticmethod
     def start_vm(vm_api: VirtualMachine) -> None:
-        try:
-            if not vm_api.ready:
-                vm_api.start(wait=True)
-        except ApiException as e:
-            # if vm is already running, do nothing.
-            if e.status != 409:
-                raise
+        if not vm_api.ready:
+            vm_api.start(wait=True)
 
     @staticmethod
     def stop_vm(vm_api: VirtualMachine) -> None:
@@ -97,7 +90,7 @@ class OCPProvider(BaseProvider):
 
     def vm_dict(self, wait_for_guest_agent: bool = False, **kwargs: Any) -> dict[str, Any]:
         dynamic_client = self.ocp_resource.client
-        _is_source_vm = kwargs.get("source", False)
+        _source = kwargs.get("source", False)
 
         cnv_vm_name = kwargs["name"]
         cnv_vm_namespace = kwargs["namespace"]
@@ -118,7 +111,7 @@ class OCPProvider(BaseProvider):
         # Power state
         result_vm_info["power_state"] = "on" if cnv_vm.instance.spec.runStrategy == cnv_vm.RunStrategy.ALWAYS else "off"
 
-        if not _is_source_vm:
+        if not _source:
             # This step is required to check some of the vm_signals.
             self.start_vm(cnv_vm)
 
@@ -134,21 +127,18 @@ class OCPProvider(BaseProvider):
             result_vm_info["network_interfaces"].append({
                 "name": interface.name,
                 "macAddress": interface.macAddress,
-                "ip": self.get_ip_by_mac_address(mac_address=interface.macAddress, vm=cnv_vm)
-                if not _is_source_vm
-                else "",
+                "ip": self.get_ip_by_mac_address(mac_address=interface.macAddress, vm=cnv_vm) if not _source else "",
                 "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[1],
             })
 
         for pvc in cnv_vm.instance.spec.template.spec.volumes:
-            if not _is_source_vm:
+            if not _source:
                 name = pvc.persistentVolumeClaim.claimName
-
-            elif pvc.name == "cloudinitdisk":
-                continue
-
             else:
-                name = pvc.dataVolume.name
+                if pvc.name == "cloudinitdisk":
+                    continue
+                else:
+                    name = pvc.dataVolume.name
 
             _pvc = PersistentVolumeClaim(
                 namespace=cnv_vm.namespace,
@@ -166,18 +156,15 @@ class OCPProvider(BaseProvider):
         result_vm_info["cpu"]["num_cores"] = cnv_vm.instance.spec.template.spec.domain.cpu.cores
         result_vm_info["cpu"]["num_sockets"] = cnv_vm.instance.spec.template.spec.domain.cpu.sockets
 
-        vm_memory = cnv_vm.instance.spec.template.spec.domain.memory
-        if vm_memory:
-            result_vm_info["memory_in_mb"] = int(
-                humanfriendly.parse_size(
-                    vm_memory.guest,
-                    binary=True,
-                )
-                / 1024
-                / 1024
+        result_vm_info["memory_in_mb"] = int(
+            humanfriendly.parse_size(
+                cnv_vm.instance.spec.template.spec.domain.memory.guest,
+                binary=True,
             )
-
-        if not _is_source_vm and result_vm_info["power_state"] == "off":
+            / 1024
+            / 1024
+        )
+        if not _source and result_vm_info["power_state"] == "off":
             self.log.info("Restoring VM Power State (turning off)")
             self.stop_vm(cnv_vm)
 
