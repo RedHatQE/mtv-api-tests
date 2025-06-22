@@ -33,7 +33,11 @@ def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[s
         if map_item.source.type and map_item.source.type == source_vm_network:
             return result
 
-        if map_item.source.name and map_item.source.name.split("/")[1] == source_vm_network:
+        if (
+            map_item.source.name and map_item.source.name.split("/")[1]
+            if "/" in map_item.source.name
+            else map_item.source.name == source_vm_network
+        ):
             return result
 
         if map_item.source.id and map_item.source.id == source_vm_network:
