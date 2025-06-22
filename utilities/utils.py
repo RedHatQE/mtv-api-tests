@@ -162,10 +162,11 @@ def create_source_provider(
             if not tmp_dir:
                 raise ValueError("tmp_dir is required for rhv")
 
+            source_provider_type = source_provider_data_copy["type"]
             cert_file = generate_ca_cert_file(
                 provider_fqdn=source_provider_data_copy["fqdn"],
-                cert_file=tmp_dir.mktemp(source_provider_data_copy["type"].upper())
-                / f"{source_provider_data_copy['type']}_cert.crt",
+                cert_file=tmp_dir.mktemp(source_provider_type.upper())
+                / f"{source_provider_type}_{session_uuid}_cert.crt",
             )
             provider_args["host"] = source_provider_data_copy["api_url"]
             provider_args["ca_file"] = str(cert_file)
