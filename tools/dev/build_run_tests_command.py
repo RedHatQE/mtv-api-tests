@@ -5,6 +5,8 @@ import subprocess
 import sys
 from typing import Any
 
+from packaging.version import Version
+
 
 def usage() -> str:
     return """Usage:
@@ -37,7 +39,9 @@ def get_cluster_version() -> str:
         sys.exit(1)
 
     data = json.loads(res.stdout)
-    return data["openshiftVersion"].rsplit(".", 1)[0]
+    version = data["openshiftVersion"].rsplit(".", 1)[0]
+    semver_version = Version(version)
+    return f"{semver_version.major}.{semver_version.minor}"
 
 
 def main() -> str:
