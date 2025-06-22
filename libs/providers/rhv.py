@@ -223,4 +223,4 @@ class OvirtProvider(BaseProvider):
 
     @property
     def is_mtv_datacenter_ok(self) -> bool:
-        return self.mtv_datacenter.status.value == ""
+        return self.mtv_datacenter.status.value == "up"
