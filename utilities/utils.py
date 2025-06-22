@@ -120,6 +120,7 @@ def create_source_provider(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
     destination_ocp_secret: Secret,
+    insecure: bool,
     tmp_dir: pytest.TempPathFactory | None = None,
     **kwargs: dict[str, Any],
 ) -> Generator[BaseProvider, None, None]:
@@ -171,20 +172,26 @@ def create_source_provider(
 
         # rhv/ovirt
         elif rhv_provider(provider_data=source_provider_data_copy):
-            if not tmp_dir:
-                raise ValueError("tmp_dir is required for rhv")
+            if not insecure:
+                if not tmp_dir:
+                    raise ValueError("tmp_dir is required for rhv")
 
-            cert_file = generate_ca_cert_file(
-                provider_fqdn=source_provider_data_copy["fqdn"],
-                cert_file=tmp_dir.mktemp(source_provider_data_copy["type"].upper())
-                / f"{source_provider_data_copy['type']}_cert.crt",
-            )
+                source_provider_type = source_provider_data_copy["type"]
+                cert_file = generate_ca_cert_file(
+                    provider_fqdn=source_provider_data_copy["fqdn"],
+                    cert_file=tmp_dir.mktemp(source_provider_type.upper())
+                    / f"{source_provider_type}_{session_uuid}_cert.crt",
+                )
+                provider_args["ca_file"] = str(cert_file)
+                secret_string_data["cacert"] = cert_file.read_text()
+
+            else:
+                provider_args["insecure"] = insecure
+
             provider_args["host"] = source_provider_data_copy["api_url"]
-            provider_args["ca_file"] = str(cert_file)
             source_provider = OvirtProvider
             secret_string_data["user"] = source_provider_data_copy["username"]
             secret_string_data["password"] = source_provider_data_copy["password"]
-            secret_string_data["cacert"] = cert_file.read_text()
 
         # openstack
         elif openstack_provider(provider_data=source_provider_data_copy):

@@ -431,6 +431,7 @@ def source_provider(
         target_namespace=target_namespace,
         ocp_admin_client=ocp_admin_client,
         destination_ocp_secret=destination_ocp_secret,
+        insecure=get_value_from_py_config(value=py_config["insecure_verify_skip"]),
     ) as _source_provider:
         yield _source_provider
 
