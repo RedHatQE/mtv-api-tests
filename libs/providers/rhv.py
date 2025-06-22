@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from typing import Any
 
 import ovirtsdk4
@@ -26,8 +27,8 @@ class OvirtProvider(BaseProvider):
         host: str,
         username: str,
         password: str,
-        ca_file: str,
         ocp_resource: Provider,
+        ca_file: str | None = None,
         insecure: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -41,6 +42,10 @@ class OvirtProvider(BaseProvider):
         self.type = Provider.ProviderType.RHV
         self.insecure = insecure
         self.ca_file = ca_file
+        if self.ca_file and not self.insecure:
+            if not os.path.isfile(self.ca_file):
+                raise ValueError("ca_file must be a valid path to a file")
+
         self.vm_cash: dict[str, Any] = {}
         self.VM_POWER_OFF_CODE: int = 33
 
@@ -53,7 +58,7 @@ class OvirtProvider(BaseProvider):
             url=self.host,
             username=self.username,
             password=self.password,
-            ca_file=self.ca_file,
+            ca_file=self.ca_file if not self.insecure else None,
             debug=self.debug,
             log=self.log,
             insecure=self.insecure,
