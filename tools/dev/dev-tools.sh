@@ -140,11 +140,11 @@ mtv-resources() {
   done
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+
 run-tests() {
   cluster-login
   shift 2
-
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
   cmd=$(uv run "$SCRIPT_DIR"/build_run_tests_command.py "$@")
   if [ $? -ne 0 ]; then
