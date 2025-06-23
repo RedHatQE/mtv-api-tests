@@ -142,6 +142,11 @@ cluster-login() {
   local iib
   iib=$(oc get catalogsource -n openshift-marketplace --sort-by='metadata.creationTimestamp' | grep redhat-osbs- | tail -n 1 | awk '{print$1}')
 
+  if [ "${3-}" == "--get-version" ]; then
+      echo "$ocp_version"
+      return
+  fi
+
   local format_string="Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nOCP version: %s\nMTV version: %s (%s)\nCNV version: %s\n"
   printf "$format_string" \
     "$username" \
@@ -180,10 +185,11 @@ run-tests() {
   local cluster_name="$1"
   export CLUSTER_NAME="$cluster_name"
   shift # Remove cluster name from args
-  cluster-login "$cluster_name" --no-copy >/dev/null
+  local ocp_version
+  ocp_version=$(cluster-login "$cluster_name" --no-copy --get-version)
 
   local cmd
-  cmd=$(uv run "$SCRIPT_DIR"/build_run_tests_command.py "$@")
+  cmd=$(uv run "$SCRIPT_DIR"/build_run_tests_command.py --cluster-version="$ocp_version" "$@")
   echo "Running command:" >&2
   echo "$cmd"
 
