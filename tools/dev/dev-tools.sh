@@ -1,301 +1,620 @@
 #! /usr/bin/env bash
 
-SUPPORTED_ACTIONS='''
-Supported actions:
-  cluster-password
-  cluster-login
-  run-tests
-  mtv-resources
-  ceph-cleanup
-  ceph-df [--watch]
-  list-clusters
-  csi-nfs-df
-'''
-# Function to display usage
+set -euo pipefail
+
 usage() {
-  printf "Usage: %s <action> [<cluster-name>]\n" "$0"
-  printf "%s" "$SUPPORTED_ACTIONS"
-  exit 1
+  cat <<EOF
+A collection of tools for managing OpenShift clusters for MTV testing.
+
+Usage:
+  $(basename "$0") <command> [arguments]
+
+Global options:
+  --help          Show this help message and exit.
+
+Available commands:
+  cluster-password <cluster-name>
+      Prints the kubeadmin password for a cluster.
+
+  cluster-login <cluster-name>
+      Logs into a cluster and prints its details. Copies password to clipboard.
+
+  run-tests <cluster-name> [test-args...]
+      Runs the API tests against a specified cluster.
+
+  mtv-resources <cluster-name>
+      Lists MTV-related resources in a cluster.
+
+  ceph-cleanup <cluster-name> [--execute]
+      Generates commands to clean up Ceph resources. Use --execute to run them.
+
+  ceph-df <cluster-name> [--watch]
+      Displays Ceph cluster usage. Use --watch to monitor in real-time.
+
+  list-clusters [--full]
+      Lists available clusters. By default, shows a summary. Use --full for details.
+
+  generate-completion-script <bash|zsh>
+      Generates a completion script for the specified shell.
+      To install, add the relevant line to your shell's startup file:
+      Bash: source <(./tools/dev/dev-tools.sh generate-completion-script bash)
+      Zsh:  source <(./tools/dev/dev-tools.sh generate-completion-script zsh)
+
+  csi-nfs-df <cluster-name>
+      Checks the available space on the NFS CSI driver.
+EOF
+  exit 0
 }
 
-ACTION=$1
-CLUSTER_NAME=$2
-MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
-export MOUNT_PATH
-export CLUSTER_NAME
-
-cluster-password() {
-  if [ -z "$CLUSTER_NAME" ]; then
-    echo "Cluster name is required. Exiting."
-    usage
-  fi
-  export MOUNT_PATH
-
-  CLUSTER_MOUNT_PATH="$MOUNT_PATH/$CLUSTER_NAME"
-
-  if [ ! -d "$MOUNT_PATH" ]; then
-    sudo mkdir -p "$MOUNT_PATH"
-  fi
-
-  if [ ! -d "$CLUSTER_MOUNT_PATH" ]; then
+ensure_nfs_mounted() {
+  if ! findmnt -n -T "$MOUNT_PATH" >/dev/null; then
+    if [ ! -d "$MOUNT_PATH" ]; then
+      echo "Creating mount path: $MOUNT_PATH" >&2
+      sudo mkdir -p "$MOUNT_PATH"
+    fi
+    echo "Mounting NFS share..." >&2
     sudo mount -t nfs 10.9.96.21:/rhos_psi_cluster_dirs "$MOUNT_PATH"
   fi
+}
 
-  if [ ! -d "$CLUSTER_MOUNT_PATH" ]; then
-    echo "Mount path $CLUSTER_MOUNT_PATH does not exist. Exiting."
+MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
+export MOUNT_PATH
+
+cluster-password() {
+  local cluster_name="$1"
+  local copy_to_clipboard=true
+  if [[ "${2-}" == "--no-copy" ]]; then
+    copy_to_clipboard=false
+  fi
+
+  if [ -z "$cluster_name" ]; then
+    echo "Cluster name is required." >&2
+    usage
+  fi
+
+  ensure_nfs_mounted
+
+  local cluster_mount_path="$MOUNT_PATH/$cluster_name"
+
+  if [ ! -d "$cluster_mount_path" ]; then
+    echo "Mount path $cluster_mount_path does not exist after mount attempt. Exiting." >&2
     exit 1
   fi
 
-  CLUSTER_FILES_PATH="$MOUNT_PATH/$CLUSTER_NAME/auth"
-  PASSWORD_FILE="$CLUSTER_FILES_PATH/kubeadmin-password"
+  local password_file="$cluster_mount_path/auth/kubeadmin-password"
 
-  if [ ! -f "$PASSWORD_FILE" ]; then
-    echo "Missing password file. Exiting."
+  if [ ! -f "$password_file" ]; then
+    echo "Missing password file: $password_file. Exiting." >&2
     exit 1
   fi
 
-  PASSWORD_CONTENT=$(cat "$PASSWORD_FILE")
-  echo "$PASSWORD_CONTENT"
+  local password
+  password=$(cat "$password_file")
+  echo "$password"
+
+  if [ "$copy_to_clipboard" = true ] && command -v xsel &>/dev/null; then
+    xsel -bi <<<"$password"
+    printf "Password copied to clipboard.\n" >&2
+  fi
 }
 
 cluster-login() {
-  if [ -z "$CLUSTER_NAME" ]; then
-    echo "Cluster name is required. Exiting."
+  local cluster_name="$1"
+  local copy_to_clipboard=true
+  if [[ "${2-}" == "--no-copy" ]]; then
+    copy_to_clipboard=false
+  fi
+
+  if [ -z "$cluster_name" ]; then
+    echo "Cluster name is required." >&2
     usage
   fi
 
-  PASSWORD=$(cluster-password)
-  if [[ $? != 0 ]]; then
-    echo "Password for $CLUSTER_NAME not found. Exiting."
+  local username="kubeadmin"
+  local password
+  password=$(cluster-password "$cluster_name" --no-copy)
+  if [ -z "$password" ]; then
     exit 1
   fi
 
-  USERNAME="kubeadmin"
+  local api_url="https://api.$cluster_name.rhos-psi.cnv-qe.rhood.us:6443"
+  local login_cmd="oc login --insecure-skip-tls-verify=true $api_url -u $username -p $password"
 
-  CMD="oc login --insecure-skip-tls-verify=true https://api.$CLUSTER_NAME.rhos-psi.cnv-qe.rhood.us:6443 -u $USERNAME -p $PASSWORD"
-
-  loggedin=$(timeout 5s oc whoami &>/dev/null)
-  if [[ $? == 0 ]]; then
-    loggedin=0
-  else
-    loggedin=1
-  fi
-  loggedinsameserver=$(oc whoami --show-server | grep -c "$CLUSTER_NAME" &>/dev/null)
-  if [[ $? == 0 ]]; then
-    loggedinsameserver=0
-  else
-    loggedinsameserver=1
-  fi
-
-  if [[ $loggedin == 0 && $loggedinsameserver == 0 ]]; then
-    printf "Already logged in to %s\n\n" "$CLUSTER_NAME"
-  else
-    timeout 5s oc logout &>/dev/null
-    $CMD &>/dev/null
-    # loggedin=$(oc whoami &>/dev/null)
-    if ! oc whoami &>/dev/null; then
-      echo "Failed to login to $CLUSTER_NAME. Exiting."
+  # Redirect stderr to /dev/null to suppress connection errors when not logged in
+  if ! oc whoami --show-server 2>/dev/null | grep -q "$api_url"; then
+    echo "Logging in to $cluster_name..." >&2
+    if ! oc login --insecure-skip-tls-verify=true "$api_url" -u "$username" -p "$password" >/dev/null; then
+      echo "Error: Failed to log in to cluster '$cluster_name'. Please check cluster name and connectivity." >&2
       exit 1
     fi
+  else
+    printf "Already logged in to %s\n\n" "$cluster_name" >&2
   fi
 
-  CONSOLE=$(oc get console cluster -o jsonpath='{.status.consoleURL}')
-  MTV_VERSION=$(oc get csv -n openshift-mtv -o jsonpath='{.items[*].spec.version}')
-  CNV_VERSION=$(oc get csv -n openshift-cnv -o jsonpath='{.items[*].spec.version}')
-  OCP_VERSION=$(oc get clusterversion -o jsonpath='{.items[*].status.desired.version}')
-  IIB=$(oc get catalogsource -n openshift-marketplace --sort-by='metadata.creationTimestamp' | grep redhat-osbs- | tail | awk '{print$1}')
-
-  format_string="Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nOCP version: %s\nMTV version: %s (%s)\nCNV version: %s\n\n"
-  printf -v res "$format_string" \
-    "$USERNAME" \
-    "$PASSWORD" \
-    "$CMD" \
-    "$CONSOLE" \
-    "$OCP_VERSION" \
-    "$MTV_VERSION" \
-    "$IIB" \
-    "$CNV_VERSION"
-
-  print-cluster-data-tree "$res"
-
-  XSEL_EXISTS=$(command -v xsel &>/dev/null)
-  if ${XSEL_EXISTS}; then
-    xsel -bi <<<"$PASSWORD"
-    printf "Password copied to clipboard.\n"
+  if [ "$copy_to_clipboard" = true ] && command -v xsel &>/dev/null; then
+    xsel -bi <<<"$password"
+    printf "Password copied to clipboard.\n\n" >&2
   fi
+
+  local console
+  console=$(oc get console cluster -o jsonpath='{.status.consoleURL}')
+  local mtv_version
+  mtv_version=$(oc get csv -n openshift-mtv -o jsonpath='{.items[*].spec.version}')
+  local cnv_version
+  cnv_version=$(oc get csv -n openshift-cnv -o jsonpath='{.items[*].spec.version}')
+  local ocp_version
+  ocp_version=$(oc get clusterversion -o jsonpath='{.items[*].status.desired.version}')
+  local iib
+  iib=$(oc get catalogsource -n openshift-marketplace --sort-by='metadata.creationTimestamp' | grep redhat-osbs- | tail -n 1 | awk '{print$1}')
+
+  local format_string="Username: %s\nPassword: %s\nLogin: %s\nConsole: %s\nOCP version: %s\nMTV version: %s (%s)\nCNV version: %s\n"
+  printf "$format_string" \
+    "$username" \
+    "$password" \
+    "$login_cmd" \
+    "$console" \
+    "$ocp_version" \
+    "$mtv_version" \
+    "$iib" \
+    "$cnv_version"
 }
 
 mtv-resources() {
-  cluster-login
-  RESOUECES="ns pods dv pvc pv plan migration storagemap networkmap provider host secret net-attach-def hook vm vmi"
-  for resource in $RESOUECES; do
-    res=$(oc get "$resource" -A | grep mtv-api)
-    IFS=$'\n' read -r -d '' -a array <<<"$res"
+  local cluster_name="$1"
+  cluster-login "$cluster_name" >/dev/null
 
-    echo "$resource:"
-    for line in "${array[@]}"; do
-      echo "    $line"
-    done
-    echo -e '\n'
+  local resources="ns pods dv pvc pv plan migration storagemap networkmap provider host secret net-attach-def hook vm vmi"
+  for resource in $resources; do
+    local res
+    res=$(oc get "$resource" -A 2>/dev/null | grep 'mtv-api' || true)
+
+    if [ -n "$res" ]; then
+      echo "$resource:"
+      # Use a while loop to indent each line of the output
+      while IFS= read -r line; do
+        echo "    $line"
+      done <<<"$res"
+      echo
+    fi
   done
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 run-tests() {
-  cluster-login
-  shift 2
+  local cluster_name="$1"
+  export CLUSTER_NAME="$cluster_name"
+  shift # Remove cluster name from args
+  cluster-login "$cluster_name" --no-copy >/dev/null
 
+  local cmd
   cmd=$(uv run "$SCRIPT_DIR"/build_run_tests_command.py "$@")
-  if [ $? -ne 0 ]; then
-    echo "$cmd"
-    exit 1
-  fi
-
+  echo "Running command:" >&2
   echo "$cmd"
 
-  # export KUBECONFIG=$KUBECONFIG_FILE
   export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
-
-  $cmd
+  eval "$cmd"
 }
 
 enable-ceph-tools() {
-  cluster-login
-  oc patch storagecluster ocs-storagecluster -n openshift-storage --type json --patch '[{ "op": "replace", "path": "/spec/enableCephTools", "value": true }]' &>/dev/null
+  local cluster_name="$1"
+  cluster-login "$cluster_name" --no-copy >/dev/null
+  local tools_enabled
+  tools_enabled=$(oc get storagecluster ocs-storagecluster -n openshift-storage -o jsonpath='{.spec.enableCephTools}' 2>/dev/null)
 
-  TOOLS_POD=$(oc get pods -n openshift-storage -l app=rook-ceph-tools -o name)
+  if [ "$tools_enabled" != "true" ]; then
+    echo "Enabling Ceph tools..." >&2
+    oc patch storagecluster ocs-storagecluster -n openshift-storage --type json --patch '[{ "op": "replace", "path": "/spec/enableCephTools", "value": true }]' >/dev/null
+  fi
+
+  echo "Waiting for Ceph tools pod..." >&2
+  local tools_pod
+  local status
+  for _ in $(seq 1 30); do # ~2.5 min timeout
+    tools_pod=$(oc get pods -n openshift-storage -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    if [ -n "$tools_pod" ]; then
+      status=$(oc get pod "$tools_pod" -n openshift-storage -o jsonpath='{.status.phase}' 2>/dev/null)
+      if [ "$status" == "Running" ]; then
+        echo "$tools_pod"
+        return 0
+      fi
+    fi
+    sleep 5
+  done
+
+  echo "Error: Timed out waiting for Ceph tools pod to become ready." >&2
+  return 1
 }
 
 ceph-df() {
-  enable-ceph-tools
+  local cluster_name="$1"
+  shift # consume cluster name
 
-  POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD -- ceph df"
-  if [[ $3 == "--watch" ]]; then
-    watch -n 10 "$POD_EXEC_CMD"
+  if [ -n "${1-}" ] && [ "$1" != "--watch" ]; then
+    echo "Error: Unknown argument '$1' for ceph-df." >&2
+    usage
+  fi
+
+  local tools_pod
+  tools_pod=$(enable-ceph-tools "$cluster_name")
+
+  local pod_exec_cmd="oc exec -n openshift-storage $tools_pod -- ceph df"
+
+  if [[ "${1-}" == "--watch" ]]; then
+    watch -n 10 "$pod_exec_cmd"
   else
-    DF=$($POD_EXEC_CMD)
-    printf "%s" "$DF"
+    $pod_exec_cmd
   fi
 }
 
 ceph-cleanup() {
-  enable-ceph-tools
-  local POD_EXEC_CMD="oc exec -n openshift-storage $TOOLS_POD"
-  local CEPH_POOL="ocs-storagecluster-cephblockpool"
+  local cluster_name="$1"
+  shift
+
+  if [ -n "${1-}" ] && [ "$1" != "--execute" ]; then
+    echo "Error: Unknown argument '$1' for ceph-cleanup." >&2
+    usage
+  fi
+
+  local execute=false
+  if [[ "${1-}" == "--execute" ]]; then
+    execute=true
+  fi
+
+  local tools_pod
+  tools_pod=$(enable-ceph-tools "$cluster_name")
+
+  local pod_exec_cmd="oc exec -i -n openshift-storage $tools_pod" # Added -i for stdin
+  local ceph_pool="ocs-storagecluster-cephblockpool"
   local logged_commands=""
 
-  local RBD_LIST
-  local SNAP_AND_VOL
-  local SNAP_AND_VOL_PATH
-  local RBD_TRASH_LIST
-  local TRASH
-  local TRASH_ITEM_PATH
+  logged_commands+="$pod_exec_cmd -- ceph osd set-full-ratio 0.90"$'\n'
 
-  logged_commands+="$POD_EXEC_CMD -- ceph osd set-full-ratio 0.90"$'\n'
-
-  RBD_LIST=$($POD_EXEC_CMD -- rbd ls "$CEPH_POOL")
-  for SNAP_AND_VOL in $RBD_LIST; do
-    SNAP_AND_VOL_PATH="$CEPH_POOL/$SNAP_AND_VOL"
-    if grep -q "snap" <<<"$SNAP_AND_VOL"; then
-      logged_commands+="$POD_EXEC_CMD -- rbd snap purge $SNAP_AND_VOL_PATH"$'\n'
-    fi
-    if grep -q "vol" <<<"$SNAP_AND_VOL"; then
-      logged_commands+="$POD_EXEC_CMD -- rbd rm $SNAP_AND_VOL_PATH"$'\n'
-    fi
+  local rbd_list
+  rbd_list=$($pod_exec_cmd -- rbd ls "$ceph_pool")
+  for image in $rbd_list; do
+    local image_path="$ceph_pool/$image"
+    # Purge all snapshots for the image.
+    logged_commands+="$pod_exec_cmd -- rbd snap purge $image_path"$'\n'
+    # Remove the image itself.
+    logged_commands+="$pod_exec_cmd -- rbd rm $image_path"$'\n'
   done
 
-  RBD_TRASH_LIST=$($POD_EXEC_CMD -- rbd trash list "$CEPH_POOL" | awk -F" " '{print$1}')
-  for TRASH in $RBD_TRASH_LIST; do
-    TRASH_ITEM_PATH="$CEPH_POOL/$TRASH"
-    logged_commands+="$POD_EXEC_CMD -- rbd trash remove $TRASH_ITEM_PATH"$'\n'
+  local rbd_trash_list
+  rbd_trash_list=$($pod_exec_cmd -- rbd trash list "$ceph_pool" | awk -F" " '{print$1}')
+  for trash_id in $rbd_trash_list; do
+    local trash_item_path="$ceph_pool/$trash_id"
+    logged_commands+="$pod_exec_cmd -- rbd trash remove $trash_item_path"$'\n'
   done
 
-  logged_commands+="$POD_EXEC_CMD -- ceph osd set-full-ratio 0.85"$'\n'
-  logged_commands+="$POD_EXEC_CMD -- ceph df"$'\n'
+  logged_commands+="$pod_exec_cmd -- ceph osd set-full-ratio 0.85"$'\n'
+  logged_commands+="$pod_exec_cmd -- ceph df"$'\n'
 
-  if [ -n "$logged_commands" ]; then
-    printf "%s" "$logged_commands"
+  if [ -z "$logged_commands" ]; then
+    echo "No commands to execute."
+    return
   fi
-  XSEL_EXISTS=$(command -v xsel &>/dev/null)
-  if ${XSEL_EXISTS}; then
-    xsel -bi <<<"$logged_commands"
-    printf "Content copied to clipboard.\n"
+
+  if [ "$execute" = true ]; then
+    echo "The following commands will be executed:"
+    printf "%s\n" "$logged_commands"
+    read -p "Are you sure you want to continue? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      echo "Executing cleanup commands..."
+      # We pipe the commands to bash for execution.
+      # Using a subshell to avoid issues with variable scope and command execution.
+      (
+        IFS=$'\n'
+        for cmd in $logged_commands; do
+          echo "Running: $cmd"
+          if ! eval "$cmd"; then
+            echo "Warning: Command failed, but continuing execution: $cmd" >&2
+          fi
+        done
+      )
+      echo "Cleanup finished."
+    else
+      echo "Cleanup aborted by user."
+    fi
+  else
+    echo "The following commands have been generated. Run with --execute to run them."
+    printf "%s" "$logged_commands"
+    if command -v xsel &>/dev/null; then
+      xsel -bi <<<"$logged_commands"
+      printf "\nContent copied to clipboard.\n"
+    fi
   fi
 }
 
 list-clusters() {
-  for cluster_path in "$MOUNT_PATH"/qemtv-*; do
-    export CLUSTER_NAME="${cluster_path##*/}"
-    res=$(cluster-login)
-    process_this_data_block=true
-
-    if [[ "$res" == "Failed to login"* ]]; then
-      process_this_data_block=false
+  local full_info=false
+  if [ -n "${1-}" ]; then
+    if [[ "$1" == "--full" ]]; then
+      full_info=true
+    else
+      echo "Error: Unknown argument '$1' for list-clusters" >&2
+      usage
     fi
+  fi
 
-    if [ "$process_this_data_block" = true ]; then
-      print-cluster-data-tree "$res"
+  ensure_nfs_mounted
 
+  for cluster_path in "$MOUNT_PATH"/qemtv{,d}-*; do
+    local cluster_name="${cluster_path##*/}"
+    local cluster_info
+    if cluster_info=$(cluster-login "$cluster_name" --no-copy 2>/dev/null); then
+      if [ "$full_info" = true ]; then
+        print-cluster-data-tree "$cluster_info" "$cluster_name"
+      else
+        local ocp_version
+        ocp_version=$(echo "$cluster_info" | grep "OCP version:" | sed 's/OCP version: //')
+        local mtv_version
+        mtv_version=$(echo "$cluster_info" | grep "MTV version:" | sed 's/MTV version: //')
+        printf "%-20s OCP: %-15s MTV: %s\n" "$cluster_name" "$ocp_version" "$mtv_version"
+      fi
+    else
+      echo "Could not log in to cluster: $cluster_name" >&2
     fi
   done
 }
 
 print-cluster-data-tree() {
-  res=$1
-  filtered_data=$(echo "$res" | grep -v "Password copied to clipboard")
-  num_lines=$(echo "$filtered_data" | wc -l | awk '{print $1}')
+  local data="$1"
+  local cluster_name="$2"
+  # Filter out unwanted/empty lines before processing
+  local filtered_data
+  filtered_data=$(echo "$data" | grep -v "Password copied to clipboard" | grep -vE '^$')
 
-  # Print a root label for your tree
-  echo "OpenShift Cluster Info -- [$CLUSTER_NAME]"
+  # Read filtered data into a bash array
+  local lines=()
+  while IFS= read -r line; do
+    lines+=("$line")
+  done <<<"$filtered_data"
 
-  # Process the data with awk to print in a tree structure
-  echo "$filtered_data" | awk -v total_lines="$num_lines" '
-    BEGIN {
-        # Define the field separator for parsing key and value.
-        # This separates on the first occurrence of ": ".
-        FS = ": "
-        OFS = ": " # Output field separator
-    }
-    {
-        # Extract the key (everything before the first ": ")
-        key = $1
+  local num_lines=${#lines[@]}
+  # Do nothing if there's no data to print
+  if [ "$num_lines" -eq 0 ]; then
+    return
+  fi
 
-        # Extract the value (everything after the first ": ")
-        # This handles cases where the value itself might contain colons.
-        value_start = index($0, ": ") + 2 # Find start of value
-        value = substr($0, value_start)  # Extract value
+  echo "OpenShift Cluster Info -- [$cluster_name]"
 
-        # Determine the prefix based on whether it is the last line
-        if (NR < total_lines) {
-            prefix = "├── "
-        } else {
-            prefix = "└── "
-        }
+  # Loop through the array and print each line with tree characters
+  for i in "${!lines[@]}"; do
+    local line="${lines[$i]}"
+    # Use bash parameter expansion to split key and value
+    local key="${line%%: *}"
+    local value="${line#*: }"
 
-        # Print the formatted line
-        print prefix key OFS value
-    }'
+    local prefix="├──"
+    if [ "$((i + 1))" -eq "$num_lines" ]; then
+      prefix="└──"
+    fi
+
+    printf "%s %s: %s\n" "$prefix" "$key" "$value"
+  done
   echo ""
 }
-if [ "$ACTION" == "cluster-password" ]; then
-  cluster-password
-elif [ "$ACTION" == "cluster-login" ]; then
-  cluster-login
-elif [ "$ACTION" == "mtv-resources" ]; then
-  mtv-resources
-elif [ "$ACTION" == "run-tests" ]; then
-  run-tests "$@"
-elif [ "$ACTION" == "ceph-cleanup" ]; then
-  ceph-cleanup
-elif [ "$ACTION" == "ceph-df" ]; then
-  ceph-df "$@"
-elif [ "$ACTION" == "list-clusters" ]; then
-  list-clusters
-elif [ "$ACTION" == "csi-nfs-df" ]; then
-  cluster-login
-  "$SCRIPT_DIR/check_nfs_csi_space.sh"
-else
-  printf "Unsupported action: %s\n" "$ACTION"
-  usage
-fi
+
+generate_bash_completion_script() {
+  local script_name
+  script_name=$(basename "$0")
+
+  cat <<EOF
+# Bash completion for ${script_name}
+
+_dev_tools_get_cluster_names()
+{
+    local MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
+    if [ ! -d "\$MOUNT_PATH" ]; then
+      return 1
+    fi
+    local clusters
+    clusters=\$(ls -d "\$MOUNT_PATH"/qemtv{,d}-* 2>/dev/null | xargs -n 1 basename)
+    COMPREPLY=( \$(compgen -W "\${clusters}" -- "\${cur}") )
+}
+
+_dev_tools_completion()
+{
+    local cur prev words cword
+    _get_comp_words_by_ref -n : cur prev words cword
+
+    local commands="cluster-password cluster-login run-tests mtv-resources ceph-cleanup ceph-df list-clusters csi-nfs-df --help generate-completion-script"
+
+    if [ \${cword} -eq 1 ]; then
+        COMPREPLY=( \$(compgen -W "\${commands}" -- "\${cur}") )
+        return 0
+    fi
+
+    local current_command="\${words[1]}"
+
+    case "\${current_command}" in
+        list-clusters)
+            if [[ "\${cur}" == --* ]]; then
+                COMPREPLY=( \$(compgen -W "--full" -- "\${cur}") )
+            fi
+            ;;
+        ceph-df)
+            if [[ "\${cur}" == --* ]]; then
+                COMPREPLY=( \$(compgen -W "--watch" -- "\${cur}") )
+            elif [ \${cword} -eq 2 ]; then
+                _dev_tools_get_cluster_names
+            fi
+            ;;
+        ceph-cleanup)
+            if [[ "\${cur}" == --* ]]; then
+                COMPREPLY=( \$(compgen -W "--execute" -- "\${cur}") )
+            elif [ \${cword} -eq 2 ]; then
+                _dev_tools_get_cluster_names
+            fi
+            ;;
+        generate-completion-script)
+            if [ \${cword} -eq 2 ]; then
+                COMPREPLY=( \$(compgen -W "bash zsh" -- "\${cur}") )
+            fi
+            ;;
+        cluster-password|cluster-login|mtv-resources|run-tests|csi-nfs-df)
+            if [ \${cword} -eq 2 ]; then
+                _dev_tools_get_cluster_names
+            fi
+            ;;
+    esac
+}
+
+complete -F _dev_tools_completion "${script_name}"
+complete -F _dev_tools_completion "$(realpath "$0")"
+EOF
+}
+
+generate_zsh_completion_script() {
+  local script_name
+  script_name=$(basename "$0")
+  local script_path
+  script_path=$(realpath "$0")
+
+  cat <<EOF
+#compdef _dev_tools ${script_name} ${script_path}
+
+_dev_tools_get_cluster_names() {
+    local MOUNT_PATH="/mnt/cnv-qe.rhcloud.com"
+    if [ ! -d "\$MOUNT_PATH" ]; then return 1; fi
+    local -a clusters
+    clusters=(\${(f)"\$(ls -d \$MOUNT_PATH/qemtv{,d}-* 2>/dev/null | xargs -n 1 basename)"})
+    _describe 'cluster' clusters
+    return 0
+}
+
+_dev_tools() {
+    local -a commands
+
+    commands=(
+      'cluster-password:Get cluster password'
+      'cluster-login:Login to cluster'
+      'run-tests:Run API tests'
+      'mtv-resources:List MTV resources'
+      'ceph-cleanup:Cleanup Ceph resources'
+      'ceph-df:Show Ceph space usage'
+      'list-clusters:List available clusters'
+      'csi-nfs-df:Check NFS CSI space'
+      'generate-completion-script:Generate completion script for bash or zsh'
+      '--help:Show help message'
+    )
+
+    if (( CURRENT == 2 )); then
+      _describe 'command' commands
+      return
+    fi
+
+    if (( CURRENT == 3 )); then
+      case "\${words[2]}" in
+        list-clusters)
+          _values 'option' --full
+          ;;
+        generate-completion-script)
+          _values 'shell' bash zsh
+          ;;
+        ceph-df|ceph-cleanup|cluster-password|cluster-login|mtv-resources|run-tests|csi-nfs-df)
+          _dev_tools_get_cluster_names
+          ;;
+      esac
+      return
+    fi
+
+    if (( CURRENT == 4 )); then
+      case "\${words[2]}" in
+        ceph-df)
+          _values 'option' --watch
+          ;;
+        ceph-cleanup)
+          _values 'option' --execute
+          ;;
+      esac
+      return
+    fi
+}
+
+# Explicitly register the completion function
+compdef _dev_tools ${script_name}
+compdef _dev_tools ${script_path}
+EOF
+}
+
+generate_completion_script() {
+  local shell="${1-}"
+  case "$shell" in
+    bash)
+      generate_bash_completion_script
+      ;;
+    zsh)
+      generate_zsh_completion_script
+      ;;
+    *)
+      echo "Error: unsupported shell '$shell'. Please use 'bash' or 'zsh'." >&2
+      exit 1
+      ;;
+  esac
+}
+
+main() {
+  if [[ "${1-}" == "--help" ]]; then
+    usage
+  fi
+
+  local action="${1-}"
+  if [ -z "$action" ]; then
+    usage
+  fi
+  shift
+
+  case "$action" in
+  "cluster-password" | "cluster-login" | "mtv-resources" | "run-tests" | "ceph-cleanup" | "ceph-df" | "csi-nfs-df")
+    if [ -z "${1-}" ]; then
+      echo "Error: Missing cluster name for action '$action'." >&2
+      usage
+    fi
+    ;;
+  "list-clusters" | "generate-completion-script")
+    # No cluster name needed
+    ;;
+  *)
+    printf "Unsupported action: %s\n" "$action" >&2
+    usage
+    ;;
+  esac
+
+  case "$action" in
+  "cluster-password")
+    cluster-password "$1"
+    ;;
+  "cluster-login")
+    local cluster_info
+    cluster_info=$(cluster-login "$1")
+    print-cluster-data-tree "$cluster_info" "$1"
+    ;;
+  "mtv-resources")
+    mtv-resources "$1"
+    ;;
+  "run-tests")
+    run-tests "$@"
+    ;;
+  "ceph-cleanup")
+    ceph-cleanup "$@"
+    ;;
+  "ceph-df")
+    ceph-df "$@"
+    ;;
+  "list-clusters")
+    list-clusters "$@"
+    ;;
+  "csi-nfs-df")
+    cluster-login "$1" --no-copy >/dev/null
+    "$SCRIPT_DIR/check_nfs_csi_space.sh"
+    ;;
+  "generate-completion-script")
+    generate_completion_script "$@"
+    ;;
+  esac
+}
+
+main "$@"
