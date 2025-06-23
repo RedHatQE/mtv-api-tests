@@ -165,8 +165,13 @@ def check_vms(
     source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
 ) -> None:
+    res: dict[str, list[str]] = {}
+    should_fail: bool = False
+
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
+        res[vm_name] = []
+
         source_vm = source_provider.vm_dict(
             name=vm_name,
             namespace=source_vms_namespace,
@@ -178,22 +183,40 @@ def check_vms(
             wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=destination_namespace
         )
 
-        check_vms_power_state(
-            source_vm=source_vm, destination_vm=destination_vm, source_power_before_migration=vm.get("source_vm_power")
-        )
+        try:
+            check_vms_power_state(
+                source_vm=source_vm,
+                destination_vm=destination_vm,
+                source_power_before_migration=vm.get("source_vm_power"),
+            )
+        except Exception as exp:
+            res[vm_name].append(str(exp))
 
-        check_cpu(source_vm=source_vm, destination_vm=destination_vm)
-        check_memory(source_vm=source_vm, destination_vm=destination_vm)
+        try:
+            check_cpu(source_vm=source_vm, destination_vm=destination_vm)
+        except Exception as exp:
+            res[vm_name].append(str(exp))
+
+        try:
+            check_memory(source_vm=source_vm, destination_vm=destination_vm)
+        except Exception as exp:
+            res[vm_name].append(str(exp))
 
         # TODO: Remove when OCP to OCP migration is done with 2 clusters
         if source_provider.type != Provider.ProviderType.OPENSHIFT:
-            check_network(
-                source_vm=source_vm,
-                destination_vm=destination_vm,
-                network_migration_map=network_map_resource,
-            )
+            try:
+                check_network(
+                    source_vm=source_vm,
+                    destination_vm=destination_vm,
+                    network_migration_map=network_map_resource,
+                )
+            except Exception as exp:
+                res[vm_name].append(str(exp))
 
-        check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
+        try:
+            check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
+        except Exception as exp:
+            res[vm_name].append(str(exp))
 
         snapshots_before_migration = vm.get("snapshots_before_migration")
 
@@ -202,13 +225,30 @@ def check_vms(
             and source_provider.provider_data
             and vmware_provider(source_provider.provider_data)
         ):
-            check_snapshots(
-                snapshots_before_migration=snapshots_before_migration,
-                snapshots_after_migration=source_vm["snapshots_data"],
-            )
+            try:
+                check_snapshots(
+                    snapshots_before_migration=snapshots_before_migration,
+                    snapshots_after_migration=source_vm["snapshots_data"],
+                )
+            except Exception as exp:
+                res[vm_name].append(str(exp))
 
         if vm_guest_agent:
-            check_guest_agent(destination_vm=destination_vm)
+            try:
+                check_guest_agent(destination_vm=destination_vm)
+            except Exception as exp:
+                res[vm_name].append(str(exp))
 
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):
-            check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)
+            try:
+                check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)
+            except Exception as exp:
+                res[vm_name].append(str(exp))
+
+        for _vm_name, _errors in res.items():
+            if _errors:
+                should_fail = True
+                LOGGER.error(f"VM {_vm_name} failed checks: {_errors}")
+
+    if should_fail:
+        pytest.fail("Some of the VMs did not match")

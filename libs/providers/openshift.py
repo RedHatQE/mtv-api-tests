@@ -5,6 +5,7 @@ from time import sleep
 from typing import Any
 
 import humanfriendly
+from kubernetes.client.exceptions import ApiException
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource
@@ -81,7 +82,12 @@ class OCPProvider(BaseProvider):
     @staticmethod
     def start_vm(vm_api: VirtualMachine) -> None:
         if not vm_api.ready:
-            vm_api.start(wait=True)
+            try:
+                vm_api.start(wait=True)
+            except ApiException as exp:
+                # 409 means the VM already started
+                if exp.status != 409:
+                    raise
 
     @staticmethod
     def stop_vm(vm_api: VirtualMachine) -> None:
