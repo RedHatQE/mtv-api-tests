@@ -65,11 +65,13 @@ source_providers_dict: dict[str, dict[str, Any]] = {
         "guest_vm_linux_user": "root",
         "guest_vm_linux_password": "<REDACTED>",
     },
-    "openshift-localhost": {
+    "openshift-remote": {
         "type": "openshift",
-        "version": "localhost",
-        "networks": [{"type": "pod"}, {"type": "multus", "name": "mtv-api-tests-ocp/mybridge"}],
-        "storages": [{"name": "hostpath-csi-basic"}, {"name": "ocs-storagecluster-ceph-rbd"}],
+        "version": "remote",
+        "fqdn": "",
+        "api_url": "",
+        "username": "",
+        "password": "",
     },
     "ova-nfs": {
         "type": "ova",

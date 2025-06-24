@@ -23,10 +23,23 @@ func getClusterPasswordImpl(clusterName string) (string, error) {
 
 // For testability, allow mocking of ensureLoggedIn
 var ensureLoggedIn = ensureLoggedInImpl
+var ensureLoggedInSilent = ensureLoggedInSilentImpl
 
 func ensureLoggedInImpl(clusterName string) error {
 	// Test connectivity by trying to build an OCP client using cluster-specific kubeconfig
 	fmt.Printf("%sLogging in to %s...%s\n", ColorYellow, clusterName, ColorReset)
+
+	_, err := buildOCPClient(clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to connect to cluster %s: %w", clusterName, err)
+	}
+
+	return nil
+}
+
+func ensureLoggedInSilentImpl(clusterName string) error {
+	// Test connectivity by trying to build an OCP client using cluster-specific kubeconfig
+	// Silent version - no progress messages
 
 	_, err := buildOCPClient(clusterName)
 	if err != nil {

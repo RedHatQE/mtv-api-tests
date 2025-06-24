@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -107,6 +108,26 @@ type IIBInfo struct {
 	Environment string
 }
 
+// VMInfo represents basic information about a virtual machine (local TUI copy)
+type VMInfo struct {
+	Name         string
+	Provider     string
+	PowerState   string
+	UUID         string
+	CPU          int32
+	MemoryMB     int64
+	GuestOS      string
+	IPAddresses  []string
+	StorageGB    float64
+	CreationTime *time.Time
+	LastModified *time.Time
+	Tags         []string
+	Cluster      string
+	Host         string
+	ResourcePool string
+	Networks     []string
+}
+
 // Helper function interfaces to access main package functionality
 type ClusterLoaderDeps interface {
 	ReadDir(path string) ([]fs.DirEntry, error)
@@ -120,6 +141,28 @@ type IIBLoaderDeps interface {
 	GetForkliftBuilds(environment string) ([]IIBInfo, error)
 	CheckKufloxLogin() bool
 	LoginToKuflox() error
+}
+
+type ProviderConfig struct {
+	Type        string
+	URL         string
+	Username    string
+	Password    string
+	Insecure    bool
+	ExtraParams map[string]string
+}
+
+type VMProvider interface {
+	Connect() error
+	ListVMs(ctx context.Context) ([]VMInfo, error)
+	GetVM(ctx context.Context, name string) (*VMInfo, error)
+	Close() error
+	GetProviderType() string
+}
+
+type ProviderLoaderDeps interface {
+	LoadProviderConfigs() (map[string]ProviderConfig, error)
+	CreateProvider(providerType, url, username, password string, insecure bool, extraParams map[string]string) (VMProvider, error)
 }
 
 // Default implementation that calls the main package functions
@@ -162,9 +205,23 @@ func (d *defaultIIBLoaderDeps) LoginToKuflox() error {
 	return fmt.Errorf("loginToKuflox not available in TUI context")
 }
 
+// Default provider loader implementation
+type defaultProviderLoaderDeps struct{}
+
+func (d *defaultProviderLoaderDeps) LoadProviderConfigs() (map[string]ProviderConfig, error) {
+	// This will be injected from main package
+	return nil, fmt.Errorf("loadProviderConfigs not available in TUI context")
+}
+
+func (d *defaultProviderLoaderDeps) CreateProvider(providerType, url, username, password string, insecure bool, extraParams map[string]string) (VMProvider, error) {
+	// This will be injected from main package
+	return nil, fmt.Errorf("createProvider not available in TUI context")
+}
+
 // Global dependency injection
 var clusterLoaderDeps ClusterLoaderDeps = &defaultClusterLoaderDeps{}
 var iibLoaderDeps IIBLoaderDeps = &defaultIIBLoaderDeps{}
+var providerLoaderDeps ProviderLoaderDeps = &defaultProviderLoaderDeps{}
 
 // SetClusterLoaderDeps allows injecting dependencies from main package
 func SetClusterLoaderDeps(deps ClusterLoaderDeps) {
@@ -174,6 +231,11 @@ func SetClusterLoaderDeps(deps ClusterLoaderDeps) {
 // SetIIBLoaderDeps allows injecting IIB dependencies from main package
 func SetIIBLoaderDeps(deps IIBLoaderDeps) {
 	iibLoaderDeps = deps
+}
+
+// SetProviderLoaderDeps allows injecting provider dependencies from main package
+func SetProviderLoaderDeps(deps ProviderLoaderDeps) {
+	providerLoaderDeps = deps
 }
 
 // Screen types
@@ -189,19 +251,24 @@ const (
 	IIBInputScreen
 	IIBDisplayScreen
 	ThemeSelectionScreen
+	ProvidersScreen
+	ProviderDetailScreen
 )
 
 // Application state
 type AppModel struct {
-	screen            ScreenType
-	previousScreen    ScreenType // Track navigation history
-	selectedCluster   string
+	screen          ScreenType
+	previousScreen  ScreenType // Track navigation history
+	selectedCluster string
+
 	mainMenu          MainMenuModel
 	clusterList       ClusterListModel
 	clusterDetail     ClusterDetailModel
 	iibInput          IIBInputModel
 	iibDisplay        IIBDisplayModel
 	themeSelection    ThemeSelectionModel
+	providers         ProvidersModel
+	providerDetail    ProviderDetailModel
 	error             string
 	notification      string    // For non-error notifications like copy success
 	notificationTimer time.Time // When notification expires
@@ -302,6 +369,15 @@ type ClusterDetailModel struct {
 	table    table.Model
 }
 
+// Provider detail model
+type ProviderDetailModel struct {
+	providerName string
+	config       *ProviderConfig
+	loading      bool
+	spinner      spinner.Model
+	table        table.Model
+}
+
 // IIB Input model for entering MTV version
 type IIBInputModel struct {
 	textInput  textinput.Model
@@ -340,6 +416,104 @@ type ThemeSelectionModel struct {
 	currentTheme string   // Current active theme name
 }
 
+// Provider item for the providers list
+type ProviderItem struct {
+	name    string
+	type_   string
+	status  string // "connected", "error", "loading"
+	vmCount int
+}
+
+func (i ProviderItem) FilterValue() string {
+	return i.name + " " + i.type_ + " " + i.status
+}
+func (i ProviderItem) Title() string { return i.name }
+func (i ProviderItem) Description() string {
+	status := "❌ Error"
+	switch i.status {
+	case "connected":
+		status = fmt.Sprintf("✅ %s (%d VMs)", i.type_, i.vmCount)
+	case "loading":
+		status = "⏳ Loading..."
+	case "error":
+		status = "❌ Error"
+	}
+	return status
+}
+
+// VM item for the VMs list
+type VMItem struct {
+	name        string
+	provider    string
+	status      string
+	cpu         int32
+	memoryGB    float64
+	storageGB   float64
+	guestOS     string
+	ipAddresses []string
+	networks    []string
+	tags        []string
+	isRunning   bool
+}
+
+func (i VMItem) FilterValue() string {
+	searchText := i.name + " " + i.provider + " " + i.status + " " + i.guestOS
+	for _, ip := range i.ipAddresses {
+		searchText += " " + ip
+	}
+	for _, net := range i.networks {
+		searchText += " " + net
+	}
+	for _, tag := range i.tags {
+		searchText += " " + tag
+	}
+	return searchText
+}
+func (i VMItem) Title() string { return i.name }
+func (i VMItem) Description() string {
+	status := "❌ Stopped"
+	if i.isRunning {
+		status = fmt.Sprintf("✅ Running - %s", i.guestOS)
+	}
+	return status
+}
+
+// VM detail model
+type VMDetailModel struct {
+	vm      *VMInfo
+	loading bool
+	spinner spinner.Model
+	table   table.Model
+}
+
+// Providers model for three-panel layout
+type ProvidersModel struct {
+	providers            []ProviderItem
+	vms                  []VMItem
+	loading              bool
+	spinner              spinner.Model
+	providersTable       table.Model               // Left pane: providers
+	vmsTable             table.Model               // Middle pane: VMs
+	detailView           VMDetailModel             // Right pane: VM details
+	focusedPane          int                       // 0=providers, 1=vms, 2=details
+	selectedProvider     int                       // Currently selected provider index
+	selectedVM           int                       // Currently selected VM index
+	showRunningOnly      bool                      // Filter to show only running VMs
+	providerSearchInput  textinput.Model           // Search input for providers
+	vmSearchInput        textinput.Model           // Search input for VMs
+	searchingProviders   bool                      // Whether searching providers
+	searchingVMs         bool                      // Whether searching VMs
+	filteredProviderRows []table.Row               // Filtered provider rows
+	filteredVMRows       []table.Row               // Filtered VM rows
+	vmCache              map[string][]VMInfo       // Cache VMs by provider name
+	providerConfigs      map[string]ProviderConfig // Provider configurations for credentials display
+	vmScrollOffset       int                       // Scroll offset for VMs list
+	maxVisibleVMs        int                       // Maximum VMs visible in panel
+	expandedProvider     string                    // Name of currently expanded provider (for tree-like display)
+	selectedTreeItem     int                       // Selected item within expanded tree (0=provider, 1=type, 2=url, 3=username, 4=password, 5=insecure)
+	treeItemCount        int                       // Total number of items in expanded tree
+}
+
 // Messages for async operations
 type ClustersLoadedMsg struct {
 	clusters    []ClusterItem
@@ -375,8 +549,41 @@ type IIBDataLoadedMsg struct {
 	err         error
 }
 
-// Clipboard helper function
-func clipboardWriteAll(text string) error {
+// Provider-related messages
+type ProvidersLoadedMsg struct {
+	providers       []ProviderItem
+	vmCache         map[string][]VMInfo       // Cache of VMs by provider name
+	providerConfigs map[string]ProviderConfig // Provider configurations for immediate display
+	err             error
+}
+
+type ProviderConnectionResult struct {
+	name    string
+	status  string
+	vmCount int
+	vms     []VMInfo
+	err     error
+}
+
+type ProviderConnectionsCompletedMsg struct {
+	connectionResults map[string]ProviderConnectionResult
+	vmCache           map[string][]VMInfo
+	err               error
+}
+
+type VMsLoadedMsg struct {
+	providerName string
+	vms          []VMInfo
+	err          error
+}
+
+type VMDetailLoadedMsg struct {
+	vm  *VMInfo
+	err error
+}
+
+// Clipboard helper function variable for testing
+var clipboardWriteAll = func(text string) error {
 	return clipboard.WriteAll(text)
 }
 
@@ -406,17 +613,22 @@ func NewAppModel() AppModel {
 	// Setup main menu items
 	mainMenuItems := []list.Item{
 		MainMenuItem{
-			title:       "🌐 Browse Clusters",
+			title:       "Clusters",
 			description: "Browse available clusters (press 'q' to quit)",
 			action:      "list-clusters",
 		},
 		MainMenuItem{
-			title:       "📦 IIB Builds",
+			title:       "Providers",
+			description: "Browse VM providers and virtual machines",
+			action:      "providers",
+		},
+		MainMenuItem{
+			title:       "IIB",
 			description: "Retrieve Forklift FBC builds",
 			action:      "iib-builds",
 		},
 		MainMenuItem{
-			title:       "🎨 Themes",
+			title:       "Themes",
 			description: "Select UI theme",
 			action:      "themes",
 		},
@@ -512,6 +724,60 @@ func NewAppModel() AppModel {
 	)
 	iibDetailTable.SetStyles(tableStyles)
 
+	// Setup providers components
+	providersSpinner := spinner.New()
+	providersSpinner.Spinner = spinner.Dot
+	providersSpinner.Style = getSpinnerStyle()
+
+	// Setup providers tables
+	providersTable := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "Provider", Width: 20},
+			{Title: "Type", Width: 15},
+			{Title: "Status", Width: 15},
+		}),
+		table.WithRows([]table.Row{}),
+		table.WithFocused(true),
+	)
+	providersTable.SetStyles(tableStyles)
+
+	vmsTable := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "VM Name", Width: 25},
+			{Title: "Status", Width: 15},
+			{Title: "OS", Width: 20},
+		}),
+		table.WithRows([]table.Row{}),
+		table.WithFocused(false),
+	)
+	vmsTable.SetStyles(tableStyles)
+
+	vmDetailTable := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "Field", Width: 15},
+			{Title: "Value", Width: 50},
+		}),
+		table.WithRows([]table.Row{}),
+		table.WithFocused(false),
+	)
+	vmDetailTable.SetStyles(tableStyles)
+
+	// Setup provider search inputs
+	providerSearchInput := textinput.New()
+	providerSearchInput.Placeholder = "Search providers..."
+	providerSearchInput.CharLimit = 50
+	providerSearchInput.Width = 30
+
+	vmSearchInput := textinput.New()
+	vmSearchInput.Placeholder = "Search VMs..."
+	vmSearchInput.CharLimit = 50
+	vmSearchInput.Width = 30
+
+	// Setup VM detail spinner
+	vmDetailSpinner := spinner.New()
+	vmDetailSpinner.Spinner = spinner.Dot
+	vmDetailSpinner.Style = getSpinnerStyle()
+
 	return AppModel{
 		screen: MainMenuScreen,
 		mainMenu: MainMenuModel{
@@ -563,6 +829,35 @@ func NewAppModel() AppModel {
 				currentTheme: currentTheme,
 			}
 		}(),
+		providers: ProvidersModel{
+			providers:      []ProviderItem{},
+			vms:            []VMItem{},
+			loading:        true, // Start loading providers immediately
+			spinner:        providersSpinner,
+			providersTable: providersTable,
+			vmsTable:       vmsTable,
+			detailView: VMDetailModel{
+				vm:      nil,
+				loading: false,
+				spinner: vmDetailSpinner,
+				table:   vmDetailTable,
+			},
+			focusedPane:          0, // Start with providers pane focused
+			selectedProvider:     0,
+			selectedVM:           0,
+			showRunningOnly:      false, // Show all VMs by default
+			providerSearchInput:  providerSearchInput,
+			vmSearchInput:        vmSearchInput,
+			searchingProviders:   false,
+			searchingVMs:         false,
+			filteredProviderRows: []table.Row{},
+			filteredVMRows:       []table.Row{},
+			vmCache:              make(map[string][]VMInfo),
+		},
+		providerDetail: ProviderDetailModel{
+			spinner: providersSpinner,
+			table:   vmDetailTable, // Reuse the table styling
+		},
 		help: h,
 		keys: keys,
 	}
@@ -570,11 +865,18 @@ func NewAppModel() AppModel {
 
 // Init initializes the model (required by tea.Model interface)
 func (m AppModel) Init() tea.Cmd {
-	// Start both spinner and background cluster loading
-	return tea.Batch(
-		m.clusterList.spinner.Tick,
-		m.loadClustersCmd(),
-	)
+	// Pre-fetch clusters and providers in background for faster navigation
+	var cmds []tea.Cmd
+
+	// Start loading clusters
+	m.clusterList.loading = true
+	cmds = append(cmds, m.clusterList.spinner.Tick, m.loadClustersCmd())
+
+	// Start loading providers (immediate configs, then async connections)
+	m.providers.loading = true
+	cmds = append(cmds, m.providers.spinner.Tick, m.loadProvidersCmd(), m.loadProviderConnectionsCmd())
+
+	return tea.Batch(cmds...)
 }
 
 // Update handles messages and state changes
@@ -627,9 +929,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "ctrl+r":
-			// Refresh cluster list - works on any screen
-			if m.screen == ClusterListScreen || m.screen == MainMenuScreen {
+			// Global refresh - works on different screens
+			switch m.screen {
+			case MainMenuScreen:
+				return m.refreshAllData()
+			case ClusterListScreen:
 				return m.refreshClusterList()
+			case ProvidersScreen:
+				return m.refreshProviders()
+			default:
+				// From any other screen, refresh all data in background
+				return m.refreshAllData()
 			}
 		case "ctrl+u":
 			// Single cluster refresh - only works on cluster list screen
@@ -637,10 +947,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.refreshSingleCluster()
 			}
 		case "/":
-			// Activate search - only works on cluster list screen
+			// Activate search
 			if m.screen == ClusterListScreen && !m.clusterList.loading {
 				m.clusterList.searching = true
 				m.clusterList.searchInput.Focus()
+				return m, textinput.Blink
+			}
+			// Start search in VMs panel
+			if m.screen == ProvidersScreen && !m.providers.loading && m.providers.focusedPane == 1 && len(m.providers.vms) > 0 {
+				m.providers.searchingVMs = true
+				m.providers.vmSearchInput.Focus()
 				return m, textinput.Blink
 			}
 		case "esc":
@@ -690,29 +1006,117 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.error = ""
 				m.notification = "" // Clear notifications on back navigation
 				return m, nil
+			case ProvidersScreen:
+				if m.providers.searchingVMs {
+					// Exit VM search mode
+					m.providers.searchingVMs = false
+					m.providers.vmSearchInput.Blur()
+					m.providers.vmSearchInput.SetValue("")
+					return m, nil
+				}
+				m.screen = MainMenuScreen
+				m.previousScreen = MainMenuScreen
+				m.error = ""
+				m.notification = "" // Clear notifications on back navigation
+				return m, nil
+			case ProviderDetailScreen:
+				m.screen = m.previousScreen
+				m.previousScreen = MainMenuScreen
+				m.error = ""
+				m.notification = "" // Clear notifications on back navigation
+				return m, nil
+			}
+
+		case "r":
+			// Refresh functionality
+			if m.screen == ProvidersScreen {
+				if m.providers.focusedPane == 0 && len(m.providers.providers) > 0 {
+					// Refresh current provider's VMs
+					selectedProvider := m.providers.providers[m.providers.selectedProvider]
+					// Clear cache for this provider to force refresh
+					delete(m.providers.vmCache, selectedProvider.name)
+					return m, tea.Batch(
+						m.loadVMsForProviderCmd(selectedProvider.name),
+						showNotification(fmt.Sprintf("Refreshing %s...", selectedProvider.name), false),
+					)
+				}
+			}
+		case "pgup", "pageup":
+			// Page up in VMs list
+			if m.screen == ProvidersScreen && m.providers.focusedPane == 1 && len(m.providers.vms) > 0 {
+				pageSize := m.providers.maxVisibleVMs
+				if pageSize <= 0 {
+					pageSize = 10
+				}
+				newSelection := m.providers.selectedVM - pageSize
+				if newSelection < 0 {
+					newSelection = 0
+				}
+				m.providers.selectedVM = newSelection
+				m.providers.vmScrollOffset = newSelection
+				// Update VM details
+				selectedProviderName := m.providers.providers[m.providers.selectedProvider].name
+				if cachedVMs, exists := m.providers.vmCache[selectedProviderName]; exists {
+					if m.providers.selectedVM < len(cachedVMs) {
+						m.providers.detailView.vm = &cachedVMs[m.providers.selectedVM]
+					}
+				}
+				return m, nil
+			}
+		case "pgdn", "pagedown":
+			// Page down in VMs list
+			if m.screen == ProvidersScreen && m.providers.focusedPane == 1 && len(m.providers.vms) > 0 {
+				pageSize := m.providers.maxVisibleVMs
+				if pageSize <= 0 {
+					pageSize = 10
+				}
+				newSelection := m.providers.selectedVM + pageSize
+				if newSelection >= len(m.providers.vms) {
+					newSelection = len(m.providers.vms) - 1
+				}
+				m.providers.selectedVM = newSelection
+				if newSelection >= m.providers.vmScrollOffset+m.providers.maxVisibleVMs {
+					m.providers.vmScrollOffset = newSelection - m.providers.maxVisibleVMs + 1
+				}
+				// Update VM details
+				selectedProviderName := m.providers.providers[m.providers.selectedProvider].name
+				if cachedVMs, exists := m.providers.vmCache[selectedProviderName]; exists {
+					if m.providers.selectedVM < len(cachedVMs) {
+						m.providers.detailView.vm = &cachedVMs[m.providers.selectedVM]
+					}
+				}
+				return m, nil
 			}
 		case "tab":
-			// Switch between panes in cluster list screen
-			if m.screen == ClusterListScreen && !m.clusterList.loading && !m.clusterList.searching {
-				m.clusterList.focusedPane = 1 - m.clusterList.focusedPane // Toggle between 0 and 1
-				return m, nil
+			// Universal Tab navigation - move to next pane
+			switch m.screen {
+			case ClusterListScreen:
+				if !m.clusterList.loading && !m.clusterList.searching {
+					m.clusterList.focusedPane = 1 - m.clusterList.focusedPane // Toggle between 0 and 1
+				}
+			case IIBDisplayScreen:
+				if !m.iibDisplay.loading {
+					m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 1) % 3 // Cycle through 0, 1, 2
+				}
+			case ProvidersScreen:
+				m.providers.focusedPane = (m.providers.focusedPane + 1) % 3 // Cycle through 0, 1, 2
 			}
-			// Switch between panes in IIB display screen
-			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
-				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 1) % 3 // Cycle through 0, 1, 2
-				return m, nil
-			}
+			return m, nil
 		case "shift+tab":
-			// Switch between panes in cluster list screen (reverse direction)
-			if m.screen == ClusterListScreen && !m.clusterList.loading && !m.clusterList.searching {
-				m.clusterList.focusedPane = 1 - m.clusterList.focusedPane // Toggle between 0 and 1
-				return m, nil
+			// Universal Shift+Tab navigation - move to previous pane
+			switch m.screen {
+			case ClusterListScreen:
+				if !m.clusterList.loading && !m.clusterList.searching {
+					m.clusterList.focusedPane = 1 - m.clusterList.focusedPane // Toggle between 0 and 1
+				}
+			case IIBDisplayScreen:
+				if !m.iibDisplay.loading {
+					m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 2) % 3 // Cycle backwards through 2, 1, 0
+				}
+			case ProvidersScreen:
+				m.providers.focusedPane = (m.providers.focusedPane + 2) % 3 // Cycle backwards through 2, 1, 0
 			}
-			// Switch between panes in IIB display screen (reverse direction)
-			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
-				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 2) % 3 // Cycle backwards through 2, 1, 0
-				return m, nil
-			}
+			return m, nil
 		case "up", "k":
 			// Handle up navigation in IIB display screen
 			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
@@ -725,6 +1129,56 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case 1: // OCP versions pane
 					if m.iibDisplay.selectedOCP > 0 {
 						m.iibDisplay.selectedOCP--
+					}
+				}
+				return m, nil
+			}
+			// Handle up navigation in provider detail screen
+			if m.screen == ProviderDetailScreen {
+				m.providerDetail.table.MoveUp(1)
+				return m, nil
+			}
+			// Handle up navigation in providers screen
+			if m.screen == ProvidersScreen && !m.providers.searchingVMs {
+				switch m.providers.focusedPane {
+				case 0: // Providers pane
+					if len(m.providers.providers) > 0 {
+						selectedProvider := m.providers.providers[m.providers.selectedProvider]
+
+						// Check if we're in tree navigation mode (expanded provider AND tree item selected)
+						if m.providers.expandedProvider == selectedProvider.name && m.providers.selectedTreeItem > 0 {
+							// Navigate within the expanded tree (up)
+							if m.providers.selectedTreeItem > 1 {
+								m.providers.selectedTreeItem--
+							}
+							// Force re-render by returning model without any command
+							return m, nil
+						} else {
+							// Normal provider navigation
+							if m.providers.selectedProvider > 0 {
+								m.providers.selectedProvider--
+								// Reset tree selection when changing providers
+								m.providers.selectedTreeItem = 0
+								// Auto-load VMs for newly selected provider
+								newSelectedProvider := m.providers.providers[m.providers.selectedProvider]
+								return m, m.loadVMsForProviderWithCacheCmd(newSelectedProvider.name)
+							}
+						}
+					}
+				case 1: // VMs pane
+					if len(m.providers.vms) > 0 && m.providers.selectedVM > 0 {
+						m.providers.selectedVM--
+						// Handle scrolling when selection goes above visible area
+						if m.providers.selectedVM < m.providers.vmScrollOffset {
+							m.providers.vmScrollOffset = m.providers.selectedVM
+						}
+						// Update details for newly selected VM using cached data
+						selectedProviderName := m.providers.providers[m.providers.selectedProvider].name
+						if cachedVMs, exists := m.providers.vmCache[selectedProviderName]; exists {
+							if m.providers.selectedVM < len(cachedVMs) {
+								m.providers.detailView.vm = &cachedVMs[m.providers.selectedVM]
+							}
+						}
 					}
 				}
 				return m, nil
@@ -745,27 +1199,77 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-		case "left", "h":
-			// Handle left navigation in IIB display screen - move to previous pane
-			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
-				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 2) % 3 // Move backwards
+			// Handle down navigation in provider detail screen
+			if m.screen == ProviderDetailScreen {
+				m.providerDetail.table.MoveDown(1)
 				return m, nil
 			}
-			// Handle left navigation in cluster list screen - move to left pane
-			if m.screen == ClusterListScreen && !m.clusterList.loading && !m.clusterList.searching {
-				m.clusterList.focusedPane = 0 // Left pane
+			// Handle down navigation in providers screen
+			if m.screen == ProvidersScreen && !m.providers.searchingVMs {
+				switch m.providers.focusedPane {
+				case 0: // Providers pane
+					if len(m.providers.providers) > 0 {
+						selectedProvider := m.providers.providers[m.providers.selectedProvider]
+
+						// Check if we're in tree navigation mode (expanded provider AND tree item selected)
+						if m.providers.expandedProvider == selectedProvider.name && m.providers.selectedTreeItem > 0 {
+							// Navigate within the expanded tree (down) - tree has 5 items (1-5)
+							if m.providers.selectedTreeItem < 5 {
+								m.providers.selectedTreeItem++
+							}
+							// Force re-render by returning model without any command
+							return m, nil
+						} else {
+							// Normal provider navigation
+							if m.providers.selectedProvider < len(m.providers.providers)-1 {
+								m.providers.selectedProvider++
+								// Reset tree selection when changing providers
+								m.providers.selectedTreeItem = 0
+								// Auto-load VMs for newly selected provider
+								newSelectedProvider := m.providers.providers[m.providers.selectedProvider]
+								return m, m.loadVMsForProviderWithCacheCmd(newSelectedProvider.name)
+							}
+						}
+					}
+				case 1: // VMs pane
+					if len(m.providers.vms) > 0 && m.providers.selectedVM < len(m.providers.vms)-1 {
+						m.providers.selectedVM++
+						// Handle scrolling when selection goes beyond visible area
+						m.providers.maxVisibleVMs = (m.height - 15) / 2 // Rough calculation
+						if m.providers.selectedVM >= m.providers.vmScrollOffset+m.providers.maxVisibleVMs {
+							m.providers.vmScrollOffset = m.providers.selectedVM - m.providers.maxVisibleVMs + 1
+						}
+						// Update details for newly selected VM using cached data
+						selectedProviderName := m.providers.providers[m.providers.selectedProvider].name
+						if cachedVMs, exists := m.providers.vmCache[selectedProviderName]; exists {
+							if m.providers.selectedVM < len(cachedVMs) {
+								m.providers.detailView.vm = &cachedVMs[m.providers.selectedVM]
+							}
+						}
+					}
+				}
 				return m, nil
+			}
+		case "left", "h":
+			// Handle left navigation in providers screen - collapse tree
+			if m.screen == ProvidersScreen {
+				// If we're in provider pane and have an expanded tree, collapse it
+				if m.providers.focusedPane == 0 && m.providers.expandedProvider != "" {
+					m.providers.expandedProvider = ""
+					m.providers.selectedTreeItem = 0
+					return m, nil
+				}
 			}
 		case "right", "l":
-			// Handle right navigation in IIB display screen - move to next pane
-			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
-				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 1) % 3 // Move forward
-				return m, nil
-			}
-			// Handle right navigation in cluster list screen - move to right pane
-			if m.screen == ClusterListScreen && !m.clusterList.loading && !m.clusterList.searching {
-				m.clusterList.focusedPane = 1 // Right pane
-				return m, nil
+			// Handle right navigation in providers screen - expand tree
+			if m.screen == ProvidersScreen {
+				// If we're in provider pane and no tree is expanded, expand the selected provider
+				if m.providers.focusedPane == 0 && m.providers.expandedProvider == "" && len(m.providers.providers) > 0 {
+					selectedProvider := m.providers.providers[m.providers.selectedProvider]
+					m.providers.expandedProvider = selectedProvider.name
+					m.providers.selectedTreeItem = 1 // Start at first tree item (Type)
+					return m, nil
+				}
 			}
 		case "enter":
 			switch m.screen {
@@ -800,6 +1304,69 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case ThemeSelectionScreen:
 				// Apply selected theme
 				return m.handleThemeSelection()
+			case ProvidersScreen:
+				// Handle selection in providers screen
+				switch m.providers.focusedPane {
+				case 0:
+					// Provider pane: Handle tree navigation copying
+					if len(m.providers.providers) > 0 {
+						selectedProvider := m.providers.providers[m.providers.selectedProvider]
+
+						// If provider is expanded and we're in tree navigation mode, copy selected item
+						if m.providers.expandedProvider == selectedProvider.name && m.providers.selectedTreeItem > 0 {
+							// Copy selected tree item to clipboard
+							if config, exists := m.providers.providerConfigs[selectedProvider.name]; exists {
+								var valueToCopy string
+
+								switch m.providers.selectedTreeItem {
+								case 1: // Type
+									valueToCopy = config.Type
+								case 2: // URL
+									valueToCopy = config.URL
+								case 3: // Username
+									valueToCopy = config.Username
+								case 4: // Password
+									valueToCopy = config.Password
+								case 5: // Insecure
+									valueToCopy = fmt.Sprintf("%t", config.Insecure)
+								}
+
+								if valueToCopy != "" {
+									err := clipboardWriteAll(valueToCopy)
+									if err != nil {
+										return m, showNotification("Failed to copy: "+err.Error(), true)
+									}
+									return m, showNotification("Copied to clipboard: "+valueToCopy, false)
+								}
+							}
+						}
+						// Note: Tree expansion/collapse is now handled by left/right arrows
+						return m, nil
+					}
+				case 2:
+					// VM Details pane: Copy VM name to clipboard
+					if m.providers.detailView.vm != nil {
+						vmName := m.providers.detailView.vm.Name
+						err := clipboardWriteAll(vmName)
+						if err != nil {
+							return m, showNotification("Failed to copy VM name: "+err.Error(), true)
+						}
+						return m, showNotification("VM name copied to clipboard: "+vmName, false)
+					}
+				}
+				return m, nil
+			case ProviderDetailScreen:
+				// Copy selected field to clipboard
+				selectedRow := m.providerDetail.table.SelectedRow()
+				if len(selectedRow) >= 2 {
+					value := selectedRow[1] // Get the value column
+					err := clipboardWriteAll(value)
+					if err != nil {
+						return m, showNotification("Failed to copy: "+err.Error(), true)
+					}
+					return m, showNotification("Copied to clipboard: "+value, false)
+				}
+				return m, nil
 			}
 		}
 
@@ -1077,20 +1644,270 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateOCPVersionsForSelectedBuildType()
 
 		return m, showNotification(fmt.Sprintf("✅ IIB data loaded for MTV %s", msg.mtvVersion), false)
+
+	case ProvidersLoadedMsg:
+		// DON'T stop loading here - keep spinner going until connections complete
+		// m.providers.loading = false // REMOVED - keep loading until ProviderConnectionsCompletedMsg
+		if msg.err != nil {
+			m.providers.loading = false // Only stop loading on error
+			m.error = fmt.Sprintf("Failed to load providers: %v", msg.err)
+			return m, nil
+		}
+
+		m.providers.providers = msg.providers
+		m.providers.vmCache = msg.vmCache // Use the pre-cached VMs
+
+		// Store provider configs for credentials display (use configs from message)
+		m.providers.providerConfigs = msg.providerConfigs
+
+		// Initialize VM scroll tracking
+		m.providers.vmScrollOffset = 0
+		m.providers.maxVisibleVMs = 10 // Will be calculated dynamically
+
+		// Update provider table rows
+		var rows []table.Row
+		for _, provider := range msg.providers {
+			statusDisplay := "❌ Error"
+			switch provider.status {
+			case "connected":
+				statusDisplay = "✅ Connected"
+			case "connecting":
+				statusDisplay = "🟡 Connecting"
+			case "error":
+				statusDisplay = "❌ Error"
+			}
+			rows = append(rows, table.Row{provider.name, provider.type_, statusDisplay})
+		}
+		m.providers.providersTable.SetRows(rows)
+		m.providers.filteredProviderRows = rows
+
+		// Don't show final status here - let ProviderConnectionsCompletedMsg handle final status
+		// Just return without notification to keep loading UI
+		return m, nil
+
+	case ProviderConnectionsCompletedMsg:
+		m.providers.loading = false
+		if msg.err != nil {
+			m.error = fmt.Sprintf("Failed to connect to providers: %v", msg.err)
+			return m, nil
+		}
+
+		// Update provider status based on connection results
+		for i, provider := range m.providers.providers {
+			if result, exists := msg.connectionResults[provider.name]; exists {
+				m.providers.providers[i].status = result.status
+				m.providers.providers[i].vmCount = result.vmCount
+			}
+		}
+
+		// Store the VM cache from successful connections
+		m.providers.vmCache = msg.vmCache
+
+		// Store provider configs for credentials display (should already be done, but ensure)
+		configs, _ := providerLoaderDeps.LoadProviderConfigs()
+		m.providers.providerConfigs = configs
+
+		// Update provider table rows with final status
+		var rows []table.Row
+		for _, provider := range m.providers.providers {
+			statusDisplay := "❌ Error"
+			switch provider.status {
+			case "connected":
+				statusDisplay = "✅ Connected"
+			case "connecting":
+				statusDisplay = "🟡 Connecting"
+			case "error":
+				statusDisplay = "❌ Error"
+			}
+			rows = append(rows, table.Row{provider.name, provider.type_, statusDisplay})
+		}
+		m.providers.providersTable.SetRows(rows)
+		m.providers.filteredProviderRows = rows
+
+		// Auto-load VMs for the first connected provider if we have cached data
+		if len(m.providers.providers) > 0 {
+			firstConnectedProvider := ""
+			for _, provider := range m.providers.providers {
+				if provider.status == "connected" {
+					firstConnectedProvider = provider.name
+					break
+				}
+			}
+
+			if firstConnectedProvider != "" && len(msg.vmCache[firstConnectedProvider]) > 0 {
+				// Convert VMInfo to VMItem for display
+				cachedVMs := msg.vmCache[firstConnectedProvider]
+				var vmItems []VMItem
+				for _, vmInfo := range cachedVMs {
+					vmItem := VMItem{
+						name:        vmInfo.Name,
+						provider:    firstConnectedProvider,
+						status:      vmInfo.PowerState,
+						cpu:         vmInfo.CPU,
+						memoryGB:    float64(vmInfo.MemoryMB) / 1024,
+						storageGB:   vmInfo.StorageGB,
+						guestOS:     vmInfo.GuestOS,
+						ipAddresses: vmInfo.IPAddresses,
+						networks:    vmInfo.Networks,
+						tags:        vmInfo.Tags,
+						isRunning:   vmInfo.PowerState == "running" || vmInfo.PowerState == "poweredOn" || vmInfo.PowerState == "up" || vmInfo.PowerState == "ACTIVE",
+					}
+					vmItems = append(vmItems, vmItem)
+				}
+
+				m.providers.vms = vmItems
+				m.providers.selectedVM = 0
+				m.providers.vmScrollOffset = 0
+
+				// Set first VM details
+				if len(cachedVMs) > 0 {
+					m.providers.detailView.vm = &cachedVMs[0]
+				}
+
+				// Update VM table rows
+				var vmRows []table.Row
+				for _, vm := range vmItems {
+					statusDisplay := "❌ Stopped"
+					if vm.isRunning {
+						statusDisplay = "✅ Running"
+					}
+					vmRows = append(vmRows, table.Row{vm.name, statusDisplay, vm.guestOS})
+				}
+				m.providers.vmsTable.SetRows(vmRows)
+				m.providers.filteredVMRows = vmRows
+			}
+		}
+
+		// Count final connected/error providers
+		connectedCount := 0
+		errorCount := 0
+		for _, provider := range m.providers.providers {
+			switch provider.status {
+			case "connected":
+				connectedCount++
+			case "error":
+				errorCount++
+			}
+		}
+
+		// Show final notification like clusters do
+		totalProviders := len(m.providers.providers)
+		if connectedCount > 0 && errorCount > 0 {
+			return m, showNotification(fmt.Sprintf("✅ Provider loading complete: %d connected, %d failed", connectedCount, errorCount), false)
+		} else if connectedCount > 0 {
+			return m, showNotification(fmt.Sprintf("✅ Provider loading complete: %d connected", connectedCount), false)
+		} else if totalProviders > 0 {
+			return m, showNotification(fmt.Sprintf("❌ Provider loading complete: All %d providers failed", totalProviders), true)
+		} else {
+			return m, showNotification("⚠️ No providers found", true)
+		}
+
+	case VMsLoadedMsg:
+		if msg.err != nil {
+			// Update provider status to error
+			for i, provider := range m.providers.providers {
+				if provider.name == msg.providerName {
+					m.providers.providers[i].status = "error"
+					break
+				}
+			}
+			return m, showNotification(fmt.Sprintf("Failed to load VMs: %v", msg.err), true)
+		}
+
+		// Update provider status to connected since VMs loaded successfully
+		for i, provider := range m.providers.providers {
+			if provider.name == msg.providerName {
+				m.providers.providers[i].status = "connected"
+				m.providers.providers[i].vmCount = len(msg.vms)
+				break
+			}
+		}
+
+		// Convert VMInfo to VMItem
+		var vmItems []VMItem
+		for _, vmInfo := range msg.vms {
+			vmItem := VMItem{
+				name:        vmInfo.Name,
+				provider:    msg.providerName,
+				status:      vmInfo.PowerState,
+				cpu:         vmInfo.CPU,
+				memoryGB:    float64(vmInfo.MemoryMB) / 1024,
+				storageGB:   vmInfo.StorageGB,
+				guestOS:     vmInfo.GuestOS,
+				ipAddresses: vmInfo.IPAddresses,
+				networks:    vmInfo.Networks,
+				tags:        vmInfo.Tags,
+				isRunning:   vmInfo.PowerState == "running" || vmInfo.PowerState == "poweredOn" || vmInfo.PowerState == "up" || vmInfo.PowerState == "ACTIVE",
+			}
+			vmItems = append(vmItems, vmItem)
+		}
+
+		m.providers.vms = vmItems
+		// Cache VMs for this provider
+		m.providers.vmCache[msg.providerName] = msg.vms
+
+		// Reset VM selection and scroll offset
+		m.providers.selectedVM = 0
+		m.providers.vmScrollOffset = 0
+
+		// Auto-load details for first VM if available
+		if len(vmItems) > 0 {
+			firstVM := msg.vms[0] // Use original VMInfo for details
+			m.providers.detailView.vm = &firstVM
+		} else {
+			m.providers.detailView.vm = nil
+		}
+
+		// Update VM table rows
+		var rows []table.Row
+		for _, vm := range vmItems {
+			statusDisplay := "❌ Stopped"
+			if vm.isRunning {
+				statusDisplay = "✅ Running"
+			}
+			rows = append(rows, table.Row{vm.name, statusDisplay, vm.guestOS})
+		}
+		m.providers.vmsTable.SetRows(rows)
+		m.providers.filteredVMRows = rows
+
+		return m, showNotification(fmt.Sprintf("✅ Loaded %d VMs from %s", len(vmItems), msg.providerName), false)
+
+	case VMDetailLoadedMsg:
+		m.providers.detailView.loading = false
+		if msg.err != nil {
+			return m, showNotification(fmt.Sprintf("Failed to load VM details: %v", msg.err), true)
+		}
+
+		m.providers.detailView.vm = msg.vm
+		return m, nil
 	}
 
 	// Handle screen-specific updates
 	switch m.screen {
 	case MainMenuScreen:
 		m.mainMenu.list, cmd = m.mainMenu.list.Update(msg)
-		// Also update spinner if clusters are loading in background
+		// Update spinners for any background loading operations
+		var spinnerCmds []tea.Cmd
 		if m.clusterList.loading {
 			var spinnerCmd tea.Cmd
 			m.clusterList.spinner, spinnerCmd = m.clusterList.spinner.Update(msg)
-			if cmd != nil && spinnerCmd != nil {
-				cmd = tea.Batch(cmd, spinnerCmd)
-			} else if spinnerCmd != nil {
-				cmd = spinnerCmd
+			if spinnerCmd != nil {
+				spinnerCmds = append(spinnerCmds, spinnerCmd)
+			}
+		}
+		if m.providers.loading {
+			var spinnerCmd tea.Cmd
+			m.providers.spinner, spinnerCmd = m.providers.spinner.Update(msg)
+			if spinnerCmd != nil {
+				spinnerCmds = append(spinnerCmds, spinnerCmd)
+			}
+		}
+		// Batch all spinner commands with the main command
+		if len(spinnerCmds) > 0 {
+			if cmd != nil {
+				cmd = tea.Batch(append([]tea.Cmd{cmd}, spinnerCmds...)...)
+			} else {
+				cmd = tea.Batch(spinnerCmds...)
 			}
 		}
 	case ClusterDetailScreen:
@@ -1100,8 +1917,29 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clusterDetail.spinner, cmd = m.clusterDetail.spinner.Update(msg)
 		}
 	case ClusterListScreen:
+		// Handle both cluster and provider spinners when on cluster list screen
+		var spinnerCmds []tea.Cmd
 		if m.clusterList.loading {
-			m.clusterList.spinner, cmd = m.clusterList.spinner.Update(msg)
+			var spinnerCmd tea.Cmd
+			m.clusterList.spinner, spinnerCmd = m.clusterList.spinner.Update(msg)
+			if spinnerCmd != nil {
+				spinnerCmds = append(spinnerCmds, spinnerCmd)
+			}
+		}
+		// Also update provider spinner if providers are loading in background
+		if m.providers.loading {
+			var spinnerCmd tea.Cmd
+			m.providers.spinner, spinnerCmd = m.providers.spinner.Update(msg)
+			if spinnerCmd != nil {
+				spinnerCmds = append(spinnerCmds, spinnerCmd)
+			}
+		}
+
+		if m.clusterList.loading {
+			// If cluster loading, just handle spinners
+			if len(spinnerCmds) > 0 {
+				cmd = tea.Batch(spinnerCmds...)
+			}
 		} else if m.clusterList.searching {
 			// Handle both search input and table navigation in search mode
 			var searchCmd tea.Cmd
@@ -1157,6 +1995,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+
+		// Always batch any background spinner commands
+		if len(spinnerCmds) > 0 {
+			if cmd != nil {
+				cmd = tea.Batch(append([]tea.Cmd{cmd}, spinnerCmds...)...)
+			} else {
+				cmd = tea.Batch(spinnerCmds...)
+			}
+		}
 	case IIBInputScreen:
 		if !m.iibInput.loading {
 			m.iibInput.textInput, cmd = m.iibInput.textInput.Update(msg)
@@ -1180,6 +2027,64 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.themeSelection.selectedIdx < len(m.themeSelection.themes)-1 {
 					m.themeSelection.selectedIdx++
 				}
+			}
+		}
+	case ProvidersScreen:
+		// Handle spinner updates when loading, but also allow navigation
+		if m.providers.loading {
+			m.providers.spinner, cmd = m.providers.spinner.Update(msg)
+			// Don't return here - allow navigation even during loading
+		}
+
+		if m.providers.searchingVMs {
+			// Handle VM search input
+			var searchCmd tea.Cmd
+			m.providers.vmSearchInput, searchCmd = m.providers.vmSearchInput.Update(msg)
+
+			// Filter VMs based on search input
+			query := m.providers.vmSearchInput.Value()
+			if query != "" {
+				var filteredVMs []VMItem
+				for _, vm := range m.providers.vms {
+					if strings.Contains(strings.ToLower(vm.name), strings.ToLower(query)) ||
+						strings.Contains(strings.ToLower(vm.guestOS), strings.ToLower(query)) {
+						filteredVMs = append(filteredVMs, vm)
+					}
+				}
+				// Reset selection to first filtered item
+				if len(filteredVMs) > 0 {
+					m.providers.selectedVM = 0
+					m.providers.vmScrollOffset = 0
+					// Update details for first filtered VM
+					selectedProviderName := m.providers.providers[m.providers.selectedProvider].name
+					if cachedVMs, exists := m.providers.vmCache[selectedProviderName]; exists {
+						// Find the VM in the cache that matches the first filtered VM
+						for _, cachedVM := range cachedVMs {
+							if cachedVM.Name == filteredVMs[0].name {
+								m.providers.detailView.vm = &cachedVM
+								break
+							}
+						}
+					}
+				}
+			}
+
+			// Handle navigation keys in search mode
+			if msg, ok := msg.(tea.KeyMsg); ok {
+				switch msg.String() {
+				case "up", "down":
+					// Let normal navigation handle these
+					return m, nil
+				case "enter":
+					// Exit search mode and handle normal selection
+					m.providers.searchingVMs = false
+					m.providers.vmSearchInput.Blur()
+					return m, nil
+				default:
+					cmd = searchCmd
+				}
+			} else {
+				cmd = searchCmd
 			}
 		}
 	}
@@ -1215,6 +2120,14 @@ func (m AppModel) handleMainMenuSelection() (AppModel, tea.Cmd) {
 		m.iibInput.loading = false
 		m.iibInput.textInput.Focus()
 		return m, textinput.Blink
+	case "providers":
+		m.previousScreen = MainMenuScreen
+		m.screen = ProvidersScreen
+		// Data should already be pre-fetched, just continue spinner if still loading
+		if m.providers.loading {
+			return m, m.providers.spinner.Tick
+		}
+		return m, nil
 	case "themes":
 		m.previousScreen = MainMenuScreen
 		m.screen = ThemeSelectionScreen
@@ -1280,6 +2193,58 @@ func (m AppModel) updateSelectedClusterDetails() tea.Cmd {
 			cluster:     cluster,
 		}
 	}
+}
+
+// Refresh all data - clusters and providers
+func (m AppModel) refreshAllData() (AppModel, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	// Refresh clusters
+	m.clusterList.clusterInfo = make(map[string]*ClusterInfo)
+	m.clusterList.clusterPasswords = make(map[string]string)
+	m.clusterList.clusters = []ClusterItem{}
+	m.clusterList.list.SetItems([]list.Item{})
+	m.clusterList.table.SetRows([]table.Row{})
+	m.clusterList.filteredRows = []table.Row{}
+	m.clusterList.loading = true
+	m.clusterList.searching = false
+	m.clusterList.searchInput.SetValue("")
+	m.clusterList.searchInput.Blur()
+	cmds = append(cmds, m.clusterList.spinner.Tick, m.loadClustersCmd())
+
+	// Refresh providers
+	m.providers.providers = []ProviderItem{}
+	m.providers.vms = []VMItem{}
+	m.providers.vmCache = make(map[string][]VMInfo)
+	m.providers.loading = true
+	m.providers.searchingVMs = false
+	m.providers.vmSearchInput.SetValue("")
+	m.providers.vmSearchInput.Blur()
+	cmds = append(cmds, m.providers.spinner.Tick, m.loadProvidersCmd(), m.loadProviderConnectionsCmd())
+
+	m.error = "" // Clear any previous errors
+
+	return m, tea.Batch(append(cmds, showNotification("Refreshing all data...", false))...)
+}
+
+// Refresh providers only
+func (m AppModel) refreshProviders() (AppModel, tea.Cmd) {
+	// Clear provider data and reload
+	m.providers.providers = []ProviderItem{}
+	m.providers.vms = []VMItem{}
+	m.providers.vmCache = make(map[string][]VMInfo)
+	m.providers.loading = true
+	m.providers.searchingVMs = false
+	m.providers.vmSearchInput.SetValue("")
+	m.providers.vmSearchInput.Blur()
+	m.error = ""
+
+	return m, tea.Batch(
+		m.providers.spinner.Tick,
+		m.loadProvidersCmd(),
+		m.loadProviderConnectionsCmd(),
+		showNotification("Refreshing providers...", false),
+	)
 }
 
 // Refresh cluster list - clears cache and reloads everything
@@ -1575,6 +2540,10 @@ func (m AppModel) View() string {
 		mainContent = m.renderIIBDisplay()
 	case ThemeSelectionScreen:
 		mainContent = m.renderThemeSelection()
+	case ProvidersScreen:
+		mainContent = m.renderProviders()
+	case ProviderDetailScreen:
+		mainContent = m.renderProviderDetail()
 	default:
 		mainContent = "Unknown screen"
 	}
@@ -1678,16 +2647,17 @@ func (m AppModel) renderMainMenu() string {
 		Render(title)
 	content.WriteString(centeredTitle + "\n\n\n") // Extra spacing after title
 
-	// Menu items - manually centered
-	items := []string{"🌐 Browse Clusters", "📦 IIB Builds", "🎨 Themes"}
+	// Menu items - use actual menu items from the list
+	menuItems := m.mainMenu.list.Items()
 	selectedIndex := m.mainMenu.list.Index()
 
-	for i, item := range items {
+	for i, item := range menuItems {
+		menuItem := item.(MainMenuItem)
 		var styledItem string
 		if i == selectedIndex {
-			styledItem = selectedItemStyle.Render(item)
+			styledItem = selectedItemStyle.Render(menuItem.title)
 		} else {
-			styledItem = menuItemStyle.Render(item)
+			styledItem = menuItemStyle.Render(menuItem.title)
 		}
 
 		// Center each menu item
@@ -1701,35 +2671,104 @@ func (m AppModel) renderMainMenu() string {
 	// Add vertical spacing before status indicators
 	content.WriteString("\n\n")
 
-	// Add background loading indicator with spinner
+	// Show separate loading indicators for each service
 	if m.clusterList.loading {
-		// Check if this is initial load or refresh
+		var loadingMessage string
+
 		if len(m.clusterList.list.Items()) == 0 {
-			loadingIndicator := StatusLoading("Loading clusters in background...")
-			centeredLoading := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(loadingIndicator)
-			content.WriteString(centeredLoading + "\n\n")
-
-			spinnerView := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(m.clusterList.spinner.View())
-			content.WriteString(spinnerView)
+			loadingMessage = "Loading clusters in background..."
 		} else {
-			loadingIndicator := StatusLoading("Refreshing clusters...")
-			centeredLoading := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(loadingIndicator)
-			content.WriteString(centeredLoading + "\n\n")
+			loadingMessage = "Refreshing clusters..."
+		}
 
-			spinnerView := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(m.clusterList.spinner.View())
-			content.WriteString(spinnerView)
+		loadingIndicator := StatusLoading(loadingMessage)
+		centeredLoading := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(loadingIndicator)
+		content.WriteString(centeredLoading + "\n")
+
+		spinnerView := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(m.clusterList.spinner.View())
+		content.WriteString(spinnerView + "\n")
+
+		if m.providers.loading {
+			content.WriteString("\n") // Extra space between loading indicators
 		}
 	}
 
-	// Show cluster count if loaded
-	if len(m.clusterList.list.Items()) > 0 {
-		clusterCount := len(m.clusterList.list.Items())
-		readyIndicator := fmt.Sprintf("✅ %d clusters ready", clusterCount)
-		centeredIndicator := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(readyIndicator)
-		content.WriteString(centeredIndicator + "\n\n")
+	if m.providers.loading {
+		loadingMessage := "Loading providers in background..."
+		loadingIndicator := StatusLoading(loadingMessage)
+		centeredLoading := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(loadingIndicator)
+		content.WriteString(centeredLoading + "\n")
 
-		// Add instructions for main menu
-		instructions := "💡 Press Enter to view clusters • Ctrl+R to refresh"
+		spinnerView := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(m.providers.spinner.View())
+		content.WriteString(spinnerView + "\n")
+	}
+
+	// Show status of completed operations independently
+	hasStatus := false
+
+	// Show cluster status if clusters are done loading
+	if !m.clusterList.loading {
+		if len(m.clusterList.list.Items()) > 0 {
+			clusterCount := len(m.clusterList.list.Items())
+			readyIndicator := fmt.Sprintf("✅ %d clusters ready", clusterCount)
+			centeredIndicator := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(readyIndicator)
+			content.WriteString(centeredIndicator + "\n")
+			hasStatus = true
+		} else {
+			// Clusters finished loading but none found
+			readyIndicator := "⚠️ No clusters found"
+			centeredIndicator := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(readyIndicator)
+			content.WriteString(centeredIndicator + "\n")
+			hasStatus = true
+		}
+	}
+
+	// Show provider status if providers are done loading
+	if !m.providers.loading {
+		// Count actually connected providers
+		connectedCount := 0
+		errorCount := 0
+		for _, provider := range m.providers.providers {
+			switch provider.status {
+			case "connected":
+				connectedCount++
+			case "error":
+				errorCount++
+			}
+		}
+
+		if connectedCount > 0 {
+			if errorCount > 0 {
+				statusIndicator := fmt.Sprintf("⚠️  %d providers connected, %d failed", connectedCount, errorCount)
+				centeredIndicator := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(statusIndicator)
+				content.WriteString(centeredIndicator + "\n")
+			} else {
+				readyIndicator := fmt.Sprintf("✅ %d providers connected", connectedCount)
+				centeredIndicator := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(readyIndicator)
+				content.WriteString(centeredIndicator + "\n")
+			}
+			hasStatus = true
+		} else if len(m.providers.providers) > 0 {
+			errorIndicator := fmt.Sprintf("❌ All %d providers failed to connect", len(m.providers.providers))
+			centeredIndicator := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(errorIndicator)
+			content.WriteString(centeredIndicator + "\n")
+			hasStatus = true
+		} else {
+			// Providers finished loading but none found (likely an error)
+			readyIndicator := "⚠️ No providers loaded"
+			if m.error != "" && strings.Contains(strings.ToLower(m.error), "provider") {
+				readyIndicator = "❌ Provider loading failed"
+			}
+			centeredIndicator := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(readyIndicator)
+			content.WriteString(centeredIndicator + "\n")
+			hasStatus = true
+		}
+	}
+
+	// Add consolidated instructions if any data is loaded
+	if hasStatus {
+		content.WriteString("\n")
+		instructions := "💡 Press Enter to navigate • Ctrl+R to refresh all data"
 		centeredInstructions := lipgloss.NewStyle().
 			Width(m.width).
 			Align(lipgloss.Center).
@@ -1792,6 +2831,12 @@ func (m AppModel) renderClusterList() string {
 	leftWidth := totalWidth * 3 / 10     // ~30% for cluster table (smaller since only name + status)
 	rightWidth := totalWidth - leftWidth // ~70% for details (more space for detailed info)
 
+	// Fixed height for all panels to prevent jumping
+	panelHeight := m.height - 10 // Reserve space for title and instructions
+	if panelHeight < 15 {
+		panelHeight = 15 // Minimum height
+	}
+
 	// Only fallback if terminal is genuinely too small
 	if totalWidth < 80 {
 		return m.renderSinglePaneClusterList()
@@ -1852,9 +2897,10 @@ func (m AppModel) renderClusterList() string {
 	// RIGHT PANE: Simple cluster details
 	rightContent := m.renderSimpleClusterDetails(rightWidth - 6) // Account for border and padding
 
-	// Create bordered panes
+	// Create bordered panes with FIXED HEIGHT
 	leftPane := lipgloss.NewStyle().
 		Width(leftWidth).
+		Height(panelHeight).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Padding(0, 1).
@@ -1862,6 +2908,7 @@ func (m AppModel) renderClusterList() string {
 
 	rightPane := lipgloss.NewStyle().
 		Width(rightWidth).
+		Height(panelHeight).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Padding(0, 1).
@@ -2361,7 +3408,7 @@ func (m AppModel) renderIIBInput() string {
 	var content strings.Builder
 
 	// Title
-	title := "📦 IIB Builds - Enter MTV Version"
+	title := "IIB - Enter MTV Version"
 	centeredTitle := lipgloss.NewStyle().
 		Width(m.width).
 		Align(lipgloss.Center).
@@ -2433,13 +3480,22 @@ func (m AppModel) renderIIBDisplay() string {
 		return content.String()
 	}
 
-	// Three-panel layout: Build Types (25%) | OCP Versions (25%) | Details (50%)
+	// Calculate fixed dimensions for stable layout
 	totalWidth := m.width - 4
 	buildWidth := totalWidth * 25 / 100
 	ocpWidth := totalWidth * 25 / 100
 	detailWidth := totalWidth - buildWidth - ocpWidth
 
-	// Build left panel (Build Types)
+	// Fixed height for all panels to prevent jumping
+	panelHeight := m.height - 10 // Reserve space for title and instructions
+	if panelHeight < 15 {
+		panelHeight = 15 // Minimum height
+	}
+
+	// Calculate available lines for content (subtract title + padding)
+	availableLines := panelHeight - 6 // Title, padding, borders
+
+	// Build left panel (Build Types) with fixed content area
 	var leftContent strings.Builder
 	leftTitle := "Build Types"
 	if m.iibDisplay.focusedPane == 0 {
@@ -2452,6 +3508,11 @@ func (m AppModel) renderIIBDisplay() string {
 		Render(leftTitle) + "\n\n")
 
 	for i, buildType := range m.iibDisplay.buildTypes {
+		if i >= availableLines-2 {
+			leftContent.WriteString("... (" + fmt.Sprintf("%d more", len(m.iibDisplay.buildTypes)-i) + ")\n")
+			break
+		}
+
 		var icon, display string
 		if buildType == "prod" {
 			icon = "🟢"
@@ -2470,7 +3531,14 @@ func (m AppModel) renderIIBDisplay() string {
 		leftContent.WriteString(item + "\n")
 	}
 
-	// Build middle panel (OCP Versions)
+	// Fill remaining space to maintain consistent height
+	currentLines := strings.Count(leftContent.String(), "\n")
+	for currentLines < panelHeight-4 {
+		leftContent.WriteString("\n")
+		currentLines++
+	}
+
+	// Build middle panel (OCP Versions) with fixed content area
 	var middleContent strings.Builder
 	middleTitle := "OCP Versions"
 	if m.iibDisplay.focusedPane == 1 {
@@ -2483,6 +3551,11 @@ func (m AppModel) renderIIBDisplay() string {
 		Render(middleTitle) + "\n\n")
 
 	for i, version := range m.iibDisplay.ocpVersions {
+		if i >= availableLines-2 {
+			middleContent.WriteString("... (" + fmt.Sprintf("%d more", len(m.iibDisplay.ocpVersions)-i) + ")\n")
+			break
+		}
+
 		item := "📋 " + version
 		if i == m.iibDisplay.selectedOCP {
 			item = selectedItemStyle.Render(item)
@@ -2492,7 +3565,14 @@ func (m AppModel) renderIIBDisplay() string {
 		middleContent.WriteString(item + "\n")
 	}
 
-	// Build right panel (Details)
+	// Fill remaining space to maintain consistent height
+	currentLines = strings.Count(middleContent.String(), "\n")
+	for currentLines < panelHeight-4 {
+		middleContent.WriteString("\n")
+		currentLines++
+	}
+
+	// Build right panel (Details) with fixed content area
 	var rightContent strings.Builder
 	rightTitle := "IIB Details"
 	if m.iibDisplay.focusedPane == 2 {
@@ -2532,9 +3612,17 @@ func (m AppModel) renderIIBDisplay() string {
 		rightContent.WriteString("No builds available")
 	}
 
-	// Combine panels
+	// Fill remaining space to maintain consistent height
+	currentLines = strings.Count(rightContent.String(), "\n")
+	for currentLines < panelHeight-4 {
+		rightContent.WriteString("\n")
+		currentLines++
+	}
+
+	// Combine panels with borders and FIXED HEIGHT
 	leftPanel := lipgloss.NewStyle().
 		Width(buildWidth).
+		Height(panelHeight).
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Padding(1).
@@ -2542,6 +3630,7 @@ func (m AppModel) renderIIBDisplay() string {
 
 	middlePanel := lipgloss.NewStyle().
 		Width(ocpWidth).
+		Height(panelHeight).
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Padding(1).
@@ -2549,6 +3638,7 @@ func (m AppModel) renderIIBDisplay() string {
 
 	rightPanel := lipgloss.NewStyle().
 		Width(detailWidth).
+		Height(panelHeight).
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Padding(1).
@@ -2572,7 +3662,7 @@ func (m AppModel) renderIIBDisplay() string {
 
 	// Add navigation instructions
 	content.WriteString("\n\n")
-	instructions := "Navigation: ↑/↓/j/k Navigate, Tab/←/→/h/l Switch Panel, Enter Copy, Esc Back"
+	instructions := "Navigation: ↑/↓/j/k Navigate, Tab/Shift+Tab Switch Panel, Enter Copy, Esc Back"
 	centeredInstructions := lipgloss.NewStyle().
 		Width(m.width).
 		Align(lipgloss.Center).
@@ -2670,7 +3760,7 @@ func (m AppModel) handleIIBCopy() (AppModel, tea.Cmd) {
 				if err != nil {
 					return m, showNotification("Failed to copy to clipboard: "+err.Error(), true)
 				}
-				return m, showNotification("📋 IIB copied to clipboard: "+build.IIB, false)
+				return m, showNotification("IIB copied to clipboard: "+build.IIB, false)
 			}
 		}
 	}
@@ -2693,7 +3783,7 @@ func (m AppModel) handleThemeSelection() (AppModel, tea.Cmd) {
 		SetTheme(*newTheme)
 		UpdateStyles()
 		m.themeSelection.currentTheme = selectedThemeName
-		return m, showNotification(fmt.Sprintf("🎨 Applied %s theme", selectedThemeName), false)
+		return m, showNotification(fmt.Sprintf("Applied %s theme", selectedThemeName), false)
 	}
 
 	return m, showNotification("Failed to apply theme", true)
@@ -2704,7 +3794,7 @@ func (m AppModel) renderThemeSelection() string {
 	var content strings.Builder
 
 	// Theme selection title - centered
-	title := "🎨 Theme Selection"
+	title := "Theme Selection"
 	centeredTitle := lipgloss.NewStyle().
 		Width(m.width).
 		Align(lipgloss.Center).
@@ -2756,6 +3846,791 @@ func (m AppModel) renderThemeSelection() string {
 		Foreground(lipgloss.Color("240")).
 		Render(instructions)
 	content.WriteString(centeredInstructions)
+
+	return content.String()
+}
+
+// Command to load providers - immediate config loading, then async connections
+func (m AppModel) loadProvidersCmd() tea.Cmd {
+	return func() tea.Msg {
+		// Load provider configurations from Python config file (immediate)
+		providerConfigs, err := providerLoaderDeps.LoadProviderConfigs()
+		if err != nil {
+			return ProvidersLoadedMsg{
+				providers:       []ProviderItem{},
+				providerConfigs: make(map[string]ProviderConfig),
+				err:             fmt.Errorf("failed to load provider configurations: %w", err),
+			}
+		}
+
+		// Create initial provider items with "connecting" status (immediate display)
+		var providers []ProviderItem
+		supportedProviderConfigs := make(map[string]ProviderConfig)
+
+		for name, config := range providerConfigs {
+			if config.Type == "vmware" || config.Type == "ovirt" || config.Type == "openstack" {
+				// Add provider immediately with connecting status
+				providers = append(providers, ProviderItem{
+					name:    name,
+					type_:   config.Type,
+					status:  "connecting",
+					vmCount: 0,
+				})
+
+				// Store config for immediate detail screen access
+				supportedProviderConfigs[name] = config
+			}
+		}
+
+		if len(providers) == 0 {
+			return ProvidersLoadedMsg{
+				providers:       []ProviderItem{},
+				providerConfigs: make(map[string]ProviderConfig),
+				err:             fmt.Errorf("no supported providers found (vmware, ovirt, openstack)"),
+			}
+		}
+
+		// Sort providers by name for consistent display
+		sort.Slice(providers, func(i, j int) bool {
+			return providers[i].name < providers[j].name
+		})
+
+		// Return immediate result with "connecting" providers, async connections will update status
+		return ProvidersLoadedMsg{
+			providers:       providers,
+			vmCache:         make(map[string][]VMInfo),
+			providerConfigs: supportedProviderConfigs, // Include configs for immediate detail screen access
+			err:             nil,
+		}
+	}
+}
+
+// Command to load provider connections asynchronously (called after initial load)
+func (m AppModel) loadProviderConnectionsCmd() tea.Cmd {
+	return func() tea.Msg {
+		// Load provider configurations again (should be cached/fast)
+		providerConfigs, err := providerLoaderDeps.LoadProviderConfigs()
+		if err != nil {
+			return ProviderConnectionsCompletedMsg{
+				err: fmt.Errorf("failed to load provider configurations: %w", err),
+			}
+		}
+
+		// Filter supported provider types
+		var supportedConfigs []struct {
+			name   string
+			config ProviderConfig
+		}
+		for name, config := range providerConfigs {
+			if config.Type == "vmware" || config.Type == "ovirt" || config.Type == "openstack" {
+				supportedConfigs = append(supportedConfigs, struct {
+					name   string
+					config ProviderConfig
+				}{name, config})
+			}
+		}
+
+		if len(supportedConfigs) == 0 {
+			return ProviderConnectionsCompletedMsg{
+				err: fmt.Errorf("no supported providers found"),
+			}
+		}
+
+		// Concurrent provider connection attempts
+		resultChan := make(chan ProviderConnectionResult, len(supportedConfigs))
+		vmCache := make(map[string][]VMInfo)
+
+		// Launch goroutine for each provider
+		for _, providerConfig := range supportedConfigs {
+			go func(name string, config ProviderConfig) {
+				defer func() {
+					if r := recover(); r != nil {
+						resultChan <- ProviderConnectionResult{
+							name:   name,
+							status: "error",
+							err:    fmt.Errorf("panic in %s: %v", name, r),
+						}
+					}
+				}()
+
+				// Try to create and connect to provider
+				provider, err := providerLoaderDeps.CreateProvider(
+					config.Type,
+					config.URL,
+					config.Username,
+					config.Password,
+					config.Insecure,
+					config.ExtraParams,
+				)
+				if err != nil {
+					resultChan <- ProviderConnectionResult{
+						name:   name,
+						status: "error",
+						err:    fmt.Errorf("failed to create provider %s: %w", name, err),
+					}
+					return
+				}
+
+				// Connect to the provider
+				if err := provider.Connect(); err != nil {
+					resultChan <- ProviderConnectionResult{
+						name:   name,
+						status: "error",
+						err:    fmt.Errorf("failed to connect to provider %s: %w", name, err),
+					}
+					return
+				}
+
+				// List VMs
+				ctx := context.Background()
+				vms, err := provider.ListVMs(ctx)
+				_ = provider.Close() // Always close the connection
+
+				if err != nil {
+					resultChan <- ProviderConnectionResult{
+						name:   name,
+						status: "error",
+						err:    fmt.Errorf("failed to list VMs for %s: %w", name, err),
+					}
+					return
+				}
+
+				// Success!
+				resultChan <- ProviderConnectionResult{
+					name:    name,
+					status:  "connected",
+					vmCount: len(vms),
+					vms:     vms,
+				}
+			}(providerConfig.name, providerConfig.config)
+		}
+
+		// Collect results with timeout
+		connectionResults := make(map[string]ProviderConnectionResult)
+		collected := 0
+		timeout := time.After(30 * time.Second)
+
+		for collected < len(supportedConfigs) {
+			select {
+			case result := <-resultChan:
+				connectionResults[result.name] = result
+				if result.err == nil && len(result.vms) > 0 {
+					vmCache[result.name] = result.vms
+				}
+				collected++
+
+			case <-timeout:
+				// Mark remaining providers as timeout/error
+				for _, providerConfig := range supportedConfigs {
+					if _, exists := connectionResults[providerConfig.name]; !exists {
+						connectionResults[providerConfig.name] = ProviderConnectionResult{
+							name:   providerConfig.name,
+							status: "error",
+							err:    fmt.Errorf("connection timeout"),
+						}
+					}
+				}
+				goto done
+			}
+		}
+
+	done:
+		return ProviderConnectionsCompletedMsg{
+			connectionResults: connectionResults,
+			vmCache:           vmCache,
+			err:               nil,
+		}
+	}
+}
+
+// Render providers screen with three-panel layout
+func (m AppModel) renderProviders() string {
+	// Always show providers if we have them, even during loading
+	if len(m.providers.providers) == 0 {
+		// Only show loading spinner if we have no providers at all
+		if m.providers.loading {
+			var content strings.Builder
+
+			loadingText := "Loading providers..."
+			centeredLoading := lipgloss.NewStyle().
+				Width(m.width).
+				Align(lipgloss.Center).
+				Render(loadingText)
+			content.WriteString(centeredLoading + "\n\n")
+
+			spinnerView := lipgloss.NewStyle().
+				Width(m.width).
+				Align(lipgloss.Center).
+				Render(m.providers.spinner.View())
+			content.WriteString(spinnerView)
+
+			return content.String()
+		} else {
+			return lipgloss.NewStyle().
+				Width(m.width).
+				Height(m.height - 6).
+				Align(lipgloss.Center).
+				Render("No providers found\n\nPress Esc to go back")
+		}
+	}
+
+	// Calculate fixed dimensions for stable layout
+	totalWidth := m.width - 4
+	leftWidth := totalWidth * 30 / 100
+	middleWidth := totalWidth * 35 / 100
+	rightWidth := totalWidth - leftWidth - middleWidth
+
+	// Fixed height for all panels to prevent jumping
+	panelHeight := m.height - 10 // Reserve space for title and instructions
+	if panelHeight < 15 {
+		panelHeight = 15 // Minimum height
+	}
+
+	// Update maxVisibleVMs based on actual panel height
+	m.providers.maxVisibleVMs = panelHeight - 8 // Account for title, padding, borders, search
+
+	// Build left panel (Providers) with fixed content area
+	var leftContent strings.Builder
+	leftTitle := "Providers"
+	if m.providers.focusedPane == 0 {
+		leftTitle = "🎯 " + leftTitle
+	}
+
+	// Show loading indicator in title if still loading
+	if m.providers.loading {
+		leftTitle += " (connecting...)"
+	}
+
+	leftContent.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Align(lipgloss.Center).
+		Render(leftTitle) + "\n\n")
+
+	// Calculate available lines for content (subtract title + padding)
+	availableLines := panelHeight - 6 // Title, padding, borders
+
+	// Render providers (with potential scrolling/truncation)
+	for i, provider := range m.providers.providers {
+		if i >= availableLines-2 { // Reserve space for potential "..." indicator
+			leftContent.WriteString("... (" + fmt.Sprintf("%d more", len(m.providers.providers)-i) + ")\n")
+			break
+		}
+
+		var statusIcon string
+		switch provider.status {
+		case "connected":
+			statusIcon = "🟢"
+		case "error":
+			statusIcon = "🔴"
+		default:
+			statusIcon = "🟡"
+		}
+
+		vmCountText := ""
+		if provider.vmCount > 0 {
+			vmCountText = fmt.Sprintf(" (%d VMs)", provider.vmCount)
+		}
+
+		item := fmt.Sprintf("%s %s (%s)%s", statusIcon, provider.name, provider.type_, vmCountText)
+		if i == m.providers.selectedProvider {
+			item = selectedItemStyle.Render(item)
+		} else {
+			item = menuItemStyle.Render(item)
+		}
+		leftContent.WriteString(item + "\n")
+
+		// If this provider is expanded, show tree-like details with navigation
+		if provider.name == m.providers.expandedProvider {
+			if config, exists := m.providers.providerConfigs[provider.name]; exists {
+				// Tree items: 0=provider, 1=type, 2=url, 3=username, 4=password, 5=insecure
+				m.providers.treeItemCount = 6
+
+				// Tree item 1: Type
+				typeItem := "    ├── Type: " + config.Type
+				if m.providers.selectedTreeItem == 1 {
+					leftContent.WriteString(selectedItemStyle.Render(typeItem) + "\n")
+				} else {
+					leftContent.WriteString(menuItemStyle.Render(typeItem) + "\n")
+				}
+
+				// Tree item 2: URL (truncated to fit on one line)
+				truncatedURL := config.URL
+				maxURLLength := leftWidth - 20 // Account for tree prefix and padding
+				if maxURLLength > 3 && len(truncatedURL) > maxURLLength {
+					truncatedURL = truncatedURL[:maxURLLength-3] + "..."
+				}
+				urlItem := "    ├── URL: " + truncatedURL
+				if m.providers.selectedTreeItem == 2 {
+					leftContent.WriteString(selectedItemStyle.Render(urlItem) + "\n")
+				} else {
+					leftContent.WriteString(menuItemStyle.Render(urlItem) + "\n")
+				}
+
+				// Tree item 3: Username
+				usernameItem := "    ├── Username: " + config.Username
+				if m.providers.selectedTreeItem == 3 {
+					leftContent.WriteString(selectedItemStyle.Render(usernameItem) + "\n")
+				} else {
+					leftContent.WriteString(menuItemStyle.Render(usernameItem) + "\n")
+				}
+
+				// Tree item 4: Password (NO MASKING! - truncated to fit on one line)
+				truncatedPassword := config.Password
+				maxPasswordLength := leftWidth - 25 // Account for tree prefix and padding
+				if maxPasswordLength > 3 && len(truncatedPassword) > maxPasswordLength {
+					truncatedPassword = truncatedPassword[:maxPasswordLength-3] + "..."
+				}
+				passwordItem := "    ├── Password: " + truncatedPassword
+				if m.providers.selectedTreeItem == 4 {
+					leftContent.WriteString(selectedItemStyle.Render(passwordItem) + "\n")
+				} else {
+					leftContent.WriteString(menuItemStyle.Render(passwordItem) + "\n")
+				}
+
+				// Tree item 5: Insecure
+				insecureItem := "    └── Insecure: " + fmt.Sprintf("%t", config.Insecure)
+				if m.providers.selectedTreeItem == 5 {
+					leftContent.WriteString(selectedItemStyle.Render(insecureItem) + "\n")
+				} else {
+					leftContent.WriteString(menuItemStyle.Render(insecureItem) + "\n")
+				}
+			}
+		}
+	}
+
+	// Fill remaining space to maintain consistent height
+	currentLines := strings.Count(leftContent.String(), "\n")
+	for currentLines < panelHeight-4 {
+		leftContent.WriteString("\n")
+		currentLines++
+	}
+
+	// Build middle panel (VMs) with scrolling and search support
+	var middleContent strings.Builder
+	middleTitle := "Virtual Machines"
+	if m.providers.focusedPane == 1 {
+		middleTitle = "🎯 " + middleTitle
+	}
+	middleContent.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Align(lipgloss.Center).
+		Render(middleTitle) + "\n")
+
+	// Show search input if searching
+	if m.providers.searchingVMs {
+		middleContent.WriteString("\nSearch: " + m.providers.vmSearchInput.View() + "\n")
+	} else {
+		middleContent.WriteString("\n")
+	}
+
+	if len(m.providers.vms) == 0 {
+		middleContent.WriteString("No VMs loaded\nPress Enter on provider")
+	} else {
+		// Determine which VMs to show based on search and scrolling
+		visibleVMs := m.providers.vms
+		if m.providers.searchingVMs {
+			query := m.providers.vmSearchInput.Value()
+			if query != "" {
+				var filteredVMs []VMItem
+				for _, vm := range m.providers.vms {
+					if strings.Contains(strings.ToLower(vm.name), strings.ToLower(query)) ||
+						strings.Contains(strings.ToLower(vm.guestOS), strings.ToLower(query)) {
+						filteredVMs = append(filteredVMs, vm)
+					}
+				}
+				visibleVMs = filteredVMs
+			}
+		}
+
+		// Apply scrolling
+		startIdx := m.providers.vmScrollOffset
+		endIdx := startIdx + m.providers.maxVisibleVMs
+		if endIdx > len(visibleVMs) {
+			endIdx = len(visibleVMs)
+		}
+		if startIdx > len(visibleVMs) {
+			startIdx = 0
+			endIdx = 0
+		}
+
+		// Show scroll indicators
+		if startIdx > 0 {
+			middleContent.WriteString("... (" + fmt.Sprintf("%d above", startIdx) + ")\n")
+		}
+
+		// Render visible VMs
+		for i := startIdx; i < endIdx; i++ {
+			vm := visibleVMs[i]
+			var statusIcon string
+			if vm.isRunning {
+				statusIcon = "▶️"
+			} else {
+				statusIcon = "⏸️"
+			}
+
+			item := fmt.Sprintf("%s %s", statusIcon, vm.name)
+			// Highlight selection based on actual index in original list
+			if !m.providers.searchingVMs && i == m.providers.selectedVM {
+				item = selectedItemStyle.Render(item)
+			} else {
+				item = menuItemStyle.Render(item)
+			}
+			middleContent.WriteString(item + "\n")
+		}
+
+		// Show bottom scroll indicator
+		if endIdx < len(visibleVMs) {
+			middleContent.WriteString("... (" + fmt.Sprintf("%d below", len(visibleVMs)-endIdx) + ")\n")
+		}
+	}
+
+	// Fill remaining space to maintain consistent height
+	currentLines = strings.Count(middleContent.String(), "\n")
+	for currentLines < panelHeight-4 {
+		middleContent.WriteString("\n")
+		currentLines++
+	}
+
+	// Build right panel (Details) with VM details OR provider credentials
+	var rightContent strings.Builder
+	rightTitle := "Details"
+	if m.providers.focusedPane == 2 {
+		rightTitle = "🎯 " + rightTitle
+	}
+	rightContent.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Align(lipgloss.Center).
+		Render(rightTitle) + "\n\n")
+
+	if m.providers.detailView.vm != nil {
+		// Show VM details
+		vm := m.providers.detailView.vm
+		rightContent.WriteString(Field("Name", vm.Name) + "\n")
+		rightContent.WriteString(Field("Provider", vm.Provider) + "\n")
+		rightContent.WriteString(Field("Status", vm.PowerState) + "\n")
+		rightContent.WriteString(Field("CPU", fmt.Sprintf("%d cores", vm.CPU)) + "\n")
+		rightContent.WriteString(Field("Memory", fmt.Sprintf("%d MB", vm.MemoryMB)) + "\n")
+		rightContent.WriteString(Field("Storage", fmt.Sprintf("%.1f GB", vm.StorageGB)) + "\n")
+		rightContent.WriteString(Field("OS", vm.GuestOS) + "\n")
+		if len(vm.IPAddresses) > 0 {
+			rightContent.WriteString(Field("IP", vm.IPAddresses[0]) + "\n")
+		}
+		rightContent.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Press Enter to copy VM name") + "\n")
+	} else if len(m.providers.providers) > 0 {
+		// Show provider credentials
+		selectedProvider := m.providers.providers[m.providers.selectedProvider]
+		rightContent.WriteString(WideField("Provider", selectedProvider.name) + "\n")
+		rightContent.WriteString(WideField("Type", selectedProvider.type_) + "\n")
+		rightContent.WriteString(WideField("Status", selectedProvider.status) + "\n")
+
+		if config, exists := m.providers.providerConfigs[selectedProvider.name]; exists {
+			rightContent.WriteString(WideField("URL", config.URL) + "\n")
+			rightContent.WriteString(WideField("Username", config.Username) + "\n")
+			// Mask password for security
+			maskedPassword := strings.Repeat("*", len(config.Password))
+			if len(maskedPassword) > 20 {
+				maskedPassword = maskedPassword[:20] + "..."
+			}
+			rightContent.WriteString(WideField("Password", maskedPassword) + "\n")
+			rightContent.WriteString(WideField("Insecure", fmt.Sprintf("%t", config.Insecure)) + "\n")
+		}
+	} else {
+		rightContent.WriteString("No selection")
+	}
+
+	// Fill remaining space to maintain consistent height
+	currentLines = strings.Count(rightContent.String(), "\n")
+	for currentLines < panelHeight-4 {
+		rightContent.WriteString("\n")
+		currentLines++
+	}
+
+	// Combine panels with borders and FIXED HEIGHT
+	leftPanel := lipgloss.NewStyle().
+		Width(leftWidth).
+		Height(panelHeight).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1).
+		Render(leftContent.String())
+
+	middlePanel := lipgloss.NewStyle().
+		Width(middleWidth).
+		Height(panelHeight).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1).
+		Render(middleContent.String())
+
+	rightPanel := lipgloss.NewStyle().
+		Width(rightWidth).
+		Height(panelHeight).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1).
+		Render(rightContent.String())
+
+	// Combine panels horizontally
+	mainContent := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, middlePanel, rightPanel)
+
+	// Add title above panels
+	var content strings.Builder
+	title := "=== VM Providers and Virtual Machines ==="
+	centeredTitle := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Render(title)
+	content.WriteString(centeredTitle + "\n\n")
+
+	content.WriteString(mainContent)
+
+	// Add navigation instructions
+	content.WriteString("\n\n")
+	var instructions string
+	if m.providers.searchingVMs {
+		instructions = "Search: Type to filter • Enter Exit search • Esc Cancel search"
+	} else {
+		// Check if we have an expanded provider with tree navigation
+		hasExpandedTree := m.providers.expandedProvider != "" && m.providers.selectedTreeItem > 0
+		if hasExpandedTree {
+			instructions = "Tree Navigation: ↑/↓ Navigate Tree • Enter Copy Field • ← Collapse • Tab/Shift+Tab Switch Panel • / Search VMs • R Refresh • Esc Back"
+		} else {
+			instructions = "Navigation: ↑/↓ Navigate • → Expand Tree • Tab/Shift+Tab Switch Panel • / Search VMs • R Refresh • Esc Back"
+		}
+	}
+
+	centeredInstructions := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Foreground(lipgloss.Color("240")).
+		Render(instructions)
+	content.WriteString(centeredInstructions)
+
+	return content.String()
+}
+
+// Command to load VMs for a specific provider
+func (m AppModel) loadVMsForProviderCmd(providerName string) tea.Cmd {
+	return func() tea.Msg {
+		// Load provider configurations
+		providerConfigs, err := providerLoaderDeps.LoadProviderConfigs()
+		if err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to load provider configurations: %w", err),
+			}
+		}
+
+		// Find the specific provider
+		providerConfig, exists := providerConfigs[providerName]
+		if !exists {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("provider '%s' not found", providerName),
+			}
+		}
+
+		// Create the provider
+		provider, err := providerLoaderDeps.CreateProvider(
+			providerConfig.Type,
+			providerConfig.URL,
+			providerConfig.Username,
+			providerConfig.Password,
+			providerConfig.Insecure,
+			providerConfig.ExtraParams,
+		)
+		if err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to create provider: %w", err),
+			}
+		}
+
+		// Connect to the provider
+		if err := provider.Connect(); err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to connect to provider: %w", err),
+			}
+		}
+		defer func() { _ = provider.Close() }()
+
+		// List VMs
+		ctx := context.Background()
+		vms, err := provider.ListVMs(ctx)
+		if err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to list VMs: %w", err),
+			}
+		}
+
+		return VMsLoadedMsg{
+			providerName: providerName,
+			vms:          vms,
+			err:          nil,
+		}
+	}
+}
+
+// Command to load VMs for a provider with caching support
+func (m AppModel) loadVMsForProviderWithCacheCmd(providerName string) tea.Cmd {
+	return func() tea.Msg {
+		// Check cache first
+		if cachedVMs, exists := m.providers.vmCache[providerName]; exists {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          cachedVMs,
+				err:          nil,
+			}
+		}
+
+		// Load provider configurations
+		providerConfigs, err := providerLoaderDeps.LoadProviderConfigs()
+		if err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to load provider configurations: %w", err),
+			}
+		}
+
+		// Find the specific provider
+		providerConfig, exists := providerConfigs[providerName]
+		if !exists {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("provider '%s' not found", providerName),
+			}
+		}
+
+		// Create the provider
+		provider, err := providerLoaderDeps.CreateProvider(
+			providerConfig.Type,
+			providerConfig.URL,
+			providerConfig.Username,
+			providerConfig.Password,
+			providerConfig.Insecure,
+			providerConfig.ExtraParams,
+		)
+		if err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to create provider: %w", err),
+			}
+		}
+
+		// Connect to the provider
+		if err := provider.Connect(); err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to connect to provider: %w", err),
+			}
+		}
+		defer func() { _ = provider.Close() }()
+
+		// List VMs
+		ctx := context.Background()
+		vms, err := provider.ListVMs(ctx)
+		if err != nil {
+			return VMsLoadedMsg{
+				providerName: providerName,
+				vms:          []VMInfo{},
+				err:          fmt.Errorf("failed to list VMs: %w", err),
+			}
+		}
+
+		return VMsLoadedMsg{
+			providerName: providerName,
+			vms:          vms,
+			err:          nil,
+		}
+	}
+}
+
+// Render provider detail screen with tree-like expandable interface
+func (m AppModel) renderProviderDetail() string {
+	if m.providerDetail.loading {
+		loadingContent := StatusLoading("Loading provider details...") + "\n\n" + m.providerDetail.spinner.View()
+		return CenteredContainer(loadingContent, 40)
+	}
+
+	if m.providerDetail.config == nil {
+		return "No provider configuration available."
+	}
+
+	var content strings.Builder
+	config := m.providerDetail.config
+
+	// Title
+	content.WriteString(Header(fmt.Sprintf("Provider Details -- [%s]", m.providerDetail.providerName)) + "\n\n")
+
+	// Provider type badge
+	content.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Render("🔧 "+strings.ToUpper(config.Type)+" Provider") + "\n\n")
+
+	// Tree-like interface - create expandable sections
+	theme := GetCurrentTheme()
+	selectedCursor := m.providerDetail.table.Cursor()
+
+	// Define all fields with their display names and values
+	fields := []struct {
+		name  string
+		value string
+	}{
+		{"Provider Name", m.providerDetail.providerName},
+		{"Type", config.Type},
+		{"URL", config.URL},
+		{"Username", config.Username},
+		{"Password", config.Password},
+		{"Insecure", fmt.Sprintf("%t", config.Insecure)},
+	}
+
+	// Add extra parameters if they exist
+	for key, value := range config.ExtraParams {
+		fields = append(fields, struct {
+			name  string
+			value string
+		}{key, value})
+	}
+
+	// Render each field as a tree item
+	for i, field := range fields {
+		var line string
+
+		if i == selectedCursor {
+			// Selected item - show with arrow and highlighted
+			line = lipgloss.NewStyle().
+				Foreground(theme.SelectionFg).
+				Background(theme.Selection).
+				Render(fmt.Sprintf("→ %-15s %s", field.name+":", field.value))
+		} else {
+			// Normal item - show with bullet
+			line = lipgloss.NewStyle().
+				Foreground(theme.Primary).
+				Render(fmt.Sprintf("  %-15s %s", field.name+":", field.value))
+		}
+
+		content.WriteString(line + "\n")
+	}
+
+	// Add copy instruction
+	content.WriteString("\n💡 Use ↑↓ to navigate • Enter to copy value to clipboard • Esc to go back")
 
 	return content.String()
 }
