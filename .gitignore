@@ -151,3 +151,6 @@ mtv-dev
 # Go coverage output
 coverage.out
 coverage.html
+
+# Cursor IDE rules (local development guidelines)
+.cursorrules
