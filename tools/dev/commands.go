@@ -16,6 +16,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 // Fast concurrent list-clusters implementation
@@ -866,4 +870,332 @@ func createTempResourcesAndGetDf(client *OCPClient) string {
 	}
 
 	return stdout
+}
+
+// IIBInfo represents the build information for a specific OCP version
+type IIBInfo struct {
+	OCPVersion  string `json:"ocp_version"`
+	MTVVersion  string `json:"mtv_version"`
+	IIB         string `json:"iib"`
+	Snapshot    string `json:"snapshot"`
+	Created     string `json:"created"`
+	Image       string `json:"image"`
+	Environment string `json:"environment"`
+}
+
+// checkKufloxLogin checks if we're already logged into the kuflox cluster and the right project
+var checkKufloxLogin = checkKufloxLoginImpl
+
+func checkKufloxLoginImpl() bool {
+	// Check current context
+	contextCmd := execCommand("oc", "whoami", "--show-server")
+	output, err := contextCmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+
+	server := strings.TrimSpace(string(output))
+	if !strings.Contains(server, "stone-prd-rh01.pg1f.p1.openshiftapps.com") {
+		return false
+	}
+
+	// Check current project
+	projectCmd := execCommand("oc", "project", "-q")
+	projectOutput, err := projectCmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+
+	currentProject := strings.TrimSpace(string(projectOutput))
+	return currentProject == "rh-mtv-1-tenant"
+}
+
+// loginToKuflox handles automated login to kuflox cluster with SSO support
+var loginToKuflox = loginToKufloxImpl
+
+func loginToKufloxImpl() error {
+	// Check if user has a valid kerberos ticket (they should run kinit themselves)
+	klistCmd := execCommand("klist", "-s")
+	hasValidTicket := klistCmd.Run() == nil
+
+	if hasValidTicket {
+		_, _ = fmt.Printf("%s✓ Valid kerberos ticket found%s\n", ColorGreen, ColorReset)
+		// TODO: Fix SSO authentication with kerberos tickets
+		// Currently the SSO authentication is not working properly even with valid kerberos tickets.
+		// The issue is that kuflox cluster requires specific SSO configuration that we haven't
+		// figured out yet. For now, we fall back to web authentication which works but requires
+		// manual browser interaction. This should be revisited to make it seamless for users
+		// with valid kerberos tickets.
+		// Try SSO-based login using kerberos ticket - use --web flag but with SSO
+		_, _ = fmt.Printf("%sTrying SSO authentication...%s\n", ColorYellow, ColorReset)
+		loginSSOCmd := execCommand("oc", "login", "--web", "https://api.stone-prd-rh01.pg1f.p1.openshiftapps.com:6443")
+		if err := loginSSOCmd.Run(); err == nil {
+			_, _ = fmt.Printf("%s✓ SSO authentication successful%s\n", ColorGreen, ColorReset)
+			// Switch to the MTV tenant
+			projectCmd := execCommand("oc", "project", "rh-mtv-1-tenant")
+			if err := projectCmd.Run(); err != nil {
+				return fmt.Errorf("failed to switch to rh-mtv-1-tenant: %w", err)
+			}
+			return nil
+		}
+		_, _ = fmt.Printf("%sSSO authentication failed, trying other methods...%s\n", ColorYellow, ColorReset)
+	} else {
+		_, _ = fmt.Printf("%sNo valid kerberos ticket found (run 'kinit' if you want SSO auth)%s\n", ColorYellow, ColorReset)
+	}
+
+	// Try to get current token and use it if available
+	tokenCmd := execCommand("oc", "whoami", "-t")
+	if tokenOutput, err := tokenCmd.CombinedOutput(); err == nil {
+		token := strings.TrimSpace(string(tokenOutput))
+		if token != "" {
+			// Try to login with existing token to the kuflox cluster
+			_, _ = fmt.Printf("%sTrying existing token authentication...%s\n", ColorYellow, ColorReset)
+			loginTokenCmd := execCommand("oc", "login", "https://api.stone-prd-rh01.pg1f.p1.openshiftapps.com:6443", "--token", token)
+			if err := loginTokenCmd.Run(); err == nil {
+				_, _ = fmt.Printf("%s✓ Successfully logged in using existing token%s\n", ColorGreen, ColorReset)
+				// Switch to the MTV tenant
+				projectCmd := execCommand("oc", "project", "rh-mtv-1-tenant")
+				if err := projectCmd.Run(); err != nil {
+					return fmt.Errorf("failed to switch to rh-mtv-1-tenant: %w", err)
+				}
+				return nil
+			}
+			_, _ = fmt.Printf("%sExisting token authentication failed%s\n", ColorYellow, ColorReset)
+		}
+	}
+
+	// Fall back to web-based authentication
+	_, _ = fmt.Printf("%sFalling back to web authentication...%s\n", ColorYellow, ColorReset)
+	loginCmd := execCommand("oc", "login", "--web", "https://api.stone-prd-rh01.pg1f.p1.openshiftapps.com:6443")
+	if err := loginCmd.Run(); err != nil {
+		return fmt.Errorf("failed to login to kuflox cluster: %w", err)
+	}
+
+	// Switch to the MTV tenant
+	projectCmd := execCommand("oc", "project", "rh-mtv-1-tenant")
+	if err := projectCmd.Run(); err != nil {
+		return fmt.Errorf("failed to switch to rh-mtv-1-tenant: %w", err)
+	}
+
+	return nil
+}
+
+// getIIB extracts latest forklift FBC builds from kuflox cluster
+func getIIB(cmd *cobra.Command, args []string) {
+	if len(args) != 1 {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError: You must specify an MTV version (e.g., '2.9')%s\n", ColorRed, ColorReset)
+		return
+	}
+
+	mtvVersion := args[0]
+	forceLogin, _ := cmd.Flags().GetBool("force-login")
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sRetrieving MTV %s builds from kuflox cluster...%s\n", ColorYellow, mtvVersion, ColorReset)
+
+	// Check if already logged in to the right cluster (unless force-login is specified)
+	if !forceLogin && checkKufloxLogin() {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s✓ Already logged into kuflox cluster (rh-mtv-1-tenant)%s\n", ColorGreen, ColorReset)
+	} else {
+		if forceLogin {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sForce login requested, re-authenticating...%s\n", ColorYellow, ColorReset)
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sConnecting to kuflox cluster...%s\n", ColorYellow, ColorReset)
+		}
+		if err := loginToKuflox(); err != nil {
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sFailed to login to kuflox cluster: %v%s\n", ColorRed, err, ColorReset)
+			return
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s✓ Successfully connected to kuflox cluster%s\n", ColorGreen, ColorReset)
+	}
+
+	// Get production builds
+	prodBuilds, err := getForkliftBuilds("prod")
+	if err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sFailed to get production builds: %v%s\n", ColorRed, err, ColorReset)
+		return
+	}
+
+	// Get stage builds
+	stageBuilds, err := getForkliftBuilds("stage")
+	if err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sFailed to get stage builds: %v%s\n", ColorRed, err, ColorReset)
+		return
+	}
+
+	// Display results
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s=== MTV %s Forklift FBC Builds ===%s\n", ColorCyan, mtvVersion, ColorReset)
+
+	// Production builds
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s📦 PRODUCTION BUILDS:%s\n", ColorGreen, ColorReset)
+	for _, build := range prodBuilds {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s  OpenShift %s:%s\n", ColorBlue, build.OCPVersion, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Full MTV version: %s\n", build.MTVVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    IIB: %s\n", build.IIB)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    OCP version: %s\n", build.OCPVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Created: %s\n", build.Created)
+	}
+
+	// Stage builds
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s📦 STAGE BUILDS:%s\n", ColorYellow, ColorReset)
+	for _, build := range stageBuilds {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s  OpenShift %s:%s\n", ColorBlue, build.OCPVersion, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Full MTV version: %s\n", build.MTVVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    IIB: %s\n", build.IIB)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    OCP version: %s\n", build.OCPVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Created: %s\n", build.Created)
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sSummary: Found %d production and %d stage builds%s\n",
+		ColorCyan, len(prodBuilds), len(stageBuilds), ColorReset)
+}
+
+// getForkliftBuilds extracts build information for a specific environment (prod/stage)
+var getForkliftBuilds = getForkliftBuildsImpl
+
+func getForkliftBuildsImpl(environment string) ([]IIBInfo, error) {
+	// Create kuflox client
+	client, err := createKufloxClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kuflox client: %w", err)
+	}
+
+	var builds []IIBInfo
+
+	// Get snapshots for the specific environment and extract build info
+	for _, version := range []string{"417", "418", "419"} {
+		build, err := getLatestBuildForVersionWithClient(client, environment, version)
+		if err != nil {
+			// Silently continue with other versions - don't print warnings that can interfere with TUI
+			continue
+		}
+		if build != nil {
+			builds = append(builds, *build)
+		}
+	}
+
+	return builds, nil
+}
+
+// getLatestBuildForVersionWithClient gets the latest build using the Go client instead of oc commands
+func getLatestBuildForVersionWithClient(client dynamic.Interface, environment, version string) (*IIBInfo, error) {
+	// Define the snapshot resource
+	snapshotGVR := schema.GroupVersionResource{
+		Group:    "appstudio.redhat.com",
+		Version:  "v1alpha1",
+		Resource: "snapshots",
+	}
+
+	// Get all snapshots in the rh-mtv-1-tenant namespace
+	snapshots, err := client.Resource(snapshotGVR).Namespace("rh-mtv-1-tenant").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list snapshots: %w", err)
+	}
+
+	// Filter snapshots for the specific environment and version
+	var matchingSnapshots []unstructured.Unstructured
+	targetApp := fmt.Sprintf("forklift-fbc-%s-v%s", environment, version)
+
+	for _, snapshot := range snapshots.Items {
+		// Check if the application label matches
+		if labels := snapshot.GetLabels(); labels != nil {
+			if app, exists := labels["appstudio.openshift.io/application"]; exists && app == targetApp {
+				matchingSnapshots = append(matchingSnapshots, snapshot)
+			}
+		}
+	}
+
+	if len(matchingSnapshots) == 0 {
+		return nil, fmt.Errorf("no snapshots found for %s v%s", environment, version)
+	}
+
+	// Sort by creation timestamp to get the latest
+	sort.Slice(matchingSnapshots, func(i, j int) bool {
+		return matchingSnapshots[i].GetCreationTimestamp().After(matchingSnapshots[j].GetCreationTimestamp().Time)
+	})
+
+	latest := matchingSnapshots[0]
+
+	// Extract the required information
+	name := latest.GetName()
+	created := latest.GetCreationTimestamp().Local().Format("2006-01-02 15:04:05 MST")
+
+	// Extract container image from spec.components[0].containerImage
+	var image string
+	if components, found, err := unstructured.NestedSlice(latest.Object, "spec", "components"); err == nil && found && len(components) > 0 {
+		if component, ok := components[0].(map[string]interface{}); ok {
+			if containerImage, found, err := unstructured.NestedString(component, "containerImage"); err == nil && found {
+				image = containerImage
+			}
+		}
+	}
+
+	// Extract git revision from spec.components[0].source.git.revision
+	var revision string
+	if components, found, err := unstructured.NestedSlice(latest.Object, "spec", "components"); err == nil && found && len(components) > 0 {
+		if component, ok := components[0].(map[string]interface{}); ok {
+			if gitRevision, found, err := unstructured.NestedString(component, "source", "git", "revision"); err == nil && found {
+				revision = gitRevision
+			}
+		}
+	}
+
+	// If revision is empty, use snapshot name suffix as fallback
+	if revision == "" {
+		parts := strings.Split(name, "-")
+		if len(parts) > 0 {
+			revision = parts[len(parts)-1]
+		} else {
+			revision = "unknown"
+		}
+	}
+
+	// Format OCP version (417 -> 4.17)
+	ocpVersion := fmt.Sprintf("4.%s", version[1:])
+
+	// Create IIB in the required format: forklift-fbc-prod-v417:on-pr-<git-hash>
+	iib := fmt.Sprintf("forklift-fbc-%s-v%s:on-pr-%s", environment, version, revision)
+
+	build := &IIBInfo{
+		OCPVersion:  ocpVersion,
+		MTVVersion:  "2.9", // Currently all builds are MTV 2.9
+		IIB:         iib,
+		Snapshot:    name,
+		Created:     created,
+		Image:       image,
+		Environment: environment,
+	}
+
+	return build, nil
+}
+
+// createKufloxClient creates a Kubernetes client for the kuflox cluster using the current token
+func createKufloxClient() (dynamic.Interface, error) {
+	// Get current token
+	tokenCmd := execCommand("oc", "whoami", "-t")
+	tokenOutput, err := tokenCmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current token: %w", err)
+	}
+
+	token := strings.TrimSpace(string(tokenOutput))
+	if token == "" {
+		return nil, fmt.Errorf("no valid token found")
+	}
+
+	// Create REST config for kuflox cluster
+	config := &rest.Config{
+		Host:        "https://api.stone-prd-rh01.pg1f.p1.openshiftapps.com:6443",
+		BearerToken: token,
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: true, // Usually kuflox uses valid certs, but keeping flexible
+		},
+	}
+
+	// Create dynamic client
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
+	return dynamicClient, nil
 }

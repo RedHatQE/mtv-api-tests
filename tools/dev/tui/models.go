@@ -96,12 +96,30 @@ type ClusterInfo struct {
 	ConsoleURL string
 }
 
+// IIB build information
+type IIBInfo struct {
+	OCPVersion  string
+	MTVVersion  string
+	IIB         string
+	Snapshot    string
+	Created     string
+	Image       string
+	Environment string
+}
+
 // Helper function interfaces to access main package functionality
 type ClusterLoaderDeps interface {
 	ReadDir(path string) ([]fs.DirEntry, error)
 	EnsureLoggedInSilent(clusterName string) error
 	GetClusterInfoSilent(clusterName string) (*ClusterInfo, error)
 	GetClusterPassword(clusterName string) (string, error)
+}
+
+// IIB data loader interface to access main package IIB functions
+type IIBLoaderDeps interface {
+	GetForkliftBuilds(environment string) ([]IIBInfo, error)
+	CheckKufloxLogin() bool
+	LoginToKuflox() error
 }
 
 // Default implementation that calls the main package functions
@@ -126,12 +144,36 @@ func (d *defaultClusterLoaderDeps) GetClusterPassword(clusterName string) (strin
 	return "", fmt.Errorf("getClusterPassword not available in TUI context")
 }
 
+// Default IIB implementation (mock for testing)
+type defaultIIBLoaderDeps struct{}
+
+func (d *defaultIIBLoaderDeps) GetForkliftBuilds(environment string) ([]IIBInfo, error) {
+	// This will be injected from main package
+	return nil, fmt.Errorf("getForkliftBuilds not available in TUI context")
+}
+
+func (d *defaultIIBLoaderDeps) CheckKufloxLogin() bool {
+	// This will be injected from main package
+	return false
+}
+
+func (d *defaultIIBLoaderDeps) LoginToKuflox() error {
+	// This will be injected from main package
+	return fmt.Errorf("loginToKuflox not available in TUI context")
+}
+
 // Global dependency injection
 var clusterLoaderDeps ClusterLoaderDeps = &defaultClusterLoaderDeps{}
+var iibLoaderDeps IIBLoaderDeps = &defaultIIBLoaderDeps{}
 
 // SetClusterLoaderDeps allows injecting dependencies from main package
 func SetClusterLoaderDeps(deps ClusterLoaderDeps) {
 	clusterLoaderDeps = deps
+}
+
+// SetIIBLoaderDeps allows injecting IIB dependencies from main package
+func SetIIBLoaderDeps(deps IIBLoaderDeps) {
+	iibLoaderDeps = deps
 }
 
 // Screen types
@@ -144,6 +186,9 @@ const (
 	TestConfigScreen
 	ProgressScreen
 	ResultsScreen
+	IIBInputScreen
+	IIBDisplayScreen
+	ThemeSelectionScreen
 )
 
 // Application state
@@ -154,6 +199,9 @@ type AppModel struct {
 	mainMenu          MainMenuModel
 	clusterList       ClusterListModel
 	clusterDetail     ClusterDetailModel
+	iibInput          IIBInputModel
+	iibDisplay        IIBDisplayModel
+	themeSelection    ThemeSelectionModel
 	error             string
 	notification      string    // For non-error notifications like copy success
 	notificationTimer time.Time // When notification expires
@@ -254,6 +302,44 @@ type ClusterDetailModel struct {
 	table    table.Model
 }
 
+// IIB Input model for entering MTV version
+type IIBInputModel struct {
+	textInput  textinput.Model
+	mtvVersion string
+	loading    bool
+	spinner    spinner.Model
+}
+
+// IIB Item for the build type and OCP version lists
+type IIBItem struct {
+	name        string
+	displayName string
+}
+
+func (i IIBItem) FilterValue() string { return i.name }
+func (i IIBItem) Title() string       { return i.displayName }
+func (i IIBItem) Description() string { return "" }
+
+// IIB Display model for three-panel layout
+type IIBDisplayModel struct {
+	mtvVersion    string
+	buildTypes    []string             // ["prod", "stage"]
+	ocpVersions   []string             // ["4.17", "4.18", "4.19"]
+	iibData       map[string][]IIBInfo // key: "prod" or "stage", value: list of IIBInfo
+	selectedBuild int                  // selected build type index (0=prod, 1=stage)
+	selectedOCP   int                  // selected OCP version index
+	focusedPane   int                  // 0=build types, 1=ocp versions, 2=details
+	loading       bool
+	spinner       spinner.Model
+	table         table.Model // right pane details table
+}
+
+type ThemeSelectionModel struct {
+	themes       []string // Available theme names
+	selectedIdx  int      // Currently selected theme index
+	currentTheme string   // Current active theme name
+}
+
 // Messages for async operations
 type ClustersLoadedMsg struct {
 	clusters    []ClusterItem
@@ -279,6 +365,14 @@ type ClusterDetailLoadedMsg struct {
 	password string
 	loginCmd string
 	err      error
+}
+
+// IIB-related messages
+type IIBDataLoadedMsg struct {
+	mtvVersion  string
+	prodBuilds  []IIBInfo
+	stageBuilds []IIBInfo
+	err         error
 }
 
 // Clipboard helper function
@@ -310,16 +404,26 @@ func showNotification(message string, isError bool) tea.Cmd {
 // Initialize the app
 func NewAppModel() AppModel {
 	// Setup main menu items
-	items := []list.Item{
+	mainMenuItems := []list.Item{
 		MainMenuItem{
-			title:       "📋 Clusters",
+			title:       "🌐 Browse Clusters",
 			description: "Browse available clusters (press 'q' to quit)",
 			action:      "list-clusters",
+		},
+		MainMenuItem{
+			title:       "📦 IIB Builds",
+			description: "Retrieve Forklift FBC builds",
+			action:      "iib-builds",
+		},
+		MainMenuItem{
+			title:       "🎨 Themes",
+			description: "Select UI theme",
+			action:      "themes",
 		},
 	}
 
 	// Create main menu list
-	mainMenuList := list.New(items, MainMenuDelegate{}, 50, 14)
+	mainMenuList := list.New(mainMenuItems, MainMenuDelegate{}, 50, 14)
 	mainMenuList.Title = "MTV Dev Tool"
 	mainMenuList.SetShowStatusBar(false)
 	mainMenuList.SetFilteringEnabled(false)
@@ -344,23 +448,25 @@ func NewAppModel() AppModel {
 		table.WithFocused(true),
 	)
 
-	// Style the cluster table
+	// Style the cluster table using theme colors
+	theme := GetCurrentTheme()
 	tableStyles := table.DefaultStyles()
 	tableStyles.Header = tableStyles.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(theme.Border).
 		BorderBottom(true).
-		Bold(true)
+		Bold(true).
+		Foreground(theme.Header)
 	tableStyles.Selected = tableStyles.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(theme.SelectionFg).
+		Background(theme.Selection).
 		Bold(false)
 	clusterTable.SetStyles(tableStyles)
 
 	// Setup spinner for loading
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = spinnerStyle
+	s.Style = getSpinnerStyle()
 
 	// Setup progress bar for cluster loading
 	prog := progress.New(progress.WithDefaultGradient())
@@ -377,7 +483,34 @@ func NewAppModel() AppModel {
 	// Detail spinner for right pane
 	detailSpinner := spinner.New()
 	detailSpinner.Spinner = spinner.Dot
-	detailSpinner.Style = spinnerStyle
+	detailSpinner.Style = getSpinnerStyle()
+
+	// Setup IIB input
+	iibTextInput := textinput.New()
+	iibTextInput.Placeholder = "Enter MTV version (e.g., 2.9)"
+	iibTextInput.CharLimit = 10
+	iibTextInput.Width = 30
+	iibTextInput.Focus()
+
+	// Setup IIB spinners
+	iibInputSpinner := spinner.New()
+	iibInputSpinner.Spinner = spinner.Dot
+	iibInputSpinner.Style = getSpinnerStyle()
+
+	iibDisplaySpinner := spinner.New()
+	iibDisplaySpinner.Spinner = spinner.Dot
+	iibDisplaySpinner.Style = getSpinnerStyle()
+
+	// Setup IIB detail table
+	iibDetailTable := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "Field", Width: 15},
+			{Title: "Value", Width: 50},
+		}),
+		table.WithRows([]table.Row{}),
+		table.WithFocused(false),
+	)
+	iibDetailTable.SetStyles(tableStyles)
 
 	return AppModel{
 		screen: MainMenuScreen,
@@ -402,6 +535,34 @@ func NewAppModel() AppModel {
 		clusterDetail: ClusterDetailModel{
 			spinner: detailSpinner,
 		},
+		iibInput: IIBInputModel{
+			textInput: iibTextInput,
+			spinner:   iibInputSpinner,
+		},
+		iibDisplay: IIBDisplayModel{
+			buildTypes:  []string{"prod", "stage"},
+			ocpVersions: []string{"4.17", "4.18", "4.19"},
+			iibData:     make(map[string][]IIBInfo),
+			spinner:     iibDisplaySpinner,
+			table:       iibDetailTable,
+		},
+		themeSelection: func() ThemeSelectionModel {
+			themes := GetAvailableThemes()
+			currentTheme := GetCurrentTheme().Name
+			selectedIdx := 0
+			// Find the index of the current theme
+			for i, theme := range themes {
+				if theme == currentTheme {
+					selectedIdx = i
+					break
+				}
+			}
+			return ThemeSelectionModel{
+				themes:       themes,
+				selectedIdx:  selectedIdx,
+				currentTheme: currentTheme,
+			}
+		}(),
 		help: h,
 		keys: keys,
 	}
@@ -498,6 +659,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = MainMenuScreen
 				m.previousScreen = MainMenuScreen
 				m.error = ""
+				m.notification = "" // Clear notifications on back navigation
 				return m, nil
 			case ClusterDetailScreen:
 				// Go back to previous screen (should be ClusterListScreen)
@@ -508,6 +670,25 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.previousScreen = MainMenuScreen
 				}
 				m.error = ""
+				m.notification = "" // Clear notifications on back navigation
+				return m, nil
+			case IIBInputScreen:
+				m.screen = MainMenuScreen
+				m.previousScreen = MainMenuScreen
+				m.error = ""
+				m.notification = "" // Clear notifications on back navigation
+				return m, nil
+			case IIBDisplayScreen:
+				m.screen = IIBInputScreen
+				m.previousScreen = MainMenuScreen
+				m.error = ""
+				m.notification = "" // Clear notifications on back navigation
+				return m, nil
+			case ThemeSelectionScreen:
+				m.screen = MainMenuScreen
+				m.previousScreen = MainMenuScreen
+				m.error = ""
+				m.notification = "" // Clear notifications on back navigation
 				return m, nil
 			}
 		case "tab":
@@ -516,10 +697,74 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.clusterList.focusedPane = 1 - m.clusterList.focusedPane // Toggle between 0 and 1
 				return m, nil
 			}
+			// Switch between panes in IIB display screen
+			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
+				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 1) % 3 // Cycle through 0, 1, 2
+				return m, nil
+			}
 		case "shift+tab":
 			// Switch between panes in cluster list screen (reverse direction)
 			if m.screen == ClusterListScreen && !m.clusterList.loading && !m.clusterList.searching {
 				m.clusterList.focusedPane = 1 - m.clusterList.focusedPane // Toggle between 0 and 1
+				return m, nil
+			}
+			// Switch between panes in IIB display screen (reverse direction)
+			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
+				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 2) % 3 // Cycle backwards through 2, 1, 0
+				return m, nil
+			}
+		case "up", "k":
+			// Handle up navigation in IIB display screen
+			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
+				switch m.iibDisplay.focusedPane {
+				case 0: // Build types pane
+					if m.iibDisplay.selectedBuild > 0 {
+						m.iibDisplay.selectedBuild--
+						m.updateOCPVersionsForSelectedBuildType()
+					}
+				case 1: // OCP versions pane
+					if m.iibDisplay.selectedOCP > 0 {
+						m.iibDisplay.selectedOCP--
+					}
+				}
+				return m, nil
+			}
+		case "down", "j":
+			// Handle down navigation in IIB display screen
+			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
+				switch m.iibDisplay.focusedPane {
+				case 0: // Build types pane
+					if m.iibDisplay.selectedBuild < len(m.iibDisplay.buildTypes)-1 {
+						m.iibDisplay.selectedBuild++
+						m.updateOCPVersionsForSelectedBuildType()
+					}
+				case 1: // OCP versions pane
+					if m.iibDisplay.selectedOCP < len(m.iibDisplay.ocpVersions)-1 {
+						m.iibDisplay.selectedOCP++
+					}
+				}
+				return m, nil
+			}
+		case "left", "h":
+			// Handle left navigation in IIB display screen - move to previous pane
+			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
+				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 2) % 3 // Move backwards
+				return m, nil
+			}
+			// Handle left navigation in cluster list screen - move to left pane
+			if m.screen == ClusterListScreen && !m.clusterList.loading && !m.clusterList.searching {
+				m.clusterList.focusedPane = 0 // Left pane
+				return m, nil
+			}
+		case "right", "l":
+			// Handle right navigation in IIB display screen - move to next pane
+			if m.screen == IIBDisplayScreen && !m.iibDisplay.loading {
+				m.iibDisplay.focusedPane = (m.iibDisplay.focusedPane + 1) % 3 // Move forward
+				return m, nil
+			}
+			// Handle right navigation in cluster list screen - move to right pane
+			if m.screen == ClusterListScreen && !m.clusterList.loading && !m.clusterList.searching {
+				m.clusterList.focusedPane = 1 // Right pane
 				return m, nil
 			}
 		case "enter":
@@ -535,6 +780,26 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case ClusterDetailScreen:
 				return m.handleClusterDetailTableCopy()
+			case IIBInputScreen:
+				// Submit MTV version
+				version := strings.TrimSpace(m.iibInput.textInput.Value())
+				if version != "" {
+					m.iibInput.mtvVersion = version
+					m.iibInput.loading = true
+					m.iibInput.textInput.Blur()
+					m.screen = IIBDisplayScreen
+					m.iibDisplay.mtvVersion = version
+					m.iibDisplay.loading = true
+					m.iibDisplay.iibData = make(map[string][]IIBInfo)
+					return m, tea.Batch(m.iibDisplay.spinner.Tick, m.loadIIBDataCmd(version))
+				}
+				return m, nil
+			case IIBDisplayScreen:
+				// Copy selected IIB to clipboard
+				return m.handleIIBCopy()
+			case ThemeSelectionScreen:
+				// Apply selected theme
+				return m.handleThemeSelection()
 			}
 		}
 
@@ -794,6 +1059,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clusterList.detailView.loginCmd = ""
 		m.clusterList.detailView.table = table.Model{} // Clear table
 		return m, tea.Batch(m.clusterList.detailView.spinner.Tick, m.loadClusterDetailCmd(msg.cluster.name, "cluster-info"))
+
+	case IIBDataLoadedMsg:
+		m.iibInput.loading = false
+		m.iibDisplay.loading = false
+
+		if msg.err != nil {
+			m.error = fmt.Sprintf("Failed to load IIB data: %v", msg.err)
+			return m, nil
+		}
+
+		// Populate IIB data
+		m.iibDisplay.iibData["prod"] = msg.prodBuilds
+		m.iibDisplay.iibData["stage"] = msg.stageBuilds
+
+		// Update OCP versions for currently selected build type
+		m.updateOCPVersionsForSelectedBuildType()
+
+		return m, showNotification(fmt.Sprintf("✅ IIB data loaded for MTV %s", msg.mtvVersion), false)
 	}
 
 	// Handle screen-specific updates
@@ -874,7 +1157,31 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-
+	case IIBInputScreen:
+		if !m.iibInput.loading {
+			m.iibInput.textInput, cmd = m.iibInput.textInput.Update(msg)
+		} else {
+			m.iibInput.spinner, cmd = m.iibInput.spinner.Update(msg)
+		}
+	case IIBDisplayScreen:
+		// Navigation is handled in the main keyboard section, only handle spinner here
+		if m.iibDisplay.loading {
+			m.iibDisplay.spinner, cmd = m.iibDisplay.spinner.Update(msg)
+		}
+	case ThemeSelectionScreen:
+		// Handle navigation in theme selection
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "up", "k":
+				if m.themeSelection.selectedIdx > 0 {
+					m.themeSelection.selectedIdx--
+				}
+			case "down", "j":
+				if m.themeSelection.selectedIdx < len(m.themeSelection.themes)-1 {
+					m.themeSelection.selectedIdx++
+				}
+			}
+		}
 	}
 
 	return m, cmd
@@ -898,6 +1205,19 @@ func (m AppModel) handleMainMenuSelection() (AppModel, tea.Cmd) {
 		if m.clusterList.loading {
 			return m, m.clusterList.spinner.Tick
 		}
+		return m, nil
+	case "iib-builds":
+		m.previousScreen = MainMenuScreen
+		m.screen = IIBInputScreen
+		// Reset IIB input state
+		m.iibInput.textInput.SetValue("")
+		m.iibInput.mtvVersion = ""
+		m.iibInput.loading = false
+		m.iibInput.textInput.Focus()
+		return m, textinput.Blink
+	case "themes":
+		m.previousScreen = MainMenuScreen
+		m.screen = ThemeSelectionScreen
 		return m, nil
 	default:
 		// For now, just show a placeholder
@@ -1249,6 +1569,14 @@ func (m AppModel) View() string {
 		mainContent = m.renderClusterList()
 	case ClusterDetailScreen:
 		mainContent = m.renderClusterDetail()
+	case IIBInputScreen:
+		mainContent = m.renderIIBInput()
+	case IIBDisplayScreen:
+		mainContent = m.renderIIBDisplay()
+	case ThemeSelectionScreen:
+		mainContent = m.renderThemeSelection()
+	default:
+		mainContent = "Unknown screen"
 	}
 
 	// Add main content with proper centering
@@ -1351,7 +1679,7 @@ func (m AppModel) renderMainMenu() string {
 	content.WriteString(centeredTitle + "\n\n\n") // Extra spacing after title
 
 	// Menu items - manually centered
-	items := []string{"📋 Clusters"}
+	items := []string{"🌐 Browse Clusters", "📦 IIB Builds", "🎨 Themes"}
 	selectedIndex := m.mainMenu.list.Index()
 
 	for i, item := range items {
@@ -1504,16 +1832,18 @@ func (m AppModel) renderClusterList() string {
 	)
 	leftTable.SetCursor(m.clusterList.table.Cursor())
 
-	// Clean table styling
+	// Style table using theme colors
+	theme := GetCurrentTheme()
 	tableStyles := table.DefaultStyles()
 	tableStyles.Header = tableStyles.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(theme.Border).
 		BorderBottom(true).
-		Bold(true)
+		Bold(true).
+		Foreground(theme.Header)
 	tableStyles.Selected = tableStyles.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(theme.SelectionFg).
+		Background(theme.Selection).
 		Bold(false)
 	leftTable.SetStyles(tableStyles)
 
@@ -1890,16 +2220,18 @@ func (m *AppModel) setupClusterDetailTable() {
 		table.WithHeight(len(rows)),
 	)
 
-	// Style the table to look clean
+	// Style the table using theme colors
+	theme := GetCurrentTheme()
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(theme.Border).
 		BorderBottom(true).
-		Bold(false)
+		Bold(false).
+		Foreground(theme.Header)
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(theme.SelectionFg).
+		Background(theme.Selection).
 		Bold(false)
 	t.SetStyles(s)
 
@@ -1968,16 +2300,18 @@ func (m *AppModel) setupRightPaneTable(maxWidth int) {
 		// NO table.WithHeight() - let it size naturally
 	)
 
-	// Style the table
+	// Style the table using theme colors
+	theme := GetCurrentTheme()
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(theme.Border).
 		BorderBottom(true).
-		Bold(false)
+		Bold(false).
+		Foreground(theme.Header)
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(theme.SelectionFg).
+		Background(theme.Selection).
 		Bold(false)
 	t.SetStyles(s)
 
@@ -2020,4 +2354,408 @@ func (m AppModel) loadSingleClusterCmd(clusterName string) tea.Cmd {
 			loginCmd: loginCmd,
 		}
 	}
+}
+
+// Render IIB input screen
+func (m AppModel) renderIIBInput() string {
+	var content strings.Builder
+
+	// Title
+	title := "📦 IIB Builds - Enter MTV Version"
+	centeredTitle := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Render(title)
+	content.WriteString(centeredTitle + "\n\n\n")
+
+	if m.iibInput.loading {
+		// Show loading state
+		loadingText := "🔍 Loading IIB data for MTV " + m.iibInput.mtvVersion + "..."
+		centeredLoading := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Render(loadingText)
+		content.WriteString(centeredLoading + "\n\n")
+
+		spinnerView := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Render(m.iibInput.spinner.View())
+		content.WriteString(spinnerView)
+	} else {
+		// Show input field
+		inputLabel := "MTV Version:"
+		centeredLabel := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Render(inputLabel)
+		content.WriteString(centeredLabel + "\n\n")
+
+		centeredInput := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Render(m.iibInput.textInput.View())
+		content.WriteString(centeredInput + "\n\n\n")
+
+		// Instructions
+		instructions := "💡 Enter MTV version (e.g., 2.9) and press Enter • Esc to go back"
+		centeredInstructions := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Foreground(lipgloss.Color("240")).
+			Render(instructions)
+		content.WriteString(centeredInstructions)
+	}
+
+	return content.String()
+}
+
+// Render IIB display screen with three panels
+func (m AppModel) renderIIBDisplay() string {
+	if m.iibDisplay.loading {
+		var content strings.Builder
+
+		loadingText := "🔍 Loading IIB data for MTV " + m.iibDisplay.mtvVersion + "..."
+		centeredLoading := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Render(loadingText)
+		content.WriteString(centeredLoading + "\n\n")
+
+		spinnerView := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Render(m.iibDisplay.spinner.View())
+		content.WriteString(spinnerView)
+
+		return content.String()
+	}
+
+	// Three-panel layout: Build Types (25%) | OCP Versions (25%) | Details (50%)
+	totalWidth := m.width - 4
+	buildWidth := totalWidth * 25 / 100
+	ocpWidth := totalWidth * 25 / 100
+	detailWidth := totalWidth - buildWidth - ocpWidth
+
+	// Build left panel (Build Types)
+	var leftContent strings.Builder
+	leftTitle := "Build Types"
+	if m.iibDisplay.focusedPane == 0 {
+		leftTitle = "🎯 " + leftTitle
+	}
+	leftContent.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Align(lipgloss.Center).
+		Render(leftTitle) + "\n\n")
+
+	for i, buildType := range m.iibDisplay.buildTypes {
+		var icon, display string
+		if buildType == "prod" {
+			icon = "🟢"
+			display = "Production"
+		} else {
+			icon = "🟡"
+			display = "Stage"
+		}
+
+		item := icon + " " + display
+		if i == m.iibDisplay.selectedBuild {
+			item = selectedItemStyle.Render(item)
+		} else {
+			item = menuItemStyle.Render(item)
+		}
+		leftContent.WriteString(item + "\n")
+	}
+
+	// Build middle panel (OCP Versions)
+	var middleContent strings.Builder
+	middleTitle := "OCP Versions"
+	if m.iibDisplay.focusedPane == 1 {
+		middleTitle = "🎯 " + middleTitle
+	}
+	middleContent.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Align(lipgloss.Center).
+		Render(middleTitle) + "\n\n")
+
+	for i, version := range m.iibDisplay.ocpVersions {
+		item := "📋 " + version
+		if i == m.iibDisplay.selectedOCP {
+			item = selectedItemStyle.Render(item)
+		} else {
+			item = menuItemStyle.Render(item)
+		}
+		middleContent.WriteString(item + "\n")
+	}
+
+	// Build right panel (Details)
+	var rightContent strings.Builder
+	rightTitle := "IIB Details"
+	if m.iibDisplay.focusedPane == 2 {
+		rightTitle = "🎯 " + rightTitle
+	}
+	rightContent.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Align(lipgloss.Center).
+		Render(rightTitle) + "\n\n")
+
+	// Get selected build data
+	selectedBuildType := m.iibDisplay.buildTypes[m.iibDisplay.selectedBuild]
+	selectedOCPVersion := m.iibDisplay.ocpVersions[m.iibDisplay.selectedOCP]
+
+	if builds, exists := m.iibDisplay.iibData[selectedBuildType]; exists {
+		// Find build for selected OCP version
+		var selectedBuild *IIBInfo
+		for _, build := range builds {
+			if build.OCPVersion == selectedOCPVersion {
+				selectedBuild = &build
+				break
+			}
+		}
+
+		if selectedBuild != nil {
+			rightContent.WriteString(Field("MTV Version", selectedBuild.MTVVersion) + "\n")
+			rightContent.WriteString(Field("IIB", selectedBuild.IIB) + "\n")
+			rightContent.WriteString(Field("OCP Version", selectedBuild.OCPVersion) + "\n")
+			rightContent.WriteString(Field("Created", selectedBuild.Created) + "\n")
+			rightContent.WriteString(Field("Environment", selectedBuild.Environment) + "\n\n")
+			rightContent.WriteString("💡 Press Enter to copy IIB to clipboard")
+		} else {
+			rightContent.WriteString("No build available for " + selectedOCPVersion)
+		}
+	} else {
+		rightContent.WriteString("No builds available")
+	}
+
+	// Combine panels
+	leftPanel := lipgloss.NewStyle().
+		Width(buildWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1).
+		Render(leftContent.String())
+
+	middlePanel := lipgloss.NewStyle().
+		Width(ocpWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1).
+		Render(middleContent.String())
+
+	rightPanel := lipgloss.NewStyle().
+		Width(detailWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1).
+		Render(rightContent.String())
+
+	// Combine panels horizontally
+	mainContent := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, middlePanel, rightPanel)
+
+	// Add title above panels
+	var content strings.Builder
+	title := fmt.Sprintf("=== MTV %s Forklift FBC Builds ===", m.iibDisplay.mtvVersion)
+	centeredTitle := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Render(title)
+	content.WriteString(centeredTitle + "\n\n")
+
+	content.WriteString(mainContent)
+
+	// Add navigation instructions
+	content.WriteString("\n\n")
+	instructions := "Navigation: ↑/↓/j/k Navigate, Tab/←/→/h/l Switch Panel, Enter Copy, Esc Back"
+	centeredInstructions := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Foreground(lipgloss.Color("240")).
+		Render(instructions)
+	content.WriteString(centeredInstructions)
+
+	return content.String()
+}
+
+// Load IIB data command
+func (m AppModel) loadIIBDataCmd(mtvVersion string) tea.Cmd {
+	return func() tea.Msg {
+		// Check if already logged into kuflox
+		if !iibLoaderDeps.CheckKufloxLogin() {
+			// Need to login first
+			if err := iibLoaderDeps.LoginToKuflox(); err != nil {
+				return IIBDataLoadedMsg{
+					mtvVersion: mtvVersion,
+					err:        fmt.Errorf("failed to login to kuflox cluster: %w", err),
+				}
+			}
+		}
+
+		// Get production builds
+		prodBuilds, err := iibLoaderDeps.GetForkliftBuilds("prod")
+		if err != nil {
+			return IIBDataLoadedMsg{
+				mtvVersion: mtvVersion,
+				err:        fmt.Errorf("failed to get production builds: %w", err),
+			}
+		}
+
+		// Get stage builds
+		stageBuilds, err := iibLoaderDeps.GetForkliftBuilds("stage")
+		if err != nil {
+			return IIBDataLoadedMsg{
+				mtvVersion: mtvVersion,
+				err:        fmt.Errorf("failed to get stage builds: %w", err),
+			}
+		}
+
+		return IIBDataLoadedMsg{
+			mtvVersion:  mtvVersion,
+			prodBuilds:  prodBuilds,
+			stageBuilds: stageBuilds,
+		}
+	}
+}
+
+// Update OCP versions based on currently selected build type
+func (m *AppModel) updateOCPVersionsForSelectedBuildType() {
+	selectedBuildType := m.iibDisplay.buildTypes[m.iibDisplay.selectedBuild]
+
+	// Get builds for the selected build type
+	builds, exists := m.iibDisplay.iibData[selectedBuildType]
+	if !exists {
+		m.iibDisplay.ocpVersions = []string{}
+		m.iibDisplay.selectedOCP = 0
+		return
+	}
+
+	// Extract OCP versions for this build type only
+	ocpVersionsSet := make(map[string]bool)
+	for _, build := range builds {
+		ocpVersionsSet[build.OCPVersion] = true
+	}
+
+	// Convert set to sorted slice
+	var availableVersions []string
+	for version := range ocpVersionsSet {
+		availableVersions = append(availableVersions, version)
+	}
+	sort.Strings(availableVersions)
+	m.iibDisplay.ocpVersions = availableVersions
+
+	// Reset selected index if out of bounds
+	if m.iibDisplay.selectedOCP >= len(availableVersions) {
+		m.iibDisplay.selectedOCP = 0
+	}
+}
+
+// Handle IIB copy to clipboard
+func (m AppModel) handleIIBCopy() (AppModel, tea.Cmd) {
+	// Get selected build data
+	selectedBuildType := m.iibDisplay.buildTypes[m.iibDisplay.selectedBuild]
+	selectedOCPVersion := m.iibDisplay.ocpVersions[m.iibDisplay.selectedOCP]
+
+	if builds, exists := m.iibDisplay.iibData[selectedBuildType]; exists {
+		// Find build for selected OCP version
+		for _, build := range builds {
+			if build.OCPVersion == selectedOCPVersion {
+				// Copy IIB string to clipboard
+				err := clipboardWriteAll(build.IIB)
+				if err != nil {
+					return m, showNotification("Failed to copy to clipboard: "+err.Error(), true)
+				}
+				return m, showNotification("📋 IIB copied to clipboard: "+build.IIB, false)
+			}
+		}
+	}
+
+	return m, showNotification("No IIB data to copy", true)
+}
+
+// Handle theme selection and apply the new theme
+func (m AppModel) handleThemeSelection() (AppModel, tea.Cmd) {
+	selectedThemeName := m.themeSelection.themes[m.themeSelection.selectedIdx]
+
+	// Don't change if it's already the current theme
+	if selectedThemeName == m.themeSelection.currentTheme {
+		return m, showNotification("Theme is already active", false)
+	}
+
+	// Apply the new theme
+	newTheme := GetThemeByName(selectedThemeName)
+	if newTheme != nil {
+		SetTheme(*newTheme)
+		UpdateStyles()
+		m.themeSelection.currentTheme = selectedThemeName
+		return m, showNotification(fmt.Sprintf("🎨 Applied %s theme", selectedThemeName), false)
+	}
+
+	return m, showNotification("Failed to apply theme", true)
+}
+
+// Render theme selection screen
+func (m AppModel) renderThemeSelection() string {
+	var content strings.Builder
+
+	// Theme selection title - centered
+	title := "🎨 Theme Selection"
+	centeredTitle := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Bold(true).
+		Foreground(lipgloss.Color("32")).
+		Render(title)
+	content.WriteString(centeredTitle + "\n\n\n")
+
+	// Current theme indicator
+	currentThemeText := fmt.Sprintf("Current: %s", m.themeSelection.currentTheme)
+	centeredCurrent := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Foreground(lipgloss.Color("33")).
+		Render(currentThemeText)
+	content.WriteString(centeredCurrent + "\n\n")
+
+	// Theme items - manually centered
+	for i, themeName := range m.themeSelection.themes {
+		var indicator string
+		if themeName == m.themeSelection.currentTheme {
+			indicator = "✅ "
+		} else {
+			indicator = "   "
+		}
+
+		var styledItem string
+		itemText := indicator + themeName
+		if i == m.themeSelection.selectedIdx {
+			styledItem = selectedItemStyle.Render(itemText)
+		} else {
+			styledItem = menuItemStyle.Render(itemText)
+		}
+
+		// Center each theme item
+		centeredItem := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center).
+			Render(styledItem)
+		content.WriteString(centeredItem + "\n")
+	}
+
+	// Add instructions
+	content.WriteString("\n\n")
+	instructions := "💡 Use ↑↓ to navigate • Enter to apply theme • Esc to go back"
+	centeredInstructions := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center).
+		Foreground(lipgloss.Color("240")).
+		Render(instructions)
+	content.WriteString(centeredInstructions)
+
+	return content.String()
 }

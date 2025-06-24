@@ -475,6 +475,318 @@ func TestMtvResourcesCommand_Basic(t *testing.T) {
 	assert.Contains(t, output, "    mtv-api-plan-2   2d")
 }
 
+// ========== GET-IIB TESTS ==========
+
+func TestGetIIBCommand_NoArguments(t *testing.T) {
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"get-iib"})
+	err := rootCmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "accepts 1 arg(s), received 0")
+}
+
+func TestGetIIBCommand_InvalidMTVVersion(t *testing.T) {
+	// Mock execCommand to prevent any real system calls
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		return &execCmdAdapter{output: "", fail: false}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	// Mock checkKufloxLogin to return true (already logged in)
+	originalCheckKufloxLogin := checkKufloxLogin
+	checkKufloxLogin = func() bool { return true }
+	defer func() { checkKufloxLogin = originalCheckKufloxLogin }()
+
+	// Mock getForkliftBuilds to return empty results to avoid actual API calls
+	originalGetForkliftBuilds := getForkliftBuilds
+	getForkliftBuilds = func(environment string) ([]IIBInfo, error) {
+		return []IIBInfo{}, nil
+	}
+	defer func() { getForkliftBuilds = originalGetForkliftBuilds }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"get-iib", "invalid"})
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Retrieving MTV invalid builds from kuflox cluster")
+}
+
+func TestGetIIBCommand_ForceLoginFlag(t *testing.T) {
+	// Mock execCommand to prevent any real system calls
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		return &execCmdAdapter{output: "", fail: false}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	// Mock checkKufloxLogin to return true (already logged in)
+	originalCheckKufloxLogin := checkKufloxLogin
+	checkKufloxLogin = func() bool { return true }
+	defer func() { checkKufloxLogin = originalCheckKufloxLogin }()
+
+	// Mock getForkliftBuilds to return empty results to avoid actual API calls
+	originalGetForkliftBuilds := getForkliftBuilds
+	getForkliftBuilds = func(environment string) ([]IIBInfo, error) {
+		return []IIBInfo{}, nil
+	}
+	defer func() { getForkliftBuilds = originalGetForkliftBuilds }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"get-iib", "2.9", "--force-login"})
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Force login requested, re-authenticating...")
+}
+
+func TestGetIIBCommand_AlreadyLoggedIn(t *testing.T) {
+	// Mock execCommand to prevent any real system calls
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		return &execCmdAdapter{output: "", fail: false}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	// Mock checkKufloxLogin to return true (already logged in)
+	originalCheckKufloxLogin := checkKufloxLogin
+	checkKufloxLogin = func() bool { return true }
+	defer func() { checkKufloxLogin = originalCheckKufloxLogin }()
+
+	// Mock getForkliftBuilds to return empty results to avoid actual API calls
+	originalGetForkliftBuilds := getForkliftBuilds
+	getForkliftBuilds = func(environment string) ([]IIBInfo, error) {
+		return []IIBInfo{}, nil
+	}
+	defer func() { getForkliftBuilds = originalGetForkliftBuilds }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"get-iib", "2.9"})
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Successfully connected to kuflox cluster")
+}
+
+func TestGetIIBCommand_WithMockBuilds(t *testing.T) {
+	// Mock execCommand to prevent any real system calls
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		return &execCmdAdapter{output: "", fail: false}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	// Mock checkKufloxLogin to return true (already logged in)
+	originalCheckKufloxLogin := checkKufloxLogin
+	checkKufloxLogin = func() bool { return true }
+	defer func() { checkKufloxLogin = originalCheckKufloxLogin }()
+
+	// Mock getForkliftBuilds to return test data
+	originalGetForkliftBuilds := getForkliftBuilds
+	getForkliftBuilds = func(environment string) ([]IIBInfo, error) {
+		switch environment {
+		case "prod":
+			return []IIBInfo{
+				{
+					OCPVersion:  "4.17",
+					MTVVersion:  "2.9",
+					IIB:         "forklift-fbc-prod-v417:on-pr-abc123",
+					Snapshot:    "forklift-fbc-prod-v417-xyz",
+					Created:     "2024-01-15 10:30:45 EST",
+					Image:       "quay.io/konveyor/forklift-fbc-prod:v417",
+					Environment: "prod",
+				},
+				{
+					OCPVersion:  "4.18",
+					MTVVersion:  "2.9",
+					IIB:         "forklift-fbc-prod-v418:on-pr-def456",
+					Snapshot:    "forklift-fbc-prod-v418-xyz",
+					Created:     "2024-01-15 11:45:22 EST",
+					Image:       "quay.io/konveyor/forklift-fbc-prod:v418",
+					Environment: "prod",
+				},
+			}, nil
+		case "stage":
+			return []IIBInfo{
+				{
+					OCPVersion:  "4.17",
+					MTVVersion:  "2.9",
+					IIB:         "forklift-fbc-stage-v417:on-pr-ghi789",
+					Snapshot:    "forklift-fbc-stage-v417-xyz",
+					Created:     "2024-01-15 09:15:30 EST",
+					Image:       "quay.io/konveyor/forklift-fbc-stage:v417",
+					Environment: "stage",
+				},
+			}, nil
+		}
+		return []IIBInfo{}, nil
+	}
+	defer func() { getForkliftBuilds = originalGetForkliftBuilds }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"get-iib", "2.9"})
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+	output := buf.String()
+
+	// Check title and summary
+	assert.Contains(t, output, "=== MTV 2.9 Forklift FBC Builds ===")
+	assert.Contains(t, output, "Summary: Found 2 production and 1 stage builds")
+
+	// Check production builds section
+	assert.Contains(t, output, "📦 PRODUCTION BUILDS:")
+	assert.Contains(t, output, "OpenShift 4.17:")
+	assert.Contains(t, output, "OpenShift 4.18:")
+	assert.Contains(t, output, "IIB: forklift-fbc-prod-v417:on-pr-abc123")
+	assert.Contains(t, output, "IIB: forklift-fbc-prod-v418:on-pr-def456")
+	assert.Contains(t, output, "Created: 2024-01-15 10:30:45 EST")
+	assert.Contains(t, output, "Created: 2024-01-15 11:45:22 EST")
+
+	// Check stage builds section
+	assert.Contains(t, output, "📦 STAGE BUILDS:")
+	assert.Contains(t, output, "IIB: forklift-fbc-stage-v417:on-pr-ghi789")
+	assert.Contains(t, output, "Created: 2024-01-15 09:15:30 EST")
+}
+
+func TestGetIIBCommand_LoginFailure(t *testing.T) {
+	// Mock execCommand to prevent any real system calls
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		return &execCmdAdapter{output: "", fail: false}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	// Mock checkKufloxLogin to return false (not logged in)
+	originalCheckKufloxLogin := checkKufloxLogin
+	checkKufloxLogin = func() bool { return false }
+	defer func() { checkKufloxLogin = originalCheckKufloxLogin }()
+
+	// Mock loginToKuflox to fail
+	originalLoginToKuflox := loginToKuflox
+	loginToKuflox = func() error { return fmt.Errorf("login failed") }
+	defer func() { loginToKuflox = originalLoginToKuflox }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"get-iib", "2.9"})
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Failed to login to kuflox cluster: login failed")
+}
+
+func TestGetIIBCommand_GetBuildsFailure(t *testing.T) {
+	// Mock execCommand to prevent any real system calls
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		return &execCmdAdapter{output: "", fail: false}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	// Mock checkKufloxLogin to return true (already logged in)
+	originalCheckKufloxLogin := checkKufloxLogin
+	checkKufloxLogin = func() bool { return true }
+	defer func() { checkKufloxLogin = originalCheckKufloxLogin }()
+
+	// Mock getForkliftBuilds to fail for production builds
+	originalGetForkliftBuilds := getForkliftBuilds
+	getForkliftBuilds = func(environment string) ([]IIBInfo, error) {
+		if environment == "prod" {
+			return nil, fmt.Errorf("failed to connect to kuflox")
+		}
+		return []IIBInfo{}, nil
+	}
+	defer func() { getForkliftBuilds = originalGetForkliftBuilds }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"get-iib", "2.9"})
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Failed to get production builds: failed to connect to kuflox")
+}
+
+func TestCheckKufloxLogin_AlreadyLoggedIn(t *testing.T) {
+	// Mock execCommand for successful kuflox check
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		if name == "oc" && len(args) >= 2 && args[0] == "whoami" && args[1] == "--show-server" {
+			return &execCmdAdapter{output: "https://api.stone-prd-rh01.pg1f.p1.openshiftapps.com:6443"}
+		}
+		if name == "oc" && len(args) >= 2 && args[0] == "project" && args[1] == "-q" {
+			return &execCmdAdapter{output: "rh-mtv-1-tenant"}
+		}
+		return &execCmdAdapter{output: "", fail: true}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	result := checkKufloxLogin()
+	assert.True(t, result)
+}
+
+func TestCheckKufloxLogin_WrongCluster(t *testing.T) {
+	// Mock execCommand for wrong cluster
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		if name == "oc" && len(args) >= 2 && args[0] == "whoami" && args[1] == "--show-server" {
+			return &execCmdAdapter{output: "https://api.different-cluster.com:6443"}
+		}
+		return &execCmdAdapter{output: "", fail: true}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	result := checkKufloxLogin()
+	assert.False(t, result)
+}
+
+func TestCheckKufloxLogin_WrongProject(t *testing.T) {
+	// Mock execCommand for wrong project
+	originalExecCommand := execCommand
+	execCommand = func(name string, args ...string) CmdRunner {
+		if name == "oc" && len(args) >= 2 && args[0] == "whoami" && args[1] == "--show-server" {
+			return &execCmdAdapter{output: "https://api.stone-prd-rh01.pg1f.p1.openshiftapps.com:6443"}
+		}
+		if name == "oc" && len(args) >= 2 && args[0] == "project" && args[1] == "-q" {
+			return &execCmdAdapter{output: "default"}
+		}
+		return &execCmdAdapter{output: "", fail: true}
+	}
+	defer func() { execCommand = originalExecCommand }()
+
+	result := checkKufloxLogin()
+	assert.False(t, result)
+}
+
+func TestIIBInfo_StructFields(t *testing.T) {
+	iib := IIBInfo{
+		OCPVersion:  "4.17",
+		MTVVersion:  "2.9",
+		IIB:         "forklift-fbc-prod-v417:on-pr-abc123",
+		Snapshot:    "forklift-fbc-prod-v417-snapshot",
+		Created:     "2024-01-15 10:30:45 EST",
+		Image:       "quay.io/konveyor/forklift-fbc-prod:v417",
+		Environment: "prod",
+	}
+
+	assert.Equal(t, "4.17", iib.OCPVersion)
+	assert.Equal(t, "2.9", iib.MTVVersion)
+	assert.Equal(t, "forklift-fbc-prod-v417:on-pr-abc123", iib.IIB)
+	assert.Equal(t, "forklift-fbc-prod-v417-snapshot", iib.Snapshot)
+	assert.Equal(t, "2024-01-15 10:30:45 EST", iib.Created)
+	assert.Equal(t, "quay.io/konveyor/forklift-fbc-prod:v417", iib.Image)
+	assert.Equal(t, "prod", iib.Environment)
+}
+
 func TestMtvResourcesCommand_WithMocks(t *testing.T) {
 	// Mock ensureLoggedIn
 	origEnsureLoggedIn := ensureLoggedIn

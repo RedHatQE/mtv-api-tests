@@ -9,7 +9,7 @@ performance, reliability, and an interactive Text User Interface (TUI).
 - **📟 Interactive TUI**: Beautiful terminal interface for cluster management
 - **⚡ High Performance**: Concurrent operations and efficient cluster processing
 - **🎯 Complete CLI**: Full command-line interface with tab completion
-- **✅ Comprehensive Testing**: 50+ tests covering all functionality
+- **✅ Comprehensive Testing**: Extensive test coverage for all functionality
 - **🔄 Manual Refresh**: On-demand cluster status updates and selective refresh
 
 The tool is built from multiple well-organized Go files:
@@ -45,6 +45,7 @@ The tool is built from multiple well-organized Go files:
    ./mtv-dev list-clusters --full
    ./mtv-dev cluster-login qemtv-01
    ./mtv-dev run-tests qemtv-02 vmware8-ceph-remote
+   ./mtv-dev get-iib 2.9
    ```
 
 4. **Enable tab completion:**
@@ -103,6 +104,9 @@ The tool features a modern, interactive TUI for cluster management. Launch it wi
 - **🔍 Search**: Quick cluster filtering with `/` key
 - **📋 Copy Integration**: Copy cluster details, passwords, and login commands to clipboard
 - **🎨 Color-coded Status**: Visual indicators for cluster accessibility and health
+- **📦 IIB Build Browser**: Interactive interface to browse and copy Forklift FBC builds by MTV version
+- **🎨 Theme Selection**: Multiple themes (Dark, Light, Blue, Neon, Classic Light) with live switching
+- **🔧 Smart Filtering**: Dynamic OCP version filtering based on available builds for selected environment
 
 ### TUI Keyboard Shortcuts
 
@@ -133,6 +137,38 @@ The TUI provides a clean, organized view:
 - IIB (Index Image Bundle) details
 - kubeadmin password and login command
 - Copy any field with Enter key
+
+### IIB Builds Interface
+
+The TUI includes a dedicated interface for browsing Forklift FBC (File-Based Catalog) builds:
+
+**Features:**
+
+- Interactive MTV version input with validation
+- Real-time build data from kuflox cluster
+- Three-pane layout: Build Types (prod/stage) | OCP Versions | Build Details
+- Dynamic OCP version filtering based on selected build type
+- One-click IIB copy to clipboard
+- Automatic kuflox authentication with SSO support
+
+**Navigation:**
+
+- Enter MTV version (e.g., "2.9") and press Enter
+- Use Tab/Shift+Tab or arrow keys to navigate between panes
+- Press Enter to copy selected IIB build to clipboard
+- Press Esc to go back to previous screen
+
+### Theme Selection
+
+Choose from multiple professionally designed themes:
+
+- **Dark** (default): Elegant dark theme with muted colors
+- **Light**: Clean light theme with high contrast
+- **Classic Light**: Traditional light theme with pure black text
+- **Blue**: GitHub-inspired dark blue theme
+- **Neon**: Retro terminal theme with bright accent colors
+
+Access via main menu → "🎨 Themes" → Select theme → Press Enter to apply
 
 ## Installation
 
@@ -170,10 +206,10 @@ You can also run it directly from the current directory:
 
 ## Testing
 
-The project has comprehensive test coverage with **50+ tests** across multiple test suites:
+The project has comprehensive test coverage across multiple test suites:
 
-- **29 main package tests** (`main_test.go`) - CLI commands, validation, error handling
-- **21 TUI tests** (`tui/models_test.go`) - Interface, interaction, state management
+- **Main package tests** (`main_test.go`) - CLI commands, validation, error handling, IIB functionality
+- **TUI tests** (`tui/models_test.go`) - Interface, interaction, state management, IIB functionality, theme system
 
 ### Quick Test Commands
 
@@ -205,6 +241,7 @@ tools/dev/
 │   ├── Command validation tests
 │   ├── Error handling tests  
 │   ├── Flag and argument tests
+│   ├── IIB functionality tests (get-iib command)
 │   ├── Mock dependency tests
 │   └── Integration tests
 └── tui/
@@ -213,6 +250,8 @@ tools/dev/
         ├── Message handling tests
         ├── View rendering tests
         ├── Key binding tests
+        ├── IIB TUI functionality tests
+        ├── Theme system tests
         ├── Performance tests
         └── Error handling tests
 ```
@@ -248,6 +287,7 @@ The tool supports comprehensive tab completion for commands, flags, and argument
 - **Provider types**: Completion for `--provider` flag (vmware6, vmware7, vmware8, ovirt, openstack, ova)
 - **Storage types**: Completion for `--storage` flag (ceph, nfs, csi)  
 - **Template names**: Completion for run-tests templates (vmware8-ceph-remote, etc.)
+- **MTV versions**: Completion for get-iib MTV version argument (2.9, etc.)
 - **Shell types**: Completion for completion script generation (bash, zsh)
 
 **Examples of tab completion in action:**
@@ -257,6 +297,7 @@ The tool supports comprehensive tab completion for commands, flags, and argument
 ./mtv-dev run-tests qemtv-01 <TAB>  # Shows available templates
 ./mtv-dev run-tests qemtv-01 --provider <TAB>   # Shows: vmware6 vmware7 vmware8 ovirt openstack ova
 ./mtv-dev run-tests qemtv-01 --storage <TAB>    # Shows: ceph csi nfs
+./mtv-dev get-iib <TAB>             # Shows available MTV versions: 2.9
 ./mtv-dev cluster-password <TAB>    # Shows available cluster names
 ```
 
@@ -294,15 +335,17 @@ echo 'source <(mtv-dev completion zsh)' >> ~/.zshrc
 
 ## Features
 
-- **🖥️ Interactive TUI**: Modern terminal interface for cluster management
+- **🖥️ Interactive TUI**: Modern terminal interface for cluster management and IIB build browsing
 - **⚡ High Performance**: Concurrent cluster processing and efficient operations
 - **🎯 Complete CLI**: Full command-line interface with comprehensive tab completion
 - **🔄 Manual Refresh**: On-demand cluster updates and selective refresh capabilities
-- **📋 Clipboard Integration**: Copy passwords, login commands, and cluster details
+- **📋 Clipboard Integration**: Copy passwords, login commands, cluster details, and IIB builds
 - **🎨 Color-coded Output**: Visual indicators for success (green), errors (red), warnings (yellow)
 - **🗂️ Automatic NFS Mounting**: Seamless cluster credentials NFS share management
 - **🔧 Automatic Tool Setup**: Ceph commands automatically enable required cluster tools
-- **✅ Comprehensive Testing**: 50+ tests ensuring reliability and stability
+- **📦 IIB Build Retrieval**: Extract latest Forklift FBC builds from kuflox cluster with SSO support
+- **🎨 Theme System**: Multiple UI themes with live switching and consistent styling
+- **✅ Comprehensive Testing**: Extensive test coverage ensuring reliability and stability
 
 ## Command Reference
 
@@ -374,6 +417,48 @@ Most commands require a `<cluster-name>` argument (e.g., `qemtv-01`).
 - **`ceph-cleanup <cluster-name>`**: Attempt to run ceph cleanup commands (automatically enables ceph tools if needed).
   - `--execute`: Execute the cleanup commands instead of just printing them.
 
+- **`get-iib <mtv-version>`**: Extract latest Forklift FBC (File-Based Catalog) builds from the kuflox cluster.
+  - Retrieves both production and stage builds for the specified MTV version (e.g., `2.9`).
+  - Shows build information including OCP version, IIB format, and creation timestamps.
+  - `--force-login`: Force re-authentication to kuflox cluster even if already logged in.
+  - Supports SSO authentication with valid kerberos tickets (run `kinit` for SSO).
+  - Example usage:
+
+    ```bash
+    ./mtv-dev get-iib 2.9
+    ./mtv-dev get-iib 2.9 --force-login
+    ```
+
+  - **Sample Output:**
+
+    ```text
+    === MTV 2.9 Forklift FBC Builds ===
+
+    📦 PRODUCTION BUILDS:
+
+      OpenShift 4.17:
+        Full MTV version: 2.9
+        IIB: forklift-fbc-prod-v417:on-pr-abc123def456
+        OCP version: 4.17
+        Created: 2024-01-15 10:30:45 EST
+
+      OpenShift 4.18:
+        Full MTV version: 2.9
+        IIB: forklift-fbc-prod-v418:on-pr-def456ghi789
+        OCP version: 4.18
+        Created: 2024-01-15 11:45:22 EST
+
+    📦 STAGE BUILDS:
+
+      OpenShift 4.17:
+        Full MTV version: 2.9
+        IIB: forklift-fbc-stage-v417:on-pr-ghi789abc123
+        OCP version: 4.17
+        Created: 2024-01-15 09:15:30 EST
+
+    Summary: Found 2 production and 1 stage builds
+    ```
+
 - **`completion [bash|zsh|fish|powershell]`**: Generate the autocompletion script for the specified shell.
 
 ---
@@ -387,4 +472,4 @@ legacy scripts but is recommended for better performance, reliability, and user 
 If you need to use the legacy scripts for any reason, they can be found in:
 
 - `legacy/dev-tools.sh`
-- `legacy/build_run_tests_command.py`  
+- `legacy/build_run_tests_command.py`

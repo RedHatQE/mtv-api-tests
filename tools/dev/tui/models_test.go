@@ -489,6 +489,505 @@ func TestAppModel_InternalState_Access(t *testing.T) {
 	assert.Equal(t, 30, model.height)
 }
 
+// ========== IIB DEPENDENCY INJECTION TESTS ==========
+
+// Mock IIB dependencies for testing
+type mockIIBLoaderDeps struct {
+	prodBuilds      []IIBInfo
+	stageBuilds     []IIBInfo
+	shouldFail      map[string]bool
+	loginStatus     bool
+	loginShouldFail bool
+}
+
+func (m *mockIIBLoaderDeps) GetForkliftBuilds(environment string) ([]IIBInfo, error) {
+	if m.shouldFail[environment] {
+		return nil, fmt.Errorf("failed to get %s builds", environment)
+	}
+
+	switch environment {
+	case "prod":
+		return m.prodBuilds, nil
+	case "stage":
+		return m.stageBuilds, nil
+	default:
+		return []IIBInfo{}, nil
+	}
+}
+
+func (m *mockIIBLoaderDeps) CheckKufloxLogin() bool {
+	return m.loginStatus
+}
+
+func (m *mockIIBLoaderDeps) LoginToKuflox() error {
+	if m.loginShouldFail {
+		return fmt.Errorf("kuflox login failed")
+	}
+	m.loginStatus = true
+	return nil
+}
+
+// Helper to create mock IIB dependencies
+func createMockIIBDeps() *mockIIBLoaderDeps {
+	return &mockIIBLoaderDeps{
+		prodBuilds: []IIBInfo{
+			{
+				OCPVersion:  "4.17",
+				MTVVersion:  "2.9",
+				IIB:         "forklift-fbc-prod-v417:on-pr-abc123",
+				Snapshot:    "forklift-fbc-prod-v417-snapshot",
+				Created:     "2024-01-15 10:30:45 EST",
+				Image:       "quay.io/konveyor/forklift-fbc-prod:v417",
+				Environment: "Production",
+			},
+			{
+				OCPVersion:  "4.19",
+				MTVVersion:  "2.9",
+				IIB:         "forklift-fbc-prod-v419:on-pr-def456",
+				Snapshot:    "forklift-fbc-prod-v419-snapshot",
+				Created:     "2024-01-15 11:45:22 EST",
+				Image:       "quay.io/konveyor/forklift-fbc-prod:v419",
+				Environment: "Production",
+			},
+		},
+		stageBuilds: []IIBInfo{
+			{
+				OCPVersion:  "4.17",
+				MTVVersion:  "2.9",
+				IIB:         "forklift-fbc-stage-v417:on-pr-ghi789",
+				Snapshot:    "forklift-fbc-stage-v417-snapshot",
+				Created:     "2024-01-15 09:15:30 EST",
+				Image:       "quay.io/konveyor/forklift-fbc-stage:v417",
+				Environment: "Stage",
+			},
+		},
+		shouldFail:      make(map[string]bool),
+		loginStatus:     true,
+		loginShouldFail: false,
+	}
+}
+
+func TestIIBDependencyInjection_Basic(t *testing.T) {
+	// Test that we can inject IIB dependencies
+	mockIIBDeps := createMockIIBDeps()
+	SetIIBLoaderDeps(mockIIBDeps)
+
+	// Test that dependencies work
+	prodBuilds, err := mockIIBDeps.GetForkliftBuilds("prod")
+	assert.NoError(t, err)
+	assert.Len(t, prodBuilds, 2)
+	assert.Equal(t, "4.17", prodBuilds[0].OCPVersion)
+	assert.Equal(t, "4.19", prodBuilds[1].OCPVersion)
+
+	stageBuilds, err := mockIIBDeps.GetForkliftBuilds("stage")
+	assert.NoError(t, err)
+	assert.Len(t, stageBuilds, 1)
+	assert.Equal(t, "4.17", stageBuilds[0].OCPVersion)
+
+	// Test login functionality
+	assert.True(t, mockIIBDeps.CheckKufloxLogin())
+	assert.NoError(t, mockIIBDeps.LoginToKuflox())
+}
+
+func TestIIBDependencyInjection_ErrorScenarios(t *testing.T) {
+	// Test error scenarios for IIB dependencies
+	mockIIBDeps := createMockIIBDeps()
+	mockIIBDeps.shouldFail["prod"] = true
+	mockIIBDeps.loginShouldFail = true
+	mockIIBDeps.loginStatus = false
+
+	SetIIBLoaderDeps(mockIIBDeps)
+
+	// Test production builds failure
+	_, err := mockIIBDeps.GetForkliftBuilds("prod")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get prod builds")
+
+	// Test stage builds still work
+	stageBuilds, err := mockIIBDeps.GetForkliftBuilds("stage")
+	assert.NoError(t, err)
+	assert.Len(t, stageBuilds, 1)
+
+	// Test login failure
+	assert.False(t, mockIIBDeps.CheckKufloxLogin())
+	err = mockIIBDeps.LoginToKuflox()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "kuflox login failed")
+}
+
+// ========== IIB SCREEN NAVIGATION TESTS ==========
+
+func TestAppModel_IIBScreenNavigation(t *testing.T) {
+	// Setup with both cluster and IIB mocks
+	mockClusterDeps := createMockTUIDeps()
+	mockIIBDeps := createMockIIBDeps()
+	SetClusterLoaderDeps(mockClusterDeps)
+	SetIIBLoaderDeps(mockIIBDeps)
+
+	model := NewAppModel()
+
+	// Set window size
+	windowMsg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	modelInterface, _ := model.Update(windowMsg)
+	model = modelInterface.(AppModel)
+
+	// Check initial state
+	assert.Equal(t, MainMenuScreen, model.screen)
+
+	// Directly test navigation by calling the handler for IIB builds
+	model.mainMenu.list.Select(1) // Select IIB Builds (index 1)
+
+	// Now press Enter to navigate to IIB input screen
+	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	modelInterface, _ = model.Update(enterMsg)
+	model = modelInterface.(AppModel)
+
+	// Should be on IIB input screen
+	assert.Equal(t, IIBInputScreen, model.screen)
+
+	// Test that the view renders without panic
+	view := model.View()
+	assert.NotEmpty(t, view)
+	assert.Contains(t, view, "IIB Builds")
+	assert.Contains(t, view, "MTV Version")
+}
+
+func TestAppModel_IIBInputToDisplay(t *testing.T) {
+	// Setup mocks
+	mockClusterDeps := createMockTUIDeps()
+	mockIIBDeps := createMockIIBDeps()
+	SetClusterLoaderDeps(mockClusterDeps)
+	SetIIBLoaderDeps(mockIIBDeps)
+
+	model := NewAppModel()
+	model.screen = IIBInputScreen // Jump directly to input screen
+	model.width = 120
+	model.height = 40
+
+	// Set MTV version in input
+	model.iibInput.textInput.SetValue("2.9")
+
+	// Press Enter to submit
+	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	modelInterface, cmd := model.Update(enterMsg)
+	model = modelInterface.(AppModel)
+
+	// Should transition to display screen
+	assert.Equal(t, IIBDisplayScreen, model.screen)
+	assert.Equal(t, "2.9", model.iibDisplay.mtvVersion)
+	assert.True(t, model.iibDisplay.loading)
+	assert.NotNil(t, cmd) // Should return spinner tick command
+
+	// Simulate IIB data loaded
+	iibDataMsg := IIBDataLoadedMsg{
+		mtvVersion:  "2.9",
+		prodBuilds:  mockIIBDeps.prodBuilds,
+		stageBuilds: mockIIBDeps.stageBuilds,
+		err:         nil,
+	}
+
+	modelInterface, cmd = model.Update(iibDataMsg)
+	model = modelInterface.(AppModel)
+
+	// Should finish loading
+	assert.False(t, model.iibDisplay.loading)
+	assert.NotNil(t, cmd) // Should return notification command
+
+	// Test the view
+	view := model.View()
+	assert.NotEmpty(t, view)
+	assert.Contains(t, view, "MTV 2.9 Forklift FBC Builds")
+}
+
+// ========== DYNAMIC OCP VERSION FILTERING TESTS ==========
+
+func TestAppModel_DynamicOCPVersionFiltering(t *testing.T) {
+	// Setup model with mock data
+	model := NewAppModel()
+	model.screen = IIBDisplayScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup test data with different OCP versions for prod vs stage
+	model.iibDisplay.buildTypes = []string{"prod", "stage"}
+	model.iibDisplay.iibData = map[string][]IIBInfo{
+		"prod": {
+			{OCPVersion: "4.17", MTVVersion: "2.9", IIB: "prod-417"},
+			{OCPVersion: "4.19", MTVVersion: "2.9", IIB: "prod-419"},
+		},
+		"stage": {
+			{OCPVersion: "4.17", MTVVersion: "2.9", IIB: "stage-417"},
+		},
+	}
+
+	// Initially should show prod versions (4.17, 4.19)
+	model.iibDisplay.selectedBuild = 0 // prod
+	model.updateOCPVersionsForSelectedBuildType()
+
+	assert.Len(t, model.iibDisplay.ocpVersions, 2)
+	assert.Contains(t, model.iibDisplay.ocpVersions, "4.17")
+	assert.Contains(t, model.iibDisplay.ocpVersions, "4.19")
+
+	// Switch to stage - should only show 4.17
+	model.iibDisplay.selectedBuild = 1 // stage
+	model.updateOCPVersionsForSelectedBuildType()
+
+	assert.Len(t, model.iibDisplay.ocpVersions, 1)
+	assert.Contains(t, model.iibDisplay.ocpVersions, "4.17")
+	assert.NotContains(t, model.iibDisplay.ocpVersions, "4.19")
+
+	// Selected OCP index should be reset to 0
+	assert.Equal(t, 0, model.iibDisplay.selectedOCP)
+}
+
+func TestAppModel_OCPVersionFiltering_EmptyBuildType(t *testing.T) {
+	// Test filtering when build type has no builds
+	model := NewAppModel()
+	model.screen = IIBDisplayScreen
+
+	model.iibDisplay.buildTypes = []string{"prod", "stage"}
+	model.iibDisplay.iibData = map[string][]IIBInfo{
+		"prod": {
+			{OCPVersion: "4.17", MTVVersion: "2.9", IIB: "prod-417"},
+		},
+		"stage": {}, // Empty stage builds
+	}
+
+	// Select stage (empty)
+	model.iibDisplay.selectedBuild = 1
+	model.updateOCPVersionsForSelectedBuildType()
+
+	// Should have no OCP versions
+	assert.Len(t, model.iibDisplay.ocpVersions, 0)
+	assert.Equal(t, 0, model.iibDisplay.selectedOCP)
+}
+
+func TestAppModel_OCPVersionFiltering_Navigation(t *testing.T) {
+	// Test that OCP versions update when navigating build types
+	model := NewAppModel()
+	model.screen = IIBDisplayScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup test data
+	model.iibDisplay.buildTypes = []string{"prod", "stage"}
+	model.iibDisplay.iibData = map[string][]IIBInfo{
+		"prod": {
+			{OCPVersion: "4.17", MTVVersion: "2.9", IIB: "prod-417"},
+			{OCPVersion: "4.18", MTVVersion: "2.9", IIB: "prod-418"},
+		},
+		"stage": {
+			{OCPVersion: "4.19", MTVVersion: "2.9", IIB: "stage-419"},
+		},
+	}
+
+	// Start with prod selected
+	model.iibDisplay.selectedBuild = 0
+	model.iibDisplay.focusedPane = 0 // Focus on build types
+	model.updateOCPVersionsForSelectedBuildType()
+
+	// Should show prod versions
+	assert.Len(t, model.iibDisplay.ocpVersions, 2)
+	assert.Contains(t, model.iibDisplay.ocpVersions, "4.17")
+	assert.Contains(t, model.iibDisplay.ocpVersions, "4.18")
+
+	// Navigate down in build types (moves from prod to stage)
+	downMsg := tea.KeyMsg{Type: tea.KeyDown}
+	modelInterface, _ := model.Update(downMsg)
+	model = modelInterface.(AppModel)
+
+	// Should now show stage versions
+	assert.Len(t, model.iibDisplay.ocpVersions, 1)
+	assert.Contains(t, model.iibDisplay.ocpVersions, "4.19")
+	assert.NotContains(t, model.iibDisplay.ocpVersions, "4.17")
+	assert.NotContains(t, model.iibDisplay.ocpVersions, "4.18")
+}
+
+// ========== IIB ERROR HANDLING TESTS ==========
+
+func TestAppModel_IIBErrorHandling_LoginFailure(t *testing.T) {
+	// Setup mocks with login failure
+	mockClusterDeps := createMockTUIDeps()
+	mockIIBDeps := createMockIIBDeps()
+	mockIIBDeps.loginStatus = false
+	mockIIBDeps.loginShouldFail = true
+
+	SetClusterLoaderDeps(mockClusterDeps)
+	SetIIBLoaderDeps(mockIIBDeps)
+
+	model := NewAppModel()
+	model.screen = IIBDisplayScreen
+	model.width = 120
+	model.height = 40
+
+	// Simulate loading IIB data with login failure
+	// This would normally be triggered by entering MTV version and pressing Enter
+
+	// Manually trigger the loadIIBDataCmd to test error handling
+	cmd := model.loadIIBDataCmd("2.9")
+
+	// Execute the command to get the result
+	msg := cmd()
+
+	// Should be an error message
+	iibMsg, ok := msg.(IIBDataLoadedMsg)
+	assert.True(t, ok)
+	assert.Error(t, iibMsg.err)
+	assert.Contains(t, iibMsg.err.Error(), "kuflox login failed")
+
+	// Update model with error message
+	modelInterface, _ := model.Update(iibMsg)
+	model = modelInterface.(AppModel)
+
+	// Should show error
+	assert.NotEmpty(t, model.error)
+	assert.Contains(t, model.error, "Failed to load IIB data")
+}
+
+func TestAppModel_IIBErrorHandling_BuildsFailure(t *testing.T) {
+	// Setup mocks with builds failure
+	mockClusterDeps := createMockTUIDeps()
+	mockIIBDeps := createMockIIBDeps()
+	mockIIBDeps.shouldFail["prod"] = true
+
+	SetClusterLoaderDeps(mockClusterDeps)
+	SetIIBLoaderDeps(mockIIBDeps)
+
+	model := NewAppModel()
+	model.screen = IIBDisplayScreen
+
+	// Trigger loading with production failure
+	cmd := model.loadIIBDataCmd("2.9")
+	msg := cmd()
+
+	// Should be an error message
+	iibMsg, ok := msg.(IIBDataLoadedMsg)
+	assert.True(t, ok)
+	assert.Error(t, iibMsg.err)
+	assert.Contains(t, iibMsg.err.Error(), "failed to get production builds")
+
+	// Update model with error message
+	modelInterface, _ := model.Update(iibMsg)
+	model = modelInterface.(AppModel)
+
+	// Should show error
+	assert.NotEmpty(t, model.error)
+	assert.Contains(t, model.error, "Failed to load IIB data")
+}
+
+// ========== IIB SPINNER TESTS ==========
+
+func TestAppModel_IIBSpinnerBehavior(t *testing.T) {
+	// Test that the correct spinner is used for IIB loading
+	model := NewAppModel()
+	model.screen = IIBInputScreen
+	model.width = 120
+	model.height = 40
+
+	// Set MTV version
+	model.iibInput.textInput.SetValue("2.9")
+
+	// Submit (should start display screen spinner, not input spinner)
+	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	modelInterface, cmd := model.Update(enterMsg)
+	model = modelInterface.(AppModel)
+
+	// Should be on display screen and loading
+	assert.Equal(t, IIBDisplayScreen, model.screen)
+	assert.True(t, model.iibDisplay.loading)
+	assert.NotNil(t, cmd) // Should return display spinner tick command
+
+	// Simulate loading completion
+	iibDataMsg := IIBDataLoadedMsg{
+		mtvVersion:  "2.9",
+		prodBuilds:  []IIBInfo{},
+		stageBuilds: []IIBInfo{},
+		err:         nil,
+	}
+
+	modelInterface, _ = model.Update(iibDataMsg)
+	model = modelInterface.(AppModel)
+
+	// Should finish loading
+	assert.False(t, model.iibDisplay.loading)
+}
+
+// ========== IIB COPY FUNCTIONALITY TESTS ==========
+
+func TestAppModel_IIBCopyFunctionality(t *testing.T) {
+	// Test IIB copy to clipboard functionality
+	model := NewAppModel()
+	model.screen = IIBDisplayScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup test data
+	model.iibDisplay.buildTypes = []string{"prod", "stage"}
+	model.iibDisplay.iibData = map[string][]IIBInfo{
+		"prod": {
+			{OCPVersion: "4.17", MTVVersion: "2.9", IIB: "test-iib-417"},
+		},
+	}
+	model.iibDisplay.ocpVersions = []string{"4.17"}
+	model.iibDisplay.selectedBuild = 0
+	model.iibDisplay.selectedOCP = 0
+
+	// Test copy functionality
+	_, cmd := model.handleIIBCopy()
+
+	// Should return notification command (even if clipboard fails in test environment)
+	assert.NotNil(t, cmd)
+
+	// Execute the command to check notification
+	if cmd != nil {
+		msg := cmd()
+		// Check that we get some kind of notification message
+		assert.NotNil(t, msg)
+
+		// In test environment, clipboard may fail, so we accept either success or failure
+		if notifMsg, ok := msg.(NotificationMsg); ok {
+			// Should contain some reference to IIB copying attempt
+			assert.True(t,
+				strings.Contains(notifMsg.message, "IIB") ||
+					strings.Contains(notifMsg.message, "clipboard") ||
+					strings.Contains(notifMsg.message, "copy"),
+				"Notification should mention IIB, clipboard, or copy")
+		}
+	}
+}
+
+func TestAppModel_IIBCopyFunctionality_NoData(t *testing.T) {
+	// Test copy when no IIB data is available
+	model := NewAppModel()
+	model.screen = IIBDisplayScreen
+
+	// Setup empty data
+	model.iibDisplay.buildTypes = []string{"prod"}
+	model.iibDisplay.iibData = map[string][]IIBInfo{}
+	model.iibDisplay.selectedBuild = 0
+
+	// Test copy functionality
+	_, cmd := model.handleIIBCopy()
+
+	// Should return error notification
+	assert.NotNil(t, cmd)
+
+	if cmd != nil {
+		msg := cmd()
+		assert.NotNil(t, msg)
+
+		// Should get an error notification about no data
+		if notifMsg, ok := msg.(NotificationMsg); ok {
+			assert.True(t,
+				strings.Contains(notifMsg.message, "No") ||
+					strings.Contains(notifMsg.message, "no") ||
+					strings.Contains(notifMsg.message, "data") ||
+					strings.Contains(notifMsg.message, "copy"),
+				"Should indicate no data available for copying")
+		}
+	}
+}
+
 func TestAppModel_ScreenTransitions(t *testing.T) {
 	model := setupTUIModelWithMocks()
 

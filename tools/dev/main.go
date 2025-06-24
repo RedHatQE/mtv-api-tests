@@ -48,6 +48,40 @@ func (d *mainClusterLoaderDeps) GetClusterPassword(clusterName string) (string, 
 	return getClusterPassword(clusterName)
 }
 
+// Bridge implementation for IIB data loading
+type mainIIBLoaderDeps struct{}
+
+func (d *mainIIBLoaderDeps) GetForkliftBuilds(environment string) ([]tui.IIBInfo, error) {
+	builds, err := getForkliftBuilds(environment)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert from main.IIBInfo to tui.IIBInfo
+	var tuiBuilds []tui.IIBInfo
+	for _, build := range builds {
+		tuiBuilds = append(tuiBuilds, tui.IIBInfo{
+			OCPVersion:  build.OCPVersion,
+			MTVVersion:  build.MTVVersion,
+			IIB:         build.IIB,
+			Snapshot:    build.Snapshot,
+			Created:     build.Created,
+			Image:       build.Image,
+			Environment: build.Environment,
+		})
+	}
+
+	return tuiBuilds, nil
+}
+
+func (d *mainIIBLoaderDeps) CheckKufloxLogin() bool {
+	return checkKufloxLogin()
+}
+
+func (d *mainIIBLoaderDeps) LoginToKuflox() error {
+	return loginToKuflox()
+}
+
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -178,8 +212,33 @@ configure tests, and perform operations without memorizing command syntax.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Inject real dependencies into TUI
 			tui.SetClusterLoaderDeps(&mainClusterLoaderDeps{})
+			tui.SetIIBLoaderDeps(&mainIIBLoaderDeps{})
 			tui.RunTUI()
 		},
 	}
 	rootCmd.AddCommand(tuiCmd)
+
+	// Get IIB command
+	getIIBCmd := &cobra.Command{
+		Use:   "get-iib <mtv-version>",
+		Short: "Get the latest Forklift FBC builds from kuflox cluster for a specific MTV version.",
+		Long: `Get the latest Forklift FBC (File-Based Catalog) builds from the kuflox cluster
+for a specific MTV version. Returns both production and stage builds for
+OpenShift versions 4.17, 4.18, and 4.19.
+
+The mtv-version should be in major.minor format (e.g., '2.9').
+
+Example:
+  mtv-dev get-iib 2.9
+
+This will show:
+- Full MTV version
+- IIB (Index Image Bundle) reference
+- OpenShift version
+- Build timestamps and details`,
+		Args: cobra.ExactArgs(1),
+		Run:  getIIB,
+	}
+	getIIBCmd.Flags().Bool("force-login", false, "Force re-authentication even if already logged in")
+	rootCmd.AddCommand(getIIBCmd)
 }

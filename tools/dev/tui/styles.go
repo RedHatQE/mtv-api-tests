@@ -4,216 +4,286 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Color definitions - Minimalistic dark theme
+// Helper functions to get themed colors
+func getTheme() Theme {
+	return GetCurrentTheme()
+}
+
+// Base styles with theme support
+func getTitleStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Primary).
+		Bold(true).
+		Align(lipgloss.Center).
+		Padding(0, 1)
+}
+
+func getHeaderStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Header).
+		Bold(true)
+}
+
+func getMenuItemStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Primary).
+		Padding(0, 2).
+		Margin(0)
+}
+
+func getSelectedItemStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.SelectionFg).
+		Background(theme.Selection).
+		Padding(0, 2).
+		Margin(0)
+}
+
+func getHelpStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Muted).
+		Align(lipgloss.Center).
+		Padding(1, 0)
+}
+
+func getErrorStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Error)
+}
+
+func getSuccessStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Success)
+}
+
+func getWarningStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Warning)
+}
+
+// Legacy variables for compatibility (will be updated to use functions)
 var (
-	primaryColor = lipgloss.Color("#E0E0E0") // Light gray
-	accentColor  = lipgloss.Color("#6C7B7F") // Muted blue-gray
-	successColor = lipgloss.Color("#8F9F8F") // Muted green
-	errorColor   = lipgloss.Color("#B57C7C") // Muted red
-	warningColor = lipgloss.Color("#B5A68B") // Muted yellow
-	mutedColor   = lipgloss.Color("#6B6B6B") // Dark gray
-	subtleColor  = lipgloss.Color("#4A4A4A") // Very dark gray
-	bgColor      = lipgloss.Color("#1C1C1C") // Dark background
+	// Keep only the ones that are still used
+	titleStyle        = getTitleStyle()
+	menuItemStyle     = getMenuItemStyle()
+	selectedItemStyle = getSelectedItemStyle()
 )
 
-// Base styles
-var (
-	titleStyle = lipgloss.NewStyle().
-			Foreground(primaryColor).
-			Bold(true).
-			Align(lipgloss.Center).
-			Padding(0, 1)
-
-	headerStyle = lipgloss.NewStyle().
-			Foreground(accentColor).
-			Bold(true)
-
-	menuItemStyle = lipgloss.NewStyle().
-			Foreground(primaryColor).
-			Padding(0, 2).
-			Margin(0)
-
-	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(bgColor).
-				Background(accentColor).
-				Padding(0, 2).
-				Margin(0)
-
-	helpStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
-			Align(lipgloss.Center).
-			Padding(1, 0)
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(errorColor)
-
-	successStyle = lipgloss.NewStyle().
-			Foreground(successColor)
-
-	warningStyle = lipgloss.NewStyle().
-			Foreground(warningColor)
-)
+// Update styles when theme changes
+func UpdateStyles() {
+	titleStyle = getTitleStyle()
+	menuItemStyle = getMenuItemStyle()
+	selectedItemStyle = getSelectedItemStyle()
+}
 
 // Full-screen layout styles
-var (
-	fullScreenStyle = lipgloss.NewStyle()
+func getFullScreenStyle() lipgloss.Style {
+	return lipgloss.NewStyle()
+}
 
-	centeredContainerStyle = lipgloss.NewStyle().
-				Align(lipgloss.Center).
-				AlignVertical(lipgloss.Center)
+func getCenteredContainerStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Align(lipgloss.Center).
+		AlignVertical(lipgloss.Center)
+}
 
-	mainContainerStyle = lipgloss.NewStyle().
-				Padding(2, 4).
-				Align(lipgloss.Center)
+func getMainContainerStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Padding(2, 4).
+		Align(lipgloss.Center)
+}
 
-	headerContainerFullStyle = lipgloss.NewStyle().
-					Foreground(primaryColor).
-					Bold(true).
-					Align(lipgloss.Center).
-					Padding(1, 0).
-					Margin(0, 0, 2, 0)
+func getHeaderContainerFullStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Primary).
+		Bold(true).
+		Align(lipgloss.Center).
+		Padding(1, 0).
+		Margin(0, 0, 2, 0)
+}
 
-	footerContainerStyle = lipgloss.NewStyle().
-				Foreground(mutedColor).
-				Align(lipgloss.Center).
-				Padding(1, 0).
-				Margin(2, 0, 0, 0)
-)
+func getFooterContainerStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Muted).
+		Align(lipgloss.Center).
+		Padding(1, 0).
+		Margin(2, 0, 0, 0)
+}
 
 // Status indicator styles
-var (
-	statusOnlineStyle = lipgloss.NewStyle().
-				Foreground(successColor)
+func getStatusOnlineStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.StatusOnline)
+}
 
-	statusOfflineStyle = lipgloss.NewStyle().
-				Foreground(errorColor)
+func getStatusOfflineStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.StatusOffline)
+}
 
-	statusWarningStyle = lipgloss.NewStyle().
-				Foreground(warningColor)
-)
+func getStatusWarningStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.StatusWarning)
+}
 
 // Container styles
-var (
-	containerStyle = lipgloss.NewStyle().
-			Padding(1, 2).
-			Margin(0, 0, 1, 0)
+func getContainerStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Padding(1, 2).
+		Margin(0, 0, 1, 0)
+}
 
-	headerContainerStyle = lipgloss.NewStyle().
-				Foreground(primaryColor).
-				Bold(true).
-				Align(lipgloss.Center).
-				Padding(1, 0).
-				Margin(0, 0, 1, 0)
-)
+func getHeaderContainerStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Primary).
+		Bold(true).
+		Align(lipgloss.Center).
+		Padding(1, 0).
+		Margin(0, 0, 1, 0)
+}
 
 // Progress and loading styles
-var (
-	spinnerStyle = lipgloss.NewStyle().
-		Foreground(accentColor)
-)
+func getSpinnerStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Accent)
+}
 
 // Card and section styles for TUI
-var (
-	sectionHeaderStyle = lipgloss.NewStyle().
-				Foreground(accentColor).
-				Bold(true).
-				Margin(0, 0, 0, 0)
+func getSectionHeaderStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Header).
+		Bold(true).
+		Margin(0, 0, 0, 0)
+}
 
-	fieldLabelStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
-			Bold(true).
-			Width(12).
-			Align(lipgloss.Right)
+func getFieldLabelStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Muted).
+		Bold(true).
+		Width(12).
+		Align(lipgloss.Right)
+}
 
-	fieldValueStyle = lipgloss.NewStyle().
-			Foreground(primaryColor)
+func getFieldValueStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Foreground(theme.Primary)
+}
 
-	codeBlockStyle = lipgloss.NewStyle().
-			Background(subtleColor).
-			Foreground(primaryColor).
-			Padding(1, 2).
-			Margin(0, 0, 1, 0).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(mutedColor)
+func getCodeBlockStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Background(theme.Subtle).
+		Foreground(theme.Primary).
+		Padding(1, 2).
+		Margin(0, 0, 1, 0).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(theme.Border)
+}
 
-	infoCardStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(successColor).
-			Padding(1, 2).
-			Margin(0, 0, 1, 0)
+func getInfoCardStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Success).
+		Padding(1, 2).
+		Margin(0, 0, 1, 0)
+}
 
-	accessCardStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(warningColor).
-			Padding(1, 2).
-			Margin(0, 0, 1, 0)
+func getAccessCardStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Warning).
+		Padding(1, 2).
+		Margin(0, 0, 1, 0)
+}
 
-	commandCardStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(accentColor).
-				Padding(1, 2).
-				Margin(0, 0, 1, 0)
-)
+func getCommandCardStyle() lipgloss.Style {
+	theme := getTheme()
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Accent).
+		Padding(1, 2).
+		Margin(0, 0, 1, 0)
+}
 
 // Helper functions for styled text
 func StatusOnline(text string) string {
-	return statusOnlineStyle.Render("● " + text)
+	return getStatusOnlineStyle().Render("● " + text)
 }
 
 func StatusOffline(text string) string {
-	return statusOfflineStyle.Render("● " + text)
+	return getStatusOfflineStyle().Render("● " + text)
 }
 
 func StatusWarning(text string) string {
-	return statusWarningStyle.Render("● " + text)
+	return getStatusWarningStyle().Render("● " + text)
 }
 
 func StatusLoading(text string) string {
-	return spinnerStyle.Render("◦ " + text)
+	return getSpinnerStyle().Render("◦ " + text)
 }
 
 func Title(text string) string {
-	return titleStyle.Render(text)
+	return getTitleStyle().Render(text)
 }
 
 func Header(text string) string {
-	return headerStyle.Render(text)
+	return getHeaderStyle().Render(text)
 }
 
 func Error(text string) string {
-	return errorStyle.Render("● " + text)
+	return getErrorStyle().Render("● " + text)
 }
 
 func Success(text string) string {
-	return successStyle.Render("● " + text)
+	return getSuccessStyle().Render("● " + text)
 }
 
 func Warning(text string) string {
-	return warningStyle.Render("● " + text)
+	return getWarningStyle().Render("● " + text)
 }
 
 func Help(text string) string {
-	return helpStyle.Render(text)
+	return getHelpStyle().Render(text)
 }
 
 func Container(content string) string {
-	return containerStyle.Render(content)
+	return getContainerStyle().Render(content)
 }
 
 func HeaderContainer(content string) string {
-	return headerContainerStyle.Render(content)
+	return getHeaderContainerStyle().Render(content)
 }
 
 // Full-screen layout helpers
 func FullScreenContainer(content string, width, height int) string {
-	return fullScreenStyle.
+	return getFullScreenStyle().
 		Width(width).
 		Height(height).
 		Render(content)
 }
 
 func CenteredContainer(content string, width int) string {
-	return centeredContainerStyle.
+	return getCenteredContainerStyle().
 		Width(width).
 		Render(content)
 }
@@ -224,34 +294,34 @@ func MainContainer(content string, width int) string {
 	if maxWidth > 120 {
 		maxWidth = 120
 	}
-	return mainContainerStyle.
+	return getMainContainerStyle().
 		Width(maxWidth).
 		Render(content)
 }
 
 func HeaderContainerFull(content string, width int) string {
-	return headerContainerFullStyle.
+	return getHeaderContainerFullStyle().
 		Width(width).
 		Render(content)
 }
 
 func FooterContainerFull(content string, width int) string {
-	return footerContainerStyle.
+	return getFooterContainerStyle().
 		Width(width).
 		Render(content)
 }
 
 // TUI Card helper functions with responsive width
 func InfoCard(title, content string) string {
-	return infoCardStyle.Render(sectionHeaderStyle.Render("🔍 "+title) + "\n\n" + content)
+	return getInfoCardStyle().Render(getSectionHeaderStyle().Render("🔍 "+title) + "\n\n" + content)
 }
 
 func AccessCard(title, content string) string {
-	return accessCardStyle.Render(sectionHeaderStyle.Render("🔐 "+title) + "\n\n" + content)
+	return getAccessCardStyle().Render(getSectionHeaderStyle().Render("🔐 "+title) + "\n\n" + content)
 }
 
 func CommandCard(title, content string) string {
-	return commandCardStyle.Render(sectionHeaderStyle.Render("⚡ "+title) + "\n\n" + content)
+	return getCommandCardStyle().Render(getSectionHeaderStyle().Render("⚡ "+title) + "\n\n" + content)
 }
 
 // Responsive field that handles long values
@@ -265,19 +335,19 @@ func ResponsiveField(label, value string, maxWidth int) string {
 				wrappedValue = value[:57] + "..."
 			}
 		}
-		return fieldLabelStyle.Render(label+":") + " " + fieldValueStyle.Render(wrappedValue)
+		return getFieldLabelStyle().Render(label+":") + " " + getFieldValueStyle().Render(wrappedValue)
 	}
-	return fieldLabelStyle.Render(label+":") + " " + fieldValueStyle.Render(value)
+	return getFieldLabelStyle().Render(label+":") + " " + getFieldValueStyle().Render(value)
 }
 
 func Field(label, value string) string {
-	return fieldLabelStyle.Render(label+":") + " " + fieldValueStyle.Render(value)
+	return getFieldLabelStyle().Render(label+":") + " " + getFieldValueStyle().Render(value)
 }
 
 func CodeBlock(content string) string {
-	return codeBlockStyle.Render(content)
+	return getCodeBlockStyle().Render(content)
 }
 
 func SectionHeader(text string) string {
-	return sectionHeaderStyle.Render(text)
+	return getSectionHeaderStyle().Render(text)
 }
