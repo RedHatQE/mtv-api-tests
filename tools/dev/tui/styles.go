@@ -344,6 +344,17 @@ func Field(label, value string) string {
 	return getFieldLabelStyle().Render(label+":") + " " + getFieldValueStyle().Render(value)
 }
 
+// WideField for provider credentials with better alignment
+func WideField(label, value string) string {
+	theme := getTheme()
+	wideLabelStyle := lipgloss.NewStyle().
+		Foreground(theme.Muted).
+		Bold(true).
+		Width(15).
+		Align(lipgloss.Right)
+	return wideLabelStyle.Render(label+":") + " " + getFieldValueStyle().Render(value)
+}
+
 func CodeBlock(content string) string {
 	return getCodeBlockStyle().Render(content)
 }

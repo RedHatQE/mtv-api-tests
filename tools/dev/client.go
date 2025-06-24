@@ -305,18 +305,3 @@ func getClusterInfoImpl(clusterName string) (*ClusterInfo, error) {
 
 	return info, nil
 }
-
-// New version for testability
-func getClusterInfoWithClient(clusterName string, kubeClient kubernetes.Interface) (*ClusterInfo, error) {
-	// Use kubeClient for all Kubernetes API calls instead of building a new client
-	// Example: get server version, etc.
-	// For now, just return a dummy ClusterInfo for demonstration
-	return &ClusterInfo{
-		Name:       clusterName,
-		OCPVersion: "fake-ocp",
-		MTVVersion: "fake-mtv",
-		CNVVersion: "fake-cnv",
-		IIB:        "fake-iib",
-		ConsoleURL: "https://fake.console",
-	}, nil
-}

@@ -635,7 +635,7 @@ func TestAppModel_IIBScreenNavigation(t *testing.T) {
 	assert.Equal(t, MainMenuScreen, model.screen)
 
 	// Directly test navigation by calling the handler for IIB builds
-	model.mainMenu.list.Select(1) // Select IIB Builds (index 1)
+	model.mainMenu.list.Select(2) // Select IIB (index 2)
 
 	// Now press Enter to navigate to IIB input screen
 	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
@@ -648,7 +648,7 @@ func TestAppModel_IIBScreenNavigation(t *testing.T) {
 	// Test that the view renders without panic
 	view := model.View()
 	assert.NotEmpty(t, view)
-	assert.Contains(t, view, "IIB Builds")
+	assert.Contains(t, view, "IIB")
 	assert.Contains(t, view, "MTV Version")
 }
 
@@ -1075,4 +1075,762 @@ func TestAppModel_MessageHandling_Sequence(t *testing.T) {
 		// We just verify no panics occur, not the specific command behavior
 		_ = cmd
 	}
+}
+
+// Test provider tree navigation functionality
+func TestAppModel_ProviderTreeNavigation(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup mock provider with config
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "vmware",
+			URL:      "https://vcenter.example.com/sdk",
+			Username: "admin",
+			Password: "secret123",
+			Insecure: true,
+		},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+
+	// Test right arrow to expand tree
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model = updatedModel.(AppModel)
+
+	assert.Equal(t, "test-provider", model.providers.expandedProvider)
+	assert.Equal(t, 1, model.providers.selectedTreeItem) // Should start at first tree item
+
+	// Test down arrow navigation in tree
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 2, model.providers.selectedTreeItem) // Should move to URL
+
+	// Test up arrow navigation in tree
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.providers.selectedTreeItem) // Should move back to Type
+
+	// Test left arrow to collapse tree
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "", model.providers.expandedProvider)
+	assert.Equal(t, 0, model.providers.selectedTreeItem)
+}
+
+// Test provider tree copy functionality with actual values
+func TestAppModel_ProviderTreeCopyFunctionality(t *testing.T) {
+	// Mock clipboard to avoid actual clipboard operations in tests
+	originalClipboardWriteAll := clipboardWriteAll
+	var copiedText string
+	clipboardWriteAll = func(text string) error {
+		copiedText = text
+		return nil
+	}
+	defer func() { clipboardWriteAll = originalClipboardWriteAll }()
+
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup mock provider with config
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "vmware",
+			URL:      "https://vcenter.example.com/sdk",
+			Username: "admin",
+			Password: "secret123",
+			Insecure: true,
+		},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+
+	// Expand tree first
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model = updatedModel.(AppModel)
+
+	// Verify tree is expanded
+	assert.Equal(t, "test-provider", model.providers.expandedProvider)
+	assert.Equal(t, 1, model.providers.selectedTreeItem) // Should be at first tree item
+
+	// Test copying Type (selectedTreeItem = 1)
+	// Ensure we're still in the providers pane
+	assert.Equal(t, 0, model.providers.focusedPane)
+	updatedModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+
+	assert.Contains(t, model.notification, "vmware") // Should show actual value, not "Type"
+	assert.Equal(t, "vmware", copiedText)            // Verify actual clipboard content
+
+	// Move to URL and test copying
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 2, model.providers.selectedTreeItem)
+	updatedModel, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+	assert.Contains(t, model.notification, "https://vcenter.example.com/sdk") // Should show actual URL
+	assert.Equal(t, "https://vcenter.example.com/sdk", copiedText)            // Verify actual clipboard content
+
+	// Move to Username and test copying
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 3, model.providers.selectedTreeItem)
+	updatedModel, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+	assert.Contains(t, model.notification, "admin") // Should show actual username
+	assert.Equal(t, "admin", copiedText)            // Verify actual clipboard content
+
+	// Move to Password and test copying
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 4, model.providers.selectedTreeItem)
+	updatedModel, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+	assert.Contains(t, model.notification, "secret123") // Should show actual password, not masked
+	assert.Equal(t, "secret123", copiedText)            // Verify actual clipboard content
+
+	// Move to Insecure and test copying
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 5, model.providers.selectedTreeItem)
+	updatedModel, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+	assert.Contains(t, model.notification, "true") // Should show actual boolean value
+	assert.Equal(t, "true", copiedText)            // Verify actual clipboard content
+}
+
+// Test URL truncation functionality
+func TestAppModel_URLTruncation(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 80 // Narrow width to trigger truncation
+	model.height = 40
+
+	// Setup provider with very long URL
+	longURL := "https://very-long-vcenter-hostname.example.com/sdk/vimService.wsdl?version=7.0.3"
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "vmware",
+			URL:      longURL,
+			Username: "admin",
+			Password: "secret123",
+			Insecure: true,
+		},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.expandedProvider = "test-provider"
+
+	// Render the view to trigger truncation logic
+	view := model.renderProviders()
+
+	// URL should be truncated and contain "..."
+	assert.Contains(t, view, "...")
+	// But the original long URL should not appear in full in the view
+	assert.NotContains(t, view, longURL)
+}
+
+// Test universal Tab/Shift+Tab navigation across all screens
+func TestAppModel_UniversalTabNavigation(t *testing.T) {
+	model := NewAppModel()
+	model.width = 120
+	model.height = 40
+
+	// Test Tab navigation in ClusterListScreen
+	model.screen = ClusterListScreen
+	model.clusterList.focusedPane = 0
+	model.clusterList.loading = false   // Ensure not loading
+	model.clusterList.searching = false // Ensure not searching
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.clusterList.focusedPane)
+
+	// Test Shift+Tab navigation in ClusterListScreen
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 0, model.clusterList.focusedPane)
+
+	// Test Tab navigation in IIBDisplayScreen
+	model.screen = IIBDisplayScreen
+	model.iibDisplay.focusedPane = 0
+	model.iibDisplay.loading = false // Ensure not loading
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.iibDisplay.focusedPane)
+
+	// Test Shift+Tab navigation in IIBDisplayScreen
+	model.iibDisplay.focusedPane = 2
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.iibDisplay.focusedPane)
+
+	// Test Tab navigation in ProvidersScreen
+	model.screen = ProvidersScreen
+	model.providers.focusedPane = 0
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.providers.focusedPane)
+
+	// Test Shift+Tab navigation in ProvidersScreen
+	model.providers.focusedPane = 2
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.providers.focusedPane)
+}
+
+// Test that left/right arrows no longer switch panes (only used for tree expand/collapse)
+func TestAppModel_LeftRightArrowsDisabledForPaneSwitching(t *testing.T) {
+	model := NewAppModel()
+	model.width = 120
+	model.height = 40
+
+	// Test that left/right arrows don't switch panes in ClusterListScreen
+	model.screen = ClusterListScreen
+	model.clusterList.focusedPane = 0
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 0, model.clusterList.focusedPane) // Should remain unchanged
+
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 0, model.clusterList.focusedPane) // Should remain unchanged
+
+	// Test that left/right arrows don't switch panes in IIBDisplayScreen
+	model.screen = IIBDisplayScreen
+	model.iibDisplay.focusedPane = 0
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 0, model.iibDisplay.focusedPane) // Should remain unchanged
+
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 0, model.iibDisplay.focusedPane) // Should remain unchanged
+}
+
+// Test provider tree bounds checking
+func TestAppModel_ProviderTreeBoundsChecking(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup provider
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "vmware",
+			URL:      "https://vcenter.example.com/sdk",
+			Username: "admin",
+			Password: "secret123",
+			Insecure: true,
+		},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+	model.providers.expandedProvider = "test-provider"
+	model.providers.selectedTreeItem = 1 // Start at first tree item
+
+	// Test navigating down to the last item (item 5: Insecure)
+	for i := 1; i < 5; i++ {
+		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+		model = updatedModel.(AppModel)
+	}
+	assert.Equal(t, 5, model.providers.selectedTreeItem) // Should be at last item
+
+	// Test that going down further doesn't exceed bounds
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 5, model.providers.selectedTreeItem) // Should stay at last item
+
+	// Test navigating up to the first item
+	for i := 5; i > 1; i-- {
+		updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+		model = updatedModel.(AppModel)
+	}
+	assert.Equal(t, 1, model.providers.selectedTreeItem) // Should be at first item
+
+	// Test that going up further doesn't go below bounds
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.providers.selectedTreeItem) // Should stay at first item
+}
+
+// Test provider tree navigation with no config (error case)
+func TestAppModel_ProviderTreeNavigationNoConfig(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup provider without config
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{} // Empty configs
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+
+	// Test right arrow to expand tree (should not crash)
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model = updatedModel.(AppModel)
+
+	// Should expand but not crash
+	assert.Equal(t, "test-provider", model.providers.expandedProvider)
+
+	// Test Enter to copy (should not crash)
+	model.providers.selectedTreeItem = 1
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+
+	// Should not crash, but also shouldn't copy anything
+	assert.Equal(t, "", model.notification) // No notification since no config exists
+}
+
+// Test password truncation for very long passwords
+func TestAppModel_PasswordTruncation(t *testing.T) {
+	// Mock clipboard to avoid actual clipboard operations in tests
+	originalClipboardWriteAll := clipboardWriteAll
+	var copiedText string
+	clipboardWriteAll = func(text string) error {
+		copiedText = text
+		return nil
+	}
+	defer func() { clipboardWriteAll = originalClipboardWriteAll }()
+
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 80 // Narrow width to trigger truncation
+	model.height = 40
+
+	// Setup provider with very long password
+	longPassword := "VeryLongPasswordThatExceedsTheMaximumLengthAndShouldBeTruncatedWithEllipsis123456789"
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "vmware",
+			URL:      "https://vcenter.example.com/sdk",
+			Username: "admin",
+			Password: longPassword,
+			Insecure: true,
+		},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.expandedProvider = "test-provider"
+
+	// Render the view to trigger truncation logic
+	view := model.renderProviders()
+
+	// Password should be truncated and contain "..."
+	assert.Contains(t, view, "...")
+	// But the original long password should not appear in full in the view
+	assert.NotContains(t, view, longPassword)
+
+	// However, copying should still copy the full password
+	model.providers.selectedTreeItem = 4 // Password item
+	model.providers.focusedPane = 0
+	updatedModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+	assert.Contains(t, model.notification, longPassword) // Full password should be in notification
+	assert.Equal(t, longPassword, copiedText)            // Verify full password was copied to clipboard
+}
+
+// Test provider tree rendering with different screen widths
+func TestAppModel_ProviderTreeResponsiveRendering(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.height = 40
+
+	// Setup provider
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "vmware",
+			URL:      "https://very-long-url.example.com/sdk/vimService.wsdl",
+			Username: "admin",
+			Password: "secret123",
+			Insecure: true,
+		},
+	}
+	model.providers.expandedProvider = "test-provider"
+
+	// Test with narrow width
+	model.width = 60
+	narrowView := model.renderProviders()
+	assert.Contains(t, narrowView, "...") // Should contain truncation
+
+	// Test with wide width
+	model.width = 200
+	wideView := model.renderProviders()
+	// With wide width, less truncation should occur
+	assert.Contains(t, wideView, "very-long-url.example.com") // Should show more of the URL
+}
+
+// Helper function to process batch commands in tests
+func processBatchCommand(model AppModel, cmd tea.Cmd) AppModel {
+	if cmd == nil {
+		return model
+	}
+
+	// For showNotification, we know it returns a batch with two commands:
+	// 1. A function that returns NotificationMsg
+	// 2. A timer function that returns NotificationClearMsg
+	// We only need the first one for our tests
+
+	// Execute the command - this will be a batch
+	batchResult := cmd()
+	if batchResult == nil {
+		return model
+	}
+
+	// The batch result should be a tea.BatchMsg containing multiple messages
+	// We need to process the NotificationMsg specifically
+	if batchMsg, ok := batchResult.(tea.BatchMsg); ok {
+		// Process each message in the batch
+		for _, msg := range batchMsg {
+			if msg != nil {
+				// Execute the message function to get the actual message
+				actualMsg := msg()
+				if actualMsg != nil {
+					// Check if this is a NotificationMsg (not a timer message)
+					if notificationMsg, isNotification := actualMsg.(NotificationMsg); isNotification {
+						updatedModel, _ := model.Update(notificationMsg)
+						model = updatedModel.(AppModel)
+						break // We only need the notification, not the timer
+					}
+				}
+			}
+		}
+	}
+
+	return model
+}
+
+// Test provider tree copy with empty config values
+func TestAppModel_ProviderTreeCopyEmptyValues(t *testing.T) {
+	// Mock clipboard to avoid actual clipboard operations in tests
+	originalClipboardWriteAll := clipboardWriteAll
+	var copiedText string
+	clipboardWriteAll = func(text string) error {
+		copiedText = text
+		return nil
+	}
+	defer func() { clipboardWriteAll = originalClipboardWriteAll }()
+
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup mock provider with empty config values
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "",
+			URL:      "",
+			Username: "",
+			Password: "",
+			Insecure: false,
+		},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+	model.providers.expandedProvider = "test-provider"
+	model.providers.selectedTreeItem = 1
+
+	// Test copying empty Type (empty values are not copied in current implementation)
+	updatedModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+
+	// Empty values are not copied, so no notification should be generated
+	assert.Equal(t, "", model.notification) // No notification for empty values
+	assert.Equal(t, "", copiedText)         // No clipboard content for empty values
+
+	// Test copying Insecure boolean (false)
+	model.providers.selectedTreeItem = 5
+	updatedModel, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+
+	assert.Contains(t, model.notification, "false") // Should show "false"
+	assert.Equal(t, "false", copiedText)            // Verify boolean value
+}
+
+// Test provider tree navigation with keyboard shortcuts
+func TestAppModel_ProviderTreeKeyboardShortcuts(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup provider
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			Type:     "vmware",
+			URL:      "https://vcenter.example.com/sdk",
+			Username: "admin",
+			Password: "secret123",
+			Insecure: true,
+		},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+
+	// Test 'j' key for down navigation
+	model.providers.expandedProvider = "test-provider"
+	model.providers.selectedTreeItem = 1
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 2, model.providers.selectedTreeItem)
+
+	// Test 'k' key for up navigation
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.providers.selectedTreeItem)
+
+	// Test 'h' key for left navigation (collapse tree)
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "", model.providers.expandedProvider)
+	assert.Equal(t, 0, model.providers.selectedTreeItem)
+
+	// Test 'l' key for right navigation (expand tree)
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "test-provider", model.providers.expandedProvider)
+	assert.Equal(t, 1, model.providers.selectedTreeItem)
+}
+
+// Test URL truncation with various edge cases
+func TestAppModel_URLTruncationEdgeCases(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.height = 40
+
+	// Setup provider
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.expandedProvider = "test-provider"
+
+	// Test with extremely narrow width (should not panic)
+	model.width = 10
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			URL: "https://example.com",
+		},
+	}
+	view := model.renderProviders()
+	assert.NotEmpty(t, view)
+	assert.NotContains(t, strings.ToLower(view), "panic")
+
+	// Test with URL shorter than truncation limit
+	model.width = 200
+	shortURL := "http://short.com"
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			URL: shortURL,
+		},
+	}
+	view = model.renderProviders()
+	assert.Contains(t, view, shortURL) // Should show full URL
+	// With wide width, short URLs may still have some truncation due to tree formatting
+	// but the URL should be visible
+
+	// Test with empty URL
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {
+			URL: "",
+		},
+	}
+	view = model.renderProviders()
+	assert.NotEmpty(t, view)
+	assert.NotContains(t, strings.ToLower(view), "panic")
+}
+
+// Test notification handling and clearing
+func TestAppModel_NotificationHandling(t *testing.T) {
+	model := NewAppModel()
+
+	// Test setting notification
+	notificationMsg := NotificationMsg{message: "Test notification", isError: false}
+	updatedModel, _ := model.Update(notificationMsg)
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "Test notification", model.notification)
+
+	// Test error notification (overwrites previous and goes to error field)
+	errorMsg := NotificationMsg{message: "Error occurred", isError: true}
+	updatedModel, _ = model.Update(errorMsg)
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "Error occurred", model.error) // Error messages go to error field
+	assert.Equal(t, "", model.notification)        // Notification should be cleared
+
+	// Test clearing notification
+	clearMsg := NotificationClearMsg{}
+	updatedModel, _ = model.Update(clearMsg)
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "", model.notification)
+}
+
+// Test provider tree with multiple providers
+func TestAppModel_MultipleProvidersTreeNavigation(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup multiple providers
+	model.providers.providers = []ProviderItem{
+		{name: "provider1", type_: "vmware", status: "connected", vmCount: 5},
+		{name: "provider2", type_: "openstack", status: "connected", vmCount: 3},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"provider1": {Type: "vmware", URL: "https://vcenter1.com"},
+		"provider2": {Type: "openstack", URL: "https://openstack2.com"},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+
+	// Expand first provider
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "provider1", model.providers.expandedProvider)
+
+	// Switch to second provider
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft}) // Collapse first
+	model = updatedModel.(AppModel)
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown}) // Move to second provider
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.providers.selectedProvider)
+
+	// Expand second provider
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, "provider2", model.providers.expandedProvider)
+	assert.Equal(t, 1, model.providers.selectedTreeItem) // Should be at first tree item
+}
+
+// Test error handling in copy functionality
+func TestAppModel_CopyFunctionalityErrorHandling(t *testing.T) {
+	// Mock clipboard to simulate error
+	originalClipboardWriteAll := clipboardWriteAll
+	clipboardWriteAll = func(text string) error {
+		return fmt.Errorf("clipboard error")
+	}
+	defer func() { clipboardWriteAll = originalClipboardWriteAll }()
+
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup provider
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {Type: "vmware", URL: "https://vcenter.example.com"},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+	model.providers.expandedProvider = "test-provider"
+	model.providers.selectedTreeItem = 1
+
+	// Test copying with clipboard error
+	updatedModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+
+	// Should show error notification (error messages go to error field)
+	assert.Contains(t, model.error, "Failed to copy")
+	assert.Contains(t, model.error, "clipboard error")
+}
+
+// Test tree navigation at provider boundaries
+func TestAppModel_ProviderTreeBoundaryNavigation(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup providers
+	model.providers.providers = []ProviderItem{
+		{name: "provider1", type_: "vmware", status: "connected", vmCount: 5},
+		{name: "provider2", type_: "openstack", status: "connected", vmCount: 3},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+
+	// Test up arrow at first provider (should stay at 0)
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 0, model.providers.selectedProvider)
+
+	// Move to last provider
+	model.providers.selectedProvider = 1
+
+	// Test down arrow at last provider (should stay at last)
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updatedModel.(AppModel)
+	assert.Equal(t, 1, model.providers.selectedProvider)
+}
+
+// Test tree navigation with invalid tree item selection
+func TestAppModel_InvalidTreeItemSelection(t *testing.T) {
+	model := NewAppModel()
+	model.screen = ProvidersScreen
+	model.width = 120
+	model.height = 40
+
+	// Setup provider
+	model.providers.providers = []ProviderItem{
+		{name: "test-provider", type_: "vmware", status: "connected", vmCount: 5},
+	}
+	model.providers.providerConfigs = map[string]ProviderConfig{
+		"test-provider": {Type: "vmware", URL: "https://vcenter.example.com"},
+	}
+	model.providers.selectedProvider = 0
+	model.providers.focusedPane = 0
+	model.providers.expandedProvider = "test-provider"
+
+	// Set invalid tree item selection (beyond bounds)
+	model.providers.selectedTreeItem = 10
+
+	// Test copying with invalid selection (should not crash)
+	updatedModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updatedModel.(AppModel)
+	model = processBatchCommand(model, cmd)
+
+	// Should not crash and notification should be empty
+	assert.Equal(t, "", model.notification)
 }

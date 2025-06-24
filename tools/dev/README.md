@@ -46,6 +46,7 @@ The tool is built from multiple well-organized Go files:
    ./mtv-dev cluster-login qemtv-01
    ./mtv-dev run-tests qemtv-02 vmware8-ceph-remote
    ./mtv-dev get-iib 2.9
+   ./mtv-dev get-vms vsphere-7.0.3
    ```
 
 4. **Enable tab completion:**
@@ -112,9 +113,10 @@ The tool features a modern, interactive TUI for cluster management. Launch it wi
 
 | Key | Action |
 |-----|--------|
-| `↑/↓` | Navigate cluster list |
-| `Tab/Shift+Tab` | Switch between left/right panes |
-| `Enter` | Copy selected field to clipboard |
+| `↑/↓` | Navigate lists and items |
+| `Tab/Shift+Tab` | Switch between panes (universal across all screens) |
+| `Enter` | Copy selected field to clipboard / Expand tree |
+| `←/→` | Collapse/Expand tree (in provider screen) |
 | `/` | Search/filter clusters |
 | `Ctrl+R` | Refresh all clusters |
 | `Ctrl+U` | Refresh selected cluster |
@@ -289,6 +291,8 @@ The tool supports comprehensive tab completion for commands, flags, and argument
 - **Template names**: Completion for run-tests templates (vmware8-ceph-remote, etc.)
 - **MTV versions**: Completion for get-iib MTV version argument (2.9, etc.)
 - **Shell types**: Completion for completion script generation (bash, zsh)
+- **Output formats**: Completion for `--output` flag (table, json, simple)
+- **Provider names**: Dynamic completion for get-vms provider names (loaded from config)
 
 **Examples of tab completion in action:**
 
@@ -457,6 +461,81 @@ Most commands require a `<cluster-name>` argument (e.g., `qemtv-01`).
         Created: 2024-01-15 09:15:30 EST
 
     Summary: Found 2 production and 1 stage builds
+    ```
+
+- **`get-vms <provider-name>`**: List virtual machines from configured providers with dynamic configuration loading.
+  - Loads provider configurations dynamically from `tests/tests_config/config.py` (the Python source of truth).
+  - **Works from anywhere**: Automatically finds the config file by searching up from the executable location to the project root.
+  - **Environment variable support**: Set `MTV_CONFIG_PATH` to specify a custom config file location.
+  - Automatically excludes OVA and OpenShift providers.
+  - By default shows all VMs; use `--running` to show only running/powered-on VMs.
+  - **Available Providers (loaded dynamically):**
+    - `vsphere-6.5`: VMware vSphere 6.5 environment
+    - `vsphere-7.0.3`: VMware vSphere 7.0.3 environment
+    - `vsphere-8.0.1`: VMware vSphere 8.0.1 environment
+    - `ovirt-4.4.9`: oVirt/RHV 4.4.9 environment
+    - `openstack-psi`: OpenStack PSI environment
+  - **Optional Flags:**
+    - `--output <format>`: Output format: table (default), json, or simple
+    - `--running`: Show only running VMs (default: show all VMs)
+    - `--list-providers`: List all available provider names and exit
+  - **Example usage:**
+
+    ```bash
+    # Works from any directory - the tool finds the config file automatically
+    mtv-dev get-vms vsphere-7.0.3
+
+    # From project root
+    ./tools/dev/mtv-dev get-vms vsphere-7.0.3
+
+    # Using custom config file location
+    MTV_CONFIG_PATH=/path/to/config.py mtv-dev get-vms vsphere-7.0.3
+
+    # List only running VMs from oVirt environment
+    mtv-dev get-vms ovirt-4.4.9 --running
+
+    # List all VMs from OpenStack with JSON output
+    mtv-dev get-vms openstack-psi --output json
+
+    # Simple VM name list for scripting
+    mtv-dev get-vms vsphere-8.0.1 --output simple
+
+    # List all available provider names
+    mtv-dev get-vms --list-providers
+    ```
+
+  - **Sample Table Output:**
+
+    ```text
+    Connecting to vsphere-7.0.3 provider (vmware)...
+    Retrieving VM list...
+
+    NAME                      PROVIDER     POWER STATE     CPU        MEMORY     GUEST OS  
+    ------------------------------------------------------------------------------------------------
+    web-server-01             vmware       poweredOn       4          8.0GB      RHEL 8.5  
+    database-server           vmware       poweredOff      8          16.0GB     Ubuntu 22.04  
+    test-vm-windows           vmware       poweredOn       2          4.0GB      Windows Server
+
+    Summary:
+    - Provider: vsphere-7.0.3 (vmware)
+    - Total VMs: 3 (use --running to show only running VMs)
+    ```
+
+  - **Sample JSON Output:**
+
+    ```json
+    [
+      {
+        "name": "web-server-01",
+        "provider": "vmware",
+        "power_state": "poweredOn",
+        "uuid": "421d2589-2a88-4aa8-b767-c5c84c4e4d2f",
+        "cpu": 4,
+        "memory_mb": 8192,
+        "guest_os": "Red Hat Enterprise Linux 8 (64-bit)",
+        "storage_gb": 100.50
+      }
+    ]
     ```
 
 - **`completion [bash|zsh|fish|powershell]`**: Generate the autocompletion script for the specified shell.

@@ -34,10 +34,13 @@ func listClusters(cmd *cobra.Command, args []string) {
 	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
-	showTiming, _ := cmd.Flags().GetBool("timing")
+	outputFormat, _ := cmd.Flags().GetString("output")
 	start := time.Now()
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sChecking cluster accessibility...%s\n", ColorCyan, ColorReset)
+	// Only show progress messages for table output
+	if outputFormat == "table" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sChecking cluster accessibility...%s\n", ColorCyan, ColorReset)
+	}
 
 	// Filter cluster names
 	var clusterNames []string
@@ -52,7 +55,11 @@ func listClusters(cmd *cobra.Command, args []string) {
 	}
 
 	if len(clusterNames) == 0 {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sNo matching clusters found.%s\n", ColorYellow, ColorReset)
+		if outputFormat == "json" {
+			printClustersJSON(cmd, []ClusterInfo{}, 0, 0)
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sNo matching clusters found.%s\n", ColorYellow, ColorReset)
+		}
 		return
 	}
 
@@ -73,8 +80,15 @@ func listClusters(cmd *cobra.Command, args []string) {
 				}
 			}()
 
-			if err := ensureLoggedIn(name); err != nil {
-				resultChan <- clusterResult{err: fmt.Errorf("login failed for %s: %w", name, err)}
+			// Use silent login for JSON output to avoid progress messages
+			var loginErr error
+			if outputFormat == "json" {
+				loginErr = ensureLoggedInSilent(name)
+			} else {
+				loginErr = ensureLoggedIn(name)
+			}
+			if loginErr != nil {
+				resultChan <- clusterResult{err: fmt.Errorf("login failed for %s: %w", name, loginErr)}
 				return
 			}
 			info, err := getClusterInfo(name)
@@ -83,7 +97,11 @@ func listClusters(cmd *cobra.Command, args []string) {
 				return
 			}
 			resultChan <- clusterResult{info: *info}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s%s is accessible%s\n", ColorGreen, name, ColorReset)
+
+			// Only show progress messages for table output
+			if outputFormat == "table" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s%s is accessible%s\n", ColorGreen, name, ColorReset)
+			}
 		}(clusterName)
 	}
 
@@ -98,20 +116,26 @@ func listClusters(cmd *cobra.Command, args []string) {
 				liveClusterInfos = append(liveClusterInfos, result.info)
 			} else {
 				errorCount++
-				if verbose {
+				if verbose && outputFormat == "table" {
 					_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: %v\n", result.err)
 				}
 			}
 			collected++
 		case <-timeout:
-			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Timeout reached after 75 seconds, processed %d/%d clusters...\n", collected, len(clusterNames))
+			if outputFormat == "table" {
+				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Timeout reached after 75 seconds, processed %d/%d clusters...\n", collected, len(clusterNames))
+			}
 			goto done
 		}
 	}
 
 done:
 	if len(liveClusterInfos) == 0 {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sNo live clusters found.%s\n", ColorYellow, ColorReset)
+		if outputFormat == "json" {
+			printClustersJSON(cmd, []ClusterInfo{}, errorCount, time.Since(start).Seconds())
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sNo live clusters found.%s\n", ColorYellow, ColorReset)
+		}
 		return
 	}
 
@@ -120,70 +144,117 @@ done:
 		return liveClusterInfos[i].Name < liveClusterInfos[j].Name
 	})
 
-	if !full {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sAvailable live clusters:%s\n", ColorCyan, ColorReset)
-		for _, info := range liveClusterInfos {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s- %s%s\n", ColorGreen, info.Name, ColorReset)
+	// Output results based on format
+	switch outputFormat {
+	case "json":
+		printClustersJSON(cmd, liveClusterInfos, errorCount, time.Since(start).Seconds())
+	case "simple":
+		printClustersSimple(cmd, liveClusterInfos)
+	default: // "table"
+		if !full {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sAvailable live clusters:%s\n", ColorCyan, ColorReset)
+			for _, info := range liveClusterInfos {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s- %s%s\n", ColorGreen, info.Name, ColorReset)
+			}
+		} else {
+			printClustersTable(cmd, liveClusterInfos)
 		}
-	} else {
-		// Full table output
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s%-15s %-12s %-15s %-15s %s%s\n",
-			ColorCyan, "CLUSTER", "OCP", "MTV", "CNV", "IIB", ColorReset)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s%s%s\n", ColorCyan, strings.Repeat("-", 80), ColorReset)
 
-		for _, info := range liveClusterInfos {
-			// Handle missing data with proper fallbacks
-			ocpVersion := info.OCPVersion
-			if ocpVersion == "" {
-				ocpVersion = "Unknown"
-			}
+		// Summary for table output
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sSummary:%s\n", ColorCyan, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Total clusters: %d\n", len(liveClusterInfos))
+		if errorCount > 0 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Failed clusters: %d\n", errorCount)
+		}
+	}
+}
 
-			mtvVersion := info.MTVVersion
-			if mtvVersion == "" {
-				mtvVersion = "Unknown"
-			}
+// printClustersTable prints clusters in a formatted table
+func printClustersTable(cmd *cobra.Command, clusters []ClusterInfo) {
+	// Full table output
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s%-15s %-12s %-15s %-15s %s%s\n",
+		ColorCyan, "CLUSTER", "OCP", "MTV", "CNV", "IIB", ColorReset)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s%s%s\n", ColorCyan, strings.Repeat("-", 80), ColorReset)
 
-			cnvVersion := info.CNVVersion
-			if cnvVersion == "" {
-				cnvVersion = "Unknown"
-			}
+	for _, info := range clusters {
+		// Handle missing data with proper fallbacks
+		ocpVersion := info.OCPVersion
+		if ocpVersion == "" {
+			ocpVersion = "Unknown"
+		}
 
-			iibVersion := info.IIB
-			if iibVersion == "" {
-				iibVersion = "N/A"
-			}
-			// Truncate very long IIB names for better table formatting
-			if len(iibVersion) > 35 {
-				iibVersion = iibVersion[:32] + "..."
-			}
+		mtvVersion := info.MTVVersion
+		if mtvVersion == "" {
+			mtvVersion = "Unknown"
+		}
 
-			// Color code the status for better visibility
-			var mtvDisplay, cnvDisplay string
-			if mtvVersion == "Not installed" || mtvVersion == "Unknown" {
-				mtvDisplay = fmt.Sprintf("%s%s%s", ColorYellow, mtvVersion, ColorReset)
-			} else {
-				mtvDisplay = fmt.Sprintf("%s%s%s", ColorGreen, mtvVersion, ColorReset)
-			}
+		cnvVersion := info.CNVVersion
+		if cnvVersion == "" {
+			cnvVersion = "Unknown"
+		}
 
-			if cnvVersion == "Not installed" || cnvVersion == "Unknown" {
-				cnvDisplay = fmt.Sprintf("%s%s%s", ColorYellow, cnvVersion, ColorReset)
-			} else {
-				cnvDisplay = fmt.Sprintf("%s%s%s", ColorGreen, cnvVersion, ColorReset)
-			}
+		iibVersion := info.IIB
+		if iibVersion == "" {
+			iibVersion = "N/A"
+		}
+		// Truncate very long IIB names for better table formatting
+		if len(iibVersion) > 35 {
+			iibVersion = iibVersion[:32] + "..."
+		}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-15s %-12s %-24s %-24s %s\n",
-				info.Name, ocpVersion, mtvDisplay, cnvDisplay, iibVersion)
+		// Color code the status for better visibility
+		var mtvDisplay, cnvDisplay string
+		if mtvVersion == "Not installed" || mtvVersion == "Unknown" {
+			mtvDisplay = fmt.Sprintf("%s%s%s", ColorYellow, mtvVersion, ColorReset)
+		} else {
+			mtvDisplay = fmt.Sprintf("%s%s%s", ColorGreen, mtvVersion, ColorReset)
+		}
+
+		if cnvVersion == "Not installed" || cnvVersion == "Unknown" {
+			cnvDisplay = fmt.Sprintf("%s%s%s", ColorYellow, cnvVersion, ColorReset)
+		} else {
+			cnvDisplay = fmt.Sprintf("%s%s%s", ColorGreen, cnvVersion, ColorReset)
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-15s %-12s %-24s %-24s %s\n",
+			info.Name, ocpVersion, mtvDisplay, cnvDisplay, iibVersion)
+	}
+}
+
+// printClustersJSON prints clusters in JSON format for automation
+func printClustersJSON(cmd *cobra.Command, clusters []ClusterInfo, errorCount int, totalTimeSeconds float64) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "{\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"clusters\": [\n")
+
+	for i, cluster := range clusters {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    {\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"name\": \"%s\",\n", cluster.Name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"ocp_version\": \"%s\",\n", cluster.OCPVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"mtv_version\": \"%s\",\n", cluster.MTVVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"cnv_version\": \"%s\",\n", cluster.CNVVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"iib\": \"%s\",\n", cluster.IIB)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"console_url\": \"%s\"\n", cluster.ConsoleURL)
+
+		if i < len(clusters)-1 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    },\n")
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    }\n")
 		}
 	}
 
-	// Summary
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sSummary:%s\n", ColorCyan, ColorReset)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Total clusters: %d\n", len(liveClusterInfos))
-	if errorCount > 0 {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Failed clusters: %d\n", errorCount)
-	}
-	if showTiming {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Total time: %.2fs\n", time.Since(start).Seconds())
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ],\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"summary\": {\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"total_clusters\": %d,\n", len(clusters))
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"failed_clusters\": %d,\n", errorCount)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"total_time_seconds\": %.2f\n", totalTimeSeconds)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  }\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "}\n")
+}
+
+// printClustersSimple prints cluster names only for scripting
+func printClustersSimple(cmd *cobra.Command, clusters []ClusterInfo) {
+	for _, cluster := range clusters {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", cluster.Name)
 	}
 }
 
@@ -204,12 +275,34 @@ func clusterPassword(cmd *cobra.Command, args []string) {
 	}
 }
 
+// ClusterLoginInfo represents login information for a cluster
+type ClusterLoginInfo struct {
+	Name       string `json:"name"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	LoginCmd   string `json:"login_command"`
+	APIUrl     string `json:"api_url"`
+	ConsoleURL string `json:"console_url"`
+	OCPVersion string `json:"ocp_version"`
+	MTVVersion string `json:"mtv_version"`
+	CNVVersion string `json:"cnv_version"`
+	IIB        string `json:"iib"`
+}
+
 func clusterLogin(cmd *cobra.Command, args []string) {
 	clusterName := args[0]
 	noCopy, _ := cmd.Flags().GetBool("no-copy")
+	outputFormat, _ := cmd.Flags().GetString("output")
 
-	if err := ensureLoggedIn(clusterName); err != nil {
-		log.Fatal(err)
+	// Use silent login for JSON output to avoid progress messages
+	var loginErr error
+	if outputFormat == "json" {
+		loginErr = ensureLoggedInSilent(clusterName)
+	} else {
+		loginErr = ensureLoggedIn(clusterName)
+	}
+	if loginErr != nil {
+		log.Fatal(loginErr)
 	}
 
 	password, err := getClusterPassword(clusterName)
@@ -220,11 +313,16 @@ func clusterLogin(cmd *cobra.Command, args []string) {
 	apiURL := fmt.Sprintf("https://api.%s.rhos-psi.cnv-qe.rhood.us:6443", clusterName)
 	loginCmdStr := fmt.Sprintf("oc login --insecure-skip-tls-verify=true %s -u kubeadmin -p %s", apiURL, password)
 
+	// Handle clipboard operations (only show messages for table output)
 	if !noCopy {
 		if err := clipboardWriteAll(password); err != nil {
-			_, _ = fmt.Fprintln(cmd.OutOrStderr(), "Warning: could not copy password to clipboard.", err)
+			if outputFormat != "json" {
+				_, _ = fmt.Fprintln(cmd.OutOrStderr(), "Warning: could not copy password to clipboard.", err)
+			}
 		} else {
-			_, _ = fmt.Fprintln(cmd.OutOrStderr(), "Password copied to clipboard.")
+			if outputFormat != "json" {
+				_, _ = fmt.Fprintln(cmd.OutOrStderr(), "Password copied to clipboard.")
+			}
 		}
 	}
 
@@ -233,18 +331,70 @@ func clusterLogin(cmd *cobra.Command, args []string) {
 		log.Fatalf("Could not get cluster info: %v", err)
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "OpenShift Cluster Info -- [%s]\n", clusterName)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Username: %s\n", "kubeadmin")
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Password: %s\n", password)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Login: %s\n", loginCmdStr)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Console: %s\n", info.ConsoleURL)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── OCP version: %s\n", info.OCPVersion)
-	if info.MTVVersion != "Not installed" {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── MTV version: %s (%s)\n", info.MTVVersion, info.IIB)
-	} else {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── MTV version: %s\n", info.MTVVersion)
+	// Prepare cluster login information
+	loginInfo := ClusterLoginInfo{
+		Name:       clusterName,
+		Username:   "kubeadmin",
+		Password:   password,
+		LoginCmd:   loginCmdStr,
+		APIUrl:     apiURL,
+		ConsoleURL: info.ConsoleURL,
+		OCPVersion: info.OCPVersion,
+		MTVVersion: info.MTVVersion,
+		CNVVersion: info.CNVVersion,
+		IIB:        info.IIB,
 	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "└── CNV version: %s\n", info.CNVVersion)
+
+	// Output results based on format
+	switch outputFormat {
+	case "json":
+		printClusterLoginJSON(cmd, loginInfo)
+	default: // "table"
+		printClusterLoginTable(cmd, loginInfo)
+	}
+}
+
+// printClusterLoginTable prints cluster login info in the original tree format
+func printClusterLoginTable(cmd *cobra.Command, loginInfo ClusterLoginInfo) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "OpenShift Cluster Info -- [%s]\n", loginInfo.Name)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Username: %s\n", loginInfo.Username)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Password: %s\n", loginInfo.Password)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Login: %s\n", loginInfo.LoginCmd)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── Console: %s\n", loginInfo.ConsoleURL)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── OCP version: %s\n", loginInfo.OCPVersion)
+	if loginInfo.MTVVersion != "Not installed" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── MTV version: %s (%s)\n", loginInfo.MTVVersion, loginInfo.IIB)
+	} else {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "├── MTV version: %s\n", loginInfo.MTVVersion)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "└── CNV version: %s\n", loginInfo.CNVVersion)
+}
+
+// printClusterLoginJSON prints cluster login info in JSON format for automation
+func printClusterLoginJSON(cmd *cobra.Command, loginInfo ClusterLoginInfo) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "{\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"cluster\": {\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"name\": \"%s\",\n", loginInfo.Name)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"api_url\": \"%s\",\n", loginInfo.APIUrl)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"console_url\": \"%s\"\n", loginInfo.ConsoleURL)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  },\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"credentials\": {\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"username\": \"%s\",\n", loginInfo.Username)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"password\": \"%s\",\n", loginInfo.Password)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"login_command\": \"%s\"\n", loginInfo.LoginCmd)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  },\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"versions\": {\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"ocp_version\": \"%s\",\n", loginInfo.OCPVersion)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"mtv_version\": \"%s\",\n", loginInfo.MTVVersion)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"cnv_version\": \"%s\"", loginInfo.CNVVersion)
+	if loginInfo.IIB != "" && loginInfo.MTVVersion != "Not installed" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), ",\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"iib\": \"%s\"\n", loginInfo.IIB)
+	} else {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n")
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  }\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "}\n")
 }
 
 func runTests(cmd *cobra.Command, args []string) {
@@ -387,14 +537,32 @@ func runTests(cmd *cobra.Command, args []string) {
 	}
 }
 
+// ResourceInfo represents information about a specific resource type
+type ResourceInfo struct {
+	Type  string   `json:"type"`
+	Items []string `json:"items"`
+}
+
 // Refactored mtvResources to accept dependencies
 func mtvResourcesWithDeps(cmd *cobra.Command, args []string, ensureLoggedInFunc func(string) error, execCommandFunc func(string, ...string) CmdRunner) {
 	clusterName := args[0]
-	if err := ensureLoggedInFunc(clusterName); err != nil {
-		_, _ = fmt.Fprintln(cmd.OutOrStderr(), "Failed to initialize OCP client:", err)
+	outputFormat, _ := cmd.Flags().GetString("output")
+
+	// Use silent login for JSON output to avoid progress messages
+	var loginErr error
+	if outputFormat == "json" {
+		loginErr = ensureLoggedInSilent(clusterName)
+	} else {
+		loginErr = ensureLoggedInFunc(clusterName)
+	}
+	if loginErr != nil {
+		_, _ = fmt.Fprintln(cmd.OutOrStderr(), "Failed to initialize OCP client:", loginErr)
 		return
 	}
+
 	resources := []string{"ns", "pods", "dv", "pvc", "pv", "plan", "migration", "storagemap", "networkmap", "provider", "host", "secret", "net-attach-def", "hook", "vm", "vmi"}
+	var resourceData []ResourceInfo
+
 	for _, resource := range resources {
 		ocCmd := execCommandFunc("oc", "get", resource, "-A")
 		output, err := ocCmd.CombinedOutput()
@@ -411,13 +579,74 @@ func mtvResourcesWithDeps(cmd *cobra.Command, args []string, ensureLoggedInFunc 
 			}
 		}
 		if found {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s:\n", resource)
-			for _, line := range filtered {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", line)
-			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout())
+			resourceData = append(resourceData, ResourceInfo{
+				Type:  resource,
+				Items: filtered,
+			})
 		}
 	}
+
+	// Output results based on format
+	switch outputFormat {
+	case "json":
+		printMTVResourcesJSON(cmd, clusterName, resourceData)
+	default: // "table"
+		printMTVResourcesTable(cmd, resourceData)
+	}
+}
+
+// printMTVResourcesTable prints resources in the original table format
+func printMTVResourcesTable(cmd *cobra.Command, resourceData []ResourceInfo) {
+	for _, resource := range resourceData {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s:\n", resource.Type)
+		for _, item := range resource.Items {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", item)
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+}
+
+// printMTVResourcesJSON prints resources in JSON format for automation
+func printMTVResourcesJSON(cmd *cobra.Command, clusterName string, resourceData []ResourceInfo) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "{\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"cluster\": \"%s\",\n", clusterName)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"resources\": [\n")
+
+	for i, resource := range resourceData {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    {\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"type\": \"%s\",\n", resource.Type)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"items\": [\n")
+
+		for j, item := range resource.Items {
+			// Escape quotes in the item string
+			escapedItem := strings.ReplaceAll(item, "\"", "\\\"")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "        \"%s\"", escapedItem)
+			if j < len(resource.Items)-1 {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), ",\n")
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n")
+			}
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      ]\n")
+		if i < len(resourceData)-1 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    },\n")
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    }\n")
+		}
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ],\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"summary\": {\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"total_resource_types\": %d,\n", len(resourceData))
+
+	totalItems := 0
+	for _, resource := range resourceData {
+		totalItems += len(resource.Items)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"total_items\": %d\n", totalItems)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  }\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "}\n")
 }
 
 // Wrapper for Cobra to use real dependencies
@@ -989,23 +1218,33 @@ func getIIB(cmd *cobra.Command, args []string) {
 
 	mtvVersion := args[0]
 	forceLogin, _ := cmd.Flags().GetBool("force-login")
+	outputFormat, _ := cmd.Flags().GetString("output")
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sRetrieving MTV %s builds from kuflox cluster...%s\n", ColorYellow, mtvVersion, ColorReset)
+	// Only show progress messages for table output
+	if outputFormat != "json" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sRetrieving MTV %s builds from kuflox cluster...%s\n", ColorYellow, mtvVersion, ColorReset)
+	}
 
 	// Check if already logged in to the right cluster (unless force-login is specified)
 	if !forceLogin && checkKufloxLogin() {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s✓ Already logged into kuflox cluster (rh-mtv-1-tenant)%s\n", ColorGreen, ColorReset)
+		if outputFormat != "json" {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s✓ Already logged into kuflox cluster (rh-mtv-1-tenant)%s\n", ColorGreen, ColorReset)
+		}
 	} else {
-		if forceLogin {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sForce login requested, re-authenticating...%s\n", ColorYellow, ColorReset)
-		} else {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sConnecting to kuflox cluster...%s\n", ColorYellow, ColorReset)
+		if outputFormat != "json" {
+			if forceLogin {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sForce login requested, re-authenticating...%s\n", ColorYellow, ColorReset)
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sConnecting to kuflox cluster...%s\n", ColorYellow, ColorReset)
+			}
 		}
 		if err := loginToKuflox(); err != nil {
 			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sFailed to login to kuflox cluster: %v%s\n", ColorRed, err, ColorReset)
 			return
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s✓ Successfully connected to kuflox cluster%s\n", ColorGreen, ColorReset)
+		if outputFormat != "json" {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s✓ Successfully connected to kuflox cluster%s\n", ColorGreen, ColorReset)
+		}
 	}
 
 	// Get production builds
@@ -1022,6 +1261,17 @@ func getIIB(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	// Output results based on format
+	switch outputFormat {
+	case "json":
+		printIIBJSON(cmd, mtvVersion, prodBuilds, stageBuilds)
+	default: // "table"
+		printIIBTable(cmd, mtvVersion, prodBuilds, stageBuilds)
+	}
+}
+
+// printIIBTable prints IIB builds in a formatted table (original format)
+func printIIBTable(cmd *cobra.Command, mtvVersion string, prodBuilds, stageBuilds []IIBInfo) {
 	// Display results
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s=== MTV %s Forklift FBC Builds ===%s\n", ColorCyan, mtvVersion, ColorReset)
 
@@ -1047,6 +1297,58 @@ func getIIB(cmd *cobra.Command, args []string) {
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sSummary: Found %d production and %d stage builds%s\n",
 		ColorCyan, len(prodBuilds), len(stageBuilds), ColorReset)
+}
+
+// printIIBJSON prints IIB builds in JSON format for automation
+func printIIBJSON(cmd *cobra.Command, mtvVersion string, prodBuilds, stageBuilds []IIBInfo) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "{\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"mtv_version\": \"%s\",\n", mtvVersion)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"production_builds\": [\n")
+
+	for i, build := range prodBuilds {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    {\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"ocp_version\": \"%s\",\n", build.OCPVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"mtv_version\": \"%s\",\n", build.MTVVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"iib\": \"%s\",\n", build.IIB)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"snapshot\": \"%s\",\n", build.Snapshot)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"created\": \"%s\",\n", build.Created)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"image\": \"%s\",\n", build.Image)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"environment\": \"%s\"\n", build.Environment)
+
+		if i < len(prodBuilds)-1 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    },\n")
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    }\n")
+		}
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ],\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"stage_builds\": [\n")
+
+	for i, build := range stageBuilds {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    {\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"ocp_version\": \"%s\",\n", build.OCPVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"mtv_version\": \"%s\",\n", build.MTVVersion)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"iib\": \"%s\",\n", build.IIB)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"snapshot\": \"%s\",\n", build.Snapshot)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"created\": \"%s\",\n", build.Created)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"image\": \"%s\",\n", build.Image)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "      \"environment\": \"%s\"\n", build.Environment)
+
+		if i < len(stageBuilds)-1 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    },\n")
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    }\n")
+		}
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ],\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  \"summary\": {\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"total_production_builds\": %d,\n", len(prodBuilds))
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"total_stage_builds\": %d,\n", len(stageBuilds))
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"total_builds\": %d\n", len(prodBuilds)+len(stageBuilds))
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  }\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "}\n")
 }
 
 // getForkliftBuilds extracts build information for a specific environment (prod/stage)
@@ -1198,4 +1500,252 @@ func createKufloxClient() (dynamic.Interface, error) {
 	}
 
 	return dynamicClient, nil
+}
+
+// getVMs lists VMs from specified provider
+func getVMs(cmd *cobra.Command, args []string) {
+	// Check if --list-providers flag is set
+	listProviders, _ := cmd.Flags().GetBool("list-providers")
+
+	// Load provider configurations from Python config file
+	vmProviderConfigs, err := loadProviderConfigs()
+	if err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError loading provider configurations: %v%s\n", ColorRed, err, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sHint: The tool searches for the mtv-api-tests config file (tests/tests_config/config.py) by looking for MTV-specific project markers.%s\n", ColorYellow, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sEnsure you're using the mtv-api-tests project, or set MTV_CONFIG_PATH environment variable to specify the config file location.%s\n", ColorYellow, ColorReset)
+		return
+	}
+
+	// If --list-providers flag is set, just list providers and exit
+	if listProviders {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sAvailable VM providers:%s\n", ColorCyan, ColorReset)
+		for name := range vmProviderConfigs {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s%s%s\n", ColorGreen, name, ColorReset)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sTotal: %d providers%s\n", ColorCyan, len(vmProviderConfigs), ColorReset)
+		return
+	}
+
+	if len(args) != 1 {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError: provider name is required%s\n", ColorRed, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Usage: %s get-vms <provider-name>%s\n", cmd.Root().Use, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Available providers: ")
+		var providers []string
+		for name := range vmProviderConfigs {
+			providers = append(providers, name)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%s%s%s\n", ColorCyan, strings.Join(providers, ", "), ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Or use: %s get-vms --list-providers%s\n", cmd.Root().Use, ColorReset)
+		return
+	}
+
+	providerName := args[0]
+	outputFormat, _ := cmd.Flags().GetString("output")
+	runningOnly, _ := cmd.Flags().GetBool("running")
+
+	// Look up provider configuration
+	providerConfig, exists := vmProviderConfigs[providerName]
+	if !exists {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError: Unknown provider '%s'%s\n", ColorRed, providerName, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Available providers: ")
+		var providers []string
+		for name := range vmProviderConfigs {
+			providers = append(providers, name)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%s%s%s\n", ColorCyan, strings.Join(providers, ", "), ColorReset)
+		return
+	}
+
+	// Create provider using stored configuration
+	provider, err := CreateProvider(
+		providerConfig.Type,
+		providerConfig.URL,
+		providerConfig.Username,
+		providerConfig.Password,
+		providerConfig.Insecure,
+		providerConfig.ExtraParams,
+	)
+	if err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError creating provider: %v%s\n", ColorRed, err, ColorReset)
+		return
+	}
+
+	// Connect to provider (only show progress for non-JSON output)
+	if outputFormat != "json" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sConnecting to %s provider (%s)...%s\n", ColorCyan, providerName, providerConfig.Type, ColorReset)
+	}
+	if err := provider.Connect(); err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError connecting to provider: %v%s\n", ColorRed, err, ColorReset)
+		return
+	}
+	defer func() { _ = provider.Close() }()
+
+	// List VMs (only show progress for non-JSON output)
+	if outputFormat != "json" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sRetrieving VM list...%s\n", ColorCyan, ColorReset)
+	}
+	ctx := context.Background()
+	vms, err := provider.ListVMs(ctx)
+	if err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError listing VMs: %v%s\n", ColorRed, err, ColorReset)
+		return
+	}
+
+	if len(vms) == 0 {
+		if outputFormat == "json" {
+			printVMJSON(cmd, []VMInfo{})
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%sNo VMs found.%s\n", ColorYellow, ColorReset)
+		}
+		return
+	}
+
+	// Filter to only running VMs if --running flag is specified
+	var filteredVMs []VMInfo
+	if runningOnly {
+		for _, vm := range vms {
+			if strings.ToLower(vm.PowerState) == "poweredon" ||
+				strings.ToLower(vm.PowerState) == "running" ||
+				strings.ToLower(vm.PowerState) == "active" ||
+				strings.ToLower(vm.PowerState) == "up" {
+				filteredVMs = append(filteredVMs, vm)
+			}
+		}
+	} else {
+		filteredVMs = vms
+	}
+
+	// Output results
+	switch outputFormat {
+	case "table":
+		printVMTable(cmd, filteredVMs, !runningOnly)
+	case "json":
+		printVMJSON(cmd, filteredVMs)
+	case "simple":
+		printVMSimple(cmd, filteredVMs)
+	default:
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "%sError: Invalid output format '%s'. Use 'table', 'json', or 'simple'%s\n", ColorRed, outputFormat, ColorReset)
+		return
+	}
+
+	// Summary (only show for non-JSON output)
+	if outputFormat != "json" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%sSummary:%s\n", ColorCyan, ColorReset)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Provider: %s (%s)\n", providerName, providerConfig.Type)
+		if runningOnly {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Running VMs: %d\n", len(filteredVMs))
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- Total VMs: %d (use --running to show only running VMs)\n", len(filteredVMs))
+		}
+	}
+}
+
+func printVMTable(cmd *cobra.Command, vms []VMInfo, showingAll bool) {
+	if len(vms) == 0 {
+		return
+	}
+
+	// Define column widths - use fixed widths for better alignment
+	nameWidth := 30
+	providerWidth := 12
+	powerStateWidth := 15
+	cpuWidth := 5
+	memoryWidth := 10
+	guestOSWidth := 20
+
+	// Print header
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s%-*s %-*s %-*s %-*s %-*s %-*s%s\n",
+		ColorCyan,
+		nameWidth, "NAME",
+		providerWidth, "PROVIDER",
+		powerStateWidth, "POWER STATE",
+		cpuWidth, "CPU",
+		memoryWidth, "MEMORY",
+		guestOSWidth, "GUEST OS",
+		ColorReset)
+
+	// Print separator
+	totalWidth := nameWidth + providerWidth + powerStateWidth + cpuWidth + memoryWidth + guestOSWidth + 5
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s%s%s\n", ColorCyan, strings.Repeat("-", totalWidth), ColorReset)
+
+	// Print rows
+	for _, vm := range vms {
+		// Truncate long names
+		displayName := vm.Name
+		if len(displayName) > nameWidth {
+			displayName = displayName[:nameWidth-3] + "..."
+		}
+
+		// Truncate long guest OS names
+		displayGuestOS := vm.GuestOS
+		if len(displayGuestOS) > guestOSWidth {
+			displayGuestOS = displayGuestOS[:guestOSWidth-3] + "..."
+		}
+
+		// Color code power state
+		powerColor := ColorGreen
+		if strings.ToLower(vm.PowerState) == "poweredoff" ||
+			strings.ToLower(vm.PowerState) == "down" ||
+			strings.ToLower(vm.PowerState) == "stopped" {
+			powerColor = ColorRed
+		} else if strings.ToLower(vm.PowerState) == "unknown" ||
+			strings.ToLower(vm.PowerState) == "not_responding" {
+			powerColor = ColorYellow
+		} else if strings.ToLower(vm.PowerState) != "running" &&
+			strings.ToLower(vm.PowerState) != "poweredon" &&
+			strings.ToLower(vm.PowerState) != "active" &&
+			strings.ToLower(vm.PowerState) != "up" {
+			powerColor = ColorYellow
+		}
+
+		// Format memory
+		memoryGB := float64(vm.MemoryMB) / 1024
+		var memoryStr string
+		if memoryGB >= 1 {
+			memoryStr = fmt.Sprintf("%.1fGB", memoryGB)
+		} else if vm.MemoryMB > 0 {
+			memoryStr = fmt.Sprintf("%dMB", vm.MemoryMB)
+		} else {
+			memoryStr = "N/A"
+		}
+
+		// Print row
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-*s %-*s %s%-*s%s %-*d %-*s %-*s\n",
+			nameWidth, displayName,
+			providerWidth, vm.Provider,
+			powerColor, powerStateWidth, vm.PowerState, ColorReset,
+			cpuWidth, vm.CPU,
+			memoryWidth, memoryStr,
+			guestOSWidth, displayGuestOS)
+	}
+}
+
+func printVMJSON(cmd *cobra.Command, vms []VMInfo) {
+	// Simple JSON output for scripting
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[\n")
+	for i, vm := range vms {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  {\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"name\": \"%s\",\n", vm.Name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"provider\": \"%s\",\n", vm.Provider)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"power_state\": \"%s\",\n", vm.PowerState)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"uuid\": \"%s\",\n", vm.UUID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"cpu\": %d,\n", vm.CPU)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"memory_mb\": %d,\n", vm.MemoryMB)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"guest_os\": \"%s\",\n", vm.GuestOS)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    \"storage_gb\": %.2f\n", vm.StorageGB)
+		if i < len(vms)-1 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  },\n")
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  }\n")
+		}
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "]\n")
+}
+
+func printVMSimple(cmd *cobra.Command, vms []VMInfo) {
+	// Simple name list for scripting
+	for _, vm := range vms {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", vm.Name)
+	}
 }
