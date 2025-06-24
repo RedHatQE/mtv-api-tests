@@ -67,3 +67,12 @@ repos:
     hooks:
       - id: markdownlint-cli2
         args: ["--fix"]
+
+  - repo: local
+    hooks:
+      - id: golangci-lint-mtv-dev
+        name: golangci-lint (mtv-dev)
+        entry: bash -c 'cd tools/dev && golangci-lint run --no-config --timeout=5m ./...'
+        language: system
+        files: ^tools/dev/.*\.go$
+        pass_filenames: false

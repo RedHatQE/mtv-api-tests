@@ -147,3 +147,6 @@ prof/
 
 # Local develop
 .dev/
+mtv-dev
+# Go coverage output
+coverage.out
