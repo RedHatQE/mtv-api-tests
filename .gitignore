@@ -153,4 +153,4 @@ coverage.out
 coverage.html
 
 # Cursor IDE rules (local development guidelines)
-.cursorrules
+.cursor
