@@ -91,7 +91,6 @@ check_vms_signals: bool = True
 target_namespace: str = "mtv-api-tests"
 mtv_namespace: str = "openshift-mtv"
 vm_name_search_pattern: str = ""
-remote_ocp_cluster: str = ""
 snapshots_interval: int = 2
 mins_before_cutover: int = 5
 plan_wait_timeout: int = 3600
