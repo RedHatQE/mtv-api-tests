@@ -179,7 +179,6 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_collection_modifyitems(session, config, items):
     for item in items:
-        # Add test ID to test name
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
 
 
