@@ -12,6 +12,8 @@ from utilities.utils import get_value_from_py_config
 
 pytestmark = pytest.mark.jira("MTV-2846", run=lambda: py_config["source_provider_type"] != Provider.ProviderType.RHV)
 
+if py_config["source_provider_type"] in [Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT]:
+    pytest.skip("OpenStack/OpenShift warm migration is not supported.", allow_module_level=True)
 
 VM_SUFFIX = get_vm_suffix()
 
