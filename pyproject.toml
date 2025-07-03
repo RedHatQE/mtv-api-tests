@@ -48,6 +48,8 @@ dependencies = [
   "semver>=3.0.4",
   "typer>=0.15.1",
   "openshift-python-wrapper>=11.0.53",
+  "pytest-jira>=0.3.22",
+  "marshmallow==3.26.1",
 ]
 
 [project.optional-dependencies]
