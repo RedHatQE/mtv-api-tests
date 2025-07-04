@@ -179,7 +179,6 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_collection_modifyitems(session, config, items):
     for item in items:
-        # Add test ID to test name
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
 
 
@@ -553,12 +552,19 @@ def plan(
 @pytest.fixture(scope="session")
 def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
     def _get_not_running_pods(_admin_client: DynamicClient) -> bool:
+        controller_pod: str | None = None
         not_running_pods: list[str] = []
 
         for pod in Pod.get(dyn_client=_admin_client, namespace=py_config["mtv_namespace"]):
             if pod.name.startswith("forklift-"):
+                if pod.name.startswith("forklift-controller"):
+                    controller_pod = pod
+
                 if pod.status not in (pod.Status.RUNNING, pod.Status.SUCCEEDED):
                     not_running_pods.append(pod.name)
+
+        if not controller_pod:
+            raise ForkliftPodsNotRunningError("Forklift controller pod not found")
 
         if not_running_pods:
             raise ForkliftPodsNotRunningError(f"Some of the forklift pods are not running: {not_running_pods}")
