@@ -78,13 +78,9 @@ source_providers_dict: dict[str, dict[str, Any]] = {
         "api_url": "f02-h06-000-r640.rdu2.scalelab.redhat.com:/home/nfsshare-test/mtv-api-tests",
         "username": "ova",
         "password": "",
-        # "default": "True",
     },
 }
 
-storage_class: str = "nfs"
-source_provider_type: str = "vsphere"
-source_provider_version: str = "7.0.3"
 insecure_verify_skip: str = "true"
 number_of_vms: int = 1
 check_vms_signals: bool = True
@@ -97,7 +93,6 @@ mins_before_cutover: int = 5
 plan_wait_timeout: int = 3600
 matrix_test: bool = True
 release_test: bool = False
-target_ocp_version: str = "4.17"
 mount_root: str = ""
 
 for _dir in dir():

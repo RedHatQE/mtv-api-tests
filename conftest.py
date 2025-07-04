@@ -420,7 +420,7 @@ def source_provider(
         namespace=target_namespace,
         admin_client=ocp_admin_client,
         tmp_dir=tmp_path_factory,
-        insecure=get_value_from_py_config(value=py_config["insecure_verify_skip"]),
+        insecure=get_value_from_py_config(value="insecure_verify_skip"),
     ) as _source_provider:
         yield _source_provider
 
