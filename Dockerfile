@@ -35,7 +35,6 @@ COPY README.md pyproject.toml uv.lock conftest.py pytest.ini report.py ./
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-RUN chmod +x scripts/run-tests.sh
 
 ARG OPENSHIFT_PYTHON_WRAPPER_COMMIT=''
 ARG OPENSHIFT_PYTHON_UTILITIES_COMMIT=''
