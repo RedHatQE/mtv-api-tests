@@ -183,7 +183,7 @@ def get_vm_suffix() -> str:
     vm_suffix = ""
 
     if get_value_from_py_config("matrix_test"):
-        storage_name = py_config["storage_class"]
+        storage_name = py_config.get("storage_class", "")
 
         if "ceph-rbd" in storage_name:
             vm_suffix = "-ceph-rbd"
@@ -192,7 +192,7 @@ def get_vm_suffix() -> str:
             vm_suffix = "-nfs"
 
     if get_value_from_py_config("release_test"):
-        ocp_version = py_config["target_ocp_version"].replace(".", "-")
+        ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
         vm_suffix = f"{vm_suffix}-{ocp_version}"
 
     return vm_suffix
