@@ -30,7 +30,6 @@ RUN mkdir /cred && mkdir -p ${APP_DIR}/output
 
 COPY utilities utilities
 COPY tests tests
-COPY scripts scripts
 COPY libs libs
 COPY README.md pyproject.toml uv.lock conftest.py pytest.ini report.py ./
 
