@@ -88,6 +88,13 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionstart(session):
+    required_config = ("storage_class", "source_provider_type", "source_provider_version", "target_ocp_version")
+
+    if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
+        for _req in required_config:
+            if not py_config.get(_req):
+                pytest.exit(reason=f"Some required config is missing {required_config}", returncode=1)
+
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
 
@@ -430,7 +437,7 @@ def source_provider(
         target_namespace=target_namespace,
         ocp_admin_client=ocp_admin_client,
         destination_ocp_secret=destination_ocp_secret,
-        insecure=get_value_from_py_config(value=py_config["insecure_verify_skip"]),
+        insecure=get_value_from_py_config(value="insecure_verify_skip"),
     ) as _source_provider:
         yield _source_provider
 
