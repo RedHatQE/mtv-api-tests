@@ -25,9 +25,14 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
             client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
         )
 
+        if not mtv_csv.instance.spec.relatedImages:
+            LOGGER.error("Can't find any relatedImages under MTV ClusterServiceVersion")
+            return
+
         must_gather_images = [
             image["image"] for image in mtv_csv.instance.spec.relatedImages if "must_gather" in image["name"]
         ]
+
         if not must_gather_images:
             LOGGER.error("Can't find any must-gather image under MTV ClusterServiceVersion")
             return

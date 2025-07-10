@@ -1,4 +1,5 @@
 import pytest
+from ocp_resources.provider import Provider
 from pytest_testconfig import py_config
 
 from utilities.migration_utils import get_cutover_value
@@ -8,8 +9,19 @@ from utilities.mtv_migration import (
     migrate_vms,
 )
 
-if py_config["source_provider_type"] in ["openstack", "openshift"]:
-    pytest.skip("OpenStack/OpenShift warm migration is not supported.", allow_module_level=True)
+pytestmark = [
+    pytest.mark.jira("MTV-2846", run=lambda: py_config["source_provider_type"] != Provider.ProviderType.RHV),
+    pytest.mark.jira("MTV-2811", run=lambda: py_config["source_provider_type"] == Provider.ProviderType.RHV),
+    pytest.mark.skipif(
+        py_config.get("source_provider_type") == Provider.ProviderType.OPENSTACK,
+        reason="OpenStack warm migration is not supported.",
+    ),
+    pytest.mark.skipif(
+        py_config.get("source_provider_type") == Provider.ProviderType.OPENSHIFT,
+        reason="Openshift warm migration is not supported.",
+    ),
+]
+
 
 VM_SUFFIX = get_vm_suffix()
 

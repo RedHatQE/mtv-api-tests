@@ -88,6 +88,13 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionstart(session):
+    required_config = ("storage_class", "source_provider_type", "source_provider_version", "target_ocp_version")
+
+    if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
+        for _req in required_config:
+            if not py_config.get(_req):
+                pytest.exit(reason=f"Some required config is missing {required_config}", returncode=1)
+
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
 
@@ -179,7 +186,6 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_collection_modifyitems(session, config, items):
     for item in items:
-        # Add test ID to test name
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
 
 
@@ -421,7 +427,7 @@ def source_provider(
         namespace=target_namespace,
         admin_client=ocp_admin_client,
         tmp_dir=tmp_path_factory,
-        insecure=get_value_from_py_config(value=py_config["insecure_verify_skip"]),
+        insecure=get_value_from_py_config(value="insecure_verify_skip"),
     ) as _source_provider:
         yield _source_provider
 
@@ -534,12 +540,19 @@ def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, re
 @pytest.fixture(scope="session")
 def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
     def _get_not_running_pods(_admin_client: DynamicClient) -> bool:
+        controller_pod: str | None = None
         not_running_pods: list[str] = []
 
         for pod in Pod.get(dyn_client=_admin_client, namespace=py_config["mtv_namespace"]):
             if pod.name.startswith("forklift-"):
+                if pod.name.startswith("forklift-controller"):
+                    controller_pod = pod
+
                 if pod.status not in (pod.Status.RUNNING, pod.Status.SUCCEEDED):
                     not_running_pods.append(pod.name)
+
+        if not controller_pod:
+            raise ForkliftPodsNotRunningError("Forklift controller pod not found")
 
         if not_running_pods:
             raise ForkliftPodsNotRunningError(f"Some of the forklift pods are not running: {not_running_pods}")

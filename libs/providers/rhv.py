@@ -29,7 +29,7 @@ class OvirtProvider(BaseProvider):
         password: str,
         ocp_resource: Provider,
         ca_file: str | None = None,
-        insecure: bool = False,
+        insecure: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(
