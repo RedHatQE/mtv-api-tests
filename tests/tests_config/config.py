@@ -32,8 +32,8 @@ source_providers_dict: dict[str, dict[str, Any]] = {
     "vsphere-8.0.1": {
         "type": "vsphere",
         "version": "8.0.1",
-        "fqdn": "10.6.46.249",
-        "api_url": "https://10.6.46.249/sdk",
+        "fqdn": "10.6.46.250",
+        "api_url": "https://10.6.46.250/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
         "guest_vm_linux_user": "root",
