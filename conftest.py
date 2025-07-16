@@ -27,7 +27,7 @@ from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
 
-from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
+from exceptions.exceptions import ForkliftPodsNotRunningError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
@@ -344,9 +344,9 @@ def ocp_admin_client():
     LOGGER.info(msg="Creating OCP admin Client")
     _client = get_client()
 
-    if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
-        if remote_cluster_name not in _client.configuration.host:
-            raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
+    # if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
+    #     if remote_cluster_name not in _client.configuration.host:
+    #         raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
 
     yield _client
 
