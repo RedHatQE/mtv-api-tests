@@ -500,6 +500,7 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
 @pytest.fixture(scope="function")
 def plan(
     fixture_store,
+    session_uuid,
     target_namespace,
     ocp_admin_client,
     source_provider,
@@ -521,6 +522,7 @@ def plan(
                 vms=virtual_machines,
                 namespace=source_vms_namespace,
                 network_name=multus_network_name,
+                session_uuid=session_uuid,
             )
         for vm in virtual_machines:
             source_vm_details = source_provider.vm_dict(name=vm["name"], namespace=source_vms_namespace, source=True)

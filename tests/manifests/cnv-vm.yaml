@@ -1,14 +1,12 @@
-﻿apiVersion: kubevirt.io/v1
+apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
-  labels:
-    app: vmname
+  finalizers:
+    - kubevirt.io/virtualMachineControllerFinalize
   name: vmname
 spec:
   dataVolumeTemplates:
-    - apiVersion: cdi.kubevirt.io/v1beta1
-      kind: DataVolume
-      metadata:
+    - metadata:
         name: vmname
       spec:
         sourceRef:
@@ -19,43 +17,22 @@ spec:
           resources:
             requests:
               storage: 30Gi
-          storageClassName: ocs-storagecluster-ceph-rbd
-
-    - metadata:
-        name: vmname-second-disk
-      spec:
-        preallocation: false
-        source:
-          blank: {}
-        storage:
-          resources:
-            requests:
-              storage: 10Gi
-          storageClassName: ocs-storagecluster-ceph-rbd
-
-  running: false
+  instancetype:
+    kind: virtualmachineclusterinstancetype
+    name: u1.small
+  preference:
+    kind: virtualmachineclusterpreference
+    name: rhel.9
+  runStrategy: Manual
   template:
     metadata:
+      creationTimestamp: null
       labels:
-        kubevirt.io/domain: vmname
+        network.kubevirt.io/headlessService: headless
     spec:
+      architecture: amd64
       domain:
-        cpu:
-          cores: 1
-          sockets: 1
-          threads: 1
         devices:
-          disks:
-            - bootOrder: 1
-              disk:
-                bus: virtio
-              name: rootdisk
-            - disk:
-                bus: virtio
-              name: cloudinitdisk
-            - disk:
-                bus: virtio
-              name: second-disk
           interfaces:
             - masquerade: {}
               model: virtio
@@ -63,37 +40,25 @@ spec:
             - bridge: {}
               model: virtio
               name: second-nic
-          rng: {}
-        features:
-          acpi: {}
-          smm:
-            enabled: true
-        firmware:
-          bootloader:
-            efi: {}
         machine:
-          type: pc-q35-rhel9.2.0
-        resources:
-          requests:
-            memory: 2Gi
-      evictionStrategy: LiveMigrate
+          type: pc-q35-rhel9.6.0
+        resources: {}
       networks:
         - name: default
           pod: {}
         - multus:
             networkName: vm-namespace/mybridge
           name: second-nic
+      subdomain: headless
       volumes:
         - dataVolume:
             name: vmname
           name: rootdisk
         - cloudInitNoCloud:
-            userData: |-
+            userData: |
               #cloud-config
-              user: cloud-user
+              chpasswd:
+                expire: false
               password: 123456
-              chpasswd: { expire: False }
+              user: rhel
           name: cloudinitdisk
-        - dataVolume:
-            name: vmname-second-disk
-          name: second-disk

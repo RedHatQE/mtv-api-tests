@@ -55,12 +55,12 @@ def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None
     src_vm_num_sockets = source_vm["cpu"]["num_sockets"]
     dst_vm_num_sockets = destination_vm["cpu"]["num_sockets"]
 
-    if not src_vm_num_cores == dst_vm_num_cores:
+    if src_vm_num_cores and not src_vm_num_cores == dst_vm_num_cores:
         failed_checks["cpu number of cores"] = (
             f"source_vm cpu cores: {src_vm_num_cores} != destination_vm cpu cores: {dst_vm_num_cores}"
         )
 
-    if not src_vm_num_sockets == dst_vm_num_sockets:
+    if src_vm_num_sockets and not src_vm_num_sockets == dst_vm_num_sockets:
         failed_checks["cpu number of sockets"] = (
             f"source_vm cpu sockets: {src_vm_num_sockets} != destination_vm cpu sockets: {dst_vm_num_sockets}"
         )
@@ -93,6 +93,10 @@ def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], net
 
 
 def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], storage_map_resource: StorageMap) -> None:
+    __import__("ipdb").set_trace()
+    if not source_vm["disks"]:
+        return
+
     destination_disks = destination_vm["disks"]
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
 

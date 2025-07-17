@@ -77,7 +77,11 @@ class OCPProvider(BaseProvider):
             sleep(5)
             it_num = it_num - 1
 
-        return [interface["ipAddress"] for interface in vm.vmi.interfaces if interface["mac"] == mac_address][0]
+        interfaces = [interface["ipAddress"] for interface in vm.vmi.interfaces if interface["mac"] == mac_address]
+        if interfaces:
+            return interfaces[0]
+
+        return ""
 
     @staticmethod
     def start_vm(vm_api: VirtualMachine) -> None:
@@ -137,42 +141,43 @@ class OCPProvider(BaseProvider):
                 "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[1],
             })
 
-        for pvc in cnv_vm.instance.spec.template.spec.volumes:
-            if not _source:
-                name = pvc.persistentVolumeClaim.claimName
-            else:
-                if pvc.name == "cloudinitdisk":
-                    continue
+        if cnv_vm.instance.spec.template.spec.volumes:
+            for pvc in cnv_vm.instance.spec.template.spec.volumes:
+                if not _source:
+                    name = pvc.persistentVolumeClaim.claimName
                 else:
-                    name = pvc.dataVolume.name
+                    if pvc.name == "cloudinitdisk":
+                        continue
+                    else:
+                        name = pvc.dataVolume.name
 
-            _pvc = PersistentVolumeClaim(
-                namespace=cnv_vm.namespace,
-                name=name,
-                client=dynamic_client,
-            )
-            result_vm_info["disks"].append({
-                "name": _pvc.name,
-                "size_in_kb": int(
-                    humanfriendly.parse_size(_pvc.instance.spec.resources.requests.storage, binary=True) / 1024
-                ),
-                "storage": {"name": _pvc.instance.spec.storageClassName, "access_mode": _pvc.instance.spec.accessModes},
-            })
-
-        result_vm_info["cpu"]["num_cores"] = cnv_vm.instance.spec.template.spec.domain.cpu.cores
-        result_vm_info["cpu"]["num_sockets"] = cnv_vm.instance.spec.template.spec.domain.cpu.sockets
-
-        if hasattr(cnv_vm.instance.spec.template.spec.domain.memory, "guest"):
-            result_vm_info["memory_in_mb"] = int(
-                humanfriendly.parse_size(
-                    cnv_vm.instance.spec.template.spec.domain.memory.guest,
-                    binary=True,
+                _pvc = PersistentVolumeClaim(
+                    namespace=cnv_vm.namespace,
+                    name=name,
+                    client=dynamic_client,
                 )
-                / 1024
-                / 1024
+                result_vm_info["disks"].append({
+                    "name": _pvc.name,
+                    "size_in_kb": int(
+                        humanfriendly.parse_size(_pvc.instance.spec.resources.requests.storage, binary=True) / 1024
+                    ),
+                    "storage": {
+                        "name": _pvc.instance.spec.storageClassName,
+                        "access_mode": _pvc.instance.spec.accessModes,
+                    },
+                })
+
+        result_vm_info["cpu"]["num_cores"] = cnv_vm.vmi.instance.spec.domain.cpu.cores
+        result_vm_info["cpu"]["num_sockets"] = cnv_vm.vmi.instance.spec.domain.cpu.sockets
+
+        result_vm_info["memory_in_mb"] = int(
+            humanfriendly.parse_size(
+                cnv_vm.vmi.instance.spec.domain.memory.guest,
+                binary=True,
             )
-        else:
-            result_vm_info["memory_in_mb"] = 0
+            / 1024
+            / 1024
+        )
 
         if not _source and result_vm_info["power_state"] == "off":
             self.log.info("Restoring VM Power State (turning off)")
