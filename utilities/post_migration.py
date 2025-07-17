@@ -93,10 +93,6 @@ def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], net
 
 
 def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], storage_map_resource: StorageMap) -> None:
-    __import__("ipdb").set_trace()
-    if not source_vm["disks"]:
-        return
-
     destination_disks = destination_vm["disks"]
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
 
@@ -194,17 +190,17 @@ def check_vms(
                 source_power_before_migration=vm.get("source_vm_power"),
             )
         except Exception as exp:
-            res[vm_name].append(str(exp))
+            res[vm_name].append(f"check_vms_power_state - {str(exp)}")
 
         try:
             check_cpu(source_vm=source_vm, destination_vm=destination_vm)
         except Exception as exp:
-            res[vm_name].append(str(exp))
+            res[vm_name].append(f"check_cpu - {str(exp)}")
 
         try:
             check_memory(source_vm=source_vm, destination_vm=destination_vm)
         except Exception as exp:
-            res[vm_name].append(str(exp))
+            res[vm_name].append(f"check_memory - {str(exp)}")
 
         # TODO: Remove when OCP to OCP migration is done with 2 clusters
         if source_provider.type != Provider.ProviderType.OPENSHIFT:
@@ -215,12 +211,12 @@ def check_vms(
                     network_migration_map=network_map_resource,
                 )
             except Exception as exp:
-                res[vm_name].append(str(exp))
+                res[vm_name].append(f"check_network - {str(exp)}")
 
         try:
             check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
         except Exception as exp:
-            res[vm_name].append(str(exp))
+            res[vm_name].append(f"check_storage - {str(exp)}")
 
         snapshots_before_migration = vm.get("snapshots_before_migration")
 
@@ -235,19 +231,19 @@ def check_vms(
                     snapshots_after_migration=source_vm["snapshots_data"],
                 )
             except Exception as exp:
-                res[vm_name].append(str(exp))
+                res[vm_name].append(f"check_snapshots - {str(exp)}")
 
         if vm_guest_agent:
             try:
                 check_guest_agent(destination_vm=destination_vm)
             except Exception as exp:
-                res[vm_name].append(str(exp))
+                res[vm_name].append(f"check_guest_agent - {str(exp)}")
 
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):
             try:
                 check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)
             except Exception as exp:
-                res[vm_name].append(str(exp))
+                res[vm_name].append(f"check_false_vm_power_off - {str(exp)}")
 
         for _vm_name, _errors in res.items():
             if _errors:

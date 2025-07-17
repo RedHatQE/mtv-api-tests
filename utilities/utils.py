@@ -142,7 +142,6 @@ def create_source_provider(
     if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
         provider = create_and_store_resource(
             fixture_store=fixture_store,
-            session_uuid=session_uuid,
             resource=Provider,
             name=source_provider_name,
             namespace=target_namespace,
@@ -228,7 +227,6 @@ def create_source_provider(
         # Creating the source Secret and source Provider CRs
         source_provider_secret = create_and_store_resource(
             fixture_store=fixture_store,
-            session_uuid=session_uuid,
             resource=Secret,
             client=admin_client,
             name=generate_name_with_uuid(name=source_provider_name),
@@ -239,7 +237,6 @@ def create_source_provider(
 
         ocp_resource_provider = create_and_store_resource(
             fixture_store=fixture_store,
-            session_uuid=session_uuid,
             resource=Provider,
             client=admin_client,
             name=source_provider_name,
@@ -268,7 +265,6 @@ def create_source_cnv_vms(
     vms: list[dict[str, Any]],
     namespace: str,
     network_name: str,
-    session_uuid: str,
 ) -> None:
     vms_to_create: list[VirtualMachine] = []
 
@@ -277,10 +273,9 @@ def create_source_cnv_vms(
             create_and_store_resource(
                 resource=VirtualMachineFromInstanceType,
                 fixture_store=fixture_store,
-                session_uuid=session_uuid,
                 name=vm_dict["name"],
                 namespace=namespace,
-                client=get_client(),
+                client=dyn_client,
                 instancetype_name="u1.small",
                 preference_name="rhel.9",
                 datasource_name="rhel9",

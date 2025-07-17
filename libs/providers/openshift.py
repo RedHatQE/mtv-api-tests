@@ -119,53 +119,50 @@ class OCPProvider(BaseProvider):
         result_vm_info["provider_vm_api"] = cnv_vm
 
         # Power state
-        result_vm_info["power_state"] = "on" if cnv_vm.instance.spec.runStrategy == cnv_vm.RunStrategy.ALWAYS else "off"
+        result_vm_info["power_state"] = (
+            "on" if cnv_vm.instance.status.printableStatus == cnv_vm.Status.RUNNING else "off"
+        )
 
-        if not _source:
-            # This step is required to check some of the vm_signals.
-            self.start_vm(cnv_vm)
+        self.start_vm(cnv_vm)
+        # True guest agent is reporting all ok
+        result_vm_info["guest_agent_running"] = (
+            self.wait_for_cnv_vm_guest_agent(vm_dict=result_vm_info) if wait_for_guest_agent else False
+        )
 
-            # True guest agent is reporting all ok
-            result_vm_info["guest_agent_running"] = (
-                self.wait_for_cnv_vm_guest_agent(vm_dict=result_vm_info) if wait_for_guest_agent else False
-            )
-
-        for interface in cnv_vm.get_interfaces():
-            network = [
-                network for network in cnv_vm.instance.spec.template.spec.networks if network.name == interface.name
-            ][0]
+        for interface in cnv_vm.vmi.interfaces:
+            network = [network for network in cnv_vm.vmi.instance.spec.networks if network.name == interface.name][0]
+            mac_addr = interface["mac"]
             result_vm_info["network_interfaces"].append({
                 "name": interface.name,
-                "macAddress": interface.macAddress,
-                "ip": self.get_ip_by_mac_address(mac_address=interface.macAddress, vm=cnv_vm) if not _source else "",
+                "macAddress": mac_addr,
+                "ip": self.get_ip_by_mac_address(mac_address=mac_addr, vm=cnv_vm) if not _source else "",
                 "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[1],
             })
 
-        if cnv_vm.instance.spec.template.spec.volumes:
-            for pvc in cnv_vm.instance.spec.template.spec.volumes:
-                if not _source:
-                    name = pvc.persistentVolumeClaim.claimName
-                else:
-                    if pvc.name == "cloudinitdisk":
-                        continue
-                    else:
-                        name = pvc.dataVolume.name
+        for pvc in cnv_vm.vmi.instance.spec.volumes:
+            if not _source:
+                name = pvc.persistentVolumeClaim.claimName
+            else:
+                if pvc.name in ("cloudinitdisk", "cloudInitNoCloud", "cloudinit"):
+                    continue
 
-                _pvc = PersistentVolumeClaim(
-                    namespace=cnv_vm.namespace,
-                    name=name,
-                    client=dynamic_client,
-                )
-                result_vm_info["disks"].append({
-                    "name": _pvc.name,
-                    "size_in_kb": int(
-                        humanfriendly.parse_size(_pvc.instance.spec.resources.requests.storage, binary=True) / 1024
-                    ),
-                    "storage": {
-                        "name": _pvc.instance.spec.storageClassName,
-                        "access_mode": _pvc.instance.spec.accessModes,
-                    },
-                })
+                name = pvc.dataVolume.name
+
+            _pvc = PersistentVolumeClaim(
+                namespace=cnv_vm.namespace,
+                name=name,
+                client=dynamic_client,
+            )
+            result_vm_info["disks"].append({
+                "name": _pvc.name,
+                "size_in_kb": int(
+                    humanfriendly.parse_size(_pvc.instance.spec.resources.requests.storage, binary=True) / 1024
+                ),
+                "storage": {
+                    "name": _pvc.instance.spec.storageClassName,
+                    "access_mode": _pvc.instance.spec.accessModes,
+                },
+            })
 
         result_vm_info["cpu"]["num_cores"] = cnv_vm.vmi.instance.spec.domain.cpu.cores
         result_vm_info["cpu"]["num_sockets"] = cnv_vm.vmi.instance.spec.domain.cpu.sockets
@@ -179,7 +176,7 @@ class OCPProvider(BaseProvider):
             / 1024
         )
 
-        if not _source and result_vm_info["power_state"] == "off":
+        if result_vm_info["power_state"] == "off":
             self.log.info("Restoring VM Power State (turning off)")
             self.stop_vm(cnv_vm)
 

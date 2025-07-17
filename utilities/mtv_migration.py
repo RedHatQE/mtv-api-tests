@@ -56,7 +56,6 @@ def migrate_vms(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         target_namespace=target_namespace,
-        session_uuid=session_uuid,
         fixture_store=fixture_store,
         cut_over=cut_over,
         pre_hook_name=pre_hook_name,
@@ -105,7 +104,6 @@ def run_migration(
     after_hook_namespace: str,
     cut_over: datetime,
     fixture_store: Any,
-    session_uuid: str,
     test_name: str,
 ) -> Plan:
     """
@@ -137,7 +135,6 @@ def run_migration(
     plan = create_and_store_resource(
         fixture_store=fixture_store,
         test_name=test_name,
-        session_uuid=session_uuid,
         resource=Plan,
         name=name,
         namespace=target_namespace,
@@ -161,7 +158,6 @@ def run_migration(
     plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
     create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Migration,
         name=f"{name}-migration",
         namespace=target_namespace,
@@ -208,7 +204,6 @@ def wait_for_migration_complate(plan: Plan) -> bool:
 
 def get_storage_migration_map(
     fixture_store: dict[str, Any],
-    session_uuid: str,
     target_namespace: str,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
@@ -230,7 +225,6 @@ def get_storage_migration_map(
     )
     storage_map = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=StorageMap,
         client=ocp_admin_client,
         name=name,
@@ -246,7 +240,6 @@ def get_storage_migration_map(
 
 def get_network_migration_map(
     fixture_store: dict[str, Any],
-    session_uuid: str,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
     multus_network_name: str,
@@ -266,7 +259,6 @@ def get_network_migration_map(
     )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=NetworkMap,
         client=ocp_admin_client,
         name=name,
@@ -283,7 +275,6 @@ def get_network_migration_map(
 def create_storagemap_and_networkmap(
     plan: dict,
     fixture_store: dict[str, Any],
-    session_uuid: str,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
@@ -294,7 +285,6 @@ def create_storagemap_and_networkmap(
     vms = [vm["name"] for vm in plan["virtual_machines"]]
     storage_migration_map = get_storage_migration_map(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         target_namespace=target_namespace,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -305,7 +295,6 @@ def create_storagemap_and_networkmap(
 
     network_migration_map = get_network_migration_map(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,

@@ -245,7 +245,7 @@ def pytest_harvest_xdist_cleanup():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, prometheus_monitor, nfs_storage_profile, forklift_pods_state):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
@@ -285,7 +285,6 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
 
     namespace = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Namespace,
         client=ocp_admin_client,
         name=unique_namespace_name,
@@ -445,12 +444,11 @@ def source_provider(
 
 
 @pytest.fixture(scope="session")
-def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin_client, multus_cni_config):
+def multus_network_name(fixture_store, target_namespace, ocp_admin_client, multus_cni_config):
     bridge_type_and_name = "cnv-bridge"
 
     create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=NetworkAttachmentDefinition,
         client=ocp_admin_client,
         name=bridge_type_and_name,
@@ -470,7 +468,6 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, target
 
     secret = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Secret,
         name=f"{session_uuid}-ocp-secret",
         namespace=target_namespace,
@@ -485,7 +482,6 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
     provider_name: str = f"{session_uuid}-ocp-provider"
     provider = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Provider,
         name=provider_name,
         namespace=target_namespace,
@@ -500,7 +496,6 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
 @pytest.fixture(scope="function")
 def plan(
     fixture_store,
-    session_uuid,
     target_namespace,
     ocp_admin_client,
     source_provider,
@@ -522,7 +517,6 @@ def plan(
                 vms=virtual_machines,
                 namespace=source_vms_namespace,
                 network_name=multus_network_name,
-                session_uuid=session_uuid,
             )
         for vm in virtual_machines:
             source_vm_details = source_provider.vm_dict(name=vm["name"], namespace=source_vms_namespace, source=True)
@@ -618,7 +612,6 @@ def source_vms_namespace(source_provider, fixture_store, ocp_admin_client, sessi
         namespace = create_and_store_resource(
             resource=Namespace,
             fixture_store=fixture_store,
-            session_uuid=fixture_store["session_uuid"],
             client=ocp_admin_client,
             name=f"{session_uuid}-source-vms",
             label={"mutatevirtualmachines.kubemacpool.io": "ignore"},
@@ -627,9 +620,7 @@ def source_vms_namespace(source_provider, fixture_store, ocp_admin_client, sessi
 
 
 @pytest.fixture(scope="session")
-def source_vms_network(
-    source_provider, source_vms_namespace, ocp_admin_client, fixture_store, session_uuid, multus_cni_config
-):
+def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, fixture_store, multus_cni_config):
     if source_provider.type == Provider.ProviderType.OPENSHIFT:
         ceph_virtualization_sc = StorageClass(
             client=ocp_admin_client, name="ocs-storagecluster-ceph-rbd-virtualization", ensure_exists=True
@@ -649,7 +640,6 @@ def source_vms_network(
 
         create_and_store_resource(
             fixture_store=fixture_store,
-            session_uuid=session_uuid,
             resource=NetworkAttachmentDefinition,
             client=ocp_admin_client,
             name=bridge_type_and_name,

@@ -11,7 +11,6 @@ LOGGER = get_logger(__name__)
 def create_and_store_resource(
     fixture_store: dict[str, Any],
     resource: type[Resource],
-    session_uuid: str,
     test_name: str | None = None,
     **kwargs: Any,
 ) -> Any:

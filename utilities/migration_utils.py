@@ -145,7 +145,6 @@ def prepare_migration_for_tests(
     network_migration_map: NetworkMap,
     storage_migration_map: StorageMap,
     target_namespace: str,
-    session_uuid: str,
     fixture_store: Any,
     source_vms_namespace: str,
     cut_over: datetime | None = None,
@@ -190,7 +189,6 @@ def prepare_migration_for_tests(
         "destination_provider_name": destination_provider.ocp_resource.name,
         "destination_provider_namespace": destination_provider.ocp_resource.namespace,
         "fixture_store": fixture_store,
-        "session_uuid": session_uuid,
         "test_name": test_name,
     }
 

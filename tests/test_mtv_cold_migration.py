@@ -42,7 +42,6 @@ def test_sanity_cold_mtv_migration(
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
@@ -105,7 +104,6 @@ def test_cold_remote_ocp(
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         source_provider_inventory=source_provider_inventory,
