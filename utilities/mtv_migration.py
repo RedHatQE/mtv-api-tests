@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from datetime import datetime
 from typing import Any
 
@@ -9,7 +8,6 @@ from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
-from ocp_resources.virtual_machine import VirtualMachine
 from pytest import FixtureRequest
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -30,16 +28,16 @@ LOGGER = get_logger(__name__)
 
 def migrate_vms(
     request: FixtureRequest,
-    ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
     destination_provider: OCPProvider,
-    plans: list[dict[str, Any]],
+    plan: dict[str, Any],
     network_migration_map: NetworkMap,
     storage_migration_map: StorageMap,
     source_provider_data: dict[str, Any],
     target_namespace: str,
     session_uuid: str,
     fixture_store: Any,
+    source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
     cut_over: datetime | None = None,
     pre_hook_name: str | None = None,
@@ -47,11 +45,10 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> None:
-    plan_from_test = plans[0]
-    warm_migration = plan_from_test.get("warm_migration", False)
+    warm_migration = plan.get("warm_migration", False)
 
     run_migration_kwargs = prepare_migration_for_tests(
-        plan=plan_from_test,
+        plan=plan,
         warm_migration=warm_migration,
         request=request,
         source_provider=source_provider,
@@ -59,38 +56,33 @@ def migrate_vms(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         target_namespace=target_namespace,
-        session_uuid=session_uuid,
         fixture_store=fixture_store,
         cut_over=cut_over,
         pre_hook_name=pre_hook_name,
         pre_hook_namespace=pre_hook_namespace,
         after_hook_name=after_hook_name,
         after_hook_namespace=after_hook_namespace,
+        source_vms_namespace=source_vms_namespace,
     )
-    try:
-        migration_plan = run_migration(**run_migration_kwargs)
+    migration_plan = run_migration(**run_migration_kwargs)
 
-        wait_for_migration_complate(plan=migration_plan)
+    wait_for_migration_complate(plan=migration_plan)
 
-        if py_config.get("create_scale_report"):
-            create_migration_scale_report(plan_resource=plan_from_test)
+    if py_config.get("create_scale_report"):
+        create_migration_scale_report(plan_resource=plan)
 
-        if get_value_from_py_config("check_vms_signals") and plan_from_test.get("check_vms_signals", True):
-            check_vms(
-                plan=plan_from_test,
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                destination_provider=destination_provider,
-                destination_namespace=target_namespace,
-                network_map_resource=network_migration_map,
-                storage_map_resource=storage_migration_map,
-                target_namespace=target_namespace,
-                source_provider_inventory=source_provider_inventory,
-            )
-    finally:
-        if not request.session.config.getoption("skip_teardown"):
-            # delete all vms created by the migration to free up space on ceph storage.
-            delete_all_vms(ocp_admin_client=ocp_admin_client, namespace=target_namespace)
+    if get_value_from_py_config("check_vms_signals") and plan.get("check_vms_signals", True):
+        check_vms(
+            plan=plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+            destination_provider=destination_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=network_migration_map,
+            storage_map_resource=storage_migration_map,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+        )
 
 
 def run_migration(
@@ -112,7 +104,6 @@ def run_migration(
     after_hook_namespace: str,
     cut_over: datetime,
     fixture_store: Any,
-    session_uuid: str,
     test_name: str,
 ) -> Plan:
     """
@@ -144,7 +135,6 @@ def run_migration(
     plan = create_and_store_resource(
         fixture_store=fixture_store,
         test_name=test_name,
-        session_uuid=session_uuid,
         resource=Plan,
         name=name,
         namespace=target_namespace,
@@ -168,7 +158,6 @@ def run_migration(
     plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
     create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Migration,
         name=f"{name}-migration",
         namespace=target_namespace,
@@ -215,7 +204,6 @@ def wait_for_migration_complate(plan: Plan) -> bool:
 
 def get_storage_migration_map(
     fixture_store: dict[str, Any],
-    session_uuid: str,
     target_namespace: str,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
@@ -237,7 +225,6 @@ def get_storage_migration_map(
     )
     storage_map = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=StorageMap,
         client=ocp_admin_client,
         name=name,
@@ -253,7 +240,6 @@ def get_storage_migration_map(
 
 def get_network_migration_map(
     fixture_store: dict[str, Any],
-    session_uuid: str,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
     multus_network_name: str,
@@ -273,7 +259,6 @@ def get_network_migration_map(
     )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=NetworkMap,
         client=ocp_admin_client,
         name=name,
@@ -290,7 +275,6 @@ def get_network_migration_map(
 def create_storagemap_and_networkmap(
     plan: dict,
     fixture_store: dict[str, Any],
-    session_uuid: str,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
@@ -301,7 +285,6 @@ def create_storagemap_and_networkmap(
     vms = [vm["name"] for vm in plan["virtual_machines"]]
     storage_migration_map = get_storage_migration_map(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         target_namespace=target_namespace,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -312,7 +295,6 @@ def create_storagemap_and_networkmap(
 
     network_migration_map = get_network_migration_map(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
@@ -322,9 +304,3 @@ def create_storagemap_and_networkmap(
         vms=vms,
     )
     return storage_migration_map, network_migration_map
-
-
-def delete_all_vms(ocp_admin_client: DynamicClient, namespace: str) -> None:
-    for vm in VirtualMachine.get(dyn_client=ocp_admin_client, namespace=namespace):
-        with contextlib.suppress(Exception):
-            vm.clean_up(wait=True)

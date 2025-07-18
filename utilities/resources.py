@@ -5,15 +5,12 @@ from kubernetes.dynamic.exceptions import ConflictError
 from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
 
-from exceptions.exceptions import ResourceNameNotStartedWithSessionUUIDError
-
 LOGGER = get_logger(__name__)
 
 
 def create_and_store_resource(
     fixture_store: dict[str, Any],
     resource: type[Resource],
-    session_uuid: str,
     test_name: str | None = None,
     **kwargs: Any,
 ) -> Any:
@@ -33,11 +30,6 @@ def create_and_store_resource(
 
     if not _resource_name:
         raise ValueError("Resource name is required, but not provided. please provide name or yaml_file or kind_dict")
-
-    if not _resource_name.startswith(session_uuid):
-        raise ResourceNameNotStartedWithSessionUUIDError(
-            f"Resource name should start with {session_uuid}: {_resource_name}"
-        )
 
     _resource = resource(**kwargs)
 

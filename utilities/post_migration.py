@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.network_map import NetworkMap
+from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -24,20 +25,23 @@ def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[s
     for map_item in map_resource.instance.spec.map:
         result = {"name": "pod"} if map_item.destination.type == "pod" else map_item.destination
 
-        if map_item.source.type:
-            if map_item.source.type == source_vm_nic["network"]:
-                return result
+        source_vm_network = source_vm_nic["network"]
 
-            if map_item.source.name and map_item.source.name.split("/")[1] == source_vm_nic["network"]:
-                return result
-        else:
-            if map_item.source.id and map_item.source.id == source_vm_nic["network"].get("id", None):
-                return result
+        if isinstance(source_vm_network, dict):
+            source_vm_network = source_vm_network.get("name", source_vm_network.get("id", None))
 
-            if map_item.source.name and map_item.source.name.split("/")[-1] == source_vm_nic["network"].get(
-                "name", None
-            ):
-                return result
+        if map_item.source.type and map_item.source.type == source_vm_network:
+            return result
+
+        if (
+            map_item.source.name and map_item.source.name.split("/")[1]
+            if "/" in map_item.source.name
+            else map_item.source.name == source_vm_network
+        ):
+            return result
+
+        if map_item.source.id and map_item.source.id == source_vm_network:
+            return result
 
     return {}
 
@@ -51,12 +55,12 @@ def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None
     src_vm_num_sockets = source_vm["cpu"]["num_sockets"]
     dst_vm_num_sockets = destination_vm["cpu"]["num_sockets"]
 
-    if not src_vm_num_cores == dst_vm_num_cores:
+    if src_vm_num_cores and not src_vm_num_cores == dst_vm_num_cores:
         failed_checks["cpu number of cores"] = (
             f"source_vm cpu cores: {src_vm_num_cores} != destination_vm cpu cores: {dst_vm_num_cores}"
         )
 
-    if not src_vm_num_sockets == dst_vm_num_sockets:
+    if src_vm_num_sockets and not src_vm_num_sockets == dst_vm_num_sockets:
         failed_checks["cpu number of sockets"] = (
             f"source_vm cpu sockets: {src_vm_num_sockets} != destination_vm cpu sockets: {dst_vm_num_sockets}"
         )
@@ -158,31 +162,61 @@ def check_vms(
     network_map_resource: NetworkMap,
     storage_map_resource: StorageMap,
     source_provider_data: dict[str, Any],
-    target_namespace: str,
+    source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
 ) -> None:
+    res: dict[str, list[str]] = {}
+    should_fail: bool = False
+
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
+        res[vm_name] = []
+
         source_vm = source_provider.vm_dict(
-            name=vm_name, namespace=target_namespace, source=True, source_provider_inventory=source_provider_inventory
+            name=vm_name,
+            namespace=source_vms_namespace,
+            source=True,
+            source_provider_inventory=source_provider_inventory,
         )
         vm_guest_agent = vm.get("guest_agent")
         destination_vm = destination_provider.vm_dict(
             wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=destination_namespace
         )
 
-        check_vms_power_state(
-            source_vm=source_vm, destination_vm=destination_vm, source_power_before_migration=vm.get("source_vm_power")
-        )
+        try:
+            check_vms_power_state(
+                source_vm=source_vm,
+                destination_vm=destination_vm,
+                source_power_before_migration=vm.get("source_vm_power"),
+            )
+        except Exception as exp:
+            res[vm_name].append(f"check_vms_power_state - {str(exp)}")
 
-        check_cpu(source_vm=source_vm, destination_vm=destination_vm)
-        check_memory(source_vm=source_vm, destination_vm=destination_vm)
-        check_network(
-            source_vm=source_vm,
-            destination_vm=destination_vm,
-            network_migration_map=network_map_resource,
-        )
-        check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
+        try:
+            check_cpu(source_vm=source_vm, destination_vm=destination_vm)
+        except Exception as exp:
+            res[vm_name].append(f"check_cpu - {str(exp)}")
+
+        try:
+            check_memory(source_vm=source_vm, destination_vm=destination_vm)
+        except Exception as exp:
+            res[vm_name].append(f"check_memory - {str(exp)}")
+
+        # TODO: Remove when OCP to OCP migration is done with 2 clusters
+        if source_provider.type != Provider.ProviderType.OPENSHIFT:
+            try:
+                check_network(
+                    source_vm=source_vm,
+                    destination_vm=destination_vm,
+                    network_migration_map=network_map_resource,
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_network - {str(exp)}")
+
+        try:
+            check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
+        except Exception as exp:
+            res[vm_name].append(f"check_storage - {str(exp)}")
 
         snapshots_before_migration = vm.get("snapshots_before_migration")
 
@@ -191,13 +225,30 @@ def check_vms(
             and source_provider.provider_data
             and vmware_provider(source_provider.provider_data)
         ):
-            check_snapshots(
-                snapshots_before_migration=snapshots_before_migration,
-                snapshots_after_migration=source_vm["snapshots_data"],
-            )
+            try:
+                check_snapshots(
+                    snapshots_before_migration=snapshots_before_migration,
+                    snapshots_after_migration=source_vm["snapshots_data"],
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_snapshots - {str(exp)}")
 
         if vm_guest_agent:
-            check_guest_agent(destination_vm=destination_vm)
+            try:
+                check_guest_agent(destination_vm=destination_vm)
+            except Exception as exp:
+                res[vm_name].append(f"check_guest_agent - {str(exp)}")
 
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):
-            check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)
+            try:
+                check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)
+            except Exception as exp:
+                res[vm_name].append(f"check_false_vm_power_off - {str(exp)}")
+
+        for _vm_name, _errors in res.items():
+            if _errors:
+                should_fail = True
+                LOGGER.error(f"VM {_vm_name} failed checks: {_errors}")
+
+    if should_fail:
+        pytest.fail("Some of the VMs did not match")

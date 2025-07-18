@@ -21,6 +21,7 @@ from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
+from utilities.utils import delete_all_vms
 
 LOGGER = get_logger(__name__)
 
@@ -164,6 +165,8 @@ def teardown_resources(
                 leftovers = append_leftovers(leftovers=leftovers, resource=pod_obj)
 
     if target_namespace:
+        delete_all_vms(ocp_admin_client=ocp_client, namespace=target_namespace)
+
         # Make sure all pods related to the test session are deleted
         for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace):
             if session_uuid in _pod.name:

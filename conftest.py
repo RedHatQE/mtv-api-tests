@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import multiprocessing
 import os
@@ -10,7 +11,6 @@ from shutil import rmtree
 from typing import Any, Generator
 
 import pytest
-import yaml
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.forklift_controller import ForkliftController
@@ -44,7 +44,7 @@ from utilities.prometheus import prometheus_monitor_deamon
 from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
-    create_source_cnv_vm,
+    create_source_cnv_vms,
     create_source_provider,
     generate_name_with_uuid,
     get_value_from_py_config,
@@ -245,7 +245,7 @@ def pytest_harvest_xdist_cleanup():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, prometheus_monitor, nfs_storage_profile, forklift_pods_state):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
@@ -272,6 +272,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
     label: dict[str, str] = {
         "pod-security.kubernetes.io/enforce": "restricted",
         "pod-security.kubernetes.io/enforce-version": "latest",
+        "mutatevirtualmachines.kubemacpool.io": "ignore",
     }
     _target_namespace: str = py_config["target_namespace"]
 
@@ -284,7 +285,6 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
 
     namespace = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Namespace,
         client=ocp_admin_client,
         name=unique_namespace_name,
@@ -417,7 +417,13 @@ def source_provider_data():
 
 @pytest.fixture(scope="session")
 def source_provider(
-    fixture_store, session_uuid, source_provider_data, target_namespace, ocp_admin_client, tmp_path_factory
+    fixture_store,
+    session_uuid,
+    source_provider_data,
+    target_namespace,
+    ocp_admin_client,
+    tmp_path_factory,
+    destination_ocp_secret,
 ):
     with create_source_provider(
         fixture_store=fixture_store,
@@ -427,6 +433,9 @@ def source_provider(
         namespace=target_namespace,
         admin_client=ocp_admin_client,
         tmp_dir=tmp_path_factory,
+        target_namespace=target_namespace,
+        ocp_admin_client=ocp_admin_client,
+        destination_ocp_secret=destination_ocp_secret,
         insecure=get_value_from_py_config(value="insecure_verify_skip"),
     ) as _source_provider:
         yield _source_provider
@@ -435,24 +444,20 @@ def source_provider(
 
 
 @pytest.fixture(scope="session")
-def multus_network_name(fixture_store, session_uuid, target_namespace, ocp_admin_client):
-    with open("tests/manifests/second_network.yaml") as fd:
-        bridge_dict = yaml.safe_load(fd)
+def multus_network_name(fixture_store, target_namespace, ocp_admin_client, multus_cni_config):
+    bridge_type_and_name = "cnv-bridge"
 
-    bridge_name = bridge_dict["metadata"]["name"]
-    bridge_dict["metadata"]["name"] = f"{session_uuid}-{generate_name_with_uuid(name=bridge_name)}"
-
-    nad = create_and_store_resource(
+    create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=NetworkAttachmentDefinition,
         client=ocp_admin_client,
-        kind_dict=bridge_dict,
+        name=bridge_type_and_name,
+        cni_type=bridge_type_and_name,
         namespace=target_namespace,
+        config=multus_cni_config,
     )
-    nad_name = nad.name
 
-    yield nad_name
+    yield bridge_type_and_name
 
 
 @pytest.fixture(scope="session")
@@ -463,7 +468,6 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, target
 
     secret = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Secret,
         name=f"{session_uuid}-ocp-secret",
         namespace=target_namespace,
@@ -478,7 +482,6 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
     provider_name: str = f"{session_uuid}-ocp-provider"
     provider = create_and_store_resource(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         resource=Provider,
         name=provider_name,
         namespace=target_namespace,
@@ -491,29 +494,41 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
 
 
 @pytest.fixture(scope="function")
-def plans(fixture_store, target_namespace, ocp_admin_client, source_provider, request):
-    plan: dict[str, Any] = request.param[0]
+def plan(
+    fixture_store,
+    target_namespace,
+    ocp_admin_client,
+    source_provider,
+    request,
+    multus_network_name,
+    source_vms_namespace,
+    source_vms_network,
+):
+    plan: dict[str, Any] = request.param
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
+        if openshift_source_provider:
+            create_source_cnv_vms(
+                fixture_store=fixture_store,
+                dyn_client=ocp_admin_client,
+                vms=virtual_machines,
+                namespace=source_vms_namespace,
+                network_name=multus_network_name,
+            )
         for vm in virtual_machines:
-            if openshift_source_provider:
-                create_source_cnv_vm(ocp_admin_client, vm["name"], namespace=target_namespace)
-
-            source_vm_details = source_provider.vm_dict(name=vm["name"], namespace=target_namespace, source=True)
+            source_vm_details = source_provider.vm_dict(name=vm["name"], namespace=source_vms_namespace, source=True)
             provider_vm_api = source_vm_details["provider_vm_api"]
 
             vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
+
             if vm.get("source_vm_power") == "on":
                 source_provider.start_vm(provider_vm_api)
 
             elif vm.get("source_vm_power") == "off":
-                if openshift_source_provider:
-                    source_provider.stop_vm(provider_vm_api)
-                else:
-                    source_provider.power_off_vm(provider_vm_api)
+                source_provider.stop_vm(provider_vm_api)
 
     yield request.param
 
@@ -589,3 +604,55 @@ def source_provider_inventory(
     return provider_instance(  # type: ignore
         client=ocp_admin_client, namespace=mtv_namespace, provider_name=source_provider.ocp_resource.name
     )
+
+
+@pytest.fixture(scope="session")
+def source_vms_namespace(source_provider, fixture_store, ocp_admin_client, session_uuid):
+    if source_provider.type == Provider.ProviderType.OPENSHIFT:
+        namespace = create_and_store_resource(
+            resource=Namespace,
+            fixture_store=fixture_store,
+            client=ocp_admin_client,
+            name=f"{session_uuid}-source-vms",
+            label={"mutatevirtualmachines.kubemacpool.io": "ignore"},
+        )
+        return namespace.name
+
+
+@pytest.fixture(scope="session")
+def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, fixture_store, multus_cni_config):
+    if source_provider.type == Provider.ProviderType.OPENSHIFT:
+        ceph_virtualization_sc = StorageClass(
+            client=ocp_admin_client, name="ocs-storagecluster-ceph-rbd-virtualization", ensure_exists=True
+        )
+        ResourceEditor(
+            patches={
+                ceph_virtualization_sc: {
+                    "metadata": {
+                        "annotations": {StorageClass.Annotations.IS_DEFAULT_VIRT_CLASS: "true"},
+                        "name": ceph_virtualization_sc.name,
+                    }
+                }
+            }
+        ).update()
+
+        bridge_type_and_name = "cnv-bridge"
+
+        create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=NetworkAttachmentDefinition,
+            client=ocp_admin_client,
+            name=bridge_type_and_name,
+            cni_type=bridge_type_and_name,
+            namespace=source_vms_namespace,
+            config=multus_cni_config,
+        )
+
+        return bridge_type_and_name
+
+
+@pytest.fixture(scope="session")
+def multus_cni_config() -> str:
+    bridge_type_and_name = "cnv-bridge"
+    config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}
+    return json.dumps(config)

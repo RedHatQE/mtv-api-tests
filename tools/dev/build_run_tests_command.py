@@ -28,6 +28,7 @@ pre-defined runs:
     ovirt-csi
     ovirt-csi-remote
     ova
+    openshift-ceph-remote
     """
 
 
@@ -65,6 +66,7 @@ def main() -> str:
         "ovirt-csi": {"provider": "ovirt", "storage": "csi"},
         "ovirt-csi-remote": {"provider": "ovirt", "storage": "csi", "remote": True},
         "ova-ceph": {"provider": "ova", "storage": "ceph"},
+        "openshift-ceph-remote": {"provider": "openshift", "storage": "ceph", "remote": True},
     }
 
     base_cmd = (
@@ -141,6 +143,13 @@ def main() -> str:
 
     elif provider == "ova":
         base_cmd += f" {source_provider_type} --tc=source_provider_version:nfs {target_namespace}"
+
+    elif provider == "openshift":
+        base_cmd += f" {source_provider_type} --tc=source_provider_version:remote {target_namespace}"
+
+    else:
+        print(usage_msg)
+        sys.exit(1)
 
     # Remote
     if remote:

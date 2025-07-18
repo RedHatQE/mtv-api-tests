@@ -30,22 +30,18 @@ VM_SUFFIX = get_vm_suffix()
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.parametrize(
-    "plans",
+    "plan",
     [
-        pytest.param(
-            [
+        pytest.param({
+            "virtual_machines": [
                 {
-                    "virtual_machines": [
-                        {
-                            "name": f"mtv-rhel8-warm-sanity{VM_SUFFIX}",
-                            "source_vm_power": "on",
-                            "guest_agent": True,
-                        },
-                    ],
-                    "warm_migration": True,
-                }
+                    "name": f"mtv-rhel8-warm-sanity{VM_SUFFIX}",
+                    "source_vm_power": "on",
+                    "guest_agent": True,
+                },
             ],
-        ),
+            "warm_migration": True,
+        }),
     ],
     indirect=True,
     ids=["rhel8"],
@@ -58,22 +54,22 @@ def test_sanity_warm_mtv_migration(
     multus_network_name,
     source_provider_inventory,
     target_namespace,
-    plans,
+    plan,
     source_provider,
     source_provider_data,
     destination_provider,
     precopy_interval_forkliftcontroller,
+    source_vms_namespace,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        plan=plans[0],
+        plan=plan,
     )
 
     migrate_vms(
@@ -82,35 +78,31 @@ def test_sanity_warm_mtv_migration(
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
-        plans=plans,
+        plan=plan,
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
+        source_vms_namespace=source_vms_namespace,
     )
 
 
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.parametrize(
-    "plans",
+    "plan",
     [
-        pytest.param(
-            [
+        pytest.param({
+            "virtual_machines": [
                 {
-                    "virtual_machines": [
-                        {
-                            "name": f"mtv-rhel8-warm-2disks2nics{VM_SUFFIX}",
-                            "source_vm_power": "on",
-                            "guest_agent": True,
-                        },
-                    ],
-                    "warm_migration": True,
-                }
+                    "name": f"mtv-rhel8-warm-2disks2nics{VM_SUFFIX}",
+                    "source_vm_power": "on",
+                    "guest_agent": True,
+                },
             ],
-        )
+            "warm_migration": True,
+        })
     ],
     indirect=True,
     ids=["MTV-200 rhel"],
@@ -123,22 +115,22 @@ def test_mtv_migration_warm_2disks2nics(
     multus_network_name,
     source_provider_inventory,
     target_namespace,
-    plans,
+    plan,
     source_provider,
     source_provider_data,
     destination_provider,
     precopy_interval_forkliftcontroller,
+    source_vms_namespace,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        plan=plans[0],
+        plan=plan,
     )
 
     migrate_vms(
@@ -147,34 +139,30 @@ def test_mtv_migration_warm_2disks2nics(
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
-        plans=plans,
+        plan=plan,
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
+        source_vms_namespace=source_vms_namespace,
     )
 
 
 @pytest.mark.remote
 @pytest.mark.parametrize(
-    "plans",
+    "plan",
     [
-        pytest.param(
-            [
+        pytest.param({
+            "virtual_machines": [
                 {
-                    "virtual_machines": [
-                        {
-                            "name": f"mtv-rhel8-warm-394{VM_SUFFIX}",
-                            "source_vm_power": "on",
-                            "guest_agent": True,
-                        },
-                    ],
-                    "warm_migration": True,
-                }
+                    "name": f"mtv-rhel8-warm-394{VM_SUFFIX}",
+                    "source_vm_power": "on",
+                    "guest_agent": True,
+                },
             ],
-        ),
+            "warm_migration": True,
+        }),
     ],
     indirect=True,
     ids=["MTV-394"],
@@ -188,22 +176,22 @@ def test_warm_remote_ocp(
     multus_network_name,
     source_provider_inventory,
     target_namespace,
-    plans,
+    plan,
     source_provider,
     source_provider_data,
     destination_ocp_provider,
     precopy_interval_forkliftcontroller,
+    source_vms_namespace,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         source_provider_inventory=source_provider_inventory,
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        plan=plans[0],
+        plan=plan,
     )
 
     migrate_vms(
@@ -212,11 +200,11 @@ def test_warm_remote_ocp(
         session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
-        plans=plans,
+        plan=plan,
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
-        ocp_admin_client=ocp_admin_client,
+        source_vms_namespace=source_vms_namespace,
     )
