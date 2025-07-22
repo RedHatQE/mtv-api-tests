@@ -169,7 +169,7 @@ def check_vms(
     should_fail: bool = False
 
     if source_provider.type == Provider.ProviderType.OVA:
-        LOGGER.info("Source OVA VMS do not have any states")
+        LOGGER.info("Source OVA VMS do not have any stats")
         return
 
     for vm in plan["virtual_machines"]:
