@@ -393,12 +393,19 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def destination_provider(ocp_admin_client, mtv_namespace):
-    provider = Provider(
-        name=py_config.get("destination_provider_name", "host"),
-        namespace=mtv_namespace,
+def destination_provider(session_uuid, ocp_admin_client, mtv_namespace, target_namespace, fixture_store):
+    kind_dict = {
+        "apiVersion": "forklift.konveyor.io/v1beta1",
+        "kind": "Provider",
+        "metadata": {"name": f"{session_uuid}-local-ocp-provider", "namespace": target_namespace},
+        "spec": {"secret": {}, "type": "openshift", "url": ""},
+    }
+
+    provider = create_and_store_resource(
+        fixture_store=fixture_store,
+        resource=Provider,
+        kind_dict=kind_dict,
         client=ocp_admin_client,
-        ensure_exists=True,
     )
 
     return OCPProvider(ocp_resource=provider)
@@ -479,11 +486,10 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, target
 
 @pytest.fixture(scope="session")
 def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_client, session_uuid, target_namespace):
-    provider_name: str = f"{session_uuid}-ocp-provider"
     provider = create_and_store_resource(
         fixture_store=fixture_store,
         resource=Provider,
-        name=provider_name,
+        name=f"{session_uuid}-ocp-provider",
         namespace=target_namespace,
         secret_name=destination_ocp_secret.name,
         secret_namespace=destination_ocp_secret.namespace,

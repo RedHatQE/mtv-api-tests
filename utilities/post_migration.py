@@ -168,6 +168,10 @@ def check_vms(
     res: dict[str, list[str]] = {}
     should_fail: bool = False
 
+    if source_provider.type == Provider.ProviderType.OVA:
+        LOGGER.info("Source OVA VMS do not have any states")
+        return
+
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
         res[vm_name] = []

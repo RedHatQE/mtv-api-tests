@@ -10,16 +10,15 @@ from utilities.mtv_migration import (
 )
 from utilities.utils import get_value_from_py_config
 
+SOURCE_PROVIDER_TYPE = py_config.get("source_provider_type")
+
 pytestmark = [
     pytest.mark.jira("MTV-2846", run=lambda: py_config["source_provider_type"] != Provider.ProviderType.RHV),
     pytest.mark.jira("MTV-2811", run=lambda: py_config["source_provider_type"] == Provider.ProviderType.RHV),
     pytest.mark.skipif(
-        py_config.get("source_provider_type") == Provider.ProviderType.OPENSTACK,
-        reason="OpenStack warm migration is not supported.",
-    ),
-    pytest.mark.skipif(
-        py_config.get("source_provider_type") == Provider.ProviderType.OPENSHIFT,
-        reason="Openshift warm migration is not supported.",
+        SOURCE_PROVIDER_TYPE
+        in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT, Provider.ProviderType.OVA),
+        reason=f"{SOURCE_PROVIDER_TYPE} warm migration is not supported.",
     ),
 ]
 
@@ -54,10 +53,10 @@ def test_sanity_warm_mtv_migration(
     multus_network_name,
     source_provider_inventory,
     target_namespace,
+    destination_provider,
     plan,
     source_provider,
     source_provider_data,
-    destination_provider,
     precopy_interval_forkliftcontroller,
     source_vms_namespace,
 ):
@@ -115,10 +114,10 @@ def test_mtv_migration_warm_2disks2nics(
     multus_network_name,
     source_provider_inventory,
     target_namespace,
+    destination_provider,
     plan,
     source_provider,
     source_provider_data,
-    destination_provider,
     precopy_interval_forkliftcontroller,
     source_vms_namespace,
 ):
@@ -176,10 +175,10 @@ def test_warm_remote_ocp(
     multus_network_name,
     source_provider_inventory,
     target_namespace,
+    destination_ocp_provider,
     plan,
     source_provider,
     source_provider_data,
-    destination_ocp_provider,
     precopy_interval_forkliftcontroller,
     source_vms_namespace,
 ):
