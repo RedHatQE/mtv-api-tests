@@ -1,4 +1,5 @@
 import pytest
+from ocp_resources.provider import Provider
 
 from utilities.mtv_migration import (
     create_storagemap_and_networkmap,
@@ -32,14 +33,19 @@ def test_sanity_cold_mtv_migration(
     session_uuid,
     ocp_admin_client,
     target_namespace,
+    destination_provider,
     plan,
     source_provider,
     source_provider_data,
-    destination_provider,
     multus_network_name,
     source_provider_inventory,
     source_vms_namespace,
 ):
+    if source_provider.type == Provider.ProviderType.OVA:
+        plan["virtual_machines"] = [
+            {"name": "1nisim-rhel9-efi"},
+        ]
+
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
         source_provider=source_provider,
@@ -95,10 +101,10 @@ def test_cold_remote_ocp(
     ocp_admin_client,
     target_namespace,
     source_provider_inventory,
+    destination_ocp_provider,
     plan,
     source_provider,
     source_provider_data,
-    destination_ocp_provider,
     multus_network_name,
     source_vms_namespace,
 ):

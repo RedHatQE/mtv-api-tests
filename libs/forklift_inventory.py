@@ -226,12 +226,20 @@ class OvaForkliftInventory(ForkliftInventory):
         return self._request(url_path=f"{self.provider_url_path}/storages")
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        _mappings: list[dict[str, str]] = []
         _storages = self.storages
 
         if not _storages:
             raise ValueError(f"Storages not found for provider {self.provider_type}")
 
-        return [{"name": _storages[0]["name"]}]
+        for _storage in _storages:
+            if [vm for vm in vms if vm in _storage["name"]]:
+                _mappings.append({"id": _storage["id"]})
+
+        if not _mappings:
+            raise ValueError(f"Storages not found for VMs {vms} on provider {self.provider_type}")
+
+        return _mappings
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
