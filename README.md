@@ -7,14 +7,18 @@
 The tests require access to a VDDK image, which is stored in a private repository.
 
 1. Make sure you part of `rh-openshift-mtv` otherwise contact Meni Yakove to add you.
-(Create new quay.io user if you don't already have one)
+   (Create new quay.io user if you don't already have one)
 2. Follow the instruction to for how to `Updating the global cluster pull secret`:
-<https://docs.openshift.com/container-platform/4.18/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets>
+   <https://docs.openshift.com/container-platform/4.18/openshift_images/managing_images/using-image-pull-secrets.html#images-update-global-pull-secret_using-image-pull-secrets>
 
 Private vddk images
 quay.io/rh-openshift-mtv/vddk-init-image:6.5
 quay.io/rh-openshift-mtv/vddk-init-image:7.0.3
 quay.io/rh-openshift-mtv/vddk-init-image:8.0.1
+
+### Source providers
+
+File `.providers.json` in the root directory of the repo with the source providers data
 
 Deploy [openshif-mtv](https://gitlab.cee.redhat.com/md-migration/mtv-autodeploy)
 

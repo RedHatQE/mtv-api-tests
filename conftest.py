@@ -45,7 +45,13 @@ from libs.providers.openshift import OCPProvider
 from utilities.logger import separator, setup_logging
 from utilities.must_gather import run_must_gather
 from utilities.prometheus import prometheus_monitor_deamon
-from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
+from utilities.pytest_utils import (
+    SessionTeardownError,
+    collect_created_resources,
+    generate_vms_to_import_report,
+    prepare_base_path,
+    session_teardown,
+)
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vms,
@@ -67,6 +73,7 @@ def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
+    vms_to_import_report = parser.getgroup(name="VMs to import report")
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
@@ -76,6 +83,9 @@ def pytest_addoption(parser):
     )
     openshift_python_wrapper_group.addoption(
         "--openshift-python-wrapper-log-debug", action="store_true", help="Enable debug logging in the wrapper"
+    )
+    vms_to_import_report.addoption(
+        "--vms-to-import-report", action="store_true", help="Generate report of VMs to import"
     )
 
 
@@ -191,6 +201,10 @@ def pytest_sessionfinish(session, exitstatus):
 def pytest_collection_modifyitems(session, config, items):
     for item in items:
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
+
+    if config.getoption("vms_to_import_report"):
+        generate_vms_to_import_report(items=items)
+        pytest.exit()
 
 
 def pytest_exception_interact(node, call, report):
