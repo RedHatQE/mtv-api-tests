@@ -20,7 +20,7 @@ source_providers_dict: dict[str, dict[str, Any]] = {
         "type": "vsphere",
         "version": "7.0.3",
         "fqdn": "10.6.46.170",
-        "api_url": "https://10.6.46.170/sdk",
+        "api_url": "https://10.6.46.159/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
         "guest_vm_linux_user": "root",
