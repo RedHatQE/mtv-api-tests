@@ -144,6 +144,7 @@ junit-report.xml
 .xdist_results
 .data-collector
 prof/
+.providers.json
 
 # Local develop
 .dev/

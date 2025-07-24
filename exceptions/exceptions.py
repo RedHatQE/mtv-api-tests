@@ -48,3 +48,7 @@ class OvirtMTVDatacenterNotFoundError(Exception):
 
 class OvirtMTVDatacenterStatusError(Exception):
     pass
+
+
+class MissingProvidersFileError(Exception):
+    pass

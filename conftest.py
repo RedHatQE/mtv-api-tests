@@ -27,7 +27,11 @@ from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
 
-from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
+from exceptions.exceptions import (
+    ForkliftPodsNotRunningError,
+    MissingProvidersFileError,
+    RemoteClusterAndLocalCluterNamesError,
+)
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
@@ -251,6 +255,19 @@ def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_st
 
 
 @pytest.fixture(scope="session")
+def source_providers() -> dict[str, dict[str, Any]]:
+    _provider_file_name = ".providers.json"
+    providers_file = Path(_provider_file_name)
+    if not providers_file.exists():
+        raise MissingProvidersFileError(f"{_provider_file_name} file is missing")
+
+    with open(providers_file, "r") as fd:
+        source_providers_dict = json.load(fd)
+
+    return source_providers_dict
+
+
+@pytest.fixture(scope="session")
 def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
     try:
         proc = multiprocessing.Process(
@@ -274,7 +291,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
         "pod-security.kubernetes.io/enforce-version": "latest",
         "mutatevirtualmachines.kubemacpool.io": "ignore",
     }
-    _target_namespace: str = py_config["target_namespace"]
+    _target_namespace: str = py_config["target_namespace_prefix"]
 
     # replace mtv-api-tests since session_uuid already include mtv-api-tests in the name
     _target_namespace = _target_namespace.replace("mtv-api-tests", "")
@@ -412,9 +429,9 @@ def destination_provider(session_uuid, ocp_admin_client, mtv_namespace, target_n
 
 
 @pytest.fixture(scope="session")
-def source_provider_data():
+def source_provider_data(source_providers):
     _source_provider_key = f"{py_config['source_provider_type']}-{py_config['source_provider_version']}"
-    _source_provider = py_config["source_providers_dict"][_source_provider_key]
+    _source_provider = source_providers[_source_provider_key]
 
     if not _source_provider:
         raise ValueError(f"Source provider {_source_provider['type']}-{_source_provider['version']} not found")
