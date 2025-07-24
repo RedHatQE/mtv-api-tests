@@ -19,7 +19,7 @@ source_providers_dict: dict[str, dict[str, Any]] = {
     "vsphere-7.0.3": {
         "type": "vsphere",
         "version": "7.0.3",
-        "fqdn": "10.6.46.170",
+        "fqdn": "10.6.46.159",
         "api_url": "https://10.6.46.159/sdk",
         "username": "administrator@vsphere.local",
         "password": "VCENTER@redhat2023",
