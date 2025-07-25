@@ -2,8 +2,12 @@ from typing import Any
 
 import yaml
 from kubernetes.dynamic.exceptions import ConflictError
+from ocp_resources.migration import Migration
+from ocp_resources.plan import Plan
 from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
+
+from utilities.naming import generate_name_with_uuid
 
 LOGGER = get_logger(__name__)
 
@@ -29,7 +33,12 @@ def create_and_store_resource(
         _resource_name = _resource_dict.get("metadata", {}).get("name")
 
     if not _resource_name:
-        raise ValueError("Resource name is required, but not provided. please provide name or yaml_file or kind_dict")
+        _resource_name = generate_name_with_uuid(name=fixture_store["base_resource_name"])
+
+        if resource.kind in (Migration.kind, Plan.kind):
+            _resource_name = f"{_resource_name}-{'warm' if kwargs['warm_migration'] else 'cold'}"
+
+    kwargs["name"] = _resource_name
 
     _resource = resource(**kwargs)
 

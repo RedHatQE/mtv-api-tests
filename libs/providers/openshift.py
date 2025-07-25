@@ -19,7 +19,7 @@ LOGGER = get_logger(__name__)
 
 
 class OCPProvider(BaseProvider):
-    def __init__(self, ocp_resource: Provider, **kwargs: Any) -> None:
+    def __init__(self, ocp_resource: Provider | None = None, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, **kwargs)
         self.type = Provider.ProviderType.OPENSHIFT
 
@@ -32,6 +32,9 @@ class OCPProvider(BaseProvider):
 
     @property
     def test(self) -> bool:
+        if not self.ocp_resource:
+            raise ValueError("Missing `ocp_resource`")
+
         return bool(self.ocp_resource.exists)
 
     def wait_for_cnv_vm_guest_agent(self, vm_dict: dict[str, Any], timeout: int = 301) -> bool:
@@ -99,10 +102,13 @@ class OCPProvider(BaseProvider):
             vm_api.stop(vmi_delete_timeout=600, wait=True)
 
     def vm_dict(self, wait_for_guest_agent: bool = False, **kwargs: Any) -> dict[str, Any]:
+        if not self.ocp_resource:
+            raise ValueError("Missing `ocp_resource`")
+
         dynamic_client = self.ocp_resource.client
         _source = kwargs.get("source", False)
 
-        cnv_vm_name = kwargs["name"]
+        cnv_vm_name = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
         cnv_vm_namespace = kwargs["namespace"]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)

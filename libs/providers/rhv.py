@@ -27,7 +27,7 @@ class OvirtProvider(BaseProvider):
         host: str,
         username: str,
         password: str,
-        ocp_resource: Provider,
+        ocp_resource: Provider | None = None,
         ca_file: str | None = None,
         insecure: bool = True,
         **kwargs: Any,
@@ -97,15 +97,12 @@ class OvirtProvider(BaseProvider):
     def events_list_by_vm(self, vm: Any) -> Any:
         return self.events_service().list(search=f"Vms.id = {vm.id}")
 
-    def vms(self, search: str) -> Any:
-        return self.vms_services.list(search=search)
-
-    def vm(self, name: str, cluster: str | None = None) -> Any:
+    def get_vm_by_name(self, name: str, cluster: str | None = None) -> Any:
         query = f"name={name}"
         if cluster:
             query = f"{query} cluster={cluster}"
 
-        return self.vms(search=query)[0]
+        return self.vms_services.list(search=query)[0]
 
     def vm_nics(self, vm: Any) -> list[Any]:
         return [self.api.follow_link(nic) for nic in self.vms_services.vm_service(id=vm.id).nics_service().list()]
@@ -135,36 +132,13 @@ class OvirtProvider(BaseProvider):
         if vm.status == VmStatus.UP:
             self.vms_services.vm_service(vm.id).shutdown()
 
-    @property
-    def networks_name(self) -> list[str]:
-        return [f"{network.name}/{network.name}" for network in self.network_services.list()]
-
-    @property
-    def networks_id(self) -> list[str]:
-        return [network.id for network in self.network_services.list()]
-
-    @property
-    def networks(self) -> list[dict[str, Any]]:
-        return [
-            {"name": network.name, "id": network.id, "data_center": self.api.follow_link(network.data_center).name}
-            for network in self.network_services.list()
-        ]
-
-    @property
-    def storages_name(self) -> list[str]:
-        return [storage.name for storage in self.storage_services.list()]
-
-    @property
-    def storage_groups(self) -> list[dict[str, Any]]:
-        return [{"name": storage.name, "id": storage.id} for storage in self.storage_services.list()]
-
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        source_vm = self.vms(search=kwargs["name"])[0]
+        source_vm = self.get_vm_by_name(name=f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}")[0]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.RHV
         result_vm_info["provider_vm_api"] = source_vm
-        result_vm_info["name"] = kwargs["name"]
+        result_vm_info["name"] = source_vm.name
 
         # Network Interfaces
         for nic in self.vm_nics(vm=source_vm):

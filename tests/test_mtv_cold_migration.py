@@ -3,12 +3,9 @@ from ocp_resources.provider import Provider
 
 from utilities.mtv_migration import (
     create_storagemap_and_networkmap,
-    get_vm_suffix,
     migrate_vms,
 )
 from utilities.utils import get_value_from_py_config
-
-VM_SUFFIX = get_vm_suffix()
 
 
 @pytest.mark.parametrize(
@@ -17,7 +14,7 @@ VM_SUFFIX = get_vm_suffix()
         pytest.param(
             {
                 "virtual_machines": [
-                    {"name": f"mtv-rhel8-sanity{VM_SUFFIX}", "guest_agent": True},
+                    {"name": "mtv-rhel8-sanity", "guest_agent": True},
                 ],
                 "warm_migration": False,
             },
@@ -30,7 +27,6 @@ VM_SUFFIX = get_vm_suffix()
 def test_sanity_cold_mtv_migration(
     request,
     fixture_store,
-    session_uuid,
     ocp_admin_client,
     target_namespace,
     destination_provider,
@@ -60,7 +56,6 @@ def test_sanity_cold_mtv_migration(
     migrate_vms(
         request=request,
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         plan=plan,
@@ -80,9 +75,9 @@ def test_sanity_cold_mtv_migration(
         pytest.param(
             {
                 "virtual_machines": [
-                    {"name": f"mtv-rhel8-79{VM_SUFFIX}"},
+                    {"name": "mtv-rhel8-79"},
                     {
-                        "name": f"mtv-win2019-79{VM_SUFFIX}",
+                        "name": "mtv-win2019-79",
                     },
                 ],
                 "warm_migration": False,
@@ -97,7 +92,6 @@ def test_sanity_cold_mtv_migration(
 def test_cold_remote_ocp(
     request,
     fixture_store,
-    session_uuid,
     ocp_admin_client,
     target_namespace,
     source_provider_inventory,
@@ -122,7 +116,6 @@ def test_cold_remote_ocp(
     migrate_vms(
         request=request,
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plan=plan,

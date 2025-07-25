@@ -23,6 +23,7 @@ from rich.table import Table
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
+from libs.providers.vmware import VMWareProvider
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 from utilities.utils import delete_all_vms
 
@@ -70,19 +71,17 @@ def session_teardown(session_store: dict[str, Any]) -> None:
             archive_plan(plan=plan)
 
         leftovers = teardown_resources(
-            session_teardown_resources=session_teardown_resources,
+            session_store=session_store,
             ocp_client=ocp_client,
             target_namespace=session_store.get("target_namespace"),
-            session_uuid=session_store["session_uuid"],
         )
         if leftovers:
             raise SessionTeardownError(f"Failed to clean up the following resources: {leftovers}")
 
 
 def teardown_resources(
-    session_teardown_resources: dict[str, list[dict[str, str]]],
+    session_store: dict[str, Any],
     ocp_client: DynamicClient,
-    session_uuid: str,
     target_namespace: str | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     """
@@ -91,6 +90,8 @@ def teardown_resources(
     Report if we have any leftovers in the cluster and return False if any, else return True
     """
     leftovers: dict[str, list[dict[str, str]]] = {}
+    session_teardown_resources: dict[str, list[dict[str, str]]] = session_store["teardown"]
+    session_uuid = session_store["session_uuid"]
 
     # Resources that was created by the tests
     migrations = session_teardown_resources.get(Migration.kind, [])
@@ -102,6 +103,7 @@ def teardown_resources(
     networkmaps = session_teardown_resources.get(NetworkMap.kind, [])
     namespaces = session_teardown_resources.get(Namespace.kind, [])
     storagemaps = session_teardown_resources.get(StorageMap.kind, [])
+    vmware_cloned_vms = session_teardown_resources.get(Provider.ProviderType.VSPHERE, [])
 
     # Resources that was created by running migration
     pods = session_teardown_resources.get(Pod.kind, [])
@@ -189,6 +191,24 @@ def teardown_resources(
         namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
         if not namespace_obj.clean_up(wait=True):
             leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
+
+    if vmware_cloned_vms:
+        source_provider_data = session_store["source_provider_data"]
+
+        with VMWareProvider(
+            host=source_provider_data["fqdn"],
+            username=source_provider_data["username"],
+            password=source_provider_data["password"],
+        ) as vmware_provider:
+            for _vm in vmware_cloned_vms:
+                _cloned_vm_name = _vm["name"]
+                try:
+                    vmware_provider.delete_vm(vm_name=_cloned_vm_name)
+                except Exception as exc:
+                    LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
+                    leftovers.setdefault(vmware_provider.type, []).append({
+                        "cloned_vm_name": _cloned_vm_name,
+                    })
 
     return leftovers
 

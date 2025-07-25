@@ -19,7 +19,7 @@ for _dir in dir():
     if type(val) not in [bool, list, dict, str, int]:
         continue
 
-    if _dir in ["encoding", "py_file"]:
+    if _dir in ["encoding", "py_file", "__annotations__"]:
         continue
 
     config[_dir] = locals()[_dir]  # type: ignore # noqa: F821

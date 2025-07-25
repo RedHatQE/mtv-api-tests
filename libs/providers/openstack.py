@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-import glanceclient.v2.client as glclient
 from ocp_resources.provider import Provider
 from openstack.connection import Connection
 from simple_logger.logger import get_logger
@@ -29,7 +28,7 @@ class OpenStackProvider(BaseProvider):
         region_name: str,
         user_domain_id: str,
         project_domain_id: str,
-        ocp_resource: Provider,
+        ocp_resource: Provider | None = None,
         insecure: bool = False,
         **kwargs: Any,
     ):
@@ -69,19 +68,6 @@ class OpenStackProvider(BaseProvider):
     @property
     def test(self) -> bool:
         return True
-
-    @property
-    def networks(self) -> list[Any]:
-        return self.api.network.networks()
-
-    @property
-    def storages_name(self) -> list[str]:
-        return [storage.name for storage in self.api.search_volume_types()]
-
-    @property
-    def vms_list(self) -> list[str]:
-        instances = self.api.compute.servers()
-        return [vm.name for vm in instances]
 
     def get_instance_id_by_name(self, name_filter: str) -> str:
         # Retrieve the specific instance ID
@@ -137,20 +123,6 @@ class OpenStackProvider(BaseProvider):
             (flavor for flavor in self.api.compute.flavors() if flavor.name == instance_obj.flavor.original_name), None
         )
 
-    def get_image_obj(self, vm_name: str) -> Any:
-        # Get custom image object built on the base of the instance.
-        # For Openstack migration the instance is created by booting from a volume instead of an image.
-        # In this case, we can't see an image associated with the instance as the part of the instance object.
-        # To get the attributes of the image we use custom image created in advance on the base of the instance.
-        glance_connect = glclient.Client(
-            session=self.api.session,
-            endpoint=self.api.session.get_endpoint(service_type="image"),
-            interface="public",
-            region_name=self.region_name,
-        )
-        images = [image for image in glance_connect.images.list() if vm_name in image.get("name")]
-        return images[0] if images else None
-
     def get_volume_metadata(self, vm_name: str) -> Any:
         # Get metadata of the volume attached to the specific instance ID
         instance_id = self.get_instance_id_by_name(name_filter=vm_name)
@@ -161,7 +133,7 @@ class OpenStackProvider(BaseProvider):
             return volume.volume_image_metadata
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        vm_name: str = kwargs["name"]
+        vm_name: str = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
         source_vm = self.get_instance_obj(vm_name)
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = "openstack"

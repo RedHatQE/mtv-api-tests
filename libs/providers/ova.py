@@ -12,7 +12,7 @@ LOGGER = get_logger(__name__)
 
 
 class OVAProvider(BaseProvider):
-    def __init__(self, ocp_resource: Provider, **kwargs: Any) -> None:
+    def __init__(self, ocp_resource: Provider | None = None, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, **kwargs)
         self.type = Provider.ProviderType.OVA
 

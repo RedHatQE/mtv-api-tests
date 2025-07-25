@@ -11,7 +11,7 @@ from ocp_resources.storage_map import StorageMap
 from pytest import FixtureRequest
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import retry
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import MigrationPlanExecError, MigrationPlanExecStopError
 from libs.base_provider import BaseProvider
@@ -21,7 +21,7 @@ from report import create_migration_scale_report
 from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
-from utilities.utils import gen_network_map_list, generate_name_with_uuid, get_value_from_py_config
+from utilities.utils import gen_network_map_list, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -35,7 +35,6 @@ def migrate_vms(
     storage_migration_map: StorageMap,
     source_provider_data: dict[str, Any],
     target_namespace: str,
-    session_uuid: str,
     fixture_store: Any,
     source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
@@ -86,7 +85,6 @@ def migrate_vms(
 
 
 def run_migration(
-    name: str,
     source_provider_name: str,
     source_provider_namespace: str,
     destination_provider_name: str,
@@ -136,7 +134,6 @@ def run_migration(
         fixture_store=fixture_store,
         test_name=test_name,
         resource=Plan,
-        name=name,
         namespace=target_namespace,
         source_provider_name=source_provider_name,
         source_provider_namespace=source_provider_namespace or target_namespace,
@@ -159,7 +156,6 @@ def run_migration(
     create_and_store_resource(
         fixture_store=fixture_store,
         resource=Migration,
-        name=f"{name}-migration",
         namespace=target_namespace,
         plan_name=plan.name,
         plan_namespace=plan.namespace,
@@ -187,19 +183,32 @@ def get_vm_suffix() -> str:
     return vm_suffix
 
 
-@retry(wait_timeout=int(py_config.get("plan_wait_timeout", 600)), sleep=1, exceptions_dict={MigrationPlanExecError: []})
-def wait_for_migration_complate(plan: Plan) -> bool:
+def wait_for_migration_complate(plan: Plan) -> None:
     err = "Plan {name} failed to reach the expected condition. \nstatus:\n\t{instance}"
-    for cond in plan.instance.status.conditions:
-        if cond["category"] == "Advisory":
-            if cond["status"] == plan.Condition.Status.TRUE:
-                if cond["type"] == plan.Status.SUCCEEDED:
-                    return True
 
-                elif cond["type"] == "Failed":
-                    raise MigrationPlanExecStopError(err.format(name=plan.name, instance=plan.instance))
+    def _wait_for_migration_complate(_plan: Plan) -> bool:
+        for cond in _plan.instance.status.conditions:
+            if cond["category"] == "Advisory":
+                if cond["status"] == _plan.Condition.Status.TRUE:
+                    if cond["type"] == _plan.Status.SUCCEEDED:
+                        return True
 
-    raise MigrationPlanExecError(err.format(name=plan.name, instance=plan.instance))
+                    elif cond["type"] == "Failed":
+                        raise MigrationPlanExecStopError(err.format(name=_plan.name, instance=_plan.instance))
+        return False
+
+    try:
+        for sample in TimeoutSampler(
+            func=_wait_for_migration_complate,
+            sleep=1,
+            wait_timeout=py_config.get("plan_wait_timeout", 600),
+            exceptions_dict={MigrationPlanExecStopError: []},
+            _plan=plan,
+        ):
+            if sample:
+                return
+    except TimeoutExpiredError:
+        raise MigrationPlanExecError(err.format(name=plan.name, instance=plan.instance))
 
 
 def get_storage_migration_map(
@@ -211,6 +220,12 @@ def get_storage_migration_map(
     source_provider_inventory: ForkliftInventory,
     vms: list[str],
 ) -> StorageMap:
+    if not source_provider.ocp_resource:
+        raise ValueError("source_provider.ocp_resource is not set")
+
+    if not destination_provider.ocp_resource:
+        raise ValueError("destination_provider.ocp_resource is not set")
+
     storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
     storage_map_list: list[dict[str, Any]] = []
     storage_map_from_config: str = py_config["storage_class"]
@@ -220,14 +235,10 @@ def get_storage_migration_map(
             "source": storage,
         })
 
-    name = generate_name_with_uuid(
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-{storage_map_from_config}-storage-map"
-    )
     storage_map = create_and_store_resource(
         fixture_store=fixture_store,
         resource=StorageMap,
         client=ocp_admin_client,
-        name=name,
         namespace=target_namespace,
         mapping=storage_map_list,
         source_provider_name=source_provider.ocp_resource.name,
@@ -248,20 +259,22 @@ def get_network_migration_map(
     source_provider_inventory: ForkliftInventory,
     vms: list[str],
 ) -> NetworkMap:
+    if not source_provider.ocp_resource:
+        raise ValueError("source_provider.ocp_resource is not set")
+
+    if not destination_provider.ocp_resource:
+        raise ValueError("destination_provider.ocp_resource is not set")
+
     network_map_list = gen_network_map_list(
         target_namespace=target_namespace,
         source_provider_inventory=source_provider_inventory,
         multus_network_name=multus_network_name,
         vms=vms,
     )
-    name = generate_name_with_uuid(
-        name=f"{source_provider.ocp_resource.name}-{destination_provider.ocp_resource.name}-network-map"
-    )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,
         resource=NetworkMap,
         client=ocp_admin_client,
-        name=name,
         namespace=target_namespace,
         mapping=network_map_list,
         source_provider_name=source_provider.ocp_resource.name,
