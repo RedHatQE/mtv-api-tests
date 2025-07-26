@@ -36,7 +36,7 @@ def create_and_store_resource(
         _resource_name = generate_name_with_uuid(name=fixture_store["base_resource_name"])
 
         if resource.kind in (Migration.kind, Plan.kind):
-            _resource_name = f"{_resource_name}-{'warm' if kwargs['warm_migration'] else 'cold'}"
+            _resource_name = f"{_resource_name}-{'warm' if kwargs.get('warm_migration') else 'cold'}"
 
     kwargs["name"] = _resource_name
 

@@ -91,7 +91,7 @@ class VMWareProvider(BaseProvider):
 
         return target_vm
 
-    def wait_task(self, task: vim.Task, action_name: str, wait_timeout: int = 60, sleep: int = 2) -> Any:
+    def wait_task(self, task: vim.Task, action_name: str, wait_timeout: int = 60, sleep: int = 1) -> Any:
         """
         Waits and provides updates on a vSphere task.
         """
@@ -110,7 +110,8 @@ class VMWareProvider(BaseProvider):
                     )
                     return task.info.result
 
-                LOGGER.info(f"{action_name} progress: {task.info.progress}%")
+                progress = f"{int(task.info.progress)}%" if task.info.progress else "In progress"
+                LOGGER.info(f"{action_name} progress: {progress}")
         except TimeoutExpiredError:
             self.log.error(msg=f"{action_name} did not complete successfully: {task.info.error}")
             raise
