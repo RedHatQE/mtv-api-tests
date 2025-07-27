@@ -1,80 +1,55 @@
 {
-  "vsphere-6.5": {
+  "vsphere": {
     "type": "vsphere",
-    "version": "6.5",
-    "fqdn": "rhev-node-05.rdu2.scalelab.redhat.com",
-    "api_url": "https://rhev-node-05.rdu2.scalelab.redhat.com/sdk",
-    "username": "mtv@vsphere.local",
-    "password": "Heslo123!",
-    "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "100yard-",
-    "guest_vm_win_user": "Administrator",
-    "guest_vm_win_password": "Heslo123!",
-    "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:6.5"
+    "version": "<SERVER VERSION>",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "<SERVER FQDN/IP>/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",
+    "guest_vm_win_user": "WINDOWS VMS USERNAME",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",
+    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>"
   },
-  "vsphere-7.0.3": {
-    "type": "vsphere",
-    "version": "7.0.3",
-    "fqdn": "10.6.46.159",
-    "api_url": "https://10.6.46.159/sdk",
-    "username": "administrator@vsphere.local",
-    "password": "VCENTER@redhat2023",
-    "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "redhat",
-    "guest_vm_win_user": "Administrator",
-    "guest_vm_win_password": "123qweP",
-    "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:7.0.3"
-  },
-  "vsphere-8.0.1": {
-    "type": "vsphere",
-    "version": "8.0.1",
-    "fqdn": "10.6.46.250",
-    "api_url": "https://10.6.46.250/sdk",
-    "username": "administrator@vsphere.local",
-    "password": "VCENTER@redhat2023",
-    "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "redhat",
-    "guest_vm_win_user": "Administrator",
-    "guest_vm_win_password": "123qweP",
-    "vddk_init_image": "quay.io/rh-openshift-mtv/vddk-init-image:8.0.1"
-  },
-  "ovirt-4.4.9": {
+
+  "ovirt": {
     "type": "ovirt",
-    "version": "4.4.9",
-    "fqdn": "rhev-red-02.rdu2.scalelab.redhat.com",
-    "api_url": "https://rhev-red-02.rdu2.scalelab.redhat.com/ovirt-engine/api",
-    "username": "admin@internal",
-    "password": "qum5net"
+    "version": "<SERVER VERSION>",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "<SERVER FQDN/IP>/ovirt-engine/api",
+    "username": "USERNAME",
+    "password": "PASSWORD"
   },
-  "openstack-psi": {
+  "openstack": {
     "type": "openstack",
-    "version": "psi",
-    "fqdn": "rhos-d.infra.prod.upshift.rdu2.redhat.com",
-    "api_url": "https://rhos-d.infra.prod.upshift.rdu2.redhat.com:13000/v3",
-    "username": "mtv-qe-user",
-    "password": "Vm0pB_NAns_l2T5b1ZMHUKd6LqtPjQkH",
-    "user_domain_name": "redhat.com",
-    "region_name": "regionOne",
-    "project_name": "mtv-qe-infra",
-    "user_domain_id": "62cf1b5ec006489db99e2b0ebfb55f57",
-    "project_domain_id": "62cf1b5ec006489db99e2b0ebfb55f57",
-    "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "redhat123456"
+    "version": "SERVER VERSION",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "<SERVER FQDN/IP>:<PORT>/v3",
+    "username": "USERNAME",
+    "password": "PASSWORD",
+    "user_domain_name": "<DOMAIN>",
+    "region_name": "<REGION>",
+    "project_name": "<PROJECT>",
+    "user_domain_id": "<USER DOMAIN ID>",
+    "project_domain_id": "PROJECT DOMAIN ID",
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD"
   },
-  "openshift-remote": {
+  "openshift": {
     "type": "openshift",
-    "version": "remote",
+    "version": "<SERVER VERSION>",
     "fqdn": "",
     "api_url": "",
     "username": "",
     "password": ""
   },
-  "ova-nfs": {
+  "ova": {
     "type": "ova",
-    "version": "nfs",
+    "version": "<SERVER VERSION>", # Can be anything, just placeholder
     "fqdn": "",
-    "api_url": "f02-h06-000-r640.rdu2.scalelab.redhat.com:/home/nfsshare-test/mtv-api-tests",
-    "username": "ova",
+    "api_url": "<NFS SHARE URL>",
+    "username": "<USERNAME>",
     "password": ""
   }
 }

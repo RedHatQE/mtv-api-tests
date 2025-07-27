@@ -22,20 +22,10 @@ File `.providers.json` in the root directory of the repo with the source provide
 
 Deploy [openshif-mtv](https://gitlab.cee.redhat.com/md-migration/mtv-autodeploy)
 
-```bash
-# Install the following packages:
-dnf install python3 \
-  install python3-devel \
-  install libxml2-devel \
-  install libcurl-devel \
-  install openssl \
-  install openssl-devel \
-  install gcc \
-  install gcc-c++
+install [uv](https://github.com/astral-sh/uv)
 
-python3 -m pip install --user pipx
-pipx install uv
-uv sync -p python3.12 # Any python should work from 3.9 to 3.12
+```bash
+uv sync
 
 # make sure oc client path in $PATH
 export PATH="<oc path>:$PATH"
@@ -54,10 +44,6 @@ export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
 2. Create a Secret with the kubeconfig content
 3. Expect the `junit-report.xml` file on the PVC root folder.
 
-```bash
-oc create secret generic kubeconfig --from-file auth=<PATH TO KUBECONFIG>
-```
-
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -75,18 +61,12 @@ spec:
         - name: SOURCE_PROVIDER_VERSION
           value: "6.5"
       name: mtv-api-tests
-      image: "quay.io/openshift-cnv/mtv-tests:v2.3"
+      image: "quay.io/openshift-cnv/mtv-tests"
       volumeMounts:
-        - mountPath: "/cred"
-          name: kubeconfig
-          readOnly: true
         - mountPath: "/app/output"
           name: "output"
           readOnly: false
   volumes:
-    - name: kubeconfig
-      secret:
-        secretName: kubeconfig
     - name: output
       persistentVolumeClaim:
         claimName: mtv-api-tests-pvc
@@ -98,27 +78,6 @@ spec:
 podman build -f Dockerfile -t mtv-api-tests
 podman login quay.io
 podman push mtv-api-tests quay.io/openshift-cnv/mtv-tests:latest
-```
-
-## Prepare the Environment
-
-```bash
-# cd to the project root directory
-export KUBECONFIG=<path to ocp cluster kubeconifig>
-```
-
-## Run Cleanup
-
-\*Can skip this step if you only have just deployed openshift-mtv
-
-```bash
-oc delete --all vm -nopenshift-mtv --wait=true #use with care
-```
-
-```bash
-oc delete -f tests/manifests/second_network.yaml --wait=true
-# May already be gone (Error from server (NotFound): error when deleting "second_network.yaml":
-# network-attachment-definitions.k8s.cni.cncf.io "mybridge" not found)
 ```
 
 ## Pytest
@@ -170,35 +129,6 @@ uv run pytest -m scale --tc:vm_name_search_pattern:<search> --tc=number_of_vms:X
 2. Make Sure oc is in the PATH.
 3. export KUBECONFIG=Path to kubeconfig file.
 4. sh scripts/run_interop_tests.sh
-
-## Known Issues
-
-- pycurl may fail with error:
-  ImportError: pycurl: libcurl link-time ssl backend (nss) is different from compile-time ssl backend (none/other)
-
-  fix:
-
-  ```bash
-  export PYCURL_SSL_LIBRARY=nss # or openssl. depend on the error (link-time ssl backend (nss))
-  uv run pip uninstall pycurl
-  uv run pip install pycurl --no-cache-dir
-  ```
-
-- message":"network-attachment-definitions.k8s.cni.cncf.io \"mtv-api-tests-mybridge\" already exists","reason":"AlreadyExists"
-
-  fix:
-
-  ```bash
-  oc delete -f tests/manifests/second_network.yaml
-  ```
-
-- Target VM Already exists
-
-  fix:
-
-  ```bash
-  oc delete --all vm -nopenshift-mtv #use with care
-  ```
 
 ## Release new version
 
