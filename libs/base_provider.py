@@ -70,3 +70,11 @@ class BaseProvider(abc.ABC):
         Create a dict for a single vm holding the Network Interface details, Disks and Storage, etc..
         """
         pass
+
+    @abc.abstractmethod
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str) -> Any:
+        pass
+
+    @abc.abstractmethod
+    def delete_vm(self, vm_name: str) -> Any:
+        pass

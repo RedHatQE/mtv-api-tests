@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from time import sleep
-from typing import Any
+from typing import Any, Self
 
 import humanfriendly
 from kubernetes.client.exceptions import ApiException
@@ -23,7 +23,7 @@ class OCPProvider(BaseProvider):
         super().__init__(ocp_resource=ocp_resource, **kwargs)
         self.type = Provider.ProviderType.OPENSHIFT
 
-    def connect(self) -> "OCPProvider":
+    def connect(self) -> Self:
         return self
 
     def disconnect(self) -> None:

@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import copy
 import os
-from typing import Any
+from typing import Any, Callable, Self
 
 import ovirtsdk4
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource
-from ovirtsdk4 import NotFoundError
+from ovirtsdk4 import NotFoundError, types
 from ovirtsdk4.types import VmStatus
 from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import OvirtMTVDatacenterNotFoundError, OvirtMTVDatacenterStatusError
 from libs.base_provider import BaseProvider
@@ -53,7 +54,7 @@ class OvirtProvider(BaseProvider):
         LOGGER.info(f"Disconnecting OvirtProvider source provider {self.host}")
         self.api.close()
 
-    def connect(self) -> "OvirtProvider":
+    def connect(self) -> Self:
         self.api = ovirtsdk4.Connection(
             url=self.host,
             username=self.username,
@@ -124,13 +125,28 @@ class OvirtProvider(BaseProvider):
         return snapshots
 
     def start_vm(self, vm: Any) -> None:
-        if vm.status != VmStatus.UP:
-            self.vms_services.vm_service(vm.id).start()
+        vm_service = self.vms_services.vm_service(vm.id)
+        if vm_service.get().status != VmStatus.UP:
+            LOGGER.info(f"Starting VM '{vm.name}'")
+            vm_service.start()
+            self._wait_for_condition(
+                entity_name=vm.name,
+                action_name="Power On",
+                # CORRECTED: Use the vm_service to get the latest status
+                condition_func=lambda: vm_service.get().status == types.VmStatus.UP,
+            )
 
-    # TODO: change the function definition to shutdown_vm once we will have the same for VMware
     def stop_vm(self, vm: Any) -> None:
-        if vm.status == VmStatus.UP:
-            self.vms_services.vm_service(vm.id).shutdown()
+        vm_service = self.vms_services.vm_service(vm.id)
+        if vm_service.get().status == VmStatus.UP:
+            LOGGER.info(f"Stopping VM '{vm.name}'")
+            vm_service.shutdown()
+            self._wait_for_condition(
+                entity_name=vm.name,
+                action_name="Power Off",
+                # CORRECTED: Use the vm_service to get the latest status
+                condition_func=lambda: vm_service.get().status == types.VmStatus.DOWN,
+            )
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         source_vm = self.get_vm_by_name(name=f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}")[0]
@@ -203,3 +219,146 @@ class OvirtProvider(BaseProvider):
     @property
     def is_mtv_datacenter_ok(self) -> bool:
         return self.mtv_datacenter.status.value == "up"
+
+    def _wait_for_condition(
+        self,
+        entity_name: str,
+        action_name: str,
+        condition_func: Callable[[], bool],
+        timeout: int = 60 * 10,
+        sleep: int = 1,
+    ) -> None:
+        """
+        Waits for a specific condition to be True using TimeoutSampler.
+
+        Args:
+            entity_name: The name of the entity being waited on.
+            action_name: The name of the action being performed.
+            condition_func: A function that returns True when the condition is met.
+            timeout: The total time to wait in seconds.
+            sleep: The interval between checks in seconds.
+        """
+        LOGGER.info(f"Waiting for '{action_name}' on '{entity_name}' to complete...")
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=sleep,
+                func=condition_func,
+            ):
+                if sample:
+                    LOGGER.info(f"Action '{action_name}' on '{entity_name}' completed successfully.")
+                    return
+        except TimeoutExpiredError:
+            LOGGER.error(f"Timeout expired while waiting for '{action_name}' on '{entity_name}'.")
+            raise
+
+    def delete_vm(self, vm_name: str) -> None:
+        """
+        Finds a VM by name, powers it off if necessary, and deletes it.
+        """
+        LOGGER.info(f"Attempting to delete VM '{vm_name}'")
+        try:
+            vm = self.get_vm_by_name(name=vm_name)
+        except IndexError:
+            LOGGER.warning(f"VM '{vm_name}' not found. Nothing to delete.")
+            return
+
+        vm_service = self.vms_services.vm_service(vm.id)
+        if vm.status != types.VmStatus.DOWN:
+            self.stop_vm(vm)
+
+        LOGGER.info(f"Deleting VM '{vm_name}' and its disks...")
+        vm_service.remove()
+
+        def _check_vm_deleted():
+            try:
+                vm_service.get()
+                return False
+            except NotFoundError:
+                return True
+
+        self._wait_for_condition(
+            entity_name=vm_name,
+            action_name="Deletion",
+            condition_func=_check_vm_deleted,
+        )
+
+    def clone_vm(
+        self,
+        source_vm_name: str,
+        clone_vm_name: str,
+        power_on: bool = False,
+    ) -> None:
+        """
+        Clones a VM using temporary snapshots and the TimeoutSampler pattern.
+        """
+        LOGGER.info(f"Starting clone of '{source_vm_name}' to '{clone_vm_name}'")
+        try:
+            source_vm = self.get_vm_by_name(name=source_vm_name)
+        except IndexError:
+            LOGGER.error(f"Source VM '{source_vm_name}' not found. Cannot clone.")
+            return
+
+        source_vm_service = self.vms_services.vm_service(source_vm.id)
+        snapshots_service = source_vm_service.snapshots_service()
+        original_status = source_vm.status
+        snapshot = None
+        snapshot_service = None
+
+        try:
+            if original_status != types.VmStatus.DOWN:
+                self.stop_vm(source_vm)
+
+            snapshot_description = f"clone_snapshot_for_{clone_vm_name}"
+            snapshot = snapshots_service.add(
+                snapshot=types.Snapshot(description=snapshot_description, persist_memorystate=False)
+            )
+            snapshot_service = snapshots_service.snapshot_service(snapshot.id)
+
+            self._wait_for_condition(
+                entity_name=snapshot_description,
+                action_name="Snapshot Creation",
+                condition_func=lambda: snapshot_service.get().snapshot_status == types.SnapshotStatus.OK,
+            )
+
+            new_vm = self.vms_services.add(
+                vm=types.Vm(
+                    name=clone_vm_name,
+                    cluster=types.Cluster(id=source_vm.cluster.id),
+                    template=types.Template(id="00000000-0000-0000-0000-000000000000"),
+                    snapshots=[types.Snapshot(id=snapshot.id)],
+                ),
+                clone=True,
+            )
+            new_vm_service = self.vms_services.vm_service(new_vm.id)
+
+            self._wait_for_condition(
+                entity_name=clone_vm_name,
+                action_name="VM Creation",
+                condition_func=lambda: new_vm_service.get().status == types.VmStatus.DOWN,
+            )
+
+            if power_on:
+                self.start_vm(new_vm)
+
+        finally:
+            if snapshot and snapshot_service:
+                snapshot_service.remove()
+
+                def _check_snapshot_deleted():
+                    try:
+                        snapshot_service.get()
+                        return False
+                    except NotFoundError:
+                        return True
+
+                self._wait_for_condition(
+                    entity_name=snapshot.description,
+                    action_name="Snapshot Deletion",
+                    condition_func=_check_snapshot_deleted,
+                )
+
+            if original_status == types.VmStatus.UP:
+                current_status = source_vm_service.get().status
+                if current_status == types.VmStatus.DOWN:
+                    self.start_vm(source_vm)

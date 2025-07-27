@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, Self
 
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource
@@ -35,7 +35,7 @@ class VMWareProvider(BaseProvider):
         LOGGER.info(f"Disconnecting VMWareProvider source provider {self.host}")
         Disconnect(si=self.api)
 
-    def connect(self) -> None:
+    def connect(self) -> Self:
         self.api = SmartConnect(  # ssl cert check is not required
             host=self.host,
             user=self.username,
@@ -43,6 +43,7 @@ class VMWareProvider(BaseProvider):
             port=443,
             disableSslCertValidation=True,
         )
+        return self
 
     @property
     def test(self) -> bool:
