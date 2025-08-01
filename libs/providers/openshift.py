@@ -189,3 +189,9 @@ class OCPProvider(BaseProvider):
         result_vm_info["snapshots_data"] = None
 
         return result_vm_info
+
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str) -> Any:
+        return
+
+    def delete_vm(self, vm_name: str) -> Any:
+        return
