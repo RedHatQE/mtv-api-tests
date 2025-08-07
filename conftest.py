@@ -102,7 +102,7 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionstart(session):
-    required_config = ("storage_class", "source_provider_type", "source_provider_version", "target_ocp_version")
+    required_config = ("storage_class", "source_provider_type", "source_provider_version")
 
     if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
         missing_configs: list[str] = []
