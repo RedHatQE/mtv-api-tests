@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, Self
 
-import glanceclient.v2.client as glclient
 from ocp_resources.provider import Provider
+from openstack.compute.v2.server import Server as OSP_Server
 from openstack.connection import Connection
+from openstack.image.v2.image import Image as OSP_Image
 from simple_logger.logger import get_logger
 
+from exceptions.exceptions import VmNotFoundError
 from libs.base_provider import BaseProvider
 
 LOGGER = get_logger(__name__)
@@ -29,7 +31,7 @@ class OpenStackProvider(BaseProvider):
         region_name: str,
         user_domain_id: str,
         project_domain_id: str,
-        ocp_resource: Provider,
+        ocp_resource: Provider | None = None,
         insecure: bool = False,
         **kwargs: Any,
     ):
@@ -53,7 +55,7 @@ class OpenStackProvider(BaseProvider):
         LOGGER.info(f"Disconnecting OpenStackProvider source provider {self.host}")
         self.api.close()
 
-    def connect(self) -> "OpenStackProvider":
+    def connect(self) -> Self:
         self.api = Connection(
             auth_url=self.auth_url,
             project_name=self.project_name,
@@ -69,19 +71,6 @@ class OpenStackProvider(BaseProvider):
     @property
     def test(self) -> bool:
         return True
-
-    @property
-    def networks(self) -> list[Any]:
-        return self.api.network.networks()
-
-    @property
-    def storages_name(self) -> list[str]:
-        return [storage.name for storage in self.api.search_volume_types()]
-
-    @property
-    def vms_list(self) -> list[str]:
-        instances = self.api.compute.servers()
-        return [vm.name for vm in instances]
 
     def get_instance_id_by_name(self, name_filter: str) -> str:
         # Retrieve the specific instance ID
@@ -137,20 +126,6 @@ class OpenStackProvider(BaseProvider):
             (flavor for flavor in self.api.compute.flavors() if flavor.name == instance_obj.flavor.original_name), None
         )
 
-    def get_image_obj(self, vm_name: str) -> Any:
-        # Get custom image object built on the base of the instance.
-        # For Openstack migration the instance is created by booting from a volume instead of an image.
-        # In this case, we can't see an image associated with the instance as the part of the instance object.
-        # To get the attributes of the image we use custom image created in advance on the base of the instance.
-        glance_connect = glclient.Client(
-            session=self.api.session,
-            endpoint=self.api.session.get_endpoint(service_type="image"),
-            interface="public",
-            region_name=self.region_name,
-        )
-        images = [image for image in glance_connect.images.list() if vm_name in image.get("name")]
-        return images[0] if images else None
-
     def get_volume_metadata(self, vm_name: str) -> Any:
         # Get metadata of the volume attached to the specific instance ID
         instance_id = self.get_instance_id_by_name(name_filter=vm_name)
@@ -161,8 +136,14 @@ class OpenStackProvider(BaseProvider):
             return volume.volume_image_metadata
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        vm_name: str = kwargs["name"]
+        base_vm_name = kwargs["name"]
+        vm_name: str = f"{base_vm_name}{kwargs.get('vm_name_suffix', '')}"
+
         source_vm = self.get_instance_obj(vm_name)
+
+        if not source_vm:
+            source_vm = self.clone_vm(source_vm_name=base_vm_name, clone_vm_name=vm_name)
+
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = "openstack"
         result_vm_info["provider_vm_api"] = source_vm
@@ -213,3 +194,88 @@ class OpenStackProvider(BaseProvider):
         else:
             result_vm_info["power_state"] = "other"
         return result_vm_info
+
+    def clone_vm(
+        self,
+        source_vm_name: str,
+        clone_vm_name: str,
+        power_on: bool = False,
+    ) -> OSP_Server:
+        """
+        Clones a VM, always reusing the flavor and network from the source.
+
+        Args:
+            source_vm_name: The name of the VM to clone.
+            clone_vm_name: The name for the new cloned VM.
+            power_on: If True, the new VM will be left running. If False,
+                      it will be created and then shut off.
+
+        Returns:
+            The new server object if successful
+        """
+        LOGGER.info(f"Starting clone of '{source_vm_name}' to '{clone_vm_name}'")
+        source_vm: OSP_Server | None = self.get_instance_obj(name_filter=source_vm_name)
+
+        if not source_vm:
+            raise VmNotFoundError(f"Source VM '{source_vm_name}' not found.")
+
+        flavor_id: str = source_vm.flavor["id"]
+        networks: list[dict[str, Any]] = self.vm_networks_details(vm_name=source_vm_name)
+
+        if not networks:
+            raise ValueError(f"Could not find a network for source VM '{source_vm_name}'.")
+
+        network_id: str = networks[0]["net_id"]
+        LOGGER.info(f"Using source flavor '{flavor_id}' and network '{network_id}'")
+
+        snapshot: OSP_Image | None = None
+
+        try:
+            snapshot_name = f"{clone_vm_name}-snapshot"
+            LOGGER.info(f"Creating snapshot '{snapshot_name}'...")
+            snapshot = self.api.compute.create_server_image(server=source_vm.id, name=snapshot_name, wait=True)
+
+            if not snapshot:
+                raise Exception("Could not create snapshot.")
+
+            LOGGER.info(f"Creating new server '{clone_vm_name}' from snapshot...")
+            new_server: OSP_Server = self.api.compute.create_server(
+                name=clone_vm_name,
+                image_id=snapshot.id,
+                flavor_id=flavor_id,
+                networks=[{"uuid": network_id}],
+            )
+            new_server = self.api.compute.wait_for_server(new_server)
+
+            if not power_on:
+                LOGGER.info(f"power_on is False, stopping server '{new_server.name}'")
+                self.api.compute.stop_server(new_server)
+                new_server = self.api.compute.wait_for_server(new_server, status="SHUTOFF")
+
+            LOGGER.info(f"Successfully cloned '{source_vm_name}' to '{clone_vm_name}'")
+            return new_server
+
+        finally:
+            if snapshot:
+                LOGGER.info(f"Cleaning up snapshot '{snapshot.name}'...")
+                self.api.image.delete_image(snapshot.id, ignore_missing=True)
+
+    def delete_vm(self, vm_name: str) -> None:
+        """
+        Finds and deletes a VM instance.
+
+        Args:
+            vm_name: The name of the VM to delete.
+        """
+        LOGGER.info(f"Attempting to delete VM '{vm_name}'")
+        vm_to_delete: OSP_Server | None = self.get_instance_obj(name_filter=vm_name)
+
+        if not vm_to_delete:
+            LOGGER.warning(f"VM '{vm_name}' not found. Nothing to delete.")
+            return
+
+        try:
+            self.api.compute.delete_server(vm_to_delete, wait=True, timeout=180)
+            LOGGER.info(f"Successfully deleted VM '{vm_name}'.")
+        except Exception as e:
+            LOGGER.error(f"An error occurred while deleting VM '{vm_name}': {e}")

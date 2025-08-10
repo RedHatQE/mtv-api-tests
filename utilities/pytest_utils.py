@@ -17,9 +17,13 @@ from ocp_resources.resource import get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
+from pytest import Function
+from rich.console import Console
+from rich.table import Table
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
+from libs.providers.vmware import VMWareProvider
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 from utilities.utils import delete_all_vms
 
@@ -67,19 +71,17 @@ def session_teardown(session_store: dict[str, Any]) -> None:
             archive_plan(plan=plan)
 
         leftovers = teardown_resources(
-            session_teardown_resources=session_teardown_resources,
+            session_store=session_store,
             ocp_client=ocp_client,
             target_namespace=session_store.get("target_namespace"),
-            session_uuid=session_store["session_uuid"],
         )
         if leftovers:
             raise SessionTeardownError(f"Failed to clean up the following resources: {leftovers}")
 
 
 def teardown_resources(
-    session_teardown_resources: dict[str, list[dict[str, str]]],
+    session_store: dict[str, Any],
     ocp_client: DynamicClient,
-    session_uuid: str,
     target_namespace: str | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     """
@@ -88,6 +90,8 @@ def teardown_resources(
     Report if we have any leftovers in the cluster and return False if any, else return True
     """
     leftovers: dict[str, list[dict[str, str]]] = {}
+    session_teardown_resources: dict[str, list[dict[str, str]]] = session_store["teardown"]
+    session_uuid = session_store["session_uuid"]
 
     # Resources that was created by the tests
     migrations = session_teardown_resources.get(Migration.kind, [])
@@ -99,6 +103,7 @@ def teardown_resources(
     networkmaps = session_teardown_resources.get(NetworkMap.kind, [])
     namespaces = session_teardown_resources.get(Namespace.kind, [])
     storagemaps = session_teardown_resources.get(StorageMap.kind, [])
+    vmware_cloned_vms = session_teardown_resources.get(Provider.ProviderType.VSPHERE, [])
 
     # Resources that was created by running migration
     pods = session_teardown_resources.get(Pod.kind, [])
@@ -187,4 +192,52 @@ def teardown_resources(
         if not namespace_obj.clean_up(wait=True):
             leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
 
+    if vmware_cloned_vms:
+        source_provider_data = session_store["source_provider_data"]
+
+        with VMWareProvider(
+            host=source_provider_data["fqdn"],
+            username=source_provider_data["username"],
+            password=source_provider_data["password"],
+        ) as vmware_provider:
+            for _vm in vmware_cloned_vms:
+                _cloned_vm_name = _vm["name"]
+                try:
+                    vmware_provider.delete_vm(vm_name=_cloned_vm_name)
+                except Exception as exc:
+                    LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
+                    leftovers.setdefault(vmware_provider.type, []).append({
+                        "cloned_vm_name": _cloned_vm_name,
+                    })
+
     return leftovers
+
+
+def generate_vms_to_import_report(items: list[Function]) -> None:
+    vms_to_import_report: list[list[dict[str, Any]]] = []
+    console = Console()
+    console.print("\n")
+    table = Table(title="VMs to import")
+    table.add_column("Name", style="cyan", no_wrap=True)
+    table.add_column("Guest Agent", style="green")
+    table.add_column("Migration type", style="green")
+
+    for item in items:
+        if parametrize := item.get_closest_marker("parametrize"):
+            if parametrize.args[0] == "plan":
+                _values = parametrize.args[1][0].values[0]
+                virtual_machines = _values["virtual_machines"]
+                warm_migration = _values.get("warm_migration", False)
+                for _vms in virtual_machines:
+                    _vms["warm"] = warm_migration
+
+                vms_to_import_report.append(virtual_machines)
+
+    for _vms in vms_to_import_report:
+        for _vm in _vms:
+            guest_agent = _vm.get("guest_agent", False)
+            warm = _vm.get("warm", False)
+
+            table.add_row(_vm["name"], "Yes" if guest_agent else "No", "Warm" if warm else "Cold")
+
+    console.print(table)

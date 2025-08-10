@@ -5,7 +5,6 @@ from pytest_testconfig import py_config
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_storagemap_and_networkmap,
-    get_vm_suffix,
     migrate_vms,
 )
 from utilities.utils import get_value_from_py_config
@@ -23,9 +22,6 @@ pytestmark = [
 ]
 
 
-VM_SUFFIX = get_vm_suffix()
-
-
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.parametrize(
@@ -34,7 +30,7 @@ VM_SUFFIX = get_vm_suffix()
         pytest.param({
             "virtual_machines": [
                 {
-                    "name": f"mtv-rhel8-warm-sanity{VM_SUFFIX}",
+                    "name": "mtv-rhel8-warm-sanity",
                     "source_vm_power": "on",
                     "guest_agent": True,
                 },
@@ -48,7 +44,6 @@ VM_SUFFIX = get_vm_suffix()
 def test_sanity_warm_mtv_migration(
     request,
     fixture_store,
-    session_uuid,
     ocp_admin_client,
     multus_network_name,
     source_provider_inventory,
@@ -74,7 +69,6 @@ def test_sanity_warm_mtv_migration(
     migrate_vms(
         request=request,
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         plan=plan,
@@ -95,7 +89,7 @@ def test_sanity_warm_mtv_migration(
         pytest.param({
             "virtual_machines": [
                 {
-                    "name": f"mtv-rhel8-warm-2disks2nics{VM_SUFFIX}",
+                    "name": "mtv-rhel8-warm-2disks2nics",
                     "source_vm_power": "on",
                     "guest_agent": True,
                 },
@@ -109,7 +103,6 @@ def test_sanity_warm_mtv_migration(
 def test_mtv_migration_warm_2disks2nics(
     request,
     fixture_store,
-    session_uuid,
     ocp_admin_client,
     multus_network_name,
     source_provider_inventory,
@@ -135,7 +128,6 @@ def test_mtv_migration_warm_2disks2nics(
     migrate_vms(
         request=request,
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_provider,
         plan=plan,
@@ -155,7 +147,7 @@ def test_mtv_migration_warm_2disks2nics(
         pytest.param({
             "virtual_machines": [
                 {
-                    "name": f"mtv-rhel8-warm-394{VM_SUFFIX}",
+                    "name": "mtv-rhel8-warm-394",
                     "source_vm_power": "on",
                     "guest_agent": True,
                 },
@@ -170,7 +162,6 @@ def test_mtv_migration_warm_2disks2nics(
 def test_warm_remote_ocp(
     request,
     fixture_store,
-    session_uuid,
     ocp_admin_client,
     multus_network_name,
     source_provider_inventory,
@@ -196,7 +187,6 @@ def test_warm_remote_ocp(
     migrate_vms(
         request=request,
         fixture_store=fixture_store,
-        session_uuid=session_uuid,
         source_provider=source_provider,
         destination_provider=destination_ocp_provider,
         plan=plan,

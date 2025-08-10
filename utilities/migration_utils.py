@@ -22,7 +22,6 @@ from timeout_sampler import TimeoutExpiredError
 
 from libs.base_provider import BaseProvider
 from libs.providers.openshift import OCPProvider
-from utilities.utils import generate_name_with_uuid, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -153,15 +152,14 @@ def prepare_migration_for_tests(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> dict[str, Any]:
+    if not source_provider.ocp_resource:
+        raise ValueError("source_provider.ocp_resource is not set")
+
+    if not destination_provider.ocp_resource:
+        raise ValueError("destination_provider.ocp_resource is not set")
+
     test_name = request._pyfuncitem.name
     _source_provider_type = py_config.get("source_provider_type")
-
-    _plan_name = (
-        f"{target_namespace}{'-remote' if get_value_from_py_config('remote_ocp_cluster') else ''}"
-        f"-{'warm' if warm_migration else 'cold'}"
-    )
-
-    plan_name = generate_name_with_uuid(name=_plan_name)
 
     # Plan CR accepts only VM name/id
     virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plan["virtual_machines"]]
@@ -171,7 +169,6 @@ def prepare_migration_for_tests(
             virtual_machines_list[idx].update({"namespace": source_vms_namespace})
 
     return {
-        "name": plan_name,
         "source_provider_name": source_provider.ocp_resource.name,
         "source_provider_namespace": source_provider.ocp_resource.namespace,
         "virtual_machines_list": virtual_machines_list,

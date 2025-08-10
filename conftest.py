@@ -27,7 +27,11 @@ from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
 
-from exceptions.exceptions import ForkliftPodsNotRunningError, RemoteClusterAndLocalCluterNamesError
+from exceptions.exceptions import (
+    ForkliftPodsNotRunningError,
+    MissingProvidersFileError,
+    RemoteClusterAndLocalCluterNamesError,
+)
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
@@ -39,14 +43,20 @@ from libs.forklift_inventory import (
 )
 from libs.providers.openshift import OCPProvider
 from utilities.logger import separator, setup_logging
+from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
+from utilities.naming import generate_name_with_uuid
 from utilities.prometheus import prometheus_monitor_deamon
-from utilities.pytest_utils import SessionTeardownError, collect_created_resources, prepare_base_path, session_teardown
+from utilities.pytest_utils import (
+    collect_created_resources,
+    generate_vms_to_import_report,
+    prepare_base_path,
+    session_teardown,
+)
 from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
-    generate_name_with_uuid,
     get_value_from_py_config,
 )
 
@@ -63,6 +73,7 @@ def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
+    vms_to_import_report = parser.getgroup(name="VMs to import report")
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
@@ -72,6 +83,9 @@ def pytest_addoption(parser):
     )
     openshift_python_wrapper_group.addoption(
         "--openshift-python-wrapper-log-debug", action="store_true", help="Enable debug logging in the wrapper"
+    )
+    vms_to_import_report.addoption(
+        "--vms-to-import-report", action="store_true", help="Generate report of VMs to import"
     )
 
 
@@ -88,12 +102,17 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionstart(session):
-    required_config = ("storage_class", "source_provider_type", "source_provider_version", "target_ocp_version")
+    required_config = ("storage_class", "source_provider_type", "source_provider_version")
 
     if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
+        missing_configs: list[str] = []
+
         for _req in required_config:
             if not py_config.get(_req):
-                pytest.exit(reason=f"Some required config is missing {required_config}", returncode=1)
+                missing_configs.append(_req)
+
+        if missing_configs:
+            pytest.exit(reason=f"Some required config is missing {required_config=} - {missing_configs=}", returncode=1)
 
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
@@ -174,7 +193,7 @@ def pytest_sessionfinish(session, exitstatus):
         # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
         try:
             session_teardown(session_store=_session_store)
-        except SessionTeardownError as exp:
+        except Exception as exp:
             LOGGER.error(f"the following resources was left after tests are finished: {exp}")
             if not session.config.getoption("skip_data_collector"):
                 run_must_gather(data_collector_path=_data_collector_path)
@@ -187,6 +206,10 @@ def pytest_sessionfinish(session, exitstatus):
 def pytest_collection_modifyitems(session, config, items):
     for item in items:
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
+
+    if config.getoption("vms_to_import_report"):
+        generate_vms_to_import_report(items=items)
+        pytest.exit()
 
 
 def pytest_exception_interact(node, call, report):
@@ -245,9 +268,28 @@ def pytest_harvest_xdist_cleanup():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile, forklift_pods_state):
+def autouse_fixtures(source_provider_data, nfs_storage_profile, base_resource_name, forklift_pods_state):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
+
+
+@pytest.fixture(scope="session")
+def base_resource_name(fixture_store, session_uuid, source_provider_data):
+    _name = f"{session_uuid}-source-{source_provider_data['type']}-{source_provider_data['version'].replace('.', '-')}"
+    fixture_store["base_resource_name"] = _name
+
+
+@pytest.fixture(scope="session")
+def source_providers() -> dict[str, dict[str, Any]]:
+    _provider_file_name = ".providers.json"
+    providers_file = Path(_provider_file_name)
+    if not providers_file.exists():
+        raise MissingProvidersFileError(f"{_provider_file_name} file is missing")
+
+    with open(providers_file, "r") as fd:
+        source_providers_dict = json.load(fd)
+
+    return source_providers_dict
 
 
 @pytest.fixture(scope="session")
@@ -274,7 +316,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
         "pod-security.kubernetes.io/enforce-version": "latest",
         "mutatevirtualmachines.kubemacpool.io": "ignore",
     }
-    _target_namespace: str = py_config["target_namespace"]
+    _target_namespace: str = py_config["target_namespace_prefix"]
 
     # replace mtv-api-tests since session_uuid already include mtv-api-tests in the name
     _target_namespace = _target_namespace.replace("mtv-api-tests", "")
@@ -393,7 +435,7 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
 
 
 @pytest.fixture(scope="session")
-def destination_provider(session_uuid, ocp_admin_client, mtv_namespace, target_namespace, fixture_store):
+def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixture_store):
     kind_dict = {
         "apiVersion": "forklift.konveyor.io/v1beta1",
         "kind": "Provider",
@@ -408,17 +450,18 @@ def destination_provider(session_uuid, ocp_admin_client, mtv_namespace, target_n
         client=ocp_admin_client,
     )
 
-    return OCPProvider(ocp_resource=provider)
+    return OCPProvider(ocp_resource=provider, fixture_store=fixture_store)
 
 
 @pytest.fixture(scope="session")
-def source_provider_data():
+def source_provider_data(source_providers, fixture_store):
     _source_provider_key = f"{py_config['source_provider_type']}-{py_config['source_provider_version']}"
-    _source_provider = py_config["source_providers_dict"][_source_provider_key]
+    _source_provider = source_providers[_source_provider_key]
 
     if not _source_provider:
         raise ValueError(f"Source provider {_source_provider['type']}-{_source_provider['version']} not found")
 
+    fixture_store["source_provider_data"] = _source_provider
     return _source_provider
 
 
@@ -435,12 +478,10 @@ def source_provider(
     with create_source_provider(
         fixture_store=fixture_store,
         session_uuid=session_uuid,
-        config=py_config,
         source_provider_data=source_provider_data,
         namespace=target_namespace,
         admin_client=ocp_admin_client,
         tmp_dir=tmp_path_factory,
-        target_namespace=target_namespace,
         ocp_admin_client=ocp_admin_client,
         destination_ocp_secret=destination_ocp_secret,
         insecure=get_value_from_py_config(value="insecure_verify_skip"),
@@ -458,7 +499,6 @@ def multus_network_name(fixture_store, target_namespace, ocp_admin_client, multu
         fixture_store=fixture_store,
         resource=NetworkAttachmentDefinition,
         client=ocp_admin_client,
-        name=bridge_type_and_name,
         cni_type=bridge_type_and_name,
         namespace=target_namespace,
         config=multus_cni_config,
@@ -468,7 +508,7 @@ def multus_network_name(fixture_store, target_namespace, ocp_admin_client, multu
 
 
 @pytest.fixture(scope="session")
-def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, target_namespace):
+def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
     api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
     if not api_key:
         raise ValueError("API key not found in configuration, please login with `oc login` first")
@@ -476,7 +516,6 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, session_uuid, target
     secret = create_and_store_resource(
         fixture_store=fixture_store,
         resource=Secret,
-        name=f"{session_uuid}-ocp-secret",
         namespace=target_namespace,
         # API key format: 'Bearer sha256~<token>', split it to get token.
         string_data={"token": api_key.split()[-1], "insecureSkipVerify": "true"},
@@ -489,14 +528,14 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
     provider = create_and_store_resource(
         fixture_store=fixture_store,
         resource=Provider,
-        name=f"{session_uuid}-ocp-provider",
+        name=f"{session_uuid}-destination-ocp-provider",
         namespace=target_namespace,
         secret_name=destination_ocp_secret.name,
         secret_namespace=destination_ocp_secret.namespace,
         url=ocp_admin_client.configuration.host,
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
-    yield OCPProvider(ocp_resource=provider)
+    yield OCPProvider(ocp_resource=provider, fixture_store=fixture_store)
 
 
 @pytest.fixture(scope="function")
@@ -515,6 +554,7 @@ def plan(
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
+        vm_name_suffix = get_vm_suffix()
 
         if openshift_source_provider:
             create_source_cnv_vms(
@@ -523,9 +563,14 @@ def plan(
                 vms=virtual_machines,
                 namespace=source_vms_namespace,
                 network_name=multus_network_name,
+                vm_name_suffix=vm_name_suffix,
             )
         for vm in virtual_machines:
-            source_vm_details = source_provider.vm_dict(name=vm["name"], namespace=source_vms_namespace, source=True)
+            source_vm_details = source_provider.vm_dict(
+                name=vm["name"], namespace=source_vms_namespace, source=True, vm_name_suffix=vm_name_suffix
+            )
+            vm["name"] = f"{vm['name']}{vm_name_suffix}"
+
             provider_vm_api = source_vm_details["provider_vm_api"]
 
             vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
@@ -536,9 +581,9 @@ def plan(
             elif vm.get("source_vm_power") == "off":
                 source_provider.stop_vm(provider_vm_api)
 
-    yield request.param
+    yield plan
 
-    for vm in virtual_machines:
+    for vm in plan["virtual_machines"]:
         vm_obj = VirtualMachine(
             client=ocp_admin_client,
             name=vm["name"],
@@ -595,6 +640,9 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 def source_provider_inventory(
     ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
+    if not source_provider.ocp_resource:
+        raise ValueError("source_provider.ocp_resource is not set")
+
     providers = {
         Provider.ProviderType.OVA: OvaForkliftInventory,
         Provider.ProviderType.RHV: OvirtForkliftInventory,
@@ -648,7 +696,6 @@ def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, 
             fixture_store=fixture_store,
             resource=NetworkAttachmentDefinition,
             client=ocp_admin_client,
-            name=bridge_type_and_name,
             cni_type=bridge_type_and_name,
             namespace=source_vms_namespace,
             config=multus_cni_config,

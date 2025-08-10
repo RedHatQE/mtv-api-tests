@@ -50,6 +50,7 @@ dependencies = [
   "openshift-python-wrapper>=11.0.53",
   "pytest-jira>=0.3.22",
   "marshmallow==3.26.1",
+  "rich>=14.0.0",
 ]
 
 [project.optional-dependencies]
