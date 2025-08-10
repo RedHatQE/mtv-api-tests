@@ -13,7 +13,7 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
-from utilities.utils import rhv_provider, vmware_provider
+from utilities.utils import rhv_provider
 
 LOGGER = get_logger(name=__name__)
 
@@ -222,20 +222,15 @@ def check_vms(
         except Exception as exp:
             res[vm_name].append(f"check_storage - {str(exp)}")
 
-        snapshots_before_migration = vm.get("snapshots_before_migration")
-
-        if (
-            snapshots_before_migration
-            and source_provider.provider_data
-            and vmware_provider(source_provider.provider_data)
-        ):
-            try:
-                check_snapshots(
-                    snapshots_before_migration=snapshots_before_migration,
-                    snapshots_after_migration=source_vm["snapshots_data"],
-                )
-            except Exception as exp:
-                res[vm_name].append(f"check_snapshots - {str(exp)}")
+        if source_provider.type == Provider.ProviderType.VSPHERE:
+            if snapshots_before_migration := vm.get("snapshots_before_migration"):
+                try:
+                    check_snapshots(
+                        snapshots_before_migration=snapshots_before_migration,
+                        snapshots_after_migration=source_vm["snapshots_data"],
+                    )
+                except Exception as exp:
+                    res[vm_name].append(f"check_snapshots - {str(exp)}")
 
         if vm_guest_agent:
             try:

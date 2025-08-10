@@ -1,0 +1,55 @@
+{
+  "vsphere": {
+    "type": "vsphere",
+    "version": "<SERVER VERSION>",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "<SERVER FQDN/IP>/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",
+    "guest_vm_win_user": "WINDOWS VMS USERNAME",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",
+    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>"
+  },
+
+  "ovirt": {
+    "type": "ovirt",
+    "version": "<SERVER VERSION>",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "<SERVER FQDN/IP>/ovirt-engine/api",
+    "username": "USERNAME",
+    "password": "PASSWORD"
+  },
+  "openstack": {
+    "type": "openstack",
+    "version": "SERVER VERSION",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "<SERVER FQDN/IP>:<PORT>/v3",
+    "username": "USERNAME",
+    "password": "PASSWORD",
+    "user_domain_name": "<DOMAIN>",
+    "region_name": "<REGION>",
+    "project_name": "<PROJECT>",
+    "user_domain_id": "<USER DOMAIN ID>",
+    "project_domain_id": "PROJECT DOMAIN ID",
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD"
+  },
+  "openshift": {
+    "type": "openshift",
+    "version": "<SERVER VERSION>",
+    "fqdn": "",
+    "api_url": "",
+    "username": "",
+    "password": ""
+  },
+  "ova": {
+    "type": "ova",
+    "version": "<SERVER VERSION>", # Can be anything, just placeholder
+    "fqdn": "",
+    "api_url": "<NFS SHARE URL>",
+    "username": "<USERNAME>",
+    "password": ""
+  }
+}

@@ -7,7 +7,6 @@ from subprocess import STDOUT, check_output
 from typing import Any, Generator
 
 import pytest
-import shortuuid
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -43,11 +42,15 @@ def rhv_provider(provider_data: dict[str, Any]) -> bool:
 
 
 def openstack_provider(provider_data: dict[str, Any]) -> bool:
-    return provider_data["type"] == "openstack"
+    return provider_data["type"] == Provider.ProviderType.OPENSTACK
 
 
 def ova_provider(provider_data: dict[str, Any]) -> bool:
-    return provider_data["type"] == "ova"
+    return provider_data["type"] == Provider.ProviderType.OVA
+
+
+def ocp_provider(provider_data: dict[str, Any]) -> bool:
+    return provider_data["type"] == Provider.ProviderType.OPENSHIFT
 
 
 def generate_ca_cert_file(provider_fqdn: dict[str, Any], cert_file: Path) -> Path:
@@ -107,156 +110,125 @@ def gen_network_map_list(
     return network_map_list
 
 
-def generated_provider_name(session_uuid: str, provider_data: dict[str, Any]) -> str:
-    _name = (
-        f"{session_uuid}-{provider_data['type']}-{provider_data['version'].replace('.', '-')}-"
-        f"{provider_data['fqdn'].split('.')[0]}-{provider_data['username'].split('@')[0]}"
-    )
-    return generate_name_with_uuid(name=_name)
-
-
 @contextmanager
 def create_source_provider(
-    config: dict[str, Any],
     source_provider_data: dict[str, Any],
     namespace: str,
     admin_client: DynamicClient,
     session_uuid: str,
     fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
-    target_namespace: str,
     destination_ocp_secret: Secret,
     insecure: bool,
     tmp_dir: pytest.TempPathFactory | None = None,
-    **kwargs: dict[str, Any],
 ) -> Generator[BaseProvider, None, None]:
     # common
+    source_provider_secret: Secret | None = None
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
 
-    source_provider_name = generated_provider_name(
-        session_uuid=session_uuid,
-        provider_data=source_provider_data_copy,
-    )
+    secret_string_data = {
+        "url": source_provider_data_copy["api_url"],
+        "insecureSkipVerify": "true" if insecure else "false",
+    }
+    provider_args = {
+        "username": source_provider_data_copy["username"],
+        "password": source_provider_data_copy["password"],
+        "fixture_store": fixture_store,
+    }
+    metadata_labels = {
+        "createdForProviderType": source_provider_data_copy["type"],
+    }
 
-    if config["source_provider_type"] == Provider.ProviderType.OPENSHIFT:
-        provider = create_and_store_resource(
-            fixture_store=fixture_store,
-            resource=Provider,
-            name=source_provider_name,
-            namespace=target_namespace,
-            secret_name=destination_ocp_secret.name,
-            secret_namespace=destination_ocp_secret.namespace,
-            url=ocp_admin_client.configuration.host,
-            provider_type=Provider.ProviderType.OPENSHIFT,
-        )
+    if ocp_provider(provider_data=source_provider_data_copy):
+        source_provider = OCPProvider
+        source_provider_data_copy["api_url"] = ocp_admin_client.configuration.host
+        source_provider_data_copy["type"] = Provider.ProviderType.OPENSHIFT
+        source_provider_secret = destination_ocp_secret
 
-        yield OCPProvider(
-            ocp_resource=provider,
-            provider_data=source_provider_data_copy,
-        )
+    elif vmware_provider(provider_data=source_provider_data_copy):
+        source_provider = VMWareProvider
+        provider_args["host"] = source_provider_data_copy["fqdn"]
+        secret_string_data["user"] = source_provider_data_copy["username"]
+        secret_string_data["password"] = source_provider_data_copy["password"]
 
-    else:
-        for key, value in kwargs.items():
-            source_provider_data_copy[key] = value
+    elif rhv_provider(provider_data=source_provider_data_copy):
+        source_provider = OvirtProvider
+        provider_args["host"] = source_provider_data_copy["api_url"]
+        secret_string_data["user"] = source_provider_data_copy["username"]
+        secret_string_data["password"] = source_provider_data_copy["password"]
 
-        secret_string_data = {}
-        provider_args = {
-            "username": source_provider_data_copy["username"],
-            "password": source_provider_data_copy["password"],
-        }
-        metadata_labels = {
-            "createdForProviderType": source_provider_data_copy["type"],
-        }
-        # vsphere/vmware
-        if vmware_provider(provider_data=source_provider_data_copy):
-            provider_args["host"] = source_provider_data_copy["fqdn"]
-            source_provider = VMWareProvider
-            secret_string_data["user"] = source_provider_data_copy["username"]
-            secret_string_data["password"] = source_provider_data_copy["password"]
+        if not insecure:
+            if not tmp_dir:
+                raise ValueError("tmp_dir is required for rhv")
 
-        # rhv/ovirt
-        elif rhv_provider(provider_data=source_provider_data_copy):
-            if not insecure:
-                if not tmp_dir:
-                    raise ValueError("tmp_dir is required for rhv")
+            source_provider_type = source_provider_data_copy["type"]
+            cert_file = generate_ca_cert_file(
+                provider_fqdn=source_provider_data_copy["fqdn"],
+                cert_file=tmp_dir.mktemp(source_provider_type.upper())
+                / f"{source_provider_type}_{session_uuid}_cert.crt",
+            )
+            provider_args["ca_file"] = str(cert_file)
+            secret_string_data["cacert"] = cert_file.read_text()
 
-                source_provider_type = source_provider_data_copy["type"]
-                cert_file = generate_ca_cert_file(
-                    provider_fqdn=source_provider_data_copy["fqdn"],
-                    cert_file=tmp_dir.mktemp(source_provider_type.upper())
-                    / f"{source_provider_type}_{session_uuid}_cert.crt",
-                )
-                provider_args["ca_file"] = str(cert_file)
-                secret_string_data["cacert"] = cert_file.read_text()
+        else:
+            provider_args["insecure"] = insecure
 
-            else:
-                provider_args["insecure"] = insecure
+    elif openstack_provider(provider_data=source_provider_data_copy):
+        source_provider = OpenStackProvider
+        provider_args["host"] = source_provider_data_copy["api_url"]
+        provider_args["auth_url"] = source_provider_data_copy["api_url"]
+        provider_args["project_name"] = source_provider_data_copy["project_name"]
+        provider_args["user_domain_name"] = source_provider_data_copy["user_domain_name"]
+        provider_args["region_name"] = source_provider_data_copy["region_name"]
+        provider_args["user_domain_id"] = source_provider_data_copy["user_domain_id"]
+        provider_args["project_domain_id"] = source_provider_data_copy["project_domain_id"]
+        secret_string_data["username"] = source_provider_data_copy["username"]
+        secret_string_data["password"] = source_provider_data_copy["password"]
+        secret_string_data["regionName"] = source_provider_data_copy["region_name"]
+        secret_string_data["projectName"] = source_provider_data_copy["project_name"]
+        secret_string_data["domainName"] = source_provider_data_copy["user_domain_name"]
 
-            provider_args["host"] = source_provider_data_copy["api_url"]
-            source_provider = OvirtProvider
-            secret_string_data["user"] = source_provider_data_copy["username"]
-            secret_string_data["password"] = source_provider_data_copy["password"]
+    elif ova_provider(provider_data=source_provider_data_copy):
+        source_provider = OVAProvider
+        provider_args["host"] = source_provider_data_copy["api_url"]
 
-        # openstack
-        elif openstack_provider(provider_data=source_provider_data_copy):
-            provider_args["host"] = source_provider_data_copy["api_url"]
-            provider_args["auth_url"] = source_provider_data_copy["api_url"]
-            provider_args["project_name"] = source_provider_data_copy["project_name"]
-            provider_args["user_domain_name"] = source_provider_data_copy["user_domain_name"]
-            provider_args["region_name"] = source_provider_data_copy["region_name"]
-            provider_args["user_domain_id"] = source_provider_data_copy["user_domain_id"]
-            provider_args["project_domain_id"] = source_provider_data_copy["project_domain_id"]
-            source_provider = OpenStackProvider
-            secret_string_data["username"] = source_provider_data_copy["username"]
-            secret_string_data["password"] = source_provider_data_copy["password"]
-            secret_string_data["regionName"] = source_provider_data_copy["region_name"]
-            secret_string_data["projectName"] = source_provider_data_copy["project_name"]
-            secret_string_data["domainName"] = source_provider_data_copy["user_domain_name"]
+    if not source_provider:
+        raise ValueError("Failed to get source provider data")
 
-        elif ova_provider(provider_data=source_provider_data_copy):
-            provider_args["host"] = source_provider_data_copy["api_url"]
-            source_provider = OVAProvider
-
-        secret_string_data["url"] = source_provider_data_copy["api_url"]
-        secret_string_data["insecureSkipVerify"] = config["insecure_verify_skip"]
-
-        if not source_provider:
-            raise ValueError("Failed to get source provider data")
-
+    if not source_provider_secret:  # OCP provider use the local OCP secret
         # Creating the source Secret and source Provider CRs
         source_provider_secret = create_and_store_resource(
             fixture_store=fixture_store,
             resource=Secret,
             client=admin_client,
-            name=generate_name_with_uuid(name=source_provider_name),
             namespace=namespace,
             string_data=secret_string_data,
             label=metadata_labels,
         )
 
-        ocp_resource_provider = create_and_store_resource(
-            fixture_store=fixture_store,
-            resource=Provider,
-            client=admin_client,
-            name=source_provider_name,
-            namespace=namespace,
-            secret_name=source_provider_secret.name,
-            secret_namespace=namespace,
-            url=source_provider_data_copy["api_url"],
-            provider_type=source_provider_data_copy["type"],
-            vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
-        )
-        ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
+    if not source_provider_secret:
+        raise ValueError("Failed to create source provider secret")
 
-        # this is for communication with the provider
-        with source_provider(
-            provider_data=source_provider_data_copy, ocp_resource=ocp_resource_provider, **provider_args
-        ) as _source_provider:
-            if not _source_provider.test:
-                pytest.skip(f"Skipping VM import tests: {provider_args['host']} is not available.")
+    ocp_resource_provider = create_and_store_resource(
+        fixture_store=fixture_store,
+        resource=Provider,
+        client=admin_client,
+        namespace=namespace,
+        secret_name=source_provider_secret.name,
+        secret_namespace=namespace,
+        url=source_provider_data_copy["api_url"],
+        provider_type=source_provider_data_copy["type"],
+        vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
+    )
+    ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
-            yield _source_provider
+    # this is for communication with the provider
+    with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
+        if not _source_provider.test:
+            pytest.fail(f"{source_provider.type} provider {provider_args['host']} is not available.")
+
+        yield _source_provider
 
 
 def create_source_cnv_vms(
@@ -265,6 +237,7 @@ def create_source_cnv_vms(
     vms: list[dict[str, Any]],
     namespace: str,
     network_name: str,
+    vm_name_suffix: str,
 ) -> None:
     vms_to_create: list[VirtualMachine] = []
 
@@ -273,7 +246,7 @@ def create_source_cnv_vms(
             create_and_store_resource(
                 resource=VirtualMachineFromInstanceType,
                 fixture_store=fixture_store,
-                name=vm_dict["name"],
+                name=f"{vm_dict['name']}{vm_name_suffix}",
                 namespace=namespace,
                 client=dyn_client,
                 instancetype_name="u1.small",
@@ -290,27 +263,6 @@ user: rhel
                 run_strategy=VirtualMachine.RunStrategy.MANUAL,
             )
         )
-        # with open("tests/manifests/cnv-vm.yaml", "r") as fd:
-        #     content = fd.read()
-        #
-        # content = content.replace("vmname", vm_dict["name"])
-        # content = content.replace("vm-namespace", namespace)
-        # content = content.replace("mybridge", network_name)
-        #
-        # yaml_dict = yaml.safe_load(content)
-        #
-        # cnv_vm = VirtualMachine(client=dyn_client, kind_dict=yaml_dict, namespace=namespace)
-        #
-        # # Needed to build the resource body
-        # cnv_vm.to_dict()
-        #
-        # if not cnv_vm.exists:
-        #     cnv_vm.deploy()
-        #     LOGGER.info(f"Storing {cnv_vm.kind} {cnv_vm.name} in fixture store")
-        #     _resource_dict = {"name": cnv_vm.name, "namespace": cnv_vm.namespace, "module": VirtualMachine.__module__}
-        #     fixture_store["teardown"].setdefault(VirtualMachine, []).append(_resource_dict)
-        #
-        # vms_to_create.append(cnv_vm)
 
     for vm in vms_to_create:
         if not vm.ready:
@@ -318,12 +270,6 @@ user: rhel
 
     for vm in vms_to_create:
         vm.wait_for_ready_status(status=True)
-
-
-def generate_name_with_uuid(name: str) -> str:
-    _name = f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
-    _name = _name.replace("_", "-").replace(".", "-").lower()
-    return _name
 
 
 def get_value_from_py_config(value: str) -> Any:

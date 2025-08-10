@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, Self
 
 from ocp_resources.provider import Provider
 from simple_logger.logger import get_logger
@@ -12,7 +12,7 @@ LOGGER = get_logger(__name__)
 
 
 class OVAProvider(BaseProvider):
-    def __init__(self, ocp_resource: Provider, **kwargs: Any) -> None:
+    def __init__(self, ocp_resource: Provider | None = None, **kwargs: Any) -> None:
         super().__init__(ocp_resource=ocp_resource, **kwargs)
         self.type = Provider.ProviderType.OVA
 
@@ -20,7 +20,7 @@ class OVAProvider(BaseProvider):
         LOGGER.info("Disconnecting OVAProvider source provider")
         return
 
-    def connect(self) -> "OVAProvider":
+    def connect(self) -> Self:
         return self
 
     @property
@@ -33,3 +33,9 @@ class OVAProvider(BaseProvider):
         result_vm_info["power_state"] = "off"
 
         return result_vm_info
+
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str) -> Any:
+        return
+
+    def delete_vm(self, vm_name: str) -> Any:
+        return
