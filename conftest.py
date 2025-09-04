@@ -486,6 +486,7 @@ def source_provider(
         destination_ocp_secret=destination_ocp_secret,
         insecure=get_value_from_py_config(value="insecure_verify_skip"),
     ) as _source_provider:
+        __import__("ipdb").set_trace()
         yield _source_provider
 
     _source_provider.disconnect()

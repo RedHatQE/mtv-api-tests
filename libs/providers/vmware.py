@@ -79,6 +79,10 @@ class VMWareProvider(BaseProvider):
         except ValueError:
             if clone_vm:
                 target_vm = self.clone_vm(source_vm_name=query, clone_vm_name=target_vm_name)
+                if not target_vm:
+                    raise VmNotFoundError(
+                        f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]"
+                    )
 
         if not target_vm:
             raise VmNotFoundError(f"No VM found matching query '{query}' on host [{self.host}]")
