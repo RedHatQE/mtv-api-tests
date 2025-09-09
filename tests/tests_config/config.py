@@ -14,6 +14,54 @@ matrix_test: bool = True
 release_test: bool = False
 mount_root: str = ""
 
+tests_params: dict = {
+    "test_sanity_warm_mtv_migration": {
+        "virtual_machines": [
+            {
+                "name": "mtv-rhel8-warm-sanity",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+    },
+    "test_mtv_migration_warm_2disks2nics": {
+        "virtual_machines": [
+            {
+                "name": "mtv-rhel8-warm-2disks2nics",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+    },
+    "test_warm_remote_ocp": {
+        "virtual_machines": [
+            {
+                "name": "mtv-rhel8-warm-394",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+    },
+    "test_sanity_cold_mtv_migration": {
+        "virtual_machines": [
+            {"name": "mtv-rhel8-sanity", "guest_agent": True},
+        ],
+        "warm_migration": False,
+    },
+    "test_cold_remote_ocp": {
+        "virtual_machines": [
+            {"name": "mtv-rhel8-79"},
+            {
+                "name": "mtv-win2019-79",
+            },
+        ],
+        "warm_migration": False,
+    },
+}
+
 for _dir in dir():
     val = locals()[_dir]
     if type(val) not in [bool, list, dict, str, int]:
