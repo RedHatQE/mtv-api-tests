@@ -52,3 +52,7 @@ class OvirtMTVDatacenterStatusError(Exception):
 
 class MissingProvidersFileError(Exception):
     pass
+
+
+class VmCloneError(Exception):
+    pass

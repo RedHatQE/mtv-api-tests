@@ -10,7 +10,7 @@ from pyVmomi import vim
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import VmBadDatastoreError, VmMissingVmxError, VmNotFoundError
+from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
 from libs.base_provider import BaseProvider
 
 LOGGER = get_logger(__name__)
@@ -106,6 +106,9 @@ class VMWareProvider(BaseProvider):
                 sleep=sleep,
                 func=lambda: task.info.state == vim.TaskInfo.State.success,
             ):
+                if task.info.error:
+                    raise VmCloneError()
+
                 if sample:
                     self.log.info(
                         msg=(
@@ -260,9 +263,10 @@ class VMWareProvider(BaseProvider):
 
         Args:
             source_vm_name: The name of the VM or template to clone from.
-            new_vm_name: The name of the new VM to be created.
+            clone_vm_name: The name of the new VM to be created.
             power_on: Whether to power on the VM after cloning.
         """
+        clone_vm_name = f"{clone_vm_name}-api-tests"
         LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
