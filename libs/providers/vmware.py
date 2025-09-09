@@ -266,7 +266,6 @@ class VMWareProvider(BaseProvider):
             clone_vm_name: The name of the new VM to be created.
             power_on: Whether to power on the VM after cloning.
         """
-        clone_vm_name = f"{clone_vm_name}-api-tests"
         LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
