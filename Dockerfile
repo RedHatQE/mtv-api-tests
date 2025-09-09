@@ -2,7 +2,6 @@ FROM quay.io/fedora/fedora:41
 
 ARG APP_DIR=/app
 
-ENV KUBECONFIG=/cred/kubeconfig
 ENV JUNITFILE=${APP_DIR}/output/
 
 ENV UV_PYTHON=python3.12
@@ -26,15 +25,15 @@ RUN dnf -y install \
 
 WORKDIR ${APP_DIR}
 
-RUN mkdir /cred && mkdir -p ${APP_DIR}/output
+RUN mkdir -p ${APP_DIR}/output
 
 COPY utilities utilities
 COPY tests tests
 COPY libs libs
+COPY exceptions exceptions
 COPY README.md pyproject.toml uv.lock conftest.py pytest.ini report.py ./
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
 
 ARG OPENSHIFT_PYTHON_WRAPPER_COMMIT=''
 ARG OPENSHIFT_PYTHON_UTILITIES_COMMIT=''
@@ -45,4 +44,4 @@ RUN uv sync --locked\
   && find ${APP_DIR}/ -type d -name "__pycache__" -print0 | xargs -0 rm -rfv \
   && rm -rf ${APP_DIR}/.cache
 
-CMD ["./scripts/run-tests.sh"]
+CMD ["uv", "run", "pytest", "--collect-only"]

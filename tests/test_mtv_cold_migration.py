@@ -62,21 +62,7 @@ def test_sanity_cold_mtv_migration(
 @pytest.mark.remote
 @pytest.mark.parametrize(
     "plan",
-    [
-        # MTV-79
-        pytest.param(
-            {
-                "virtual_machines": [
-                    {"name": "mtv-rhel8-79"},
-                    {
-                        "name": "mtv-win2019-79",
-                    },
-                ],
-                "warm_migration": False,
-            }
-            # TODO fix Polarion ID
-        )
-    ],
+    [pytest.param(py_config["tests_params"]["test_cold_remote_ocp"])],
     indirect=True,
     ids=["MTV-79"],
 )
