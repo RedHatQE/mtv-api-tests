@@ -144,7 +144,12 @@ junit-report.xml
 .xdist_results
 .data-collector
 prof/
+
+# Providers
 .providers.json
+
+# Jira
+jira.cfg
 
 # Local develop
 .dev/
@@ -155,3 +160,7 @@ CLAUDE.md
 .agent-os/
 .cursorrules
 .claude/
+
+# ENV
+.env
+.envrc
