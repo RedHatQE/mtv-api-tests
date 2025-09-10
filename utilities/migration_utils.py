@@ -137,7 +137,6 @@ def append_leftovers(
 
 def prepare_migration_for_tests(
     plan: dict[str, Any],
-    warm_migration: bool,
     request: FixtureRequest,
     source_provider: BaseProvider,
     destination_provider: OCPProvider,
@@ -172,7 +171,7 @@ def prepare_migration_for_tests(
         "source_provider_name": source_provider.ocp_resource.name,
         "source_provider_namespace": source_provider.ocp_resource.namespace,
         "virtual_machines_list": virtual_machines_list,
-        "warm_migration": warm_migration,
+        "warm_migration": plan.get("warm_migration", False),
         "network_map_name": network_migration_map.name,
         "network_map_namespace": network_migration_map.namespace,
         "storage_map_name": storage_migration_map.name,

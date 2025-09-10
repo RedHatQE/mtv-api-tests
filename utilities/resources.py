@@ -38,6 +38,10 @@ def create_and_store_resource(
         if resource.kind in (Migration.kind, Plan.kind):
             _resource_name = f"{_resource_name}-{'warm' if kwargs.get('warm_migration') else 'cold'}"
 
+    if len(_resource_name) > 63:
+        LOGGER.warning(f"'{_resource_name=}' is too long ({len(_resource_name)} > 63). Truncating.")
+        _resource_name = _resource_name[-63:]
+
     kwargs["name"] = _resource_name
 
     _resource = resource(**kwargs)

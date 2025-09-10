@@ -17,9 +17,6 @@ from ocp_resources.resource import get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
-from pytest import Function
-from rich.console import Console
-from rich.table import Table
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
@@ -211,33 +208,3 @@ def teardown_resources(
                     })
 
     return leftovers
-
-
-def generate_vms_to_import_report(items: list[Function]) -> None:
-    vms_to_import_report: list[list[dict[str, Any]]] = []
-    console = Console()
-    console.print("\n")
-    table = Table(title="VMs to import")
-    table.add_column("Name", style="cyan", no_wrap=True)
-    table.add_column("Guest Agent", style="green")
-    table.add_column("Migration type", style="green")
-
-    for item in items:
-        if parametrize := item.get_closest_marker("parametrize"):
-            if parametrize.args[0] == "plan":
-                _values = parametrize.args[1][0].values[0]
-                virtual_machines = _values["virtual_machines"]
-                warm_migration = _values.get("warm_migration", False)
-                for _vms in virtual_machines:
-                    _vms["warm"] = warm_migration
-
-                vms_to_import_report.append(virtual_machines)
-
-    for _vms in vms_to_import_report:
-        for _vm in _vms:
-            guest_agent = _vm.get("guest_agent", False)
-            warm = _vm.get("warm", False)
-
-            table.add_row(_vm["name"], "Yes" if guest_agent else "No", "Warm" if warm else "Cold")
-
-    console.print(table)

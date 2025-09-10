@@ -26,18 +26,7 @@ pytestmark = [
 @pytest.mark.warm
 @pytest.mark.parametrize(
     "plan",
-    [
-        pytest.param({
-            "virtual_machines": [
-                {
-                    "name": "mtv-rhel8-warm-sanity",
-                    "source_vm_power": "on",
-                    "guest_agent": True,
-                },
-            ],
-            "warm_migration": True,
-        }),
-    ],
+    [pytest.param(py_config["tests_params"]["test_sanity_warm_mtv_migration"])],
     indirect=True,
     ids=["rhel8"],
 )
@@ -85,18 +74,7 @@ def test_sanity_warm_mtv_migration(
 @pytest.mark.warm
 @pytest.mark.parametrize(
     "plan",
-    [
-        pytest.param({
-            "virtual_machines": [
-                {
-                    "name": "mtv-rhel8-warm-2disks2nics",
-                    "source_vm_power": "on",
-                    "guest_agent": True,
-                },
-            ],
-            "warm_migration": True,
-        })
-    ],
+    [pytest.param(py_config["tests_params"]["test_mtv_migration_warm_2disks2nics"])],
     indirect=True,
     ids=["MTV-200 rhel"],
 )
@@ -143,18 +121,7 @@ def test_mtv_migration_warm_2disks2nics(
 @pytest.mark.remote
 @pytest.mark.parametrize(
     "plan",
-    [
-        pytest.param({
-            "virtual_machines": [
-                {
-                    "name": "mtv-rhel8-warm-394",
-                    "source_vm_power": "on",
-                    "guest_agent": True,
-                },
-            ],
-            "warm_migration": True,
-        }),
-    ],
+    [pytest.param(py_config["tests_params"]["test_warm_remote_ocp"])],
     indirect=True,
     ids=["MTV-394"],
 )

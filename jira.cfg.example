@@ -1,0 +1,5 @@
+# https://github.com/rhevm-qe-automation/pytest_jira
+
+[DEFAULT]
+url = <Jira URL>
+token = <User Token>

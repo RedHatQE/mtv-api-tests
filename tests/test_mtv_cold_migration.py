@@ -1,5 +1,6 @@
 import pytest
 from ocp_resources.provider import Provider
+from pytest_testconfig import config as py_config
 
 from utilities.mtv_migration import (
     create_storagemap_and_networkmap,
@@ -10,16 +11,7 @@ from utilities.utils import get_value_from_py_config
 
 @pytest.mark.parametrize(
     "plan",
-    [
-        pytest.param(
-            {
-                "virtual_machines": [
-                    {"name": "mtv-rhel8-sanity", "guest_agent": True},
-                ],
-                "warm_migration": False,
-            },
-        )
-    ],
+    [pytest.param(py_config["tests_params"]["test_sanity_cold_mtv_migration"])],
     indirect=True,
     ids=["rhel8"],
 )
@@ -70,21 +62,7 @@ def test_sanity_cold_mtv_migration(
 @pytest.mark.remote
 @pytest.mark.parametrize(
     "plan",
-    [
-        # MTV-79
-        pytest.param(
-            {
-                "virtual_machines": [
-                    {"name": "mtv-rhel8-79"},
-                    {
-                        "name": "mtv-win2019-79",
-                    },
-                ],
-                "warm_migration": False,
-            }
-            # TODO fix Polarion ID
-        )
-    ],
+    [pytest.param(py_config["tests_params"]["test_cold_remote_ocp"])],
     indirect=True,
     ids=["MTV-79"],
 )

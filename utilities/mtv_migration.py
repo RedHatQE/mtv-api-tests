@@ -13,7 +13,7 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import MigrationPlanExecError, MigrationPlanExecStopError
+from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
@@ -44,11 +44,8 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> None:
-    warm_migration = plan.get("warm_migration", False)
-
     run_migration_kwargs = prepare_migration_for_tests(
         plan=plan,
-        warm_migration=warm_migration,
         request=request,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -164,51 +161,54 @@ def run_migration(
     return plan
 
 
-def get_vm_suffix() -> str:
-    vm_suffix = ""
+def get_vm_suffix(warm_migration: bool) -> str:
+    migration_type = "warm" if warm_migration else "cold"
+    storage_class = py_config.get("storage_class", "")
+    storage_class_name = "-".join(storage_class.split("-")[-2:])
+    ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
 
-    if get_value_from_py_config("matrix_test"):
-        storage_name = py_config.get("storage_class", "")
-
-        if "ceph-rbd" in storage_name:
-            vm_suffix = "-ceph-rbd"
-
-        elif "nfs" in storage_name:
-            vm_suffix = "-nfs"
-
-    if get_value_from_py_config("release_test"):
-        ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
-        vm_suffix = f"{vm_suffix}-{ocp_version}"
+    vm_suffix = f"-{storage_class_name}-{ocp_version}-{migration_type}"
+    if len(vm_suffix) > 63:
+        LOGGER.warning(f"VM suffix '{vm_suffix}' is too long ({len(vm_suffix)} > 63). Truncating.")
+        vm_suffix = vm_suffix[-63:]
 
     return vm_suffix
 
 
 def wait_for_migration_complate(plan: Plan) -> None:
-    err = "Plan {name} failed to reach the expected condition. \nstatus:\n\t{instance}"
-
-    def _wait_for_migration_complate(_plan: Plan) -> bool:
+    def _wait_for_migration_complate(_plan: Plan) -> str:
         for cond in _plan.instance.status.conditions:
-            if cond["category"] == "Advisory":
-                if cond["status"] == _plan.Condition.Status.TRUE:
-                    if cond["type"] == _plan.Status.SUCCEEDED:
-                        return True
+            if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
+                cond_type = cond["type"]
 
-                    elif cond["type"] == "Failed":
-                        raise MigrationPlanExecStopError(err.format(name=_plan.name, instance=_plan.instance))
-        return False
+                if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                    return cond_type
+
+        return "Executing"
 
     try:
+        last_status: str = ""
+
         for sample in TimeoutSampler(
             func=_wait_for_migration_complate,
             sleep=1,
             wait_timeout=py_config.get("plan_wait_timeout", 600),
-            exceptions_dict={MigrationPlanExecStopError: []},
             _plan=plan,
         ):
-            if sample:
+            if sample != last_status:
+                LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
+                last_status = sample
+
+            if sample == Plan.Status.SUCCEEDED:
                 return
-    except TimeoutExpiredError:
-        raise MigrationPlanExecError(err.format(name=plan.name, instance=plan.instance))
+
+            elif sample == Plan.Status.FAILED:
+                raise MigrationPlanExecError()
+
+    except (TimeoutExpiredError, MigrationPlanExecError):
+        raise MigrationPlanExecError(
+            f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
+        )
 
 
 def get_storage_migration_map(

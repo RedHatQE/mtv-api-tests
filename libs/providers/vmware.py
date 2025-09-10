@@ -283,7 +283,7 @@ class VMWareProvider(BaseProvider):
         LOGGER.info(f"Clone task started for {clone_vm_name}. Waiting for completion...")
 
         res = self.wait_task(
-            task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}", wait_timeout=60 * 10, sleep=5
+            task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}", wait_timeout=60 * 20, sleep=5
         )
         if res and self.fixture_store:
             self.fixture_store["teardown"].setdefault(self.type, []).append({
