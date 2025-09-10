@@ -551,10 +551,11 @@ def plan(
 ):
     plan: dict[str, Any] = request.param
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
+    warm_migration = plan.get["warm_migration"]
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
-        vm_name_suffix = get_vm_suffix()
+        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration)
 
         if openshift_source_provider:
             create_source_cnv_vms(
