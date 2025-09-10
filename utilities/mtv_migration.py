@@ -162,39 +162,35 @@ def run_migration(
 
 
 def get_vm_suffix(warm_migration: bool) -> str:
-    vm_suffix = ""
     migration_type = "warm" if warm_migration else "cold"
+    storage_class = py_config.get("storage_class", "")
+    storage_class_name = "-".join(storage_class.split("-")[-2:])
+    ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
 
-    if get_value_from_py_config("matrix_test"):
-        storage_name = py_config.get("storage_class", "")
-
-        if "ceph-rbd" in storage_name:
-            vm_suffix = "-ceph-rbd"
-
-        elif "nfs" in storage_name:
-            vm_suffix = "-nfs"
-
-    if get_value_from_py_config("release_test"):
-        ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
-        vm_suffix = f"{vm_suffix}-{ocp_version}"
-
-    vm_suffix = f"{vm_suffix}-{migration_type}"
+    vm_suffix = f"-{storage_class_name}-{ocp_version}-{migration_type}"
+    if len(vm_suffix) > 63:
+        LOGGER.warning(f"VM suffix '{vm_suffix}' is too long ({len(vm_suffix)} > 63). Truncating.")
+        vm_suffix = vm_suffix[-63:]
 
     return vm_suffix
 
 
 def wait_for_migration_complate(plan: Plan) -> None:
     def _wait_for_migration_complate(_plan: Plan) -> str:
+        last_cond_type: str = ""
+
         for cond in _plan.instance.status.conditions:
-            if cond["category"] == "Advisory":
-                if cond["status"] == _plan.Condition.Status.TRUE:
-                    if cond["type"] == _plan.Status.SUCCEEDED:
-                        return _plan.Status.SUCCEEDED
+            if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
+                cond_type = cond["type"]
 
-                    elif cond["type"] == _plan.Status.FAILED:
-                        return _plan.Status.FAILED
+                if last_cond_type != cond_type:
+                    last_cond_type = cond_type
+                    LOGGER.info(f"Plan {_plan.name} status: {last_cond_type}")
 
-        return _plan.Status.FAILED
+                if last_cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                    return last_cond_type
+
+        return "Executing"
 
     try:
         for sample in TimeoutSampler(
@@ -203,10 +199,10 @@ def wait_for_migration_complate(plan: Plan) -> None:
             wait_timeout=py_config.get("plan_wait_timeout", 600),
             _plan=plan,
         ):
-            if sample == plan.Status.SUCCEEDED:
+            if sample == Plan.Status.SUCCEEDED:
                 return
 
-            elif sample == plan.Status.FAILED:
+            elif sample == Plan.Status.FAILED:
                 raise MigrationPlanExecError()
 
     except (TimeoutExpiredError, MigrationPlanExecError):

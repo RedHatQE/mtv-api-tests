@@ -49,7 +49,6 @@ from utilities.naming import generate_name_with_uuid
 from utilities.prometheus import prometheus_monitor_deamon
 from utilities.pytest_utils import (
     collect_created_resources,
-    generate_vms_to_import_report,
     prepare_base_path,
     session_teardown,
 )
@@ -73,7 +72,6 @@ def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
-    vms_to_import_report = parser.getgroup(name="VMs to import report")
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
@@ -83,9 +81,6 @@ def pytest_addoption(parser):
     )
     openshift_python_wrapper_group.addoption(
         "--openshift-python-wrapper-log-debug", action="store_true", help="Enable debug logging in the wrapper"
-    )
-    vms_to_import_report.addoption(
-        "--vms-to-import-report", action="store_true", help="Generate report of VMs to import"
     )
 
 
@@ -204,12 +199,16 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_collection_modifyitems(session, config, items):
+    _session_store = get_fixture_store(session)
+    _vms_for_this_session: list[str] = []
+
     for item in items:
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
+        for _vm in py_config["tests_params"][item.originalname]["virtual_machines"]:
+            _vms_for_this_session.append(_vm["name"])
 
-    if config.getoption("vms_to_import_report"):
-        generate_vms_to_import_report(items=items)
-        pytest.exit()
+    _session_store["vms_for_current_session"] = _vms_for_this_session
+    LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(_vms_for_this_session)}")
 
 
 def pytest_exception_interact(node, call, report):
