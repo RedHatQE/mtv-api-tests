@@ -13,7 +13,7 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import MigrationPlanExecError, MigrationPlanExecStopError
+from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
@@ -184,31 +184,35 @@ def get_vm_suffix(warm_migration: bool) -> str:
 
 
 def wait_for_migration_complate(plan: Plan) -> None:
-    err = "Plan {name} failed to reach the expected condition. \nstatus:\n\t{instance}"
-
-    def _wait_for_migration_complate(_plan: Plan) -> bool:
+    def _wait_for_migration_complate(_plan: Plan) -> str:
         for cond in _plan.instance.status.conditions:
             if cond["category"] == "Advisory":
                 if cond["status"] == _plan.Condition.Status.TRUE:
                     if cond["type"] == _plan.Status.SUCCEEDED:
-                        return True
+                        return _plan.Status.SUCCEEDED
 
-                    elif cond["type"] == "Failed":
-                        raise MigrationPlanExecStopError(err.format(name=_plan.name, instance=_plan.instance))
-        return False
+                    elif cond["type"] == _plan.Status.FAILED:
+                        return _plan.Status.FAILED
+
+        return _plan.Status.FAILED
 
     try:
         for sample in TimeoutSampler(
             func=_wait_for_migration_complate,
             sleep=1,
             wait_timeout=py_config.get("plan_wait_timeout", 600),
-            exceptions_dict={MigrationPlanExecStopError: []},
             _plan=plan,
         ):
-            if sample:
+            if sample == plan.Status.SUCCEEDED:
                 return
-    except TimeoutExpiredError:
-        raise MigrationPlanExecError(err.format(name=plan.name, instance=plan.instance))
+
+            elif sample == plan.Status.FAILED:
+                raise MigrationPlanExecError()
+
+    except (TimeoutExpiredError, MigrationPlanExecError):
+        raise MigrationPlanExecError(
+            f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
+        )
 
 
 def get_storage_migration_map(

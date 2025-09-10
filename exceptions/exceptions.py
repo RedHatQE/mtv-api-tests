@@ -30,10 +30,6 @@ class MigrationPlanExecError(Exception):
     pass
 
 
-class MigrationPlanExecStopError(Exception):
-    pass
-
-
 class SessionTeardownError(Exception):
     pass
 
