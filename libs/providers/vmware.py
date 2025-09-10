@@ -162,17 +162,21 @@ class VMWareProvider(BaseProvider):
             # Network Interfaces
             if isinstance(device, vim.vm.device.VirtualEthernetCard):
                 result_vm_info["network_interfaces"].append({
-                    "name": device.deviceInfo.label,
+                    "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "macAddress": device.macAddress,
-                    "network": {"name": device.backing.network.name},
+                    "network": {
+                        "name": device.backing.network.name if device.backing and device.backing.network else "Unknown"
+                    },
                 })
 
             # Disks
             if isinstance(device, vim.vm.device.VirtualDisk):
                 result_vm_info["disks"].append({
-                    "name": device.deviceInfo.label,
+                    "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "size_in_kb": device.capacityInKB,
-                    "storage": dict(name=device.backing.datastore.name),
+                    "storage": dict(
+                        name=device.backing.datastore.name if device.backing and device.backing.datastore else "Unknown"
+                    ),
                 })
 
         # CPUs
@@ -223,7 +227,9 @@ class VMWareProvider(BaseProvider):
             self.log.error(f"VM {vm.name} is inaccessible due to config error")
             return True
 
-        vm_datastore_info = vm.datastore[0].browser.Search(vm.config.files.vmPathName)
+        search_spec = vim.host.DatastoreBrowser.SearchSpec()
+        search_spec.matchPattern = ["*.vmx"]
+        vm_datastore_info = vm.datastore[0].browser.SearchSubFolders(vm.config.files.vmPathName, search_spec)
         if vm_datastore_info.info.state == "error":
             _error = vm_datastore_info.info.error.msg
 
@@ -243,7 +249,9 @@ class VMWareProvider(BaseProvider):
         self.reconnect_if_not_connected
         container = self.view_manager.CreateContainerView(self.content.rootFolder, vimtype, True)
         try:
-            for obj in container.view:  # type: ignore
+            # Access the view property which contains the managed objects
+            managed_objects = getattr(container, "view", [])
+            for obj in managed_objects:
                 if obj.name == name:
                     return obj
 
