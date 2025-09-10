@@ -72,6 +72,7 @@ def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
+
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
         "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
@@ -80,7 +81,9 @@ def pytest_addoption(parser):
         "--skip-teardown", action="store_true", help="Do not teardown resource created by the tests"
     )
     openshift_python_wrapper_group.addoption(
-        "--openshift-python-wrapper-log-debug", action="store_true", help="Enable debug logging in the wrapper"
+        "--openshift-python-wrapper-log-debug",
+        action="store_true",
+        help="Enable debug logging in the openshift-python-wrapper module",
     )
 
 
