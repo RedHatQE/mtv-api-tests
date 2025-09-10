@@ -502,6 +502,7 @@ def multus_network_name(fixture_store, target_namespace, ocp_admin_client, multu
         cni_type=bridge_type_and_name,
         namespace=target_namespace,
         config=multus_cni_config,
+        name=bridge_type_and_name,
     )
 
     yield bridge_type_and_name
