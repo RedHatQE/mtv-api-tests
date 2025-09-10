@@ -162,17 +162,21 @@ class VMWareProvider(BaseProvider):
             # Network Interfaces
             if isinstance(device, vim.vm.device.VirtualEthernetCard):
                 result_vm_info["network_interfaces"].append({
-                    "name": device.deviceInfo.label,
+                    "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "macAddress": device.macAddress,
-                    "network": {"name": device.backing.network.name},
+                    "network": {
+                        "name": device.backing.network.name if device.backing and device.backing.network else "Unknown"
+                    },
                 })
 
             # Disks
             if isinstance(device, vim.vm.device.VirtualDisk):
                 result_vm_info["disks"].append({
-                    "name": device.deviceInfo.label,
+                    "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "size_in_kb": device.capacityInKB,
-                    "storage": dict(name=device.backing.datastore.name),
+                    "storage": dict(
+                        name=device.backing.datastore.name if device.backing and device.backing.datastore else "Unknown"
+                    ),
                 })
 
         # CPUs
@@ -223,7 +227,9 @@ class VMWareProvider(BaseProvider):
             self.log.error(f"VM {vm.name} is inaccessible due to config error")
             return True
 
-        vm_datastore_info = vm.datastore[0].browser.Search(vm.config.files.vmPathName)
+        search_spec = vim.host.DatastoreBrowser.SearchSpec()
+        search_spec.matchPattern = ["*.vmx"]
+        vm_datastore_info = vm.datastore[0].browser.SearchSubFolders(vm.config.files.vmPathName, search_spec)
         if vm_datastore_info.info.state == "error":
             _error = vm_datastore_info.info.error.msg
 
@@ -243,7 +249,9 @@ class VMWareProvider(BaseProvider):
         self.reconnect_if_not_connected
         container = self.view_manager.CreateContainerView(self.content.rootFolder, vimtype, True)
         try:
-            for obj in container.view:  # type: ignore
+            # Access the view property which contains the managed objects
+            managed_objects = getattr(container, "view", [])
+            for obj in managed_objects:
                 if obj.name == name:
                     return obj
 
@@ -257,6 +265,7 @@ class VMWareProvider(BaseProvider):
         source_vm_name: str,
         clone_vm_name: str,
         power_on: bool = False,
+        regenerate_mac: bool = True,
     ) -> vim.VirtualMachine:
         """
         Clones a VM from a source VM or template.
@@ -265,6 +274,8 @@ class VMWareProvider(BaseProvider):
             source_vm_name: The name of the VM or template to clone from.
             clone_vm_name: The name of the new VM to be created.
             power_on: Whether to power on the VM after cloning.
+            regenerate_mac: Whether to regenerate MAC addresses for network interfaces.
+                          Prevents MAC address conflicts between cloned VMs. Default: True.
         """
         LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
@@ -278,6 +289,32 @@ class VMWareProvider(BaseProvider):
         clone_spec.location = relocate_spec
         clone_spec.powerOn = power_on
         clone_spec.template = False
+
+        # Configure MAC address regeneration if requested
+        if regenerate_mac:
+            device_changes = []
+            source_config = source_vm.config
+
+            if source_config and source_config.hardware and source_config.hardware.device:
+                for device in source_config.hardware.device:
+                    if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                        # Create device spec for MAC regeneration
+                        device_spec = vim.vm.device.VirtualDeviceSpec()
+                        device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+                        device_spec.device = device
+                        # Set address type to generate new MAC address
+                        device_spec.device.addressType = "generated"
+                        device_changes.append(device_spec)
+                        LOGGER.info(
+                            f"Configured MAC regeneration for network device: {device.deviceInfo.label if device.deviceInfo else 'Unknown'}"
+                        )
+
+            # Add device changes to clone spec if any network devices found
+            if device_changes:
+                config_spec = vim.vm.ConfigSpec()
+                config_spec.deviceChange = device_changes
+                clone_spec.config = config_spec
+                LOGGER.info(f"Configured {len(device_changes)} network devices for MAC regeneration")
 
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
         LOGGER.info(f"Clone task started for {clone_vm_name}. Waiting for completion...")
