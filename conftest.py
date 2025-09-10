@@ -203,15 +203,17 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_collection_modifyitems(session, config, items):
     _session_store = get_fixture_store(session)
-    _vms_for_this_session: list[str] = []
+    vms_for_current_session: list[str] = []
 
     for item in items:
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
         for _vm in py_config["tests_params"][item.originalname]["virtual_machines"]:
-            _vms_for_this_session.append(_vm["name"])
+            vms_for_current_session.append(_vm["name"])
 
-    _session_store["vms_for_current_session"] = _vms_for_this_session
-    LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(_vms_for_this_session)}")
+    _session_store["vms_for_current_session"] = vms_for_current_session
+
+    if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
+        LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
 def pytest_exception_interact(node, call, report):

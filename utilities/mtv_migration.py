@@ -177,28 +177,28 @@ def get_vm_suffix(warm_migration: bool) -> str:
 
 def wait_for_migration_complate(plan: Plan) -> None:
     def _wait_for_migration_complate(_plan: Plan) -> str:
-        last_cond_type: str = ""
-
         for cond in _plan.instance.status.conditions:
             if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
                 cond_type = cond["type"]
 
-                if last_cond_type != cond_type:
-                    last_cond_type = cond_type
-                    LOGGER.info(f"Plan {_plan.name} status: {last_cond_type}")
-
-                if last_cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
-                    return last_cond_type
+                if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                    return cond_type
 
         return "Executing"
 
     try:
+        last_status: str = ""
+
         for sample in TimeoutSampler(
             func=_wait_for_migration_complate,
             sleep=1,
             wait_timeout=py_config.get("plan_wait_timeout", 600),
             _plan=plan,
         ):
+            if sample != last_status:
+                LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
+                last_status = sample
+
             if sample == Plan.Status.SUCCEEDED:
                 return
 
