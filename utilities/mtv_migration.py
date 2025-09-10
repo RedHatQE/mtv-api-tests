@@ -46,7 +46,6 @@ def migrate_vms(
 ) -> None:
     run_migration_kwargs = prepare_migration_for_tests(
         plan=plan,
-        warm_migration=plan["warm_migration"],
         request=request,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -179,7 +178,7 @@ def get_vm_suffix(warm_migration: bool) -> str:
         ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
         vm_suffix = f"{vm_suffix}-{ocp_version}"
 
-    vm_suffix = f"-{migration_type}"
+    vm_suffix = f"{vm_suffix}-{migration_type}"
 
     return vm_suffix
 

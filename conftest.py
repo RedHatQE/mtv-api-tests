@@ -551,7 +551,7 @@ def plan(
 ):
     plan: dict[str, Any] = request.param
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
-    warm_migration = plan.get["warm_migration"]
+    warm_migration = plan.get("warm_migration", False)
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
