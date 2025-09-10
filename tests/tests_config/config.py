@@ -17,7 +17,7 @@ tests_params: dict = {
     "test_sanity_warm_mtv_migration": {
         "virtual_machines": [
             {
-                "name": "mtv-rhel8-warm-sanity",
+                "name": "mtv-api-tests-rhel8",
                 "source_vm_power": "on",
                 "guest_agent": True,
             },
@@ -27,7 +27,7 @@ tests_params: dict = {
     "test_mtv_migration_warm_2disks2nics": {
         "virtual_machines": [
             {
-                "name": "mtv-rhel8-warm-2disks2nics",
+                "name": "mtv-api-tests-rhel8-2disks2nics",
                 "source_vm_power": "on",
                 "guest_agent": True,
             },
@@ -37,7 +37,7 @@ tests_params: dict = {
     "test_warm_remote_ocp": {
         "virtual_machines": [
             {
-                "name": "mtv-rhel8-warm-394",
+                "name": "mtv-api-tests-rhel8",
                 "source_vm_power": "on",
                 "guest_agent": True,
             },
@@ -46,15 +46,15 @@ tests_params: dict = {
     },
     "test_sanity_cold_mtv_migration": {
         "virtual_machines": [
-            {"name": "mtv-rhel8-sanity", "guest_agent": True},
+            {"name": "mtv-api-tests-rhel8", "guest_agent": True},
         ],
         "warm_migration": False,
     },
     "test_cold_remote_ocp": {
         "virtual_machines": [
-            {"name": "mtv-rhel8-79"},
+            {"name": "mtv-api-tests-rhel8"},
             {
-                "name": "mtv-win2019-79",
+                "name": "mtv-api-tests-win2019",
             },
         ],
         "warm_migration": False,

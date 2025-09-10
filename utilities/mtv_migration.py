@@ -44,11 +44,9 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> None:
-    warm_migration = plan.get("warm_migration", False)
-
     run_migration_kwargs = prepare_migration_for_tests(
         plan=plan,
-        warm_migration=warm_migration,
+        warm_migration=plan["warm_migration"],
         request=request,
         source_provider=source_provider,
         destination_provider=destination_provider,
@@ -164,8 +162,9 @@ def run_migration(
     return plan
 
 
-def get_vm_suffix() -> str:
+def get_vm_suffix(warm_migration: str) -> str:
     vm_suffix = ""
+    migration_type = "warm" if warm_migration else "cold"
 
     if get_value_from_py_config("matrix_test"):
         storage_name = py_config.get("storage_class", "")
@@ -179,6 +178,8 @@ def get_vm_suffix() -> str:
     if get_value_from_py_config("release_test"):
         ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
         vm_suffix = f"{vm_suffix}-{ocp_version}"
+
+    vm_suffix = f"-{migration_type}"
 
     return vm_suffix
 
