@@ -162,7 +162,7 @@ def run_migration(
     return plan
 
 
-def get_vm_suffix(warm_migration: str) -> str:
+def get_vm_suffix(warm_migration: bool) -> str:
     vm_suffix = ""
     migration_type = "warm" if warm_migration else "cold"
 
