@@ -46,6 +46,7 @@ def test_sanity_cold_mtv_migration(
     )
 
     migrate_vms(
+        ocp_admin_client=ocp_admin_client,
         request=request,
         fixture_store=fixture_store,
         source_provider=source_provider,
@@ -92,6 +93,7 @@ def test_cold_remote_ocp(
     )
 
     migrate_vms(
+        ocp_admin_client=ocp_admin_client,
         request=request,
         fixture_store=fixture_store,
         source_provider=source_provider,

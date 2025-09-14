@@ -1,6 +1,7 @@
 from typing import Any
 
 import yaml
+from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import ConflictError
 from ocp_resources.migration import Migration
 from ocp_resources.plan import Plan
@@ -13,11 +14,14 @@ LOGGER = get_logger(__name__)
 
 
 def create_and_store_resource(
+    client: DynamicClient,
     fixture_store: dict[str, Any],
     resource: type[Resource],
     test_name: str | None = None,
     **kwargs: Any,
 ) -> Any:
+    kwargs["client"] = client
+
     _resource_name = kwargs.get("name")
     _resource_dict = kwargs.get("kind_dict", {})
     _resource_yaml = kwargs.get("yaml_file")

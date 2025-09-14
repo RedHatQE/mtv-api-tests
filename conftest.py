@@ -520,6 +520,7 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
         raise ValueError("API key not found in configuration, please login with `oc login` first")
 
     secret = create_and_store_resource(
+        client=ocp_admin_client,
         fixture_store=fixture_store,
         resource=Secret,
         namespace=target_namespace,
@@ -532,6 +533,7 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
 @pytest.fixture(scope="session")
 def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_client, session_uuid, target_namespace):
     provider = create_and_store_resource(
+        client=ocp_admin_client,
         fixture_store=fixture_store,
         resource=Provider,
         name=f"{session_uuid}-destination-ocp-provider",

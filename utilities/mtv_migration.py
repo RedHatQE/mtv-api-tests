@@ -27,6 +27,7 @@ LOGGER = get_logger(__name__)
 
 
 def migrate_vms(
+    ocp_admin_client: DynamicClient,
     request: FixtureRequest,
     source_provider: BaseProvider,
     destination_provider: OCPProvider,
@@ -45,6 +46,7 @@ def migrate_vms(
     after_hook_namespace: str | None = None,
 ) -> None:
     run_migration_kwargs = prepare_migration_for_tests(
+        ocp_admin_client=ocp_admin_client,
         plan=plan,
         request=request,
         source_provider=source_provider,
@@ -82,6 +84,7 @@ def migrate_vms(
 
 
 def run_migration(
+    ocp_admin_client: DynamicClient,
     source_provider_name: str,
     source_provider_namespace: str,
     destination_provider_name: str,
@@ -128,6 +131,7 @@ def run_migration(
         Plan and Migration Managed Resources.
     """
     plan = create_and_store_resource(
+        client=ocp_admin_client,
         fixture_store=fixture_store,
         test_name=test_name,
         resource=Plan,
@@ -151,6 +155,7 @@ def run_migration(
 
     plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
     create_and_store_resource(
+        client=ocp_admin_client,
         fixture_store=fixture_store,
         resource=Migration,
         namespace=target_namespace,
