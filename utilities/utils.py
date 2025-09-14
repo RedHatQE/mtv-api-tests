@@ -464,7 +464,8 @@ def get_cluster_client() -> DynamicClient:
     host = get_value_from_py_config("cluster_host")
     username = get_value_from_py_config("cluster_username")
     password = get_value_from_py_config("cluster_password")
-    _client = get_client(host=host, username=username, password=password)
+    verify_ssl = get_value_from_py_config(value="insecure_verify_skip")
+    _client = get_client(host=host, username=username, password=password, verify_ssl=verify_ssl)
 
     if isinstance(_client, DynamicClient):
         return _client
