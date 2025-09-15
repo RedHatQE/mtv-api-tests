@@ -153,7 +153,10 @@ def run_migration(
         after_hook_namespace=after_hook_namespace,
     )
 
-    plan.wait_for_condition(condition=plan.Condition.READY, status=plan.Condition.Status.TRUE, timeout=360)
+    try:
+        plan.wait_for_condition(condition=Plan.Condition.READY, status=Plan.Condition.Status.TRUE, timeout=360)
+    except TimeoutExpiredError:
+        LOGGER.error(f"Plan {plan.name} failed to reach status {Plan.Condition.Status.TRUE}\n\t{plan.instance}")
     create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
