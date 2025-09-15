@@ -7,6 +7,7 @@ from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
+from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest import FixtureRequest
 from pytest_testconfig import py_config
@@ -157,6 +158,10 @@ def run_migration(
         plan.wait_for_condition(condition=Plan.Condition.READY, status=Plan.Condition.Status.TRUE, timeout=360)
     except TimeoutExpiredError:
         LOGGER.error(f"Plan {plan.name} failed to reach status {Plan.Condition.Status.TRUE}\n\t{plan.instance}")
+        source_provider = Provider(name=source_provider_name, namespace=source_provider_namespace)
+        dest_provider = Provider(name=destination_provider_name, namespace=destination_provider_namespace)
+        LOGGER.error(f"Source provider: {source_provider.instance}")
+        LOGGER.error(f"Destinaion provider: {dest_provider.instance}")
     create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
