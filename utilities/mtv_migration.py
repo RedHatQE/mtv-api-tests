@@ -162,6 +162,7 @@ def run_migration(
         dest_provider = Provider(name=destination_provider_name, namespace=destination_provider_namespace)
         LOGGER.error(f"Source provider: {source_provider.instance}")
         LOGGER.error(f"Destinaion provider: {dest_provider.instance}")
+        raise
     create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
