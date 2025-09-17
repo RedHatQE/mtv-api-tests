@@ -11,9 +11,9 @@ from kubernetes.dynamic import DynamicClient
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.provider import Provider
+from ocp_resources.resource import get_client
 
 # Optional import if available
-from ocp_resources.resource import get_client
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.virtual_machine_cluster_instancetype import VirtualMachineClusterInstancetype
@@ -335,7 +335,7 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             **kwargs: Additional arguments passed to the base VirtualMachine class (name, namespace, client, etc.)
         """
         # Extract client from kwargs to use with resource creation before calling super()
-        client = kwargs.get("client") or get_client()
+        client = kwargs.get("client")
         kwargs.setdefault("client", client)
 
         super().__init__(**kwargs)
@@ -458,3 +458,15 @@ class VirtualMachineFromInstanceType(VirtualMachine):
 
             # Set the complete spec
             self.res["spec"] = spec
+
+
+def get_cluster_client() -> DynamicClient:
+    host = get_value_from_py_config("cluster_host")
+    username = get_value_from_py_config("cluster_username")
+    password = get_value_from_py_config("cluster_password")
+    insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
+    _client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+
+    if isinstance(_client, DynamicClient):
+        return _client
+    raise ValueError("Failed to get client for cluster")

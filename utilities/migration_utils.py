@@ -57,7 +57,6 @@ def cancel_migration(migration: Migration) -> None:
                 )
             except TimeoutExpiredError:
                 LOGGER.error(f"Failed to cancel migration {migration.name}")
-                raise
 
 
 def archive_plan(plan: Plan) -> None:
@@ -82,7 +81,6 @@ def archive_plan(plan: Plan) -> None:
 
     except TimeoutExpiredError:
         LOGGER.error(f"Failed to archive plan {plan.name}")
-        raise
 
 
 def check_dv_pvc_pv_deleted(
@@ -136,6 +134,7 @@ def append_leftovers(
 
 
 def prepare_migration_for_tests(
+    ocp_admin_client: DynamicClient,
     plan: dict[str, Any],
     request: FixtureRequest,
     source_provider: BaseProvider,
@@ -168,6 +167,7 @@ def prepare_migration_for_tests(
             virtual_machines_list[idx].update({"namespace": source_vms_namespace})
 
     return {
+        "ocp_admin_client": ocp_admin_client,
         "source_provider_name": source_provider.ocp_resource.name,
         "source_provider_namespace": source_provider.ocp_resource.namespace,
         "virtual_machines_list": virtual_machines_list,
