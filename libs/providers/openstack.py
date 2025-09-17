@@ -141,7 +141,7 @@ class OpenStackProvider(BaseProvider):
 
         source_vm = self.get_instance_obj(vm_name)
 
-        if not source_vm and kwargs["clone"]:
+        if not source_vm and kwargs.get("clone"):
             source_vm = self.clone_vm(
                 source_vm_name=base_vm_name, clone_vm_name=vm_name, session_uuid=kwargs["session_uuid"]
             )

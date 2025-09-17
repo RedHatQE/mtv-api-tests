@@ -156,7 +156,7 @@ class VMWareProvider(BaseProvider):
         _vm = self.get_vm_by_name(
             query=f"{vm_name}",
             vm_name_suffix=kwargs.get("vm_name_suffix", ""),
-            clone_vm=kwargs["clone"],
+            clone_vm=kwargs.get("clone", False),
             session_uuid=kwargs["session_uuid"],
         )
 

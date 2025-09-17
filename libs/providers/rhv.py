@@ -151,7 +151,7 @@ class OvirtProvider(BaseProvider):
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         target_vm_name = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
         source_vm = self.get_vm_by_name(name=target_vm_name)[0]
-        if not source_vm and kwargs["clone"]:
+        if not source_vm and kwargs.get("clone"):
             source_vm = self.clone_vm(
                 source_vm_name=source_vm, clone_vm_name=target_vm_name, session_uuid=kwargs["session_uuid"]
             )
