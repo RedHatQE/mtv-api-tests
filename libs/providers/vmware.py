@@ -71,14 +71,16 @@ class VMWareProvider(BaseProvider):
 
         return view_manager
 
-    def get_vm_by_name(self, query: str, vm_name_suffix: str = "", clone_vm: bool = False) -> vim.VirtualMachine:
+    def get_vm_by_name(
+        self, query: str, vm_name_suffix: str = "", clone_vm: bool = False, session_uuid: str = ""
+    ) -> vim.VirtualMachine:
         target_vm_name = f"{query}{vm_name_suffix}"
         target_vm = None
         try:
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
         except ValueError:
             if clone_vm:
-                target_vm = self.clone_vm(source_vm_name=query, clone_vm_name=target_vm_name)
+                target_vm = self.clone_vm(source_vm_name=query, clone_vm_name=target_vm_name, session_uuid=session_uuid)
                 if not target_vm:
                     raise VmNotFoundError(
                         f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]"
@@ -118,7 +120,11 @@ class VMWareProvider(BaseProvider):
                     )
                     return task.info.result
 
-                progress = f"{int(task.info.progress)}%" if task.info.progress else "In progress"
+                try:
+                    progress = f"{int(task.info.progress)}%" if task.info.progress else "In progress"
+                except TypeError:
+                    progress = "N/A"
+
                 LOGGER.info(f"{action_name} progress: {progress}")
         except TimeoutExpiredError:
             self.log.error(msg=f"{action_name} did not complete successfully: {task.info.error}")
@@ -146,7 +152,13 @@ class VMWareProvider(BaseProvider):
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         vm_name = kwargs["name"]
-        _vm = self.get_vm_by_name(query=f"{vm_name}", vm_name_suffix=kwargs.get("vm_name_suffix", ""), clone_vm=True)
+
+        _vm = self.get_vm_by_name(
+            query=f"{vm_name}",
+            vm_name_suffix=kwargs.get("vm_name_suffix", ""),
+            clone_vm=kwargs["clone"],
+            session_uuid=kwargs["session_uuid"],
+        )
 
         vm_config: Any = _vm.config
         if not vm_config:
@@ -264,6 +276,7 @@ class VMWareProvider(BaseProvider):
         self,
         source_vm_name: str,
         clone_vm_name: str,
+        session_uuid: str,
         power_on: bool = False,
         regenerate_mac: bool = True,
     ) -> vim.VirtualMachine:
@@ -277,6 +290,7 @@ class VMWareProvider(BaseProvider):
             regenerate_mac: Whether to regenerate MAC addresses for network interfaces.
                           Prevents MAC address conflicts between cloned VMs. Default: True.
         """
+        clone_vm_name = f"{session_uuid}-{clone_vm_name}"
         LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)

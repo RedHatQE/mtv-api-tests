@@ -182,6 +182,7 @@ def get_vm_suffix(warm_migration: bool) -> str:
     ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
 
     vm_suffix = f"-{storage_class_name}-{ocp_version}-{migration_type}"
+
     if len(vm_suffix) > 63:
         LOGGER.warning(f"VM suffix '{vm_suffix}' is too long ({len(vm_suffix)} > 63). Truncating.")
         vm_suffix = vm_suffix[-63:]

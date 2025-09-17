@@ -563,7 +563,10 @@ def plan(
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
-        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration)
+
+        vm_name_suffix = get_vm_suffix(
+            warm_migration=warm_migration,
+        )
 
         if openshift_source_provider:
             create_source_cnv_vms(
@@ -576,9 +579,13 @@ def plan(
             )
         for vm in virtual_machines:
             source_vm_details = source_provider.vm_dict(
-                name=vm["name"], namespace=source_vms_namespace, source=True, vm_name_suffix=vm_name_suffix
+                name=vm["name"],
+                namespace=source_vms_namespace,
+                clone=True,
+                vm_name_suffix=vm_name_suffix,
+                session_uuid=fixture_store["session_uuid"],
             )
-            vm["name"] = f"{vm['name']}{vm_name_suffix}"
+            vm["name"] = source_vm_details["name"]
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 
