@@ -41,6 +41,9 @@ docker run --rm \
   -e KUBECONFIG=/app/kubeconfig \
   quay.io/openshift-cnv/mtv-tests:latest \
   uv run pytest -s \
+  --tc=cluster_host:https://api.example.cluster:6443 \
+  --tc=cluster_username:kubeadmin \
+  --tc=cluster_password:'YOUR_PASSWORD' \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:standard-csi
@@ -53,6 +56,9 @@ docker run --rm \
   -e KUBECONFIG=/app/kubeconfig \
   quay.io/openshift-cnv/mtv-tests:latest \
   uv run pytest -s \
+  --tc=cluster_host:https://api.example.cluster:6443 \
+  --tc=cluster_username:kubeadmin \
+  --tc=cluster_password:'YOUR_PASSWORD' \
   --tc=target_ocp_version:4.20 \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
@@ -70,13 +76,46 @@ docker run --rm \
 
 ### Common Test Configuration Parameters
 
+- `--tc=cluster_host`: OpenShift API URL (e.g., <https://api.example.cluster:6443>) [required]
+- `--tc=cluster_username`: Cluster username (e.g., kubeadmin) [required]
+- `--tc=cluster_password`: Cluster password [required]
 - `--tc=source_provider_type`: vsphere, rhv, openstack, etc.
 - `--tc=source_provider_version`: Provider version (6.5, 7.0.3, 8.0.1)
 - `--tc=storage_class`: Storage class for testing
 - `--tc=target_namespace`: Namespace for test resources
 - `--tc=target_ocp_version`: Target OpenShift version
 
+#### Authentication notes
+
+- These three options are required for the test suite to authenticate to the cluster via API.
+- Keep the kubeconfig mount and KUBECONFIG env in container runs so oc adm must-gather can execute.
+- Quote passwords with special characters. Prefer passing secrets via environment variables to avoid shell history exposure.
+
+```bash
+export CLUSTER_HOST=https://api.example.cluster:6443
+export CLUSTER_USERNAME=kubeadmin
+export CLUSTER_PASSWORD='your-password'
+uv run pytest -s \
+  --tc=cluster_host:"$CLUSTER_HOST" \
+  --tc=cluster_username:"$CLUSTER_USERNAME" \
+  --tc=cluster_password:"$CLUSTER_PASSWORD" \
+  --tc=source_provider_type:vsphere \
+  --tc=source_provider_version:8.0.1 \
+  --tc=storage_class:standard-csi
+```
+
 ## Pytest
+
+```bash
+# Local run example
+uv run pytest -s \
+  --tc=cluster_host:https://api.example.cluster:6443 \
+  --tc=cluster_username:kubeadmin \
+  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=source_provider_type:vsphere \
+  --tc=source_provider_version:8.0.1 \
+  --tc=storage_class:standard-csi
+```
 
 Set log collector folder: (default to `/tmp/mtv-api-tests`)
 
@@ -147,6 +186,15 @@ def test_your_new_test(request, fixture_store, ...):
 
 You can create your own config file and use it with:
 
+```python
+# your_config.py
+cluster_host = "https://api.example.cluster:6443"
+cluster_username = "kubeadmin"
+cluster_password = "YOUR_PASSWORD"
+```
+
+Usage remains the same:
+
 ```bash
 uv run pytest --tc-file=your_config.py
 ```
@@ -154,7 +202,11 @@ uv run pytest --tc-file=your_config.py
 ## Run Functional Tests tier1
 
 ```bash
-uv run pytest -m tier1 --tc=storage_class:<storage_class>
+uv run pytest -m tier1 \
+  --tc=cluster_host:https://api.example.cluster:6443 \
+  --tc=cluster_username:kubeadmin \
+  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=storage_class:<storage_class>
 ```
 
 ## Release new version

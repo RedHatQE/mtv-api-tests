@@ -2,11 +2,12 @@ import shlex
 from pathlib import Path
 
 from ocp_resources.cluster_service_version import ClusterServiceVersion
-from ocp_resources.resource import get_client
 from ocp_resources.subscription import Subscription
 from pyhelper_utils.shell import run_command
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
+
+from utilities.utils import get_cluster_client
 
 LOGGER = get_logger(__name__)
 
@@ -14,7 +15,7 @@ LOGGER = get_logger(__name__)
 def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = None) -> None:
     try:
         # https://github.com/kubev2v/forklift-must-gather
-        ocp_admin_client = get_client()
+        ocp_admin_client = get_cluster_client()
         mtv_namespace = py_config["mtv_namespace"]
         mtv_subs = Subscription(
             client=ocp_admin_client, name="mtv-operator", namespace=mtv_namespace, ensure_exists=True

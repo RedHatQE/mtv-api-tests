@@ -18,7 +18,7 @@ from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
-from ocp_resources.resource import ResourceEditor, get_client
+from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_profile import StorageProfile
@@ -56,6 +56,7 @@ from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
+    get_cluster_client,
     get_value_from_py_config,
 )
 
@@ -388,7 +389,7 @@ def ocp_admin_client():
     OCP client
     """
     LOGGER.info(msg="Creating OCP admin Client")
-    _client = get_client()
+    _client = get_cluster_client()
 
     if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
         if remote_cluster_name not in _client.configuration.host:
@@ -519,6 +520,7 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
         raise ValueError("API key not found in configuration, please login with `oc login` first")
 
     secret = create_and_store_resource(
+        client=ocp_admin_client,
         fixture_store=fixture_store,
         resource=Secret,
         namespace=target_namespace,
@@ -531,6 +533,7 @@ def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
 @pytest.fixture(scope="session")
 def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_client, session_uuid, target_namespace):
     provider = create_and_store_resource(
+        client=ocp_admin_client,
         fixture_store=fixture_store,
         resource=Provider,
         name=f"{session_uuid}-destination-ocp-provider",

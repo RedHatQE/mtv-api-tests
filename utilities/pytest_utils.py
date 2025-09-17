@@ -13,7 +13,6 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
-from ocp_resources.resource import get_client
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
@@ -22,7 +21,7 @@ from simple_logger.logger import get_logger
 from exceptions.exceptions import SessionTeardownError
 from libs.providers.vmware import VMWareProvider
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
-from utilities.utils import delete_all_vms
+from utilities.utils import delete_all_vms, get_cluster_client
 
 LOGGER = get_logger(__name__)
 
@@ -55,7 +54,7 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
 def session_teardown(session_store: dict[str, Any]) -> None:
     LOGGER.info("Running teardown to delete all created resources")
 
-    ocp_client = get_client()
+    ocp_client = get_cluster_client()
 
     # When running in parallel (-n auto) `session_store` can be empty.
     if session_teardown_resources := session_store.get("teardown"):
