@@ -10,7 +10,16 @@
     "guest_vm_linux_password": "LINUX VMS PASSWORD",
     "guest_vm_win_user": "WINDOWS VMS USERNAME",
     "guest_vm_win_password": "WINDOWS VMS PASSWORD",
-    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>"
+    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>", # only for non-copyoffload migrations
+    "copyoffload": {
+      "storage_vendor_product": "STORAGE_VENDOR",
+      "datastore_id": "DATASTORE_ID",
+      "template_name": "TEMPLATE_NAME",
+      "storage_hostname": "storage.example.com",
+      "storage_username": "STORAGE_USERNAME",
+      "storage_password": "STORAGE_PASSWORD",
+      "ontap_svm": "VSERVER_NAME"
+    }
   },
 
   "ovirt": {

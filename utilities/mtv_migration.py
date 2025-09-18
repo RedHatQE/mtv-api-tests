@@ -63,6 +63,7 @@ def migrate_vms(
         after_hook_namespace=after_hook_namespace,
         source_vms_namespace=source_vms_namespace,
     )
+    
     migration_plan = run_migration(**run_migration_kwargs)
 
     wait_for_migration_complate(plan=migration_plan)
@@ -104,6 +105,7 @@ def run_migration(
     cut_over: datetime,
     fixture_store: Any,
     test_name: str,
+    copyoffload: bool = False,
 ) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -127,32 +129,55 @@ def run_migration(
          condition_category (str): Plan's condition category to wait for
          condition_status (str): Plan's condition status to wait for
          condition_type (str): Plan's condition type to wait for
+         copyoffload (bool): Enable copy-offload specific settings for the Plan
 
     Returns:
         Plan and Migration Managed Resources.
     """
-    plan = create_and_store_resource(
-        client=ocp_admin_client,
-        fixture_store=fixture_store,
-        test_name=test_name,
-        resource=Plan,
-        namespace=target_namespace,
-        source_provider_name=source_provider_name,
-        source_provider_namespace=source_provider_namespace or target_namespace,
-        destination_provider_name=destination_provider_name,
-        destination_provider_namespace=destination_provider_namespace or target_namespace,
-        storage_map_name=storage_map_name,
-        storage_map_namespace=storage_map_namespace,
-        network_map_name=network_map_name,
-        network_map_namespace=network_map_namespace,
-        virtual_machines_list=virtual_machines_list,
-        target_namespace=target_namespace,
-        warm_migration=warm_migration,
-        pre_hook_name=pre_hook_name,
-        pre_hook_namespace=pre_hook_namespace,
-        after_hook_name=after_hook_name,
-        after_hook_namespace=after_hook_namespace,
-    )
+    # Build plan kwargs
+    plan_kwargs = {
+        "client": ocp_admin_client,
+        "fixture_store": fixture_store,
+        "test_name": test_name,
+        "resource": Plan,
+        "namespace": target_namespace,
+        "source_provider_name": source_provider_name,
+        "source_provider_namespace": source_provider_namespace or target_namespace,
+        "destination_provider_name": destination_provider_name,
+        "destination_provider_namespace": destination_provider_namespace or target_namespace,
+        "storage_map_name": storage_map_name,
+        "storage_map_namespace": storage_map_namespace,
+        "network_map_name": network_map_name,
+        "network_map_namespace": network_map_namespace,
+        "virtual_machines_list": virtual_machines_list,
+        "target_namespace": target_namespace,
+        "warm_migration": warm_migration,
+        "pre_hook_name": pre_hook_name,
+        "pre_hook_namespace": pre_hook_namespace,
+        "after_hook_name": after_hook_name,
+        "after_hook_namespace": after_hook_namespace,
+    }
+
+    plan = create_and_store_resource(**plan_kwargs)
+    
+    # Add copy-offload specific parameters if enabled
+    # Since Plan class doesn't support pvcNameTemplate parameter, we need to update the Plan after creation
+    if copyoffload:
+        # When using copy-offload with generateName, we need to provide a template
+        # According to the Forklift API, pvcNameTemplate should be set when pvcNameTemplateUseGenerateName is true
+        # NOTE: Do NOT end with hyphen - Kubernetes adds the hyphen automatically with generateName
+        from ocp_resources.resource import ResourceEditor
+        
+        LOGGER.info("Adding pvcNameTemplate field to Plan for copy-offload migration")
+        ResourceEditor(
+            patches={
+                plan: {
+                    "spec": {
+                        "pvcNameTemplate": "pvc"
+                    }
+                }
+            }
+        ).update()
 
     try:
         plan.wait_for_condition(condition=Plan.Condition.READY, status=Plan.Condition.Status.TRUE, timeout=360)
@@ -180,7 +205,6 @@ def get_vm_suffix(warm_migration: bool) -> str:
     storage_class = py_config.get("storage_class", "")
     storage_class_name = "-".join(storage_class.split("-")[-2:])
     ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
-
     vm_suffix = f"-{storage_class_name}-{ocp_version}-{migration_type}"
 
     if len(vm_suffix) > 63:
@@ -234,21 +258,82 @@ def get_storage_migration_map(
     ocp_admin_client: DynamicClient,
     source_provider_inventory: ForkliftInventory,
     vms: list[str],
+    storage_class: str | None = None,
+    # Copy-offload specific parameters
+    datastore_id: str | None = None,
+    offload_plugin_config: dict[str, Any] | None = None,
+    access_mode: str | None = None,
+    volume_mode: str | None = None,
 ) -> StorageMap:
+    """
+    Create a storage map for VM migration.
+
+    This function supports both standard migrations and copy-offload migrations.
+
+    Copy-offload migration (extended functionality):
+        When datastore_id and offload_plugin_config are provided, creates a copy-offload
+        storage map instead of querying the inventory.
+
+    Args:
+        fixture_store: Pytest fixture store for resource tracking
+        target_namespace: Target namespace
+        source_provider: Source provider instance
+        destination_provider: Destination provider instance
+        ocp_admin_client: OpenShift admin client
+        source_provider_inventory: Source provider inventory (required for signature compatibility)
+        vms: List of VM names (required for signature compatibility)
+        storage_class: Storage class to use (optional, defaults to config value)
+        datastore_id: Datastore ID for copy-offload (optional, triggers copy-offload mode)
+        offload_plugin_config: Copy-offload plugin configuration (optional, required if datastore_id is set)
+        access_mode: Access mode for copy-offload (optional, used only in copy-offload mode)
+        volume_mode: Volume mode for copy-offload (optional, used only in copy-offload mode)
+
+    Returns:
+        StorageMap: Created storage map resource
+
+    Raises:
+        ValueError: If required parameters are not provided or invalid
+    """
     if not source_provider.ocp_resource:
         raise ValueError("source_provider.ocp_resource is not set")
 
     if not destination_provider.ocp_resource:
         raise ValueError("destination_provider.ocp_resource is not set")
 
-    storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
+    # Determine storage class
+    storage_map_from_config: str = storage_class or py_config["storage_class"]
+
+    # Build storage map list based on migration type
     storage_map_list: list[dict[str, Any]] = []
-    storage_map_from_config: str = py_config["storage_class"]
-    for storage in storage_migration_map:
+
+    # Check if copy-offload parameters are provided
+    if datastore_id and offload_plugin_config:
+        # Copy-offload migration mode
+        LOGGER.info(f"Creating copy-offload storage map for datastore ID: {datastore_id}")
+        destination_config = {
+            "storageClass": storage_map_from_config,
+        }
+
+        # Add copy-offload specific destination settings
+        if access_mode:
+            destination_config["accessMode"] = access_mode
+        if volume_mode:
+            destination_config["volumeMode"] = volume_mode
+
         storage_map_list.append({
-            "destination": {"storageClass": storage_map_from_config},
-            "source": storage,
+            "destination": destination_config,
+            "source": {"id": datastore_id},
+            "offloadPlugin": offload_plugin_config,
         })
+    else:
+        # Standard migration mode (original behavior - unchanged)
+        LOGGER.info(f"Creating standard storage map for VMs: {vms}")
+        storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
+        for storage in storage_migration_map:
+            storage_map_list.append({
+                "destination": {"storageClass": storage_map_from_config},
+                "source": storage,
+            })
 
     storage_map = create_and_store_resource(
         fixture_store=fixture_store,
