@@ -141,13 +141,15 @@ class OpenStackProvider(BaseProvider):
 
         source_vm = self.get_instance_obj(vm_name)
 
-        if not source_vm:
-            source_vm = self.clone_vm(source_vm_name=base_vm_name, clone_vm_name=vm_name)
+        if not source_vm and kwargs.get("clone"):
+            source_vm = self.clone_vm(
+                source_vm_name=base_vm_name, clone_vm_name=vm_name, session_uuid=kwargs["session_uuid"]
+            )
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = "openstack"
         result_vm_info["provider_vm_api"] = source_vm
-        result_vm_info["name"] = kwargs["name"]
+        result_vm_info["name"] = source_vm.name
 
         # Snapshots details
         for volume_snapshots in self.list_snapshots(vm_name):
@@ -199,6 +201,7 @@ class OpenStackProvider(BaseProvider):
         self,
         source_vm_name: str,
         clone_vm_name: str,
+        session_uuid: str,
         power_on: bool = False,
     ) -> OSP_Server:
         """
@@ -213,6 +216,7 @@ class OpenStackProvider(BaseProvider):
         Returns:
             The new server object if successful
         """
+        clone_vm_name = f"{session_uuid}-{clone_vm_name}"
         LOGGER.info(f"Starting clone of '{source_vm_name}' to '{clone_vm_name}'")
         source_vm: OSP_Server | None = self.get_instance_obj(name_filter=source_vm_name)
 

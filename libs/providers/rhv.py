@@ -149,7 +149,12 @@ class OvirtProvider(BaseProvider):
             )
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        source_vm = self.get_vm_by_name(name=f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}")[0]
+        target_vm_name = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
+        source_vm = self.get_vm_by_name(name=target_vm_name)[0]
+        if not source_vm and kwargs.get("clone"):
+            source_vm = self.clone_vm(
+                source_vm_name=source_vm, clone_vm_name=target_vm_name, session_uuid=kwargs["session_uuid"]
+            )
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.RHV
@@ -287,11 +292,13 @@ class OvirtProvider(BaseProvider):
         self,
         source_vm_name: str,
         clone_vm_name: str,
+        session_uuid: str,
         power_on: bool = False,
     ) -> types.Vm:
         """
         Clones a VM. Raises an exception if the process fails.
         """
+        clone_vm_name = f"{session_uuid}-{clone_vm_name}"
         LOGGER.info(f"Starting clone of '{source_vm_name}' to '{clone_vm_name}'")
         try:
             source_vm = self.get_vm_by_name(name=source_vm_name)
