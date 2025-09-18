@@ -1,0 +1,202 @@
+"""
+Copy-offload migration utilities for MTV tests.
+
+This module provides copy-offload specific functionality for VM migration tests,
+including storage secret creation, copy-offload storage maps, and enhanced
+migration workflows that use the vsphere-xcopy-volume-populator.
+"""
+from __future__ import annotations
+
+import os
+from typing import Any
+
+from kubernetes.dynamic import DynamicClient
+from ocp_resources.secret import Secret
+from pytest_testconfig import config as py_config
+from simple_logger.logger import get_logger
+
+from libs.base_provider import BaseProvider
+from libs.forklift_inventory import ForkliftInventory
+from utilities.mtv_migration import get_storage_migration_map, migrate_vms
+from utilities.resources import create_and_store_resource
+
+LOGGER = get_logger(__name__)
+
+
+def get_copyoffload_config(source_provider_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Get and validate copyoffload configuration from source provider data.
+
+    Args:
+        source_provider_data: Source provider configuration data
+
+    Returns:
+        dict: Copyoffload configuration dictionary
+
+    Raises:
+        ValueError: If copyoffload configuration is not found
+    """
+    if "copyoffload" not in source_provider_data:
+        raise ValueError("copyoffload configuration not found in source provider data")
+
+    return source_provider_data["copyoffload"]
+
+def create_storage_secret_for_copyoffload(
+    fixture_store: dict[str, Any],
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    source_provider_data: dict[str, Any],
+) -> Secret:
+    """
+    Create a storage secret for copy-offload functionality.
+
+    Args:
+        fixture_store: Pytest fixture store for resource tracking
+        ocp_admin_client: OpenShift admin client
+        target_namespace: Target namespace for the secret
+        source_provider_data: Source provider configuration data
+
+    Returns:
+        Secret: Created storage secret resource
+
+    Raises:
+        ValueError: If required copyoffload configuration is missing
+    """
+    copyoffload_config = get_copyoffload_config(source_provider_data)
+
+    # Get storage credentials from environment variables or provider config
+    storage_hostname = os.getenv("STORAGE_HOSTNAME") or copyoffload_config.get("storage_hostname")
+    storage_username = os.getenv("STORAGE_USERNAME") or copyoffload_config.get("storage_username") 
+    storage_password = os.getenv("STORAGE_PASSWORD") or copyoffload_config.get("storage_password")
+
+    if not all([storage_hostname, storage_username, storage_password]):
+        raise ValueError(
+            "Storage credentials are required. Set STORAGE_HOSTNAME, STORAGE_USERNAME, "
+            "and STORAGE_PASSWORD environment variables or include them in .providers.json"
+        )
+
+    # Base secret data
+    secret_data = {
+        "STORAGE_HOSTNAME": storage_hostname,
+        "STORAGE_USERNAME": storage_username,
+        "STORAGE_PASSWORD": storage_password,
+    }
+
+    # Add vendor-specific configuration
+    storage_vendor = copyoffload_config.get("storage_vendor_product", "")
+
+    if storage_vendor == "ontap":
+        ontap_svm = os.getenv("ONTAP_SVM") or copyoffload_config.get("ontap_svm")
+        if ontap_svm:
+            secret_data["ONTAP_SVM"] = ontap_svm
+
+    LOGGER.info(f"Creating storage secret for copy-offload with vendor: {storage_vendor}")
+
+    storage_secret = create_and_store_resource(
+        client=ocp_admin_client,
+        fixture_store=fixture_store,
+        resource=Secret,
+        namespace=target_namespace,
+        string_data=secret_data,
+    )
+
+    return storage_secret
+
+
+def migrate_vms_with_copyoffload(
+    ocp_admin_client: DynamicClient,
+    request,
+    fixture_store: dict[str, Any],
+    source_provider: BaseProvider,
+    destination_provider: BaseProvider,
+    plan: dict[str, Any],
+    network_migration_map,
+    source_provider_data: dict[str, Any],
+    target_namespace: str,
+    source_vms_namespace: str,
+    source_provider_inventory: ForkliftInventory | None = None,
+) -> None:
+    """Migrate VMs using copy-offload functionality."""
+    LOGGER.info("Starting copy-offload migration")
+    LOGGER.info(f"VMs to migrate: {[vm['name'] for vm in plan['virtual_machines']]}")
+
+    # Get VM IDs from Forklift inventory (works for both cloned and existing VMs)
+    for vm in plan["virtual_machines"]:
+        vm_name = vm["name"]
+        vm_data = source_provider_inventory.get_vm(vm_name)
+        vm["id"] = vm_data["id"]
+        LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
+
+    LOGGER.info(f"Final plan VMs before migration: {plan['virtual_machines']}")
+
+    # Create storage secret
+    storage_secret = create_storage_secret_for_copyoffload(
+        ocp_admin_client=ocp_admin_client,
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider_data=source_provider_data,
+    )
+
+    # Create storage map using copy-offload configuration
+    copyoffload_config = get_copyoffload_config(source_provider_data)
+
+    storage_vendor_product = copyoffload_config.get("storage_vendor_product")
+    if not storage_vendor_product:
+        raise ValueError("storage_vendor_product not found in copyoffload configuration")
+
+    datastore_id = copyoffload_config.get("datastore_id")
+    if not datastore_id:
+        raise ValueError("datastore_id not found in copyoffload configuration")
+
+    storage_class = py_config["storage_class"]
+    LOGGER.info(f"Storage vendor: {storage_vendor_product}")
+    LOGGER.info(f"Storage class: {storage_class}")
+
+    # Build offload plugin configuration
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    # Use consolidated storage map creation function with copy-offload parameters
+    vms = [vm["name"] for vm in plan["virtual_machines"]]
+    
+    # Note: source_provider_inventory is required for function signature but not used in copy-offload mode
+    # We pass it even if None; the copy-offload parameters take precedence
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,  # type: ignore[arg-type]
+        vms=vms,
+        storage_class=storage_class,
+        # Copy-offload specific parameters trigger copy-offload mode
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
+    # Execute migration
+    migrate_vms(
+        ocp_admin_client=ocp_admin_client,
+        request=request,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plan=plan,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+        source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
+    )
+
+    LOGGER.info("Copy-offload migration completed")
+
+

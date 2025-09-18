@@ -279,6 +279,11 @@ def autouse_fixtures(source_provider_data, nfs_storage_profile, base_resource_na
 @pytest.fixture(scope="session")
 def base_resource_name(fixture_store, session_uuid, source_provider_data):
     _name = f"{session_uuid}-source-{source_provider_data['type']}-{source_provider_data['version'].replace('.', '-')}"
+
+    # Add copyoffload indicator for Plan/StorageMap/NetworkMap names
+    if "copyoffload" in source_provider_data:
+        _name = f"{_name}-xcopy"
+
     fixture_store["base_resource_name"] = _name
 
 
@@ -303,6 +308,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
         "pod-security.kubernetes.io/enforce-version": "latest",
         "mutatevirtualmachines.kubemacpool.io": "ignore",
     }
+
     _target_namespace: str = py_config["target_namespace_prefix"]
 
     # replace mtv-api-tests since session_uuid already include mtv-api-tests in the name
@@ -352,13 +358,11 @@ def nfs_storage_profile(ocp_admin_client):
     else:
         yield
 
-
 @pytest.fixture(scope="session")
-def session_uuid(fixture_store):
+def session_uuid(fixture_store, source_provider_data):
     _session_uuid = generate_name_with_uuid(name="mtv-api-tests")
     fixture_store["session_uuid"] = _session_uuid
     return _session_uuid
-
 
 @pytest.fixture(scope="session")
 def mtv_namespace():
@@ -547,9 +551,7 @@ def plan(
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
-        vm_name_suffix = get_vm_suffix(
-            warm_migration=warm_migration,
-        )
+        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration)
 
         if openshift_source_provider:
             create_source_cnv_vms(
@@ -564,7 +566,7 @@ def plan(
             source_vm_details = source_provider.vm_dict(
                 name=vm["name"],
                 namespace=source_vms_namespace,
-                clone=True,
+                clone=vm.get("clone", True),
                 vm_name_suffix=vm_name_suffix,
                 session_uuid=fixture_store["session_uuid"],
             )
@@ -714,3 +716,71 @@ def multus_cni_config() -> str:
     bridge_type_and_name = "cnv-bridge"
     config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}
     return json.dumps(config)
+
+
+@pytest.fixture(scope="function")
+def validate_copyoffload_config(source_provider, source_provider_data, plan, target_namespace):
+    """
+    Validate copy-offload configuration and log test setup details.
+
+    This fixture performs all necessary validations before running copy-offload tests:
+    - Verifies vSphere provider type
+    - Checks for copyoffload configuration
+    - Validates plan configuration
+    - Checks for storage credentials
+    - Logs test configuration details
+    """
+    import os
+    from ocp_resources.provider import Provider
+    from simple_logger.logger import get_logger
+
+    LOGGER = get_logger(__name__)
+
+    # Validate that this is a vSphere provider
+    if source_provider.type != Provider.ProviderType.VSPHERE:
+        pytest.skip("Copy-offload tests are only supported for vSphere providers")
+
+    # Validate copy-offload configuration exists
+    if "copyoffload" not in source_provider_data:
+        pytest.skip("Copy-offload configuration not found in source provider data")
+
+    # Validate that the plan is configured for copy-offload
+    if not plan.get("copyoffload", False):
+        pytest.skip("Test plan is not configured for copy-offload")
+
+    # Check if required environment variables are set for storage credentials
+    required_env_vars = ["STORAGE_HOSTNAME", "STORAGE_USERNAME", "STORAGE_PASSWORD"]
+    missing_vars = []
+
+    for var in required_env_vars:
+        if not os.getenv(var) and not source_provider_data["copyoffload"].get(var.lower()):
+            missing_vars.append(var)
+
+    if missing_vars:
+        pytest.skip(
+            f"Required storage credentials not found: {missing_vars}. "
+            "Set environment variables or include in .providers.json copyoffload config"
+        )
+
+    # Log detailed test configuration
+    copyoffload_config = source_provider_data["copyoffload"]
+    LOGGER.info("Copy-offload Migration Test Configuration:")
+    LOGGER.info(f"  Storage vendor: {copyoffload_config.get('storage_vendor_product')}")
+    LOGGER.info(f"  Datastore ID: {copyoffload_config.get('datastore_id')}")
+    LOGGER.info(f"  Template name: {copyoffload_config.get('template_name', 'Not specified')}")
+    LOGGER.info(f"  VM count: {len(plan['virtual_machines'])}")
+    LOGGER.info(f"  Target namespace: {target_namespace}")
+
+    # Log storage credentials source (without exposing values)
+    storage_hostname = os.getenv("STORAGE_HOSTNAME") or copyoffload_config.get("storage_hostname")
+    if os.getenv("STORAGE_HOSTNAME"):
+        LOGGER.info("  Storage credentials: Environment variables")
+    else:
+        LOGGER.info("  Storage credentials: Provider configuration")
+
+    if storage_hostname:
+        LOGGER.info(f"  Storage hostname: {storage_hostname}")
+
+    LOGGER.info(f"  VMs to migrate: {[vm['name'] for vm in plan['virtual_machines']]}")
+
+    return copyoffload_config
