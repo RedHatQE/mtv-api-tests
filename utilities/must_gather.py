@@ -26,17 +26,12 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
             client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
         )
 
-        if not mtv_csv.instance.spec.relatedImages:
-            LOGGER.error("Can't find any relatedImages under MTV ClusterServiceVersion")
-            return
-
-        must_gather_images = [
-            image["image"] for image in mtv_csv.instance.spec.relatedImages if "must_gather" in image["name"]
-        ]
+        mtv_envs = mtv_csv.instance.spec.install.spec.deployments[0].spec.template.spec.containers[0].env
+        must_gather_images = [env["value"] for env in mtv_envs if env["name"] == "MUST_GATHER_IMAGE"]
 
         if not must_gather_images:
-            LOGGER.error("Can't find any must-gather image under MTV ClusterServiceVersion")
-            return
+            LOGGER.warning("Can't find any must-gather image under MTV ClusterServiceVersion using upsream image")
+            must_gather_images = ["quay.io/kubev2v/forklift-must-gather:latest"]
 
         _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_images[0]} --dest-dir={data_collector_path}"
 
