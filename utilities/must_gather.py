@@ -30,9 +30,8 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
         must_gather_images = [env["value"] for env in mtv_envs if env["name"] == "MUST_GATHER_IMAGE"]
 
         if not must_gather_images:
-            LOGGER.error("Can't find any must-gather image under MTV ClusterServiceVersion using upsream image")
+            LOGGER.warning("Can't find any must-gather image under MTV ClusterServiceVersion using upsream image")
             must_gather_images = ["quay.io/kubev2v/forklift-must-gather:latest"]
-            return
 
         _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_images[0]} --dest-dir={data_collector_path}"
 
