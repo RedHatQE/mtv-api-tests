@@ -26,8 +26,13 @@ LOGGER = get_logger(__name__)
 
 @pytest.mark.copyoffload
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_thin_migration"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_thin_migration"],
+            py_config["tests_params"]["test_copyoffload_thin_migration"],
+        )
+    ],
     indirect=True,
     ids=["copyoffload-thin"],
 )
@@ -45,6 +50,7 @@ def test_copyoffload_thin_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    vm_ssh_connections,
 ):
     """
     Test copy-offload migration of a thin-provisioned VM disk.
@@ -165,8 +171,13 @@ def test_copyoffload_thin_migration(
 
 @pytest.mark.copyoffload
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_thick_lazy_migration"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_thick_lazy_migration"],
+            py_config["tests_params"]["test_copyoffload_thick_lazy_migration"],
+        )
+    ],
     indirect=True,
     ids=["copyoffload-thick-lazy"],
 )
@@ -184,6 +195,7 @@ def test_copyoffload_thick_lazy_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    vm_ssh_connections,
 ):
     """
     Test copy-offload migration of a thick (lazy) disk VM.
@@ -309,13 +321,19 @@ def test_copyoffload_thick_lazy_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
 
 
 @pytest.mark.copyoffload
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_multi_disk_migration"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_multi_disk_migration"],
+            py_config["tests_params"]["test_copyoffload_multi_disk_migration"],
+        )
+    ],
     indirect=True,
     ids=["copyoffload-multi-disk"],
 )
@@ -333,6 +351,7 @@ def test_copyoffload_multi_disk_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    vm_ssh_connections,
 ):
     """
     Test copy-offload migration of a VM with multiple disks.
@@ -453,6 +472,7 @@ def test_copyoffload_multi_disk_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
 
     # Verify that the correct number of disks were migrated

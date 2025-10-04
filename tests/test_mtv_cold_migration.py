@@ -10,8 +10,13 @@ from utilities.utils import get_value_from_py_config
 
 
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_sanity_cold_mtv_migration"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_sanity_cold_mtv_migration"],
+            py_config["tests_params"]["test_sanity_cold_mtv_migration"],
+        )
+    ],
     indirect=True,
     ids=["rhel8"],
 )
@@ -28,6 +33,7 @@ def test_sanity_cold_mtv_migration(
     multus_network_name,
     source_provider_inventory,
     source_vms_namespace,
+    vm_ssh_connections,
 ):
     if source_provider.type == Provider.ProviderType.OVA:
         plan["virtual_machines"] = [
@@ -58,13 +64,18 @@ def test_sanity_cold_mtv_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
 
 
 @pytest.mark.remote
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_cold_remote_ocp"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_cold_remote_ocp"], py_config["tests_params"]["test_cold_remote_ocp"]
+        )
+    ],
     indirect=True,
     ids=["MTV-79"],
 )
@@ -81,6 +92,7 @@ def test_cold_remote_ocp(
     source_provider_data,
     multus_network_name,
     source_vms_namespace,
+    vm_ssh_connections,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -106,4 +118,5 @@ def test_cold_remote_ocp(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )

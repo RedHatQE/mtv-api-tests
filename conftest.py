@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -58,6 +59,7 @@ from utilities.utils import (
     get_cluster_client,
     get_value_from_py_config,
 )
+from utilities.ssh_utils import SSHConnectionManager
 
 RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
@@ -485,21 +487,108 @@ def source_provider(
     _source_provider.disconnect()
 
 
-@pytest.fixture(scope="session")
-def multus_network_name(fixture_store, target_namespace, ocp_admin_client, multus_cni_config):
-    bridge_type_and_name = "cnv-bridge"
+@pytest.fixture(scope="function")
+def multus_network_name(
+    fixture_store, target_namespace, ocp_admin_client, multus_cni_config, source_provider_inventory, request
+):
+    """
+    Create NADs based on network requirements with unique names per test.
+    Automatically detects number of networks and creates NADs with test-unique naming:
+    - cb-{4-char-hash}-1, cb-{4-char-hash}-2, etc. (e.g., "cb-a1b2-1" = 9 chars)
 
-    create_and_store_resource(
-        fixture_store=fixture_store,
-        resource=NetworkAttachmentDefinition,
-        client=ocp_admin_client,
-        cni_type=bridge_type_and_name,
+    The unique test hash prevents conflicts when running tests in parallel.
+    Names are kept under 15 characters to comply with Linux bridge interface name limits.
+    """
+    # Validate test configuration structure
+    if not isinstance(request.param, dict):
+        raise TypeError(f"request.param must be dict, got {type(request.param)}")
+
+    test_config: dict[str, Any] = request.param
+
+    if "virtual_machines" not in test_config:
+        raise KeyError("Test configuration missing required 'virtual_machines' key")
+
+    if not isinstance(test_config["virtual_machines"], list):
+        raise TypeError("test_config['virtual_machines'] must be list")
+
+    # Generate unique identifier based on test name to avoid conflicts in parallel execution
+    test_name = request.node.name
+    short_hash = hashlib.md5(test_name.encode()).hexdigest()[:4]
+    base_name = f"cb-{short_hash}"
+
+    LOGGER.info(f"Creating NADs with unique base name: {base_name} (test: {test_name})")
+
+    created_nads = []
+
+    # Get VM names from the test configuration (same way as plan fixture)
+    vms = [vm["name"] for vm in test_config["virtual_machines"]]
+    LOGGER.info(f"Found VMs from test config: {vms}")
+
+    # Get network count directly from source provider inventory
+    networks = source_provider_inventory.vms_networks_mappings(vms=vms)
+
+    if not networks:
+        raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
+
+    # Calculate how many multus NADs we need (all networks except the first one)
+    multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
+
+    # Create all required NADs with consistent naming
+    for i in range(1, multus_count + 1):
+        nad_name = f"{base_name}-{i}"
+
+        # Use the provided config for the first NAD, custom config for others
+        if i == 1:
+            config = multus_cni_config
+        else:
+            cni_config = {"cniVersion": "0.3.1", "type": "bridge", "bridge": nad_name}
+            config = json.dumps(cni_config)
+
+        create_and_store_resource(
+            fixture_store=fixture_store,
+            resource=NetworkAttachmentDefinition,
+            client=ocp_admin_client,
+            namespace=target_namespace,
+            config=config,
+            name=nad_name,
+        )
+
+        created_nads.append(nad_name)
+        LOGGER.info(f"Created NAD: {nad_name} in namespace {target_namespace}")
+
+    LOGGER.info(f"Created {len(created_nads)} NADs for migration: {created_nads}")
+
+    # Return the base name - consuming code will generate the same indexed names
+    # This maintains the contract: fixture creates NADs, returns base name for generation
+    yield base_name
+
+
+@pytest.fixture(scope="function")
+def vm_ssh_connections(fixture_store, destination_provider, target_namespace, ocp_admin_client):
+    """
+    Fixture to manage SSH connections to migrated VMs using python-rrmngmnt.
+
+    Usage:
+        def test_vm_ssh_access(vm_ssh_connections):
+            ssh_conn = vm_ssh_connections.create(vm_name="my-vm", username="root", password="pass")
+            with ssh_conn:
+                from pyhelper_utils.shell import run_ssh_commands
+                results = run_ssh_commands(ssh_conn.rrmngmnt_host, ["whoami"])
+                host = ssh_conn.get_rrmngmnt_host()  # Access rrmngmnt's rich API
+                host.fs.put("/local/file", "/remote/file")
+                host.package_management.install("htop")
+    """
+    manager = SSHConnectionManager(
+        provider=destination_provider,
         namespace=target_namespace,
-        config=multus_cni_config,
-        name=bridge_type_and_name,
+        fixture_store=fixture_store,
+        ocp_client=ocp_admin_client,
     )
 
-    yield bridge_type_and_name
+    yield manager
+
+    # Cleanup
+    manager.cleanup_all()
 
 
 @pytest.fixture(scope="session")
@@ -566,10 +655,29 @@ def plan(
                 vm_name_suffix=vm_name_suffix,
             )
         for vm in virtual_machines:
+            # Get VM object first (without full vm_dict analysis)
+            provider_vm_api = source_provider.get_vm_by_name(
+                query=vm["name"],
+                vm_name_suffix=vm_name_suffix,
+                clone_vm=True,
+                session_uuid=fixture_store["session_uuid"],
+            )
+
+            # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
+            if vm.get("source_vm_power") == "on":
+                source_provider.start_vm(provider_vm_api)
+                # Wait for guest info to become available (VMware only)
+                if source_provider.type == Provider.ProviderType.VSPHERE:
+                    source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=60)
+            elif vm.get("source_vm_power") == "off":
+                source_provider.stop_vm(provider_vm_api)
+
+            # NOW call vm_dict() with VM in correct power state for guest info
             source_vm_details = source_provider.vm_dict(
+                provider_vm_api=provider_vm_api,
                 name=vm["name"],
                 namespace=source_vms_namespace,
-                clone=True,
+                clone=False,  # Already cloned above
                 vm_name_suffix=vm_name_suffix,
                 session_uuid=fixture_store["session_uuid"],
                 clone_options=vm,
@@ -585,12 +693,8 @@ def plan(
             provider_vm_api = source_vm_details["provider_vm_api"]
 
             vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
-
-            if vm.get("source_vm_power") == "on":
-                source_provider.start_vm(provider_vm_api)
-
-            elif vm.get("source_vm_power") == "off":
-                source_provider.stop_vm(provider_vm_api)
+            # Store complete source VM data for post-migration checks
+            vm["source_vm_data"] = source_vm_details
 
     yield plan
 

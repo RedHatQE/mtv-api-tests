@@ -14,6 +14,7 @@ from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from libs.base_provider import BaseProvider
+from utilities.ssh_utils import VMSSHConnection, create_vm_ssh_connection
 
 LOGGER = get_logger(__name__)
 
@@ -136,7 +137,17 @@ class OCPProvider(BaseProvider):
         )
 
         for interface in cnv_vm.vmi.interfaces:
-            network = [network for network in cnv_vm.vmi.instance.spec.networks if network.name == interface.name][0]
+            matching_networks = [
+                network for network in cnv_vm.vmi.instance.spec.networks if network.name == interface.name
+            ]
+
+            if not matching_networks:
+                LOGGER.debug(
+                    f"No network found for interface {interface.name} - skipping (likely loopback or system interface)"
+                )
+                continue
+
+            network = matching_networks[0]
             mac_addr = interface["mac"]
             result_vm_info["network_interfaces"].append({
                 "name": interface.name,
@@ -195,3 +206,53 @@ class OCPProvider(BaseProvider):
 
     def delete_vm(self, vm_name: str) -> Any:
         return
+
+    def create_ssh_connection_to_vm(
+        self,
+        vm_name: str,
+        namespace: str,
+        username: str,
+        password: str | None = None,
+        private_key_path: str | None = None,
+        ocp_token: str | None = None,
+        ocp_api_server: str | None = None,
+        ocp_insecure: bool = False,
+        **kwargs: Any,
+    ) -> VMSSHConnection:
+        """
+        Create SSH connection to a VM running on OpenShift.
+
+        Args:
+            vm_name: Name of the VM
+            namespace: Namespace where VM is running
+            username: SSH username
+            password: SSH password (if using password auth)
+            private_key_path: Path to private key file (if using key auth)
+            ocp_token: OCP cluster token for virtctl authentication
+            ocp_api_server: OCP API server URL for virtctl authentication
+            ocp_insecure: Whether to skip TLS verification for OCP
+            **kwargs: Additional arguments passed to VMSSHConnection
+
+        Returns:
+            VMSSHConnection: Ready-to-use SSH connection object
+        """
+        if not self.ocp_resource:
+            raise ValueError("Missing `ocp_resource`")
+
+        vm = VirtualMachine(
+            client=self.ocp_resource.client,
+            name=vm_name,
+            namespace=namespace,
+            ensure_exists=True,
+        )
+
+        return create_vm_ssh_connection(
+            vm=vm,
+            username=username,
+            password=password,
+            private_key_path=private_key_path,
+            ocp_token=ocp_token,
+            ocp_api_server=ocp_api_server,
+            ocp_insecure=ocp_insecure,
+            **kwargs,
+        )

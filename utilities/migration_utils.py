@@ -238,6 +238,7 @@ def prepare_migration_for_tests(
         "fixture_store": fixture_store,
         "test_name": test_name,
         "copyoffload": plan.get("copyoffload", False),
+        "preserve_static_ips": plan.get("preserve_static_ips", False),
     }
 
 

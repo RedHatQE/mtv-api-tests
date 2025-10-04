@@ -25,8 +25,13 @@ pytestmark = [
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_sanity_warm_mtv_migration"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_sanity_warm_mtv_migration"],
+            py_config["tests_params"]["test_sanity_warm_mtv_migration"],
+        )
+    ],
     indirect=True,
     ids=["rhel8"],
 )
@@ -43,6 +48,7 @@ def test_sanity_warm_mtv_migration(
     source_provider_data,
     precopy_interval_forkliftcontroller,
     source_vms_namespace,
+    vm_ssh_connections,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -69,14 +75,20 @@ def test_sanity_warm_mtv_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
 
 
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_mtv_migration_warm_2disks2nics"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_mtv_migration_warm_2disks2nics"],
+            py_config["tests_params"]["test_mtv_migration_warm_2disks2nics"],
+        )
+    ],
     indirect=True,
     ids=["MTV-200 rhel"],
 )
@@ -93,6 +105,7 @@ def test_mtv_migration_warm_2disks2nics(
     source_provider_data,
     precopy_interval_forkliftcontroller,
     source_vms_namespace,
+    vm_ssh_connections,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -119,13 +132,18 @@ def test_mtv_migration_warm_2disks2nics(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
 
 
 @pytest.mark.remote
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_warm_remote_ocp"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_warm_remote_ocp"], py_config["tests_params"]["test_warm_remote_ocp"]
+        )
+    ],
     indirect=True,
     ids=["MTV-394"],
 )
@@ -143,6 +161,7 @@ def test_warm_remote_ocp(
     source_provider_data,
     precopy_interval_forkliftcontroller,
     source_vms_namespace,
+    vm_ssh_connections,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -169,4 +188,5 @@ def test_warm_remote_ocp(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
