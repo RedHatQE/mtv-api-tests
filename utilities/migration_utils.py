@@ -208,10 +208,24 @@ def prepare_migration_for_tests(
         raise ValueError("destination_provider.ocp_resource is not set")
 
     test_name = request._pyfuncitem.name
-    _source_provider_type = py_config.get("source_provider_type")
+    _source_provider_type = py_config["source_provider_type"]
 
-    # Plan CR accepts VM id
-    virtual_machines_list: list[dict[str, str]] = [{"id": vm.get("id", vm["name"])} for vm in plan["virtual_machines"]]
+    # Plan CR accepts VM name/id and optional targetPowerState
+    virtual_machines_list: list[dict[str, Any]] = []
+    for vm in plan["virtual_machines"]:
+        vm_config = {"id": vm.get("id", vm["name"])}
+
+        # Add targetPowerState if specified
+        if "target_power_state" in vm:
+            state = vm["target_power_state"]
+            if state not in ("on", "off"):
+                raise ValueError(
+                    f"Invalid target_power_state '{state}' for VM {vm_config['id']}. Must be 'on' or 'off'"
+                )
+            vm_config["targetPowerState"] = state
+            LOGGER.info(f"VM {vm_config['id']}: setting targetPowerState={state}")
+
+        virtual_machines_list.append(vm_config)
 
     if _source_provider_type == Provider.ProviderType.OPENSHIFT:
         for idx in range(len(virtual_machines_list)):

@@ -512,11 +512,23 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
 
 
 def check_vms_power_state(
-    source_vm: dict[str, Any], destination_vm: dict[str, Any], source_power_before_migration: bool
+    source_vm: dict[str, Any],
+    destination_vm: dict[str, Any],
+    source_power_before_migration: str | None,
+    target_power_state: str | None = None,
 ) -> None:
     assert source_vm["power_state"] == "off", "Checking source VM is off"
 
-    if source_power_before_migration:
+    # If targetPowerState is specified, check that the destination VM matches it
+    if target_power_state:
+        actual_power_state = destination_vm["power_state"]
+        LOGGER.info(f"Checking target power state: expected={target_power_state}, actual={actual_power_state}")
+        assert actual_power_state == target_power_state, (
+            f"VM power state mismatch: expected {target_power_state}, got {actual_power_state}"
+        )
+        LOGGER.info(f"Target power state verification passed: {actual_power_state}")
+    elif source_power_before_migration:
+        # Default behavior: destination VM should match source power state before migration
         assert destination_vm["power_state"] == source_power_before_migration
 
 
@@ -594,6 +606,7 @@ def check_vms(
                 source_vm=source_vm,
                 destination_vm=destination_vm,
                 source_power_before_migration=vm.get("source_vm_power"),
+                target_power_state=vm.get("target_power_state"),
             )
         except Exception as exp:
             res[vm_name].append(f"check_vms_power_state - {str(exp)}")
@@ -640,8 +653,8 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_guest_agent - {str(exp)}")
 
-        # SSH connectivity check - only when source VM was powered on
-        if vm_ssh_connections and vm.get("source_vm_power") == "on":
+        # SSH connectivity check - only when destination VM is powered on
+        if vm_ssh_connections and destination_vm.get("power_state") == "on":
             try:
                 check_ssh_connectivity(
                     vm_name=vm_name,
@@ -668,10 +681,10 @@ def check_vms(
                     )
                 except Exception as exp:
                     res[vm_name].append(f"check_static_ip_preservation - {str(exp)}")
-        elif vm_ssh_connections and vm.get("source_vm_power") != "on":
+        elif vm_ssh_connections:
             LOGGER.info(
-                f"Skipping SSH connectivity check for VM {vm_name} - source VM was not powered on (source_vm_power: "
-                f"{vm.get('source_vm_power')})"
+                f"Skipping SSH connectivity check for VM {vm_name} - destination VM is not powered on "
+                f"(power_state: {destination_vm.get('power_state', 'unknown')})"
             )
 
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):
