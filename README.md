@@ -204,6 +204,7 @@ tests_params: dict = {
                 "name": "vm-name-for-test",
                 "source_vm_power": "on",  # "on" for warm, "off" for cold
                 "guest_agent": True,
+                "target_power_state": "on",  # Optional: "on" or "off" - destination VM power state after migration
             },
         ],
         "warm_migration": True,  # True for warm, False for cold
