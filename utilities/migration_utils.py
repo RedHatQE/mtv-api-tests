@@ -253,6 +253,8 @@ def prepare_migration_for_tests(
         "test_name": test_name,
         "copyoffload": plan.get("copyoffload", False),
         "preserve_static_ips": plan.get("preserve_static_ips", False),
+        "pvc_name_template": plan.get("pvc_name_template"),
+        "pvc_name_template_use_generate_name": plan.get("pvc_name_template_use_generate_name"),
     }
 
 

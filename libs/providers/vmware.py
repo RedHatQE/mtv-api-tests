@@ -438,6 +438,7 @@ class VMWareProvider(BaseProvider):
         result_vm_info["provider_type"] = Resource.ProviderType.VSPHERE
         result_vm_info["provider_vm_api"] = _vm
         result_vm_info["name"] = _vm.name
+        result_vm_info["id"] = _vm._moId  # VMware Managed Object ID
 
         # Devices
         for device in vm_config.hardware.device:
@@ -465,6 +466,9 @@ class VMWareProvider(BaseProvider):
                     "storage": dict(
                         name=device.backing.datastore.name if device.backing and device.backing.datastore else "Unknown"
                     ),
+                    "device_key": device.key,
+                    "unit_number": device.unitNumber,
+                    "controller_key": device.controllerKey,
                 })
 
         # CPUs

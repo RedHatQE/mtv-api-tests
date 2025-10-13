@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 import ipaddress
 from typing import Any
 
+import go_template
 import jc
 import pytest
 from ocp_resources.datavolume import DataVolume
@@ -22,6 +25,10 @@ from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import rhv_provider
 
 LOGGER = get_logger(name=__name__)
+
+# Kubernetes resource name limits
+KUBERNETES_MAX_NAME_LENGTH: int = 63
+KUBERNETES_MAX_GENERATE_NAME_PREFIX_LENGTH: int = 58
 
 
 def get_ssh_credentials_from_provider_config(
@@ -511,6 +518,260 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
 
 
+def check_pvc_names(
+    source_vm: dict[str, Any],
+    destination_vm: dict[str, Any],
+    pvc_name_template: str | None,
+    use_generate_name: bool = False,
+    source_provider: BaseProvider | None = None,
+    source_provider_inventory: ForkliftInventory | None = None,
+) -> None:
+    """
+    Verify that PVC names match the expected pvcNameTemplate pattern.
+
+    This function:
+    1. Orders source disks by their position (controller_key, unit_number)
+    2. Verifies the PVC name follows the Forklift template with correct diskIndex
+
+    Args:
+        source_vm: Source VM information including disks
+        destination_vm: Destination VM information including PVCs
+        pvc_name_template: Forklift template string (e.g., "{{.VmName}}-{{.DiskIndex}}")
+        use_generate_name: If True, Kubernetes adds random suffix, so use prefix matching
+        source_provider: Source provider instance (required for provider-specific validation)
+        source_provider_inventory: Forklift inventory for extracting disk filenames (required for {{.FileName}} template)
+
+    Raises:
+        AssertionError: If PVC names don't match expected template
+
+    Note:
+        Supports full Go template syntax with Sprig functions:
+        - {{.VmName}} - VM name
+        - {{.DiskIndex}} - Disk index (0-based)
+        - {{.FileName}} - VMDK filename without path/extension (VMware only)
+        - Sprig functions: mustRegexReplaceAll, replace, lower, upper, etc.
+
+        Examples:
+        - "{{.VmName}}-{{.DiskIndex}}"
+        - "{{.FileName}}"
+        - "{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}"
+
+        When use_generate_name=True, verifies PVC name starts with template (prefix match).
+        When use_generate_name=False, verifies exact name match.
+    """
+    if not pvc_name_template:
+        LOGGER.info("No pvc_name_template specified, skipping PVC name verification")
+        return
+
+    # Validate VMware-only wildcards
+    for wildcard in ["{{.FileName}}", "{{.DiskIndex}}"]:
+        if wildcard in pvc_name_template:
+            if not source_provider or source_provider.type != Provider.ProviderType.VSPHERE:
+                LOGGER.warning(
+                    f"{wildcard} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
+                    f"Current provider: {source_provider.type if source_provider else 'unknown'}. "
+                    f"Skipping PVC name verification."
+                )
+                return
+
+    # Get disk filenames from inventory (required for {{.FileName}} template)
+    inventory_disk_files: dict[int, str] = {}
+    if source_provider_inventory and source_provider:
+        try:
+            vm_name = source_vm["name"]
+            inventory_vm = source_provider_inventory.get_vm(name=vm_name)
+            inventory_disks = inventory_vm.get("disks")
+            if not inventory_disks:
+                LOGGER.warning(f"No disks found in inventory for VM '{vm_name}'")
+            else:
+                for disk in inventory_disks:
+                    if disk.get("file"):
+                        # Extract filename from Forklift inventory disk file path
+                        # Format: "[datastore1] vm-name/vm-name_1.vmdk"
+                        # We extract just the filename: "vm-name_1.vmdk"
+                        full_path = disk["file"]
+                        if "]" in full_path:
+                            full_path = full_path.split("]", 1)[1].strip()
+                        filename = full_path.split("/")[-1]
+                        inventory_disk_files[disk["key"]] = filename
+                LOGGER.debug(f"Got {len(inventory_disk_files)} disk filenames from inventory")
+        except (KeyError, ValueError, AttributeError, IndexError) as e:
+            LOGGER.warning(f"Could not get disk filenames from inventory: {e}")
+
+    source_disks = source_vm["disks"]
+    destination_disks = destination_vm["disks"]
+
+    LOGGER.info(f"Source VM has {len(source_disks)} disks, destination VM has {len(destination_disks)} disks")
+
+    if not source_disks:
+        LOGGER.warning("No source disks found for PVC name verification")
+        return
+
+    vm_name = source_vm.get("name", "unknown")
+    assert destination_disks, (
+        f"No destination disks found for VM '{vm_name}'. "
+        f"Available keys in destination_vm: {list(destination_vm.keys())}"
+    )
+
+    # Sort source disks by their position (controller_key, unit_number)
+    # Only VMware has reliable disk ordering metadata
+    if source_provider and source_provider.type == Provider.ProviderType.VSPHERE:
+        source_disks_ordered = sorted(source_disks, key=lambda d: (d["controller_key"], d["unit_number"]))
+    else:
+        source_disks_ordered = source_disks
+
+    LOGGER.info(
+        f"Verifying PVC names for {len(source_disks_ordered)} disks using Forklift template: '{pvc_name_template}'"
+    )
+    LOGGER.info(
+        f"Source disks (ordered): {
+            [
+                (d.get('name'), d.get('size_in_kb'), d.get('controller_key'), d.get('unit_number'))
+                for d in source_disks_ordered
+            ]
+        }"
+    )
+    LOGGER.info(f"Destination disks: {[(d.get('name'), d.get('size_in_kb')) for d in destination_disks]}")
+
+    # Track which destination PVCs we've matched to avoid duplicates
+    matched_pvcs = set()
+
+    for source_index, src_disk in enumerate(source_disks_ordered):
+        src_name = src_disk["name"]
+
+        # Evaluate Forklift Go template using py-go-template library
+        # This supports {{.VmName}}, {{.DiskIndex}}, {{.FileName}} and Sprig functions
+        device_key = src_disk.get("device_key")
+        if device_key is None:
+            LOGGER.warning(f"No device_key found for source disk {source_index} ({src_disk.get('name', 'unknown')})")
+            filename = ""
+        else:
+            filename = inventory_disk_files.get(device_key, "")
+
+        # Warn if FileName template is used but filename not found from inventory
+        if "{{.FileName}}" in pvc_name_template and not filename:
+            LOGGER.warning(
+                f"{{{{.FileName}}}} wildcard used but filename not found for disk with device_key={device_key}. "
+                f"Available inventory disk keys: {list(inventory_disk_files.keys())}"
+            )
+
+        template_values = {
+            "VmName": source_vm["name"],
+            "DiskIndex": source_index,
+            "FileName": filename,
+        }
+
+        # py-go-template requires a file path, so create a temporary file
+        tmp_file_path = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".tmpl", delete=False) as tmp_file:
+                tmp_file.write(pvc_name_template)
+                tmp_file_path = tmp_file.name
+
+            # Render Go template with proper Sprig function support
+            try:
+                result = go_template.render(Path(tmp_file_path), template_values)
+                expected_pvc_name = result.decode("utf-8") if isinstance(result, bytes) else result
+                expected_pvc_name = expected_pvc_name.strip()
+            except Exception as template_error:
+                raise ValueError(
+                    f"Failed to render pvcNameTemplate '{pvc_name_template}' with values {template_values}: {template_error}"
+                ) from template_error
+
+            if not expected_pvc_name:
+                raise ValueError(
+                    f"pvcNameTemplate '{pvc_name_template}' rendered to empty string with values {template_values}"
+                )
+        finally:
+            # Clean up temporary file
+            if tmp_file_path:
+                Path(tmp_file_path).unlink(missing_ok=True)
+
+        if use_generate_name:
+            max_prefix_length = KUBERNETES_MAX_GENERATE_NAME_PREFIX_LENGTH
+            if len(expected_pvc_name) > max_prefix_length:
+                original_name = expected_pvc_name
+                expected_pvc_name = expected_pvc_name[:max_prefix_length]
+                LOGGER.info(
+                    f"Template result '{original_name}' ({len(original_name)} chars) "
+                    f"truncated to '{expected_pvc_name}' (max {max_prefix_length} chars for generateName prefix)"
+                )
+        else:
+            max_name_length = KUBERNETES_MAX_NAME_LENGTH
+            if len(expected_pvc_name) > max_name_length:
+                original_name = expected_pvc_name
+                expected_pvc_name = expected_pvc_name[:max_name_length]
+                LOGGER.info(
+                    f"Template result '{original_name}' ({len(original_name)} chars) "
+                    f"truncated to '{expected_pvc_name}' (max {max_name_length} chars for PVC name)"
+                )
+
+        # Find destination PVC that matches the expected name (prefix or exact match)
+        matching_pvc = None
+        for dest_pvc in destination_disks:
+            dest_pvc_name = dest_pvc["name"]
+            if dest_pvc_name in matched_pvcs:
+                continue
+
+            # Check if this PVC matches the expected name
+            if use_generate_name:
+                # With generateName, PVC should start with the expected prefix
+                if dest_pvc_name.startswith(expected_pvc_name):
+                    matching_pvc = dest_pvc
+                    matched_pvcs.add(dest_pvc_name)
+                    break
+            else:
+                # Without generateName, PVC should match exactly
+                if dest_pvc_name == expected_pvc_name:
+                    matching_pvc = dest_pvc
+                    matched_pvcs.add(dest_pvc_name)
+                    break
+
+        available_pvcs = [d["name"] for d in destination_disks if d["name"] not in matched_pvcs]
+        match_type = "prefix" if use_generate_name else "exact name"
+        assert matching_pvc, (
+            f"No destination PVC found matching {match_type} '{expected_pvc_name}' "
+            f"for source disk {source_index} ({src_name}).\n"
+            f"  Template: '{pvc_name_template}'\n"
+            f"  Expected {'prefix' if use_generate_name else 'name'}: '{expected_pvc_name}'\n"
+            f"  Available unmatched PVCs: {available_pvcs}\n"
+            f"  Already matched: {matched_pvcs}"
+        )
+
+        actual_pvc_name = matching_pvc["name"]
+
+        # Verify disk order: destination unit_number should match source disk index
+        # Only for VMware at the moment
+        dest_unit_number = matching_pvc.get("unit_number")
+        if source_provider and source_provider.type == Provider.ProviderType.VSPHERE:
+            assert dest_unit_number is None or dest_unit_number == source_index, (
+                f"Disk order mismatch for source disk {source_index} ({src_name}):\n"
+                f"  Source disk index: {source_index}\n"
+                f"  Destination unit_number: {dest_unit_number}\n"
+                f"  PVC name: '{actual_pvc_name}'\n"
+                f"  This indicates the disk order was not preserved during migration!"
+            )
+
+        # Log successful match
+        if use_generate_name:
+            LOGGER.info(
+                f"Disk {source_index} ({src_name}) -> "
+                f"PVC '{actual_pvc_name}' at position {dest_unit_number} "
+                f"(matches prefix '{expected_pvc_name}', generateName suffix OK, order preserved)"
+            )
+        else:
+            LOGGER.info(
+                f"Disk {source_index} ({src_name}) -> "
+                f"PVC '{actual_pvc_name}' at position {dest_unit_number} "
+                f"(exact match, order preserved)"
+            )
+
+    match_type = "prefix match (generateName=True)" if use_generate_name else "exact match (generateName=False)"
+    LOGGER.info(
+        f"PVC name verification completed: All {len(source_disks_ordered)} PVC names match template ({match_type})"
+    )
+
+
 def check_vms_power_state(
     source_vm: dict[str, Any],
     destination_vm: dict[str, Any],
@@ -638,6 +899,20 @@ def check_vms(
             check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
         except Exception as exp:
             res[vm_name].append(f"check_storage - {str(exp)}")
+
+        # Check PVC names if pvcNameTemplate was specified
+        if plan.get("pvc_name_template"):
+            try:
+                check_pvc_names(
+                    source_vm=vm.get("source_vm_data", source_vm),  # Use stored source_vm_data if available
+                    destination_vm=destination_vm,
+                    pvc_name_template=plan["pvc_name_template"],
+                    use_generate_name=plan.get("pvc_name_template_use_generate_name", False),
+                    source_provider=source_provider,
+                    source_provider_inventory=source_provider_inventory,
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_pvc_names - {str(exp)}")
 
         if source_provider.type == Provider.ProviderType.VSPHERE:
             if snapshots_before_migration := vm.get("snapshots_before_migration"):

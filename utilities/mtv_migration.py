@@ -121,6 +121,8 @@ def run_migration(
     test_name: str,
     copyoffload: bool = False,
     preserve_static_ips: bool = False,
+    pvc_name_template: str | None = None,
+    pvc_name_template_use_generate_name: bool | None = None,
 ) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -172,6 +174,8 @@ def run_migration(
         "after_hook_name": after_hook_name,
         "after_hook_namespace": after_hook_namespace,
         "preserve_static_ips": preserve_static_ips,
+        "pvc_name_template": pvc_name_template,
+        "pvc_name_template_use_generate_name": pvc_name_template_use_generate_name,
     }
 
     # Add copy-offload specific parameters if enabled
