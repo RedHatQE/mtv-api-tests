@@ -209,6 +209,10 @@ tests_params: dict = {
         ],
         "warm_migration": True,  # True for warm, False for cold
         "preserve_static_ips": True, # True for preserving source Vm's Static IP
+        # pvc_name_template to set Forklift PVC Name template, supports Go template syntax: {{.FileName}},
+        # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
+        "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
+        "pvc_name_template_use_generate_name": False,  # Boolean to control template usage  
     },
 }
 ```

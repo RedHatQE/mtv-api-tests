@@ -169,6 +169,7 @@ class OvirtProvider(BaseProvider):
         result_vm_info["provider_type"] = Resource.ProviderType.RHV
         result_vm_info["provider_vm_api"] = source_vm
         result_vm_info["name"] = source_vm.name
+        result_vm_info["id"] = source_vm.id
 
         # Network Interfaces
         for nic in self.vm_nics(vm=source_vm):
@@ -186,7 +187,9 @@ class OvirtProvider(BaseProvider):
                 "name": disk.name,
                 "size_in_kb": disk.total_size,
                 "storage": dict(name=storage_domain.name, id=storage_domain.id),
+                "device_key": disk.id,  # RHV disk ID
             })
+
         # CPUs
         result_vm_info["cpu"]["num_cores"] = source_vm.cpu.topology.cores
         result_vm_info["cpu"]["num_threads"] = source_vm.cpu.topology.threads

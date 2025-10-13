@@ -152,6 +152,7 @@ class OpenStackProvider(BaseProvider):
         result_vm_info["provider_type"] = "openstack"
         result_vm_info["provider_vm_api"] = source_vm
         result_vm_info["name"] = source_vm.name
+        result_vm_info["id"] = source_vm.id  # OpenStack VM/Instance ID (UUID)
 
         # Snapshots details
         for volume_snapshots in self.list_snapshots(vm_name):
@@ -178,6 +179,7 @@ class OpenStackProvider(BaseProvider):
                 "name": disk.name,
                 "size_in_kb": disk.size,
                 "storage": dict(name=disk.availability_zone, id=disk.id),
+                "device_key": disk.id,  # OpenStack volume ID
             })
 
         # CPUs
