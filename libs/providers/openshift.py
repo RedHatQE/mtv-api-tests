@@ -131,6 +131,10 @@ class OCPProvider(BaseProvider):
             "on" if cnv_vm.instance.status.printableStatus == cnv_vm.Status.RUNNING else "off"
         )
 
+        # Serial number (from firmware) - for serial preservation verification
+        firmware_spec: dict[str, Any] | None = cnv_vm.instance.spec.template.spec.domain.get("firmware")
+        result_vm_info["serial"] = firmware_spec.get("serial") if firmware_spec else None
+
         self.start_vm(cnv_vm)
         # True guest agent is reporting all ok
         result_vm_info["guest_agent_running"] = (
