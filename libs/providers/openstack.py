@@ -223,14 +223,19 @@ class OpenStackProvider(BaseProvider):
         if not source_vm:
             raise VmNotFoundError(f"Source VM '{source_vm_name}' not found.")
 
-        flavor_id: str = source_vm.flavor["id"]
+        # Get the flavor object to retrieve the actual UUID (not the string name)
+        flavor_obj = self.get_flavor_obj(vm_name=source_vm_name)
+        if not flavor_obj:
+            raise ValueError(f"Could not find flavor for source VM '{source_vm_name}'.")
+        flavor_id: str = flavor_obj.id
+
         networks: list[dict[str, Any]] = self.vm_networks_details(vm_name=source_vm_name)
 
         if not networks:
             raise ValueError(f"Could not find a network for source VM '{source_vm_name}'.")
 
         network_id: str = networks[0]["net_id"]
-        LOGGER.info(f"Using source flavor '{flavor_id}' and network '{network_id}'")
+        LOGGER.info(f"Using source flavor '{flavor_obj.name}' (ID: {flavor_id}) and network '{network_id}'")
 
         snapshot: OSP_Image | None = None
 
