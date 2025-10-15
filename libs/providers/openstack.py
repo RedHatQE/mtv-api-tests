@@ -145,6 +145,8 @@ class OpenStackProvider(BaseProvider):
             source_vm = self.clone_vm(
                 source_vm_name=base_vm_name, clone_vm_name=vm_name, session_uuid=kwargs["session_uuid"]
             )
+            # Update vm_name to the actual cloned VM name (includes session_uuid prefix)
+            vm_name = source_vm.name
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = "openstack"
