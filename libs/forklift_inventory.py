@@ -5,6 +5,10 @@ from kubernetes.dynamic.client import DynamicClient
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.provider import Provider
 from ocp_resources.route import Route
+from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+
+LOGGER = get_logger(__name__)
 
 
 class ForkliftInventory(abc.ABC):
@@ -45,6 +49,66 @@ class ForkliftInventory(abc.ABC):
                 return self._request(url_path=f"{self.vms_path}/{_vm['id']}")
 
         raise ValueError(f"VM {name} not found. Available VMs: {self.vms_names}")
+
+    def wait_for_vm(self, name: str, timeout: int = 300, sleep: int = 10) -> dict[str, Any]:
+        """Wait for a VM to appear in the Forklift inventory after cloning.
+
+        For OpenStack VMs, also waits for attached volumes to sync, as volumes
+        are synced separately from VM metadata and are required for storage mapping.
+
+        Args:
+            name: VM name to wait for
+            timeout: Maximum time to wait in seconds (default: 300)
+            sleep: Time to sleep between checks in seconds (default: 10)
+
+        Returns:
+            VM dictionary from inventory
+
+        Raises:
+            TimeoutExpiredError: If VM doesn't appear within timeout or attached volumes don't sync
+        """
+        LOGGER.info(f"Waiting for VM '{name}' to appear in Forklift inventory...")
+        last_vm = None
+
+        def _check_vm_ready() -> dict[str, Any] | None:
+            """Check if VM exists and has all required data synced."""
+            nonlocal last_vm
+            try:
+                vm = self.get_vm(name=name)
+                last_vm = vm
+
+                # For OpenStack VMs, verify attached volumes are synced
+                if self.provider_type == Provider.ProviderType.OPENSTACK:
+                    attached_volumes = vm.get("attachedVolumes", [])
+                    if not attached_volumes:
+                        LOGGER.debug(f"VM '{name}' found but attached volumes not yet synced, waiting...")
+                        return None
+
+                return vm
+            except ValueError:
+                return None
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=sleep,
+                func=_check_vm_ready,
+            ):
+                if sample:
+                    LOGGER.info(f"VM '{name}' found in inventory with all required data")
+                    return sample
+        except TimeoutExpiredError:
+            if last_vm:
+                raise TimeoutExpiredError(
+                    f"VM '{name}' found in Forklift inventory but attached volumes did not sync after {timeout}s. "
+                    f"Attached volumes: {last_vm.get('attachedVolumes', [])}"
+                )
+            raise TimeoutExpiredError(
+                f"VM '{name}' did not appear in Forklift inventory after {timeout}s. Available VMs: {self.vms_names}"
+            )
+
+        # This should never be reached, but satisfies type checker
+        raise TimeoutExpiredError(f"VM '{name}' wait completed unexpectedly without returning")
 
     @property
     def vms_names(self) -> list[str]:
@@ -140,11 +204,33 @@ class OpenstackForliftinventory(ForkliftInventory):
 
     @property
     def storages(self) -> list[dict[str, Any]]:
-        return [{}]
+        # OpenStack uses volume types, not storage domains
+        return self._request(url_path=f"{self.provider_url_path}/volumes")
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
-        # TODO: find out how to get it from forklift-inventory
-        return [{"name": "tripleo"}]
+        """Get storage mappings for OpenStack VMs based on volume types."""
+        _mappings: list[dict[str, str]] = []
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+
+            # Get volumes attached to this VM
+            for attached_volume in _vm.get("attachedVolumes", []):
+                volume_id = attached_volume.get("ID")
+                if not volume_id:
+                    continue
+
+                # Get volume details to find volume type
+                volume_info = self._request(url_path=f"{self.provider_url_path}/volumes/{volume_id}")
+                volume_type = volume_info.get("volumeType")
+
+                if volume_type and not any(m.get("name") == volume_type for m in _mappings):
+                    _mappings.append({"name": volume_type})
+
+        if not _mappings:
+            raise ValueError(f"No storage volumes found for VMs {vms} on provider {self.provider_type}")
+
+        return _mappings
 
     def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []

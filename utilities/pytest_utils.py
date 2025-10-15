@@ -19,6 +19,7 @@ from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
+from libs.providers.openstack import OpenStackProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 from utilities.utils import delete_all_vms, get_cluster_client
@@ -100,6 +101,7 @@ def teardown_resources(
     namespaces = session_teardown_resources.get(Namespace.kind, [])
     storagemaps = session_teardown_resources.get(StorageMap.kind, [])
     vmware_cloned_vms = session_teardown_resources.get(Provider.ProviderType.VSPHERE, [])
+    openstack_cloned_vms = session_teardown_resources.get(Provider.ProviderType.OPENSTACK, [])
 
     # Resources that was created by running migration
     pods = session_teardown_resources.get(Pod.kind, [])
@@ -107,76 +109,131 @@ def teardown_resources(
 
     # Clean all resources that was created by the tests
     for migration in migrations:
-        migration_obj = Migration(name=migration["name"], namespace=migration["namespace"], client=ocp_client)
-        if not migration_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=migration_obj)
+        try:
+            migration_obj = Migration(name=migration["name"], namespace=migration["namespace"], client=ocp_client)
+            if not migration_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=migration_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup migration {migration['name']}: {exc}")
+            leftovers.setdefault(Migration.kind, []).append(migration)
 
     for plan in plans:
-        plan_obj = Plan(name=plan["name"], namespace=plan["namespace"], client=ocp_client)
-        if not plan_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=plan_obj)
+        try:
+            plan_obj = Plan(name=plan["name"], namespace=plan["namespace"], client=ocp_client)
+            if not plan_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=plan_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup plan {plan['name']}: {exc}")
+            leftovers.setdefault(Plan.kind, []).append(plan)
 
     for provider in providers:
-        provider_obj = Provider(name=provider["name"], namespace=provider["namespace"], client=ocp_client)
-        if not provider_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=provider_obj)
+        try:
+            provider_obj = Provider(name=provider["name"], namespace=provider["namespace"], client=ocp_client)
+            if not provider_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=provider_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup provider {provider['name']}: {exc}")
+            leftovers.setdefault(Provider.kind, []).append(provider)
 
     for host in hosts:
-        host_obj = Host(name=host["name"], namespace=host["namespace"], client=ocp_client)
-        if not host_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=host_obj)
+        try:
+            host_obj = Host(name=host["name"], namespace=host["namespace"], client=ocp_client)
+            if not host_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=host_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup host {host['name']}: {exc}")
+            leftovers.setdefault(Host.kind, []).append(host)
 
     for secret in secrets:
-        secret_obj = Secret(name=secret["name"], namespace=secret["namespace"], client=ocp_client)
-        if not secret_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=secret_obj)
+        try:
+            secret_obj = Secret(name=secret["name"], namespace=secret["namespace"], client=ocp_client)
+            if not secret_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=secret_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup secret {secret['name']}: {exc}")
+            leftovers.setdefault(Secret.kind, []).append(secret)
 
     for network_attachment_definition in network_attachment_definitions:
-        network_attachment_definition_obj = NetworkAttachmentDefinition(
-            name=network_attachment_definition["name"],
-            namespace=network_attachment_definition["namespace"],
-            client=ocp_client,
-        )
-        if not network_attachment_definition_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=network_attachment_definition_obj)
+        try:
+            network_attachment_definition_obj = NetworkAttachmentDefinition(
+                name=network_attachment_definition["name"],
+                namespace=network_attachment_definition["namespace"],
+                client=ocp_client,
+            )
+            if not network_attachment_definition_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=network_attachment_definition_obj)
+        except Exception as exc:
+            LOGGER.error(
+                f"Failed to cleanup NetworkAttachmentDefinition {network_attachment_definition['name']}: {exc}"
+            )
+            leftovers.setdefault(NetworkAttachmentDefinition.kind, []).append(network_attachment_definition)
 
     for storagemap in storagemaps:
-        storagemap_obj = StorageMap(name=storagemap["name"], namespace=storagemap["namespace"], client=ocp_client)
-        if not storagemap_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=storagemap_obj)
+        try:
+            storagemap_obj = StorageMap(name=storagemap["name"], namespace=storagemap["namespace"], client=ocp_client)
+            if not storagemap_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=storagemap_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup StorageMap {storagemap['name']}: {exc}")
+            leftovers.setdefault(StorageMap.kind, []).append(storagemap)
 
     for networkmap in networkmaps:
-        networkmap_obj = NetworkMap(name=networkmap["name"], namespace=networkmap["namespace"], client=ocp_client)
-        if not networkmap_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=networkmap_obj)
+        try:
+            networkmap_obj = NetworkMap(name=networkmap["name"], namespace=networkmap["namespace"], client=ocp_client)
+            if not networkmap_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=networkmap_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup NetworkMap {networkmap['name']}: {exc}")
+            leftovers.setdefault(NetworkMap.kind, []).append(networkmap)
 
     # Check that resources that was created by running migration are deleted
     for virtual_machine in virtual_machines:
-        virtual_machine_obj = VirtualMachine(
-            name=virtual_machine["name"], namespace=virtual_machine["namespace"], client=ocp_client
-        )
-        if virtual_machine_obj.exists:
-            if not virtual_machine_obj.clean_up(wait=True):
-                leftovers = append_leftovers(leftovers=leftovers, resource=virtual_machine_obj)
+        try:
+            virtual_machine_obj = VirtualMachine(
+                name=virtual_machine["name"], namespace=virtual_machine["namespace"], client=ocp_client
+            )
+            if virtual_machine_obj.exists:
+                if not virtual_machine_obj.clean_up(wait=True):
+                    leftovers = append_leftovers(leftovers=leftovers, resource=virtual_machine_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup VirtualMachine {virtual_machine['name']}: {exc}")
+            leftovers.setdefault(VirtualMachine.kind, []).append(virtual_machine)
 
     for pod in pods:
-        pod_obj = Pod(name=pod["name"], namespace=pod["namespace"], client=ocp_client)
-        if pod_obj.exists:
-            if not pod_obj.clean_up(wait=True):
-                leftovers = append_leftovers(leftovers=leftovers, resource=pod_obj)
+        try:
+            pod_obj = Pod(name=pod["name"], namespace=pod["namespace"], client=ocp_client)
+            if pod_obj.exists:
+                if not pod_obj.clean_up(wait=True):
+                    leftovers = append_leftovers(leftovers=leftovers, resource=pod_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup Pod {pod['name']}: {exc}")
+            leftovers.setdefault(Pod.kind, []).append(pod)
 
     if target_namespace:
-        delete_all_vms(ocp_admin_client=ocp_client, namespace=target_namespace)
+        try:
+            delete_all_vms(ocp_admin_client=ocp_client, namespace=target_namespace)
+        except Exception as exc:
+            LOGGER.error(f"Failed to delete all VMs in namespace {target_namespace}: {exc}")
 
         # Make sure all pods related to the test session are deleted
-        for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace):
-            if session_uuid in _pod.name:
-                if not _pod.wait_deleted():
-                    leftovers = append_leftovers(leftovers=leftovers, resource=_pod)
+        try:
+            for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace):
+                if session_uuid in _pod.name:
+                    try:
+                        if not _pod.wait_deleted():
+                            leftovers = append_leftovers(leftovers=leftovers, resource=_pod)
+                    except Exception as exc:
+                        LOGGER.error(f"Failed to wait for pod {_pod.name} deletion: {exc}")
+                        leftovers = append_leftovers(leftovers=leftovers, resource=_pod)
+        except Exception as exc:
+            LOGGER.error(f"Failed to get pods in namespace {target_namespace}: {exc}")
 
-        leftovers = check_dv_pvc_pv_deleted(
-            leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
-        )
+        try:
+            leftovers = check_dv_pvc_pv_deleted(
+                leftovers=leftovers, ocp_client=ocp_client, target_namespace=target_namespace, partial_name=session_uuid
+            )
+        except Exception as exc:
+            LOGGER.error(f"Failed to check DV/PVC/PV deletion: {exc}")
 
     if leftovers:
         LOGGER.error(
@@ -184,26 +241,62 @@ def teardown_resources(
         )
 
     for namespace in namespaces:
-        namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
-        if not namespace_obj.clean_up(wait=True):
-            leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
+        try:
+            namespace_obj = Namespace(name=namespace["name"], client=ocp_client)
+            if not namespace_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=namespace_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup namespace {namespace['name']}: {exc}")
+            leftovers.setdefault(Namespace.kind, []).append(namespace)
 
     if vmware_cloned_vms:
-        source_provider_data = session_store["source_provider_data"]
+        try:
+            source_provider_data = session_store["source_provider_data"]
 
-        with VMWareProvider(
-            host=source_provider_data["fqdn"],
-            username=source_provider_data["username"],
-            password=source_provider_data["password"],
-        ) as vmware_provider:
-            for _vm in vmware_cloned_vms:
-                _cloned_vm_name = _vm["name"]
-                try:
-                    vmware_provider.delete_vm(vm_name=_cloned_vm_name)
-                except Exception as exc:
-                    LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
-                    leftovers.setdefault(vmware_provider.type, []).append({
-                        "cloned_vm_name": _cloned_vm_name,
-                    })
+            with VMWareProvider(
+                host=source_provider_data["fqdn"],
+                username=source_provider_data["username"],
+                password=source_provider_data["password"],
+            ) as vmware_provider:
+                for _vm in vmware_cloned_vms:
+                    _cloned_vm_name = _vm["name"]
+                    try:
+                        vmware_provider.delete_vm(vm_name=_cloned_vm_name)
+                    except Exception as exc:
+                        LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
+                        leftovers.setdefault(vmware_provider.type, []).append({
+                            "cloned_vm_name": _cloned_vm_name,
+                        })
+        except Exception as exc:
+            LOGGER.error(f"Failed to connect to VMware provider for cleanup: {exc}")
+            leftovers.setdefault(Provider.ProviderType.VSPHERE, vmware_cloned_vms)
+
+    if openstack_cloned_vms:
+        try:
+            source_provider_data = session_store["source_provider_data"]
+
+            with OpenStackProvider(
+                host=source_provider_data["fqdn"],
+                username=source_provider_data["username"],
+                password=source_provider_data["password"],
+                auth_url=source_provider_data["api_url"],
+                project_name=source_provider_data["project_name"],
+                user_domain_name=source_provider_data["user_domain_name"],
+                region_name=source_provider_data["region_name"],
+                user_domain_id=source_provider_data["user_domain_id"],
+                project_domain_id=source_provider_data["project_domain_id"],
+            ) as openstack_provider:
+                for _vm in openstack_cloned_vms:
+                    _cloned_vm_name = _vm["name"]
+                    try:
+                        openstack_provider.delete_vm(vm_name=_cloned_vm_name)
+                    except Exception as exc:
+                        LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
+                        leftovers.setdefault(openstack_provider.type, []).append({
+                            "cloned_vm_name": _cloned_vm_name,
+                        })
+        except Exception as exc:
+            LOGGER.error(f"Failed to connect to OpenStack provider for cleanup: {exc}")
+            leftovers.setdefault(Provider.ProviderType.OPENSTACK, openstack_cloned_vms)
 
     return leftovers

@@ -264,6 +264,13 @@ class OpenStackProvider(BaseProvider):
                 new_server = self.api.compute.wait_for_server(new_server, status="SHUTOFF")
 
             LOGGER.info(f"Successfully cloned '{source_vm_name}' to '{clone_vm_name}'")
+
+            # Track cloned VM for cleanup
+            if self.fixture_store:
+                self.fixture_store["teardown"].setdefault(self.type, []).append({
+                    "name": new_server.name,
+                })
+
             return new_server
 
         finally:
@@ -286,7 +293,8 @@ class OpenStackProvider(BaseProvider):
             return
 
         try:
-            self.api.compute.delete_server(vm_to_delete, wait=True, timeout=180)
+            self.api.compute.delete_server(vm_to_delete)
+            self.api.compute.wait_for_delete(vm_to_delete, interval=2, wait=180)
             LOGGER.info(f"Successfully deleted VM '{vm_name}'.")
         except Exception as e:
             LOGGER.error(f"An error occurred while deleting VM '{vm_name}': {e}")

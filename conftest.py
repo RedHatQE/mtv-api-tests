@@ -552,6 +552,7 @@ def plan(
     target_namespace,
     ocp_admin_client,
     source_provider,
+    source_provider_inventory,
     request,
     multus_network_name,
     source_vms_namespace,
@@ -586,6 +587,12 @@ def plan(
                 session_uuid=fixture_store["session_uuid"],
             )
             vm["name"] = source_vm_details["name"]
+
+            # Wait for cloned VM to appear in Forklift inventory before proceeding
+            # This is needed for external providers that Forklift needs to sync from
+            # OVA is excluded because it doesn't clone VMs (uses pre-existing files)
+            if source_provider.type != Provider.ProviderType.OVA:
+                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=300)
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 
