@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
-import multiprocessing
 import os
 import pickle
 import shutil
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from kubernetes.dynamic import DynamicClient
@@ -46,7 +45,6 @@ from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
 from utilities.naming import generate_name_with_uuid
-from utilities.prometheus import prometheus_monitor_deamon
 from utilities.pytest_utils import (
     collect_created_resources,
     prepare_base_path,
@@ -295,22 +293,6 @@ def source_providers() -> dict[str, dict[str, Any]]:
         source_providers_dict = json.load(fd)
 
     return source_providers_dict
-
-
-@pytest.fixture(scope="session")
-def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
-    try:
-        proc = multiprocessing.Process(
-            target=prometheus_monitor_deamon,
-            kwargs={"ocp_admin_client": ocp_admin_client},
-        )
-
-        proc.start()
-        yield
-        proc.kill()
-
-    except Exception:
-        yield
 
 
 @pytest.fixture(scope="session")
