@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import ipaddress
 import tempfile
 from pathlib import Path
-import ipaddress
 from typing import Any
 
 import go_template
 import jc
 import pytest
+from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
+from packaging.version import InvalidVersion, Version
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
 from pyhelper_utils.exceptions import CommandExecFailed
 from pytest_testconfig import py_config
@@ -74,6 +76,42 @@ def get_ssh_credentials_from_provider_config(
         ) from e
     LOGGER.info(f"Using Linux credentials for VM: {username}")
     return username, password
+
+
+def get_ocp_version(destination_provider: BaseProvider) -> Version:
+    """
+    Get OpenShift cluster version.
+
+    Args:
+        destination_provider: The OpenShift destination provider
+
+    Returns:
+        Version object (e.g., Version("4.20.1"))
+
+    Raises:
+        ValueError: If ClusterVersion resource does not exist or version cannot be determined
+        InvalidVersion: If version string cannot be parsed
+    """
+    if not hasattr(destination_provider, "ocp_resource") or not destination_provider.ocp_resource:
+        raise ValueError("Destination provider has no ocp_resource, cannot determine OCP version")
+
+    client = destination_provider.ocp_resource.client
+    cluster_version = ClusterVersion(client=client, name="version")
+
+    if not cluster_version.exists:
+        raise ValueError(
+            "ClusterVersion resource 'version' not found. This resource must exist on an OpenShift cluster."
+        )
+
+    # Get version from status
+    try:
+        version_str = cluster_version.instance.status.desired.version
+        LOGGER.info(f"Detected OpenShift version: {version_str}")
+        return Version(version_str)
+    except (AttributeError, KeyError) as e:
+        raise ValueError(f"Failed to get OCP version (missing attribute): {e}") from e
+    except InvalidVersion as e:
+        raise InvalidVersion(f"Failed to parse OCP version string '{version_str}': {e}") from e
 
 
 def check_ssh_connectivity(
@@ -830,6 +868,94 @@ def check_snapshots(
         pytest.fail(f"Some of the VM snapshots did not match: {failed_snapshots}")
 
 
+def _format_uuid_to_vmware_serial(uuid: str) -> str:
+    """
+    Format a UUID to VMware BIOS serial format.
+
+    Converts: "12345678-1234-1234-1234-123456789012"
+    To: "VMware-12 34 56 78 12 34 12 34-12 34 12 34 56 78 90 12"
+
+    Args:
+        uuid: UUID string with hyphens
+
+    Returns:
+        Formatted VMware BIOS serial string
+    """
+    uuid_no_hyphens = uuid.replace("-", "").upper()
+    return (
+        f"VMware-{' '.join([uuid_no_hyphens[i : i + 2] for i in range(0, 16, 2)])}-"
+        f"{' '.join([uuid_no_hyphens[i : i + 2] for i in range(16, 32, 2)])}"
+    )
+
+
+def check_serial_preservation(
+    source_vm: dict[str, Any], destination_vm: dict[str, Any], destination_provider: BaseProvider
+) -> None:
+    """
+    Verify that the VM serial number is preserved during migration from VMware to OpenShift.
+
+    Behavior depends on OpenShift version:
+    - OCP 4.20+: UUID is formatted as BIOS serial (VMware-XX XX XX...)
+    - Before OCP 4.20: UUID is used as-is
+
+    Args:
+        source_vm: Source VM information including uuid
+        destination_vm: Destination VM information including serial
+        destination_provider: OpenShift destination provider for version detection
+
+    Raises:
+        AssertionError: If serial number validation fails
+        ValueError: If OCP version cannot be determined
+        InvalidVersion: If OCP version cannot be parsed
+    """
+    source_uuid = source_vm["uuid"]
+    dest_serial = destination_vm["serial"]
+    vm_name = destination_vm["name"]
+
+    # Validate serial number exists and is a string
+    assert dest_serial and isinstance(dest_serial, str), (
+        f"Destination VM {vm_name} has no valid serial number in firmware spec (got: {dest_serial})"
+    )
+
+    # Get OCP version to determine expected behavior
+    ocp_version = get_ocp_version(destination_provider)
+
+    # Extract major and minor version (ignore patch and pre-release)
+    major = ocp_version.major
+    minor = ocp_version.minor
+
+    # Check if version is 4.20 or newer (including rc versions)
+    is_ocp_420_or_newer = (major > 4) or (major == 4 and minor >= 20)
+
+    comparison = ">=" if is_ocp_420_or_newer else "<"
+    uuid_format = "formatted" if is_ocp_420_or_newer else "plain"
+    LOGGER.info(f"OCP version {ocp_version} (major={major}, minor={minor}) {comparison} 4.20: Using {uuid_format} UUID")
+
+    # Generate expected serial formats
+    expected_serial_420 = _format_uuid_to_vmware_serial(source_uuid)
+    expected_serial_pre420 = source_uuid
+
+    # Check based on version
+    if is_ocp_420_or_newer:
+        # OCP 4.20+: Expect formatted serial
+        assert str(dest_serial).lower() == expected_serial_420.lower(), (
+            f"Serial number mismatch for VM {vm_name} (OCP {ocp_version} >= 4.20):\n"
+            f"  Source UUID: {source_uuid}\n"
+            f"  Expected formatted serial: {expected_serial_420}\n"
+            f"  Actual destination serial: {dest_serial}"
+        )
+        LOGGER.info(f"Serial preserved correctly (OCP {ocp_version} >= 4.20, formatted): {dest_serial}")
+    else:
+        # OCP < 4.20: Expect plain UUID
+        assert str(dest_serial).lower() == expected_serial_pre420.lower(), (
+            f"Serial number mismatch for VM {vm_name} (OCP {ocp_version} < 4.20):\n"
+            f"  Source UUID: {source_uuid}\n"
+            f"  Expected plain UUID: {expected_serial_pre420}\n"
+            f"  Actual destination serial: {dest_serial}"
+        )
+        LOGGER.info(f"Serial preserved correctly (OCP {ocp_version} < 4.20, plain UUID): {dest_serial}")
+
+
 def check_vms(
     plan: dict[str, Any],
     source_provider: BaseProvider,
@@ -923,6 +1049,14 @@ def check_vms(
                     )
                 except Exception as exp:
                     res[vm_name].append(f"check_snapshots - {str(exp)}")
+
+            # Check serial number preservation (VMware UUID -> OpenShift serial)
+            try:
+                check_serial_preservation(
+                    source_vm=source_vm, destination_vm=destination_vm, destination_provider=destination_provider
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_serial_preservation - {str(exp)}")
 
         if vm_guest_agent:
             try:
