@@ -158,19 +158,21 @@ def create_source_provider(
         secret_string_data["user"] = source_provider_data_copy["username"]
         secret_string_data["password"] = source_provider_data_copy["password"]
 
+        # Always fetch CA certificate for RHV provider, even when insecure=True
+        # The certificate is required for imageio connection, insecureSkipVerify controls validation
+        if not tmp_dir:
+            raise ValueError("tmp_dir is required for rhv")
+
+        source_provider_type = source_provider_data_copy["type"]
+        cert_file = generate_ca_cert_file(
+            provider_fqdn=source_provider_data_copy["fqdn"],
+            cert_file=tmp_dir.mktemp(source_provider_type.upper()) / f"{source_provider_type}_{session_uuid}_cert.crt",
+        )
+        secret_string_data["cacert"] = cert_file.read_text()
+
+        # Set ca_file in provider_args only when secure mode (for SDK connection)
         if not insecure:
-            if not tmp_dir:
-                raise ValueError("tmp_dir is required for rhv")
-
-            source_provider_type = source_provider_data_copy["type"]
-            cert_file = generate_ca_cert_file(
-                provider_fqdn=source_provider_data_copy["fqdn"],
-                cert_file=tmp_dir.mktemp(source_provider_type.upper())
-                / f"{source_provider_type}_{session_uuid}_cert.crt",
-            )
             provider_args["ca_file"] = str(cert_file)
-            secret_string_data["cacert"] = cert_file.read_text()
-
         else:
             provider_args["insecure"] = insecure
 

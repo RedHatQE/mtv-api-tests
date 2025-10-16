@@ -13,8 +13,7 @@ SOURCE_PROVIDER_TYPE = py_config.get("source_provider_type")
 
 
 pytestmark = [
-    pytest.mark.jira("MTV-2846", run=py_config["source_provider_type"] != Provider.ProviderType.RHV),
-    pytest.mark.jira("MTV-2811", run=py_config["source_provider_type"] != Provider.ProviderType.RHV),
+    pytest.mark.jira("MTV-2846", run=py_config.get("source_provider_type") != Provider.ProviderType.RHV),
     pytest.mark.skipif(
         SOURCE_PROVIDER_TYPE
         in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT, Provider.ProviderType.OVA),
