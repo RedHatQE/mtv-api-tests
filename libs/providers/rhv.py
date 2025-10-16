@@ -329,8 +329,7 @@ class OvirtProvider(BaseProvider):
             raise
 
         try:
-            # Clone from template with memory policy fix
-            # Set guaranteed memory to 0 to avoid "Physical Memory Guaranteed cannot exceed Memory Size" error
+            # Clone from template
             new_vm = self.vms_services.add(
                 vm=types.Vm(
                     name=clone_vm_name,
