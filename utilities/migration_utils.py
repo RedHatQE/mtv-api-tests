@@ -101,7 +101,7 @@ def check_dv_pvc_pv_deleted(
         """Helper function to wait for a single resource deletion."""
         try:
             with contextlib.suppress(NotFoundError):
-                if not resource.wait_deleted():
+                if not resource.wait_deleted(timeout=60 * 2):
                     return {"success": False, "resource": resource, "type": resource_type}
             return {"success": True, "resource": resource, "type": resource_type}
         except Exception as exc:
