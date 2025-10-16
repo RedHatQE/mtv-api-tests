@@ -145,6 +145,9 @@ junit-report.xml
 .data-collector
 prof/
 
+# Bug reports
+bugs/
+
 # Providers
 .providers.json
 

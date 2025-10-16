@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
-import multiprocessing
 import os
 import pickle
 import shutil
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from kubernetes.dynamic import DynamicClient
@@ -46,7 +45,6 @@ from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
 from utilities.naming import generate_name_with_uuid
-from utilities.prometheus import prometheus_monitor_deamon
 from utilities.pytest_utils import (
     collect_created_resources,
     prepare_base_path,
@@ -298,22 +296,6 @@ def source_providers() -> dict[str, dict[str, Any]]:
 
 
 @pytest.fixture(scope="session")
-def prometheus_monitor(ocp_admin_client: DynamicClient) -> Generator[None, Any, Any]:
-    try:
-        proc = multiprocessing.Process(
-            target=prometheus_monitor_deamon,
-            kwargs={"ocp_admin_client": ocp_admin_client},
-        )
-
-        proc.start()
-        yield
-        proc.kill()
-
-    except Exception:
-        yield
-
-
-@pytest.fixture(scope="session")
 def target_namespace(fixture_store, session_uuid, ocp_admin_client):
     """create the target namespace for MTV migrations"""
     label: dict[str, str] = {
@@ -552,6 +534,7 @@ def plan(
     target_namespace,
     ocp_admin_client,
     source_provider,
+    source_provider_inventory,
     request,
     multus_network_name,
     source_vms_namespace,
@@ -586,6 +569,12 @@ def plan(
                 session_uuid=fixture_store["session_uuid"],
             )
             vm["name"] = source_vm_details["name"]
+
+            # Wait for cloned VM to appear in Forklift inventory before proceeding
+            # This is needed for external providers that Forklift needs to sync from
+            # OVA is excluded because it doesn't clone VMs (uses pre-existing files)
+            if source_provider.type != Provider.ProviderType.OVA:
+                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=300)
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 
