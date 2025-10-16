@@ -1,4 +1,5 @@
 import contextlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -89,34 +90,84 @@ def check_dv_pvc_pv_deleted(
     partial_name: str,
     leftovers: dict[str, list[dict[str, str]]] | None = None,
 ) -> dict[str, list[dict[str, str]]]:
-    # When migration in not canceled (succeeded) DVs,PVCs are deleted only when the target_namespace is deleted
-    # All calls wrap with `with contextlib.suppress(NotFoundError)` since the resources can be gone even after we get it.
-    for _dv in DataVolume.get(dyn_client=ocp_client, namespace=target_namespace):
-        with contextlib.suppress(NotFoundError):
-            if partial_name in _dv.name:
-                if not _dv.wait_deleted():
-                    if leftovers:
-                        leftovers = append_leftovers(leftovers=leftovers, resource=_dv)
+    """
+    Check and wait for DataVolumes, PVCs, and PVs to be deleted in parallel.
+    Order is maintained: DVs → PVCs → PVs, but within each group resources are checked in parallel.
+    """
+    if leftovers is None:
+        leftovers = {}
 
-    for _pvc in PersistentVolumeClaim.get(dyn_client=ocp_client, namespace=target_namespace):
-        with contextlib.suppress(NotFoundError):
-            if partial_name in _pvc.name:
-                if not _pvc.wait_deleted():
-                    if leftovers:
-                        leftovers = append_leftovers(leftovers=leftovers, resource=_pvc)
+    def wait_for_resource_deletion(resource, resource_type):
+        """Helper function to wait for a single resource deletion."""
+        try:
+            with contextlib.suppress(NotFoundError):
+                if not resource.wait_deleted():
+                    return {"success": False, "resource": resource, "type": resource_type}
+            return {"success": True, "resource": resource, "type": resource_type}
+        except Exception as exc:
+            LOGGER.error(f"Failed to wait for {resource_type} {resource.name} deletion: {exc}")
+            return {"success": False, "resource": resource, "type": resource_type}
 
-    for _pv in PersistentVolume.get(dyn_client=ocp_client):
-        with contextlib.suppress(NotFoundError):
-            _pv_spec = _pv.instance.spec.to_dict()
-            if partial_name in _pv_spec.get("claimRef", {}).get("name", ""):
-                if _pv.instance.status.phase == _pv.Status.RELEASED:
-                    continue
+    # Check DataVolumes in parallel
+    dvs_to_wait = []
+    try:
+        dvs_to_wait = [
+            _dv for _dv in DataVolume.get(dyn_client=ocp_client, namespace=target_namespace) if partial_name in _dv.name
+        ]
+    except Exception as exc:
+        LOGGER.error(f"Failed to get DataVolumes: {exc}")
 
-                if not _pv.wait_deleted():
-                    if leftovers:
-                        leftovers = append_leftovers(leftovers=leftovers, resource=_pv)
+    if dvs_to_wait:
+        LOGGER.info(f"Waiting for {len(dvs_to_wait)} DataVolumes to be deleted in parallel...")
+        with ThreadPoolExecutor(max_workers=min(len(dvs_to_wait), 10)) as executor:
+            future_to_dv = {executor.submit(wait_for_resource_deletion, dv, "DataVolume"): dv for dv in dvs_to_wait}
+            for future in as_completed(future_to_dv):
+                result = future.result()
+                if not result["success"]:
+                    leftovers = append_leftovers(leftovers=leftovers, resource=result["resource"])
 
-    return leftovers or {}
+    # Check PVCs in parallel
+    pvcs_to_wait = []
+    try:
+        pvcs_to_wait = [
+            _pvc
+            for _pvc in PersistentVolumeClaim.get(dyn_client=ocp_client, namespace=target_namespace)
+            if partial_name in _pvc.name
+        ]
+    except Exception as exc:
+        LOGGER.error(f"Failed to get PVCs: {exc}")
+
+    if pvcs_to_wait:
+        LOGGER.info(f"Waiting for {len(pvcs_to_wait)} PVCs to be deleted in parallel...")
+        with ThreadPoolExecutor(max_workers=min(len(pvcs_to_wait), 10)) as executor:
+            future_to_pvc = {executor.submit(wait_for_resource_deletion, pvc, "PVC"): pvc for pvc in pvcs_to_wait}
+            for future in as_completed(future_to_pvc):
+                result = future.result()
+                if not result["success"]:
+                    leftovers = append_leftovers(leftovers=leftovers, resource=result["resource"])
+
+    # Check PVs in parallel
+    pvs_to_wait = []
+    try:
+        for _pv in PersistentVolume.get(dyn_client=ocp_client):
+            with contextlib.suppress(NotFoundError):
+                _pv_spec = _pv.instance.spec.to_dict()
+                if partial_name in _pv_spec.get("claimRef", {}).get("name", ""):
+                    if _pv.instance.status.phase != _pv.Status.RELEASED:
+                        pvs_to_wait.append(_pv)
+    except Exception as exc:
+        LOGGER.error(f"Failed to get PVs: {exc}")
+
+    if pvs_to_wait:
+        LOGGER.info(f"Waiting for {len(pvs_to_wait)} PVs to be deleted in parallel...")
+        with ThreadPoolExecutor(max_workers=min(len(pvs_to_wait), 10)) as executor:
+            future_to_pv = {executor.submit(wait_for_resource_deletion, pv, "PV"): pv for pv in pvs_to_wait}
+            for future in as_completed(future_to_pv):
+                result = future.result()
+                if not result["success"]:
+                    leftovers = append_leftovers(leftovers=leftovers, resource=result["resource"])
+
+    return leftovers
 
 
 def append_leftovers(
