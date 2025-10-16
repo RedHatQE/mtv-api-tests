@@ -4,6 +4,26 @@
 
 File `.providers.json` in the root directory of the repository with the source providers data
 
+### Provider Requirements
+
+Each source provider requires pre-existing base VMs or templates for test execution:
+
+- **VMware vSphere**: Base VM must exist (e.g., `mtv-tests-rhel8`)
+  - Tests will clone from this base VM for migration testing
+  - VM should be powered off and in a ready state
+
+- **OpenStack**: Base VM/instance must exist (e.g., `mtv-tests-rhel8`)
+  - Tests will clone from this base instance using snapshots
+  - Instance should be in ACTIVE or SHUTOFF state
+
+- **RHV/oVirt**: Template must exist (e.g., `mtv-tests-rhel8`)
+  - Tests will create VMs from this template
+  - Template should have sufficient memory (minimum 1536 MiB recommended)
+  - Ensure template's "Physical Memory Guaranteed" setting is not misconfigured
+
+**Note**: The base VM/template names are referenced in test configurations. Ensure these resources exist in your
+source provider before running tests.
+
 install [uv](https://github.com/astral-sh/uv)
 
 ```bash

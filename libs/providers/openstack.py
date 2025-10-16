@@ -258,18 +258,18 @@ class OpenStackProvider(BaseProvider):
             )
             new_server = self.api.compute.wait_for_server(new_server)
 
+            # Track cloned VM for cleanup immediately after creation
+            if self.fixture_store:
+                self.fixture_store["teardown"].setdefault(self.type, []).append({
+                    "name": new_server.name,
+                })
+
             if not power_on:
                 LOGGER.info(f"power_on is False, stopping server '{new_server.name}'")
                 self.api.compute.stop_server(new_server)
                 new_server = self.api.compute.wait_for_server(new_server, status="SHUTOFF")
 
             LOGGER.info(f"Successfully cloned '{source_vm_name}' to '{clone_vm_name}'")
-
-            # Track cloned VM for cleanup
-            if self.fixture_store:
-                self.fixture_store["teardown"].setdefault(self.type, []).append({
-                    "name": new_server.name,
-                })
 
             return new_server
 
