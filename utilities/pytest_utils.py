@@ -1,6 +1,7 @@
 import contextlib
 import json
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -217,16 +218,33 @@ def teardown_resources(
         except Exception as exc:
             LOGGER.error(f"Failed to delete all VMs in namespace {target_namespace}: {exc}")
 
-        # Make sure all pods related to the test session are deleted
+        # Make sure all pods related to the test session are deleted (in parallel)
         try:
-            for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace):
-                if session_uuid in _pod.name:
+            pods_to_wait = [
+                _pod for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace) if session_uuid in _pod.name
+            ]
+
+            if pods_to_wait:
+                LOGGER.info(f"Waiting for {len(pods_to_wait)} pods to be deleted in parallel...")
+
+                def wait_for_pod_deletion(pod):
+                    """Helper function to wait for a single pod deletion."""
                     try:
-                        if not _pod.wait_deleted():
-                            leftovers = append_leftovers(leftovers=leftovers, resource=_pod)
+                        if not pod.wait_deleted():
+                            return {"success": False, "pod": pod, "error": None}
+                        return {"success": True, "pod": pod, "error": None}
                     except Exception as exc:
-                        LOGGER.error(f"Failed to wait for pod {_pod.name} deletion: {exc}")
-                        leftovers = append_leftovers(leftovers=leftovers, resource=_pod)
+                        LOGGER.error(f"Failed to wait for pod {pod.name} deletion: {exc}")
+                        return {"success": False, "pod": pod, "error": exc}
+
+                # Wait for all pods in parallel
+                with ThreadPoolExecutor(max_workers=min(len(pods_to_wait), 10)) as executor:
+                    future_to_pod = {executor.submit(wait_for_pod_deletion, pod): pod for pod in pods_to_wait}
+
+                    for future in as_completed(future_to_pod):
+                        result = future.result()
+                        if not result["success"]:
+                            leftovers = append_leftovers(leftovers=leftovers, resource=result["pod"])
         except Exception as exc:
             LOGGER.error(f"Failed to get pods in namespace {target_namespace}: {exc}")
 
