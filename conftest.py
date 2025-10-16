@@ -407,7 +407,7 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
         patches={
             forklift_controller: {
                 "spec": {
-                    "controller_precopy_interval": int(snapshots_interval),
+                    "controller_precopy_interval": str(snapshots_interval),
                 }
             }
         }

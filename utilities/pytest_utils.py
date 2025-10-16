@@ -20,6 +20,7 @@ from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
 from libs.providers.openstack import OpenStackProvider
+from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 from utilities.utils import delete_all_vms, get_cluster_client
@@ -102,6 +103,7 @@ def teardown_resources(
     storagemaps = session_teardown_resources.get(StorageMap.kind, [])
     vmware_cloned_vms = session_teardown_resources.get(Provider.ProviderType.VSPHERE, [])
     openstack_cloned_vms = session_teardown_resources.get(Provider.ProviderType.OPENSTACK, [])
+    rhv_cloned_vms = session_teardown_resources.get(Provider.ProviderType.RHV, [])
 
     # Resources that was created by running migration
     pods = session_teardown_resources.get(Pod.kind, [])
@@ -298,5 +300,28 @@ def teardown_resources(
         except Exception as exc:
             LOGGER.error(f"Failed to connect to OpenStack provider for cleanup: {exc}")
             leftovers.setdefault(Provider.ProviderType.OPENSTACK, openstack_cloned_vms)
+
+    if rhv_cloned_vms:
+        try:
+            source_provider_data = session_store["source_provider_data"]
+
+            with OvirtProvider(
+                host=source_provider_data["api_url"],
+                username=source_provider_data["username"],
+                password=source_provider_data["password"],
+                insecure=source_provider_data.get("insecure", True),
+            ) as rhv_provider:
+                for _vm in rhv_cloned_vms:
+                    _cloned_vm_name = _vm["name"]
+                    try:
+                        rhv_provider.delete_vm(vm_name=_cloned_vm_name)
+                    except Exception as exc:
+                        LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
+                        leftovers.setdefault(rhv_provider.type, []).append({
+                            "cloned_vm_name": _cloned_vm_name,
+                        })
+        except Exception as exc:
+            LOGGER.error(f"Failed to connect to RHV provider for cleanup: {exc}")
+            leftovers.setdefault(Provider.ProviderType.RHV, rhv_cloned_vms)
 
     return leftovers

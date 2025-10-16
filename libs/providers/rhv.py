@@ -92,6 +92,10 @@ class OvirtProvider(BaseProvider):
     def data_center_service(self) -> ovirtsdk4.services.DataCentersService:
         return self.api.system_service().data_centers_service()
 
+    @property
+    def templates_service(self) -> ovirtsdk4.services.TemplatesService:
+        return self.api.system_service().templates_service()
+
     def events_service(self) -> ovirtsdk4.services.EventsService:
         return self.api.system_service().events_service()
 
@@ -150,11 +154,16 @@ class OvirtProvider(BaseProvider):
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         target_vm_name = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
-        source_vm = self.get_vm_by_name(name=target_vm_name)[0]
-        if not source_vm and kwargs.get("clone"):
-            source_vm = self.clone_vm(
-                source_vm_name=source_vm, clone_vm_name=target_vm_name, session_uuid=kwargs["session_uuid"]
-            )
+        try:
+            source_vm = self.get_vm_by_name(name=target_vm_name)
+        except IndexError:
+            # VM not found - clone it if clone flag is set
+            if kwargs.get("clone"):
+                source_vm = self.clone_vm(
+                    source_vm_name=kwargs["name"], clone_vm_name=target_vm_name, session_uuid=kwargs["session_uuid"]
+                )
+            else:
+                raise
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.RHV
@@ -288,6 +297,14 @@ class OvirtProvider(BaseProvider):
             condition_func=_check_vm_deleted,
         )
 
+    def get_template_by_name(self, name: str) -> Any:
+        """Get template by name from oVirt."""
+        query = f"name={name}"
+        templates = self.templates_service.list(search=query)
+        if not templates:
+            raise NotFoundError(f"Template '{name}' not found in oVirt")
+        return templates[0]
+
     def clone_vm(
         self,
         source_vm_name: str,
@@ -296,72 +313,55 @@ class OvirtProvider(BaseProvider):
         power_on: bool = False,
     ) -> types.Vm:
         """
-        Clones a VM. Raises an exception if the process fails.
+        Clones a VM from a template.
+        In RHV/oVirt, source_vm_name is actually a template name.
+        Raises an exception if the process fails.
         """
         clone_vm_name = f"{session_uuid}-{clone_vm_name}"
-        LOGGER.info(f"Starting clone of '{source_vm_name}' to '{clone_vm_name}'")
-        try:
-            source_vm = self.get_vm_by_name(name=source_vm_name)
-        except IndexError:
-            # Raise an exception if the source VM isn't found
-            err_msg = f"Source VM '{source_vm_name}' not found. Cannot clone."
-            LOGGER.error(err_msg)
-            raise NotFoundError(err_msg)
+        LOGGER.info(f"Starting clone of '{source_vm_name}' template to '{clone_vm_name}'")
 
-        source_vm_service = self.vms_services.vm_service(source_vm.id)
-        snapshots_service = source_vm_service.snapshots_service()
-        original_status = source_vm.status
-        snapshot = None
-        snapshot_service = None
+        # Get the template (not VM)
+        try:
+            template = self.get_template_by_name(name=source_vm_name)
+            LOGGER.info(f"Using template '{source_vm_name}' (ID: {template.id}) for cloning")
+        except NotFoundError:
+            LOGGER.error(f"Template '{source_vm_name}' not found in oVirt")
+            raise
 
         try:
-            if original_status != types.VmStatus.DOWN:
-                self.stop_vm(source_vm)
-
-            snapshot_description = f"clone_snapshot_for_{clone_vm_name}"
-            snapshot = snapshots_service.add(
-                snapshot=types.Snapshot(description=snapshot_description, persist_memorystate=False)
-            )
-            snapshot_service = snapshots_service.snapshot_service(snapshot.id)
-
-            self._wait_for_condition(
-                entity_name=snapshot_description,
-                action_name="Snapshot Creation",
-                condition_func=lambda: snapshot_service.get().snapshot_status == types.SnapshotStatus.OK,
-            )
-
+            # Clone from template with memory policy fix
+            # Set guaranteed memory to 0 to avoid "Physical Memory Guaranteed cannot exceed Memory Size" error
             new_vm = self.vms_services.add(
                 vm=types.Vm(
                     name=clone_vm_name,
-                    cluster=types.Cluster(id=source_vm.cluster.id),
-                    template=types.Template(id="00000000-0000-0000-0000-000000000000"),
-                    snapshots=[types.Snapshot(id=snapshot.id)],
+                    cluster=types.Cluster(id=template.cluster.id),
+                    template=types.Template(id=template.id),
+                    memory_policy=types.MemoryPolicy(guaranteed=0),
                 ),
                 clone=True,
             )
             new_vm_service = self.vms_services.vm_service(new_vm.id)
 
+            # Wait for VM to be ready
             self._wait_for_condition(
                 entity_name=clone_vm_name,
-                action_name="VM Creation",
+                action_name="VM Creation from Template",
                 condition_func=lambda: new_vm_service.get().status == types.VmStatus.DOWN,
+                timeout=60 * 20,
             )
+
+            # Track cloned VM for cleanup
+            if self.fixture_store:
+                self.fixture_store["teardown"].setdefault(self.type, []).append({
+                    "name": clone_vm_name,
+                })
 
             if power_on:
                 self.start_vm(new_vm)
 
-            LOGGER.info(f"Successfully cloned '{source_vm_name}' to '{clone_vm_name}'")
+            LOGGER.info(f"Successfully cloned template '{source_vm_name}' to VM '{clone_vm_name}'")
             return new_vm
 
         except Exception as e:
             LOGGER.error(f"Clone process failed: {e}")
-            raise  # Re-raise the caught exception
-
-        finally:
-            if snapshot and snapshot_service:
-                # Cleanup logic remains the same...
-                snapshot_service.remove()
-                # ...
-            if original_status == types.VmStatus.UP:
-                # ... (Restore power state logic remains the same)
-                self.start_vm(source_vm)
+            raise
