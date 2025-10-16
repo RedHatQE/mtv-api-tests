@@ -53,7 +53,7 @@ def ocp_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.OPENSHIFT
 
 
-def generate_ca_cert_file(provider_fqdn: dict[str, Any], cert_file: Path) -> Path:
+def generate_ca_cert_file(provider_fqdn: str, cert_file: Path) -> Path:
     cert = check_output(
         [
             "/bin/sh",
@@ -63,7 +63,44 @@ def generate_ca_cert_file(provider_fqdn: dict[str, Any], cert_file: Path) -> Pat
         stderr=STDOUT,
     )
 
+    # Validate certificate data
+    if b"BEGIN CERTIFICATE" not in cert:
+        raise ValueError(f"Failed to download valid certificate from {provider_fqdn}")
+
     cert_file.write_bytes(cert)
+    return cert_file
+
+
+def _fetch_and_store_cacert(
+    source_provider_data: dict[str, Any],
+    secret_string_data: dict[str, Any],
+    tmp_dir: pytest.TempPathFactory | None,
+    session_uuid: str,
+) -> Path:
+    """
+    Fetch CA certificate from provider and store in secret data.
+
+    Args:
+        source_provider_data: Provider configuration with 'type' and 'fqdn'
+        secret_string_data: Secret data dict to add 'cacert' to
+        tmp_dir: Temp directory factory for cert file
+        session_uuid: Session UUID for unique filename
+
+    Returns:
+        Path to the certificate file
+
+    Raises:
+        ValueError: If tmp_dir is not provided
+    """
+    source_provider_type = source_provider_data["type"]
+    if not tmp_dir:
+        raise ValueError(f"tmp_dir is required for {source_provider_type} with SSL verification")
+
+    cert_file = generate_ca_cert_file(
+        provider_fqdn=source_provider_data["fqdn"],
+        cert_file=tmp_dir.mktemp(source_provider_type.upper()) / f"{source_provider_type}_{session_uuid}_cert.crt",
+    )
+    secret_string_data["cacert"] = cert_file.read_text()
     return cert_file
 
 
@@ -167,6 +204,9 @@ def create_source_provider(
         if has_copyoffload:
             provider_args["copyoffload"] = source_provider_data_copy["copyoffload"]
 
+        if not insecure:
+            _fetch_and_store_cacert(source_provider_data_copy, secret_string_data, tmp_dir, session_uuid)
+
     elif rhv_provider(provider_data=source_provider_data_copy):
         source_provider = OvirtProvider
         provider_args["host"] = source_provider_data_copy["api_url"]
@@ -175,15 +215,7 @@ def create_source_provider(
 
         # Always fetch CA certificate for RHV provider, even when insecure=True
         # The certificate is required for imageio connection, insecureSkipVerify controls validation
-        if not tmp_dir:
-            raise ValueError("tmp_dir is required for rhv")
-
-        source_provider_type = source_provider_data_copy["type"]
-        cert_file = generate_ca_cert_file(
-            provider_fqdn=source_provider_data_copy["fqdn"],
-            cert_file=tmp_dir.mktemp(source_provider_type.upper()) / f"{source_provider_type}_{session_uuid}_cert.crt",
-        )
-        secret_string_data["cacert"] = cert_file.read_text()
+        cert_file = _fetch_and_store_cacert(source_provider_data_copy, secret_string_data, tmp_dir, session_uuid)
 
         # Set ca_file in provider_args only when secure mode (for SDK connection)
         if not insecure:
@@ -205,6 +237,10 @@ def create_source_provider(
         secret_string_data["regionName"] = source_provider_data_copy["region_name"]
         secret_string_data["projectName"] = source_provider_data_copy["project_name"]
         secret_string_data["domainName"] = source_provider_data_copy["user_domain_name"]
+
+        # Add CA certificate for SSL verification
+        if not insecure:
+            _fetch_and_store_cacert(source_provider_data_copy, secret_string_data, tmp_dir, session_uuid)
 
     elif ova_provider(provider_data=source_provider_data_copy):
         source_provider = OVAProvider

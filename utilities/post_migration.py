@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import base64
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.provider import Provider
+from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from packaging.version import InvalidVersion, Version
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
@@ -24,7 +26,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
 from utilities.ssh_utils import SSHConnectionManager
-from utilities.utils import rhv_provider
+from utilities.utils import rhv_provider, get_value_from_py_config
 
 LOGGER = get_logger(name=__name__)
 
@@ -954,6 +956,54 @@ def check_serial_preservation(
         LOGGER.info(f"Serial preserved correctly (OCP {ocp_version} < 4.20, plain UUID): {dest_serial}")
 
 
+def check_ssl_configuration(source_provider: BaseProvider) -> None:
+    """
+    Verify that Provider secret's insecureSkipVerify matches the global configuration.
+
+    This ensures that when source_provider_insecure_skip_verify is set to false, the Provider is actually
+    configured to verify SSL certificates (and vice versa).
+
+    Args:
+        source_provider: The source provider to check
+
+    Raises:
+        AssertionError: If insecureSkipVerify doesn't match the configuration
+    """
+    # Get the expected value from config
+    insecure_config = get_value_from_py_config("source_provider_insecure_skip_verify")
+    expected_value = "true" if insecure_config else "false"
+
+    LOGGER.info(f"Checking SSL configuration: expected insecureSkipVerify='{expected_value}'")
+
+    assert source_provider.ocp_resource is not None
+
+    provider_secret_ref = source_provider.ocp_resource.instance.spec.secret
+    if not provider_secret_ref:
+        LOGGER.warning("Provider has no secret reference, skipping SSL verification")
+        return
+
+    assert provider_secret_ref.name is not None
+    assert provider_secret_ref.namespace is not None
+
+    secret = Secret(
+        client=source_provider.ocp_resource.client,
+        name=provider_secret_ref.name,
+        namespace=provider_secret_ref.namespace,
+    )
+
+    # Check insecureSkipVerify field exists and has a value
+    assert secret.instance.data.get("insecureSkipVerify"), "Provider secret is missing 'insecureSkipVerify' field"
+
+    actual_value = base64.b64decode(secret.instance.data["insecureSkipVerify"]).decode("utf-8")
+
+    assert actual_value == expected_value, (
+        f"SSL configuration mismatch: config has source_provider_insecure_skip_verify={insecure_config}, "
+        f"but Provider secret has insecureSkipVerify='{actual_value}' (expected '{expected_value}')"
+    )
+
+    LOGGER.info(f"SSL configuration verified: insecureSkipVerify='{actual_value}' matches config")
+
+
 def check_vms(
     plan: dict[str, Any],
     source_provider: BaseProvider,
@@ -972,6 +1022,17 @@ def check_vms(
     if source_provider.type == Provider.ProviderType.OVA:
         LOGGER.info("Source OVA VMS do not have any stats")
         return
+
+    # Verify SSL configuration matches the global setting (VMware, RHV, OpenStack)
+    if source_provider.type in (
+        Provider.ProviderType.VSPHERE,
+        Provider.ProviderType.RHV,
+        Provider.ProviderType.OPENSTACK,
+    ):
+        try:
+            check_ssl_configuration(source_provider=source_provider)
+        except Exception as exp:
+            res.setdefault("_provider", []).append(f"check_ssl_configuration - {str(exp)}")
 
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
