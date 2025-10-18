@@ -493,11 +493,14 @@ def multus_network_name(
 ):
     """
     Create NADs based on network requirements with unique names per test.
+
     Automatically detects number of networks and creates NADs with test-unique naming:
     - cb-{4-char-hash}-1, cb-{4-char-hash}-2, etc. (e.g., "cb-a1b2-1" = 9 chars)
 
-    The unique test hash prevents conflicts when running tests in parallel.
-    Names are kept under 15 characters to comply with Linux bridge interface name limits.
+    Returns:
+        dict[str, str]: Dictionary containing:
+            - name: Base name for NAD naming
+            - namespace: Namespace where NADs are created
     """
     # Validate test configuration structure
     if not isinstance(request.param, dict):
@@ -520,9 +523,32 @@ def multus_network_name(
 
     created_nads = []
 
-    # Get VM names from the test configuration (same way as plan fixture)
+    # Get VM names and Multus namespace from test configuration
     vms = [vm["name"] for vm in test_config["virtual_machines"]]
     LOGGER.info(f"Found VMs from test config: {vms}")
+
+    multus_namespace = test_config.get("multus_namespace")
+    if multus_namespace is None:
+        multus_namespace = target_namespace
+        LOGGER.info(f"Multus namespace not specified in test config, using target namespace: {multus_namespace}")
+    else:
+        LOGGER.info(f"Using custom Multus namespace from test config: {multus_namespace}")
+        ns = Namespace(name=multus_namespace, client=ocp_admin_client)
+        if ns.exists:
+            LOGGER.info(f"Namespace {multus_namespace} already exists, using it")
+        else:
+            LOGGER.info(f"Namespace {multus_namespace} doesn't exist, creating it...")
+            ns = create_and_store_resource(
+                fixture_store=fixture_store,
+                resource=Namespace,
+                client=ocp_admin_client,
+                name=multus_namespace,
+                label={
+                    "pod-security.kubernetes.io/enforce": "restricted",
+                    "pod-security.kubernetes.io/enforce-version": "latest",
+                },
+            )
+        ns.wait_for_status(status=ns.Status.ACTIVE)
 
     # Get network count directly from source provider inventory
     networks = source_provider_inventory.vms_networks_mappings(vms=vms)
@@ -548,23 +574,23 @@ def multus_network_name(
             fixture_store=fixture_store,
             resource=NetworkAttachmentDefinition,
             client=ocp_admin_client,
-            namespace=target_namespace,
+            namespace=multus_namespace,
             config=config,
             name=nad_name,
         )
 
         created_nads.append(nad_name)
-        LOGGER.info(f"Created NAD: {nad_name} in namespace {target_namespace}")
+        LOGGER.info(f"Created NAD: {nad_name} in namespace {multus_namespace}")
 
-    LOGGER.info(f"Created {len(created_nads)} NADs for migration: {created_nads}")
+    LOGGER.info(f"Created {len(created_nads)} NADs in namespace {multus_namespace}: {created_nads}")
 
     # Return the base name - consuming code will generate the same indexed names
     # This maintains the contract: fixture creates NADs, returns base name for generation
-    yield base_name
+    yield {"name": base_name, "namespace": multus_namespace}
 
 
 @pytest.fixture(scope="function")
-def vm_ssh_connections(fixture_store, destination_provider, target_namespace, ocp_admin_client):
+def vm_ssh_connections(fixture_store, destination_provider, target_namespace, ocp_admin_client, plan):
     """
     Fixture to manage SSH connections to migrated VMs using python-rrmngmnt.
 
@@ -578,9 +604,10 @@ def vm_ssh_connections(fixture_store, destination_provider, target_namespace, oc
                 host.fs.put("/local/file", "/remote/file")
                 host.package_management.install("htop")
     """
+    vm_namespace = plan["_vm_target_namespace"]
     manager = SSHConnectionManager(
         provider=destination_provider,
-        namespace=target_namespace,
+        namespace=vm_namespace,
         fixture_store=fixture_store,
         ocp_client=ocp_admin_client,
     )
@@ -640,6 +667,35 @@ def plan(
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     warm_migration = plan.get("warm_migration", False)
 
+    # Handle custom VM target namespace from test config
+    custom_vm_namespace = plan.get("vm_target_namespace")
+    if custom_vm_namespace:
+        LOGGER.info(f"Using custom VM target namespace from test config: {custom_vm_namespace}")
+        ns = Namespace(name=custom_vm_namespace, client=ocp_admin_client)
+        if ns.exists:
+            LOGGER.info(f"Namespace {custom_vm_namespace} already exists, using it")
+        else:
+            LOGGER.info(f"Namespace {custom_vm_namespace} doesn't exist, creating it...")
+            ns = create_and_store_resource(
+                fixture_store=fixture_store,
+                resource=Namespace,
+                client=ocp_admin_client,
+                name=custom_vm_namespace,
+                label={
+                    "pod-security.kubernetes.io/enforce": "restricted",
+                    "pod-security.kubernetes.io/enforce-version": "latest",
+                    "mutatevirtualmachines.kubemacpool.io": "ignore",
+                },
+            )
+        ns.wait_for_status(status=ns.Status.ACTIVE)
+        vm_target_namespace = custom_vm_namespace
+    else:
+        LOGGER.info(f"VM target namespace not specified in test config, using default: {target_namespace}")
+        vm_target_namespace = target_namespace
+
+    # Store vm_target_namespace in plan for later use
+    plan["_vm_target_namespace"] = vm_target_namespace
+
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
@@ -651,7 +707,7 @@ def plan(
                 dyn_client=ocp_admin_client,
                 vms=virtual_machines,
                 namespace=source_vms_namespace,
-                network_name=multus_network_name,
+                network_name=multus_network_name["name"],
                 vm_name_suffix=vm_name_suffix,
             )
         for vm in virtual_machines:
@@ -698,11 +754,13 @@ def plan(
 
     yield plan
 
+    # Use VM-specific namespace for cleanup registration
+    vm_namespace_for_cleanup = plan["_vm_target_namespace"]
     for vm in plan["virtual_machines"]:
         vm_obj = VirtualMachine(
             client=ocp_admin_client,
             name=vm["name"],
-            namespace=target_namespace,
+            namespace=vm_namespace_for_cleanup,
         )
         fixture_store["teardown"].setdefault(vm_obj.kind, []).append({
             "name": vm_obj.name,
@@ -710,7 +768,7 @@ def plan(
             "module": vm_obj.__module__,
         })
 
-    for pod in Pod.get(dyn_client=ocp_admin_client, namespace=target_namespace):
+    for pod in Pod.get(dyn_client=ocp_admin_client, namespace=vm_namespace_for_cleanup):
         fixture_store["teardown"].setdefault(pod.kind, []).append({
             "name": pod.name,
             "namespace": pod.namespace,

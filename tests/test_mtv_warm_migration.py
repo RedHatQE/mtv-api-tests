@@ -76,6 +76,7 @@ def test_sanity_warm_mtv_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
+        vm_target_namespace=plan.get("_vm_target_namespace"),
     )
 
 
@@ -133,6 +134,7 @@ def test_mtv_migration_warm_2disks2nics(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
+        vm_target_namespace=plan.get("_vm_target_namespace"),
     )
 
 
@@ -189,4 +191,5 @@ def test_warm_remote_ocp(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
+        vm_target_namespace=plan.get("_vm_target_namespace"),
     )

@@ -49,7 +49,9 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
+    vm_target_namespace: str | None = None,
 ) -> None:
+    _vm_target_namespace: str = vm_target_namespace if vm_target_namespace is not None else target_namespace
     # Populate VM IDs from Forklift inventory for all VMs
     # This ensures we always use IDs in the Plan CR (works for all provider types)
     if source_provider_inventory:
@@ -67,7 +69,7 @@ def migrate_vms(
         destination_provider=destination_provider,
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
-        target_namespace=target_namespace,
+        target_namespace=_vm_target_namespace,
         fixture_store=fixture_store,
         cut_over=cut_over,
         pre_hook_name=pre_hook_name,
@@ -90,12 +92,13 @@ def migrate_vms(
             source_provider=source_provider,
             source_provider_data=source_provider_data,
             destination_provider=destination_provider,
-            destination_namespace=target_namespace,
+            destination_namespace=_vm_target_namespace,
             network_map_resource=network_migration_map,
             storage_map_resource=storage_migration_map,
             source_vms_namespace=source_vms_namespace,
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
+            vm_target_namespace=_vm_target_namespace,
         )
 
 
@@ -365,7 +368,7 @@ def get_network_migration_map(
     fixture_store: dict[str, Any],
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
-    multus_network_name: str,
+    multus_network_name: dict[str, str],
     ocp_admin_client: DynamicClient,
     target_namespace: str,
     source_provider_inventory: ForkliftInventory,
@@ -404,7 +407,7 @@ def create_storagemap_and_networkmap(
     destination_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
     ocp_admin_client: DynamicClient,
-    multus_network_name: str,
+    multus_network_name: dict[str, str],
     target_namespace: str,
 ) -> tuple[StorageMap, NetworkMap]:
     vms = [vm["name"] for vm in plan["virtual_machines"]]

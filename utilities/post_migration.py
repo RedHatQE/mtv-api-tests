@@ -1015,6 +1015,7 @@ def check_vms(
     source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
+    vm_target_namespace: str | None = None,
 ) -> None:
     res: dict[str, list[str]] = {}
     should_fail: bool = False
@@ -1045,8 +1046,10 @@ def check_vms(
             source_provider_inventory=source_provider_inventory,
         )
         vm_guest_agent = vm.get("guest_agent")
+        # Use vm_target_namespace if specified, otherwise use destination_namespace
+        vm_namespace = vm_target_namespace if vm_target_namespace else destination_namespace
         destination_vm = destination_provider.vm_dict(
-            wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=destination_namespace
+            wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=vm_namespace
         )
 
         try:
