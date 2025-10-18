@@ -212,7 +212,9 @@ tests_params: dict = {
         # pvc_name_template to set Forklift PVC Name template, supports Go template syntax: {{.FileName}},
         # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
         "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
-        "pvc_name_template_use_generate_name": False,  # Boolean to control template usage  
+        "pvc_name_template_use_generate_name": False,  # Boolean to control template usage
+        "vm_target_namespace": 'test-vms',  # Optional: Deploy migrated VMs to a different namespace than Plans/Maps
+        "multus_namespace": 'default',       # Optional: Use NADs from a different namespace (e.g., pre-existing 'default')
     },
 }
 ```

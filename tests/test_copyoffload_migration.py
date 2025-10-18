@@ -167,6 +167,7 @@ def test_copyoffload_thin_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_target_namespace=plan["_vm_target_namespace"],
     )
 
 
@@ -317,6 +318,7 @@ def test_copyoffload_thick_lazy_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
+        vm_target_namespace=plan["_vm_target_namespace"],
     )
 
 
@@ -469,6 +471,7 @@ def test_copyoffload_multi_disk_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
+        vm_target_namespace=plan["_vm_target_namespace"],
     )
 
     # Verify that the correct number of disks were migrated
@@ -597,6 +600,7 @@ def test_copyoffload_multi_disk_different_path_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_target_namespace=plan["_vm_target_namespace"],
     )
 
     # Verify that the correct number of disks were migrated
@@ -702,6 +706,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
+        vm_target_namespace=plan["_vm_target_namespace"],
     )
 
     # Verify that the correct number of disks were migrated (1 base + 1 RDM = 2)

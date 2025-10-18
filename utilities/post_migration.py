@@ -1017,6 +1017,20 @@ def check_vms(
     source_provider_inventory: ForkliftInventory | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
 ) -> None:
+    """Verify migrated VMs match source VM configuration.
+
+    Args:
+        plan: Migration plan containing VM specifications.
+        source_provider: Source provider connection.
+        destination_provider: Destination provider connection.
+        destination_namespace: Namespace where migrated VMs are located.
+        network_map_resource: Network mapping resource.
+        storage_map_resource: Storage mapping resource.
+        source_provider_data: Source provider configuration data.
+        source_vms_namespace: Namespace where source VMs are located.
+        source_provider_inventory: Provider inventory for source VMs.
+        vm_ssh_connections: SSH connection manager for VM validation.
+    """
     res: dict[str, list[str]] = {}
     should_fail: bool = False
 

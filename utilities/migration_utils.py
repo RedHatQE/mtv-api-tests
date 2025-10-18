@@ -200,6 +200,7 @@ def prepare_migration_for_tests(
     pre_hook_namespace: str | None = None,
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
+    vm_target_namespace: str | None = None,
 ) -> dict[str, Any]:
     if not source_provider.ocp_resource:
         raise ValueError("source_provider.ocp_resource is not set")
@@ -242,6 +243,7 @@ def prepare_migration_for_tests(
         "storage_map_name": storage_migration_map.name,
         "storage_map_namespace": storage_migration_map.namespace,
         "target_namespace": target_namespace,
+        "vm_target_namespace": vm_target_namespace,
         "pre_hook_name": pre_hook_name,
         "pre_hook_namespace": pre_hook_namespace,
         "after_hook_name": after_hook_name,

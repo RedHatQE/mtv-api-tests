@@ -48,6 +48,7 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
+    vm_target_namespace: str | None = None,
 ) -> None:
     # Populate VM IDs from Forklift inventory for all VMs
     # This ensures we always use IDs in the Plan CR (works for all provider types)
@@ -67,6 +68,7 @@ def migrate_vms(
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         target_namespace=target_namespace,
+        vm_target_namespace=vm_target_namespace,
         fixture_store=fixture_store,
         cut_over=cut_over,
         pre_hook_name=pre_hook_name,
@@ -84,12 +86,13 @@ def migrate_vms(
         create_migration_scale_report(plan_resource=plan)
 
     if get_value_from_py_config("check_vms_signals") and plan.get("check_vms_signals", True):
+        _vm_namespace = vm_target_namespace if vm_target_namespace else target_namespace
         check_vms(
             plan=plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
             destination_provider=destination_provider,
-            destination_namespace=target_namespace,
+            destination_namespace=_vm_namespace,
             network_map_resource=network_migration_map,
             storage_map_resource=storage_migration_map,
             source_vms_namespace=source_vms_namespace,
@@ -122,6 +125,7 @@ def run_migration(
     preserve_static_ips: bool = False,
     pvc_name_template: str | None = None,
     pvc_name_template_use_generate_name: bool | None = None,
+    vm_target_namespace: str | None = None,
 ) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -150,6 +154,9 @@ def run_migration(
     Returns:
         Plan and Migration Managed Resources.
     """
+    # Determine where VMs should be migrated to (spec.targetNamespace)
+    spec_target_namespace = vm_target_namespace if vm_target_namespace else target_namespace
+
     # Build plan kwargs
     plan_kwargs = {
         "client": ocp_admin_client,
@@ -166,7 +173,7 @@ def run_migration(
         "network_map_name": network_map_name,
         "network_map_namespace": network_map_namespace,
         "virtual_machines_list": virtual_machines_list,
-        "target_namespace": target_namespace,
+        "target_namespace": spec_target_namespace,
         "warm_migration": warm_migration,
         "pre_hook_name": pre_hook_name,
         "pre_hook_namespace": pre_hook_namespace,
@@ -368,7 +375,7 @@ def get_network_migration_map(
     fixture_store: dict[str, Any],
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
-    multus_network_name: str,
+    multus_network_name: dict[str, str],
     ocp_admin_client: DynamicClient,
     target_namespace: str,
     source_provider_inventory: ForkliftInventory,
@@ -407,7 +414,7 @@ def create_storagemap_and_networkmap(
     destination_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
     ocp_admin_client: DynamicClient,
-    multus_network_name: str,
+    multus_network_name: dict[str, str],
     target_namespace: str,
 ) -> tuple[StorageMap, NetworkMap]:
     vms = [vm["name"] for vm in plan["virtual_machines"]]
