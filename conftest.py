@@ -600,7 +600,7 @@ def plan(
             "module": vm_obj.__module__,
         })
 
-    for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
+    for pod in Pod.get(dyn_client=ocp_admin_client, namespace=target_namespace):
         fixture_store["teardown"].setdefault(pod.kind, []).append({
             "name": pod.name,
             "namespace": pod.namespace,
