@@ -83,23 +83,18 @@ class VMWareProvider(BaseProvider):
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
         except ValueError:
             if clone_vm:
-                try:
-                    # Use copyoffload datastore if configured
-                    target_datastore_id = self.copyoffload_config.get('datastore_id')
-                    target_vm = self.clone_vm(
-                        source_vm_name=query,
-                        clone_vm_name=target_vm_name,
-                        session_uuid=session_uuid,
-                        target_datastore_id=target_datastore_id
-                    )
-                    if not target_vm:
-                        raise VmNotFoundError(
-                            f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]"
-                        )
-                except Exception as clone_error:
+                # Use copyoffload datastore if configured
+                target_datastore_id = self.copyoffload_config.get('datastore_id')
+                target_vm = self.clone_vm(
+                    source_vm_name=query,
+                    clone_vm_name=target_vm_name,
+                    session_uuid=session_uuid,
+                    target_datastore_id=target_datastore_id
+                )
+                if not target_vm:
                     raise VmNotFoundError(
-                        f"Failed to clone VM '{target_vm_name}' by cloning from '{query}': {clone_error}"
-                    ) from clone_error
+                        f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]"
+                    )
             else:
                 # Re-raise the original error if cloning is not enabled
                 raise
@@ -183,6 +178,55 @@ class VMWareProvider(BaseProvider):
                 root_snapshot_list = snapshot.childSnapshotList
         return snapshots
 
+    def _get_network_name_from_device(self, device: vim.vm.device.VirtualEthernetCard) -> str:
+        """
+        Extract network name from a virtual ethernet device.
+        
+        Handles different network backing types:
+        - Standard network backing (vSwitch)
+        - Distributed Virtual Switch (DVS) portgroups
+        
+        Args:
+            device: Virtual ethernet card device
+            
+        Returns:
+            str: Network name or "Unknown" if unable to determine
+        """
+        network_name = "Unknown"
+        
+        if not device.backing:
+            return network_name
+            
+        # Standard network backing (vSwitch)
+        if hasattr(device.backing, 'network') and device.backing.network:
+            return device.backing.network.name
+            
+        # Distributed virtual port backing (DVS)
+        if hasattr(device.backing, 'port') and device.backing.port:
+            port = device.backing.port
+            if hasattr(port, 'portgroupKey'):
+                # Resolve the portgroup key to its name by searching all DVS portgroups
+                try:
+                    container = self.view_manager.CreateContainerView(
+                        self.content.rootFolder, [vim.dvs.DistributedVirtualPortgroup], True
+                    )
+                    for pg in container.view:
+                        if pg.key == port.portgroupKey:
+                            network_name = pg.name
+                            break
+                    container.Destroy()
+                    
+                    # If we didn't find it, fall back to the key
+                    if network_name == "Unknown":
+                        network_name = f"DVS-{port.portgroupKey}"
+                except Exception:
+                    # Fallback if we can't resolve the portgroup
+                    network_name = f"DVS-{port.portgroupKey}"
+            else:
+                network_name = "Distributed Virtual Switch"
+                
+        return network_name
+
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         vm_name = kwargs["name"]
 
@@ -206,35 +250,7 @@ class VMWareProvider(BaseProvider):
         for device in vm_config.hardware.device:
             # Network Interfaces
             if isinstance(device, vim.vm.device.VirtualEthernetCard):
-                # Handle different network backing types
-                network_name = "Unknown"
-                if device.backing:
-                    if hasattr(device.backing, 'network') and device.backing.network:
-                        # Standard network backing
-                        network_name = device.backing.network.name
-                    elif hasattr(device.backing, 'port') and device.backing.port:
-                        # Distributed virtual port backing - get the actual portgroup name
-                        port = device.backing.port
-                        if hasattr(port, 'portgroupKey'):
-                            # Resolve the portgroup key to its name by searching all DVS portgroups
-                            try:
-                                container = self.view_manager.CreateContainerView(
-                                    self.content.rootFolder, [vim.dvs.DistributedVirtualPortgroup], True
-                                )
-                                for pg in container.view:
-                                    if pg.key == port.portgroupKey:
-                                        network_name = pg.name
-                                        break
-                                container.Destroy()
-                                # If we didn't find it, fall back to the key
-                                if network_name == "Unknown":
-                                    network_name = f"DVS-{port.portgroupKey}"
-                            except Exception:
-                                # Fallback if we can't resolve the portgroup
-                                network_name = f"DVS-{port.portgroupKey}"
-                        else:
-                            network_name = "Distributed Virtual Switch"
-
+                network_name = self._get_network_name_from_device(device)
                 result_vm_info["network_interfaces"].append({
                     "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "macAddress": device.macAddress,
@@ -345,7 +361,7 @@ class VMWareProvider(BaseProvider):
         session_uuid: str,
         power_on: bool = False,
         regenerate_mac: bool = True,
-        target_datastore_id: str = None,
+        target_datastore_id: str | None = None,
     ) -> vim.VirtualMachine:
         """
         Clones a VM from a source VM or template.
@@ -363,15 +379,7 @@ class VMWareProvider(BaseProvider):
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
 
         relocate_spec = vim.vm.RelocateSpec()
-        # Use default resource pool instead of template's resource pool to avoid permission issues
-        try:
-            # Try to find the "Resources" resource pool (default in most vSphere environments)
-            resource_pool = self.get_obj([vim.ResourcePool], "Resources")
-            relocate_spec.pool = resource_pool
-        except ValueError:
-            # Fallback to the template's resource pool if "Resources" not found
-            LOGGER.warning("Could not find 'Resources' resource pool, using template's resource pool")
-            relocate_spec.pool = source_vm.resourcePool
+        relocate_spec.pool = source_vm.resourcePool
 
         # Use target datastore if specified, otherwise relay on vsphere's default behaviour
         if target_datastore_id:
