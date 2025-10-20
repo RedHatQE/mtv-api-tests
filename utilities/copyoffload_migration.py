@@ -41,6 +41,26 @@ def get_copyoffload_config(source_provider_data: dict[str, Any]) -> dict[str, An
 
     return source_provider_data["copyoffload"]
 
+
+def get_copyoffload_credential(
+    credential_name: str,
+    copyoffload_config: dict[str, Any],
+) -> str | None:
+    """
+    Get a copyoffload credential from environment variable or config file.
+    
+    Environment variables take precedence over config file values.
+    
+    Args:
+        credential_name: Name of the credential (e.g., "storage_hostname", "ontap_svm")
+        copyoffload_config: Copyoffload configuration dictionary
+        
+    Returns:
+        str | None: Credential value from env var or config, or None if not found
+    """
+    env_var_name = f"COPYOFFLOAD_{credential_name.upper()}"
+    return os.getenv(env_var_name) or copyoffload_config.get(credential_name)
+
 def create_storage_secret_for_copyoffload(
     fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
@@ -65,14 +85,22 @@ def create_storage_secret_for_copyoffload(
     copyoffload_config = get_copyoffload_config(source_provider_data)
 
     # Get storage credentials from environment variables or provider config
-    storage_hostname = os.getenv("STORAGE_HOSTNAME") or copyoffload_config.get("storage_hostname")
-    storage_username = os.getenv("STORAGE_USERNAME") or copyoffload_config.get("storage_username") 
-    storage_password = os.getenv("STORAGE_PASSWORD") or copyoffload_config.get("storage_password")
+    storage_hostname = get_copyoffload_credential("storage_hostname", copyoffload_config)
+    storage_username = get_copyoffload_credential("storage_username", copyoffload_config)
+    storage_password = get_copyoffload_credential("storage_password", copyoffload_config)
 
     if not all([storage_hostname, storage_username, storage_password]):
         raise ValueError(
-            "Storage credentials are required. Set STORAGE_HOSTNAME, STORAGE_USERNAME, "
-            "and STORAGE_PASSWORD environment variables or include them in .providers.json"
+            "Storage credentials are required. Set COPYOFFLOAD_STORAGE_HOSTNAME, COPYOFFLOAD_STORAGE_USERNAME, "
+            "and COPYOFFLOAD_STORAGE_PASSWORD environment variables or include them in .providers.json"
+        )
+
+    # Validate storage vendor product
+    storage_vendor = copyoffload_config.get("storage_vendor_product")
+    if not storage_vendor:
+        raise ValueError(
+            "storage_vendor_product is required in copyoffload configuration. "
+            "Valid values: 'ontap', 'vantara'"
         )
 
     # Base secret data
@@ -83,10 +111,8 @@ def create_storage_secret_for_copyoffload(
     }
 
     # Add vendor-specific configuration
-    storage_vendor = copyoffload_config.get("storage_vendor_product", "")
-
     if storage_vendor == "ontap":
-        ontap_svm = os.getenv("ONTAP_SVM") or copyoffload_config.get("ontap_svm")
+        ontap_svm = get_copyoffload_credential("ontap_svm", copyoffload_config)
         if ontap_svm:
             secret_data["ONTAP_SVM"] = ontap_svm
 
@@ -114,7 +140,7 @@ def migrate_vms_with_copyoffload(
     source_provider_data: dict[str, Any],
     target_namespace: str,
     source_vms_namespace: str,
-    source_provider_inventory: ForkliftInventory | None = None,
+    source_provider_inventory: ForkliftInventory,
 ) -> None:
     """Migrate VMs using copy-offload functionality."""
     LOGGER.info("Starting copy-offload migration")
@@ -140,9 +166,8 @@ def migrate_vms_with_copyoffload(
     # Create storage map using copy-offload configuration
     copyoffload_config = get_copyoffload_config(source_provider_data)
 
+    # Get storage_vendor_product
     storage_vendor_product = copyoffload_config.get("storage_vendor_product")
-    if not storage_vendor_product:
-        raise ValueError("storage_vendor_product not found in copyoffload configuration")
 
     datastore_id = copyoffload_config.get("datastore_id")
     if not datastore_id:
@@ -163,15 +188,13 @@ def migrate_vms_with_copyoffload(
     # Use consolidated storage map creation function with copy-offload parameters
     vms = [vm["name"] for vm in plan["virtual_machines"]]
     
-    # Note: source_provider_inventory is required for function signature but not used in copy-offload mode
-    # We pass it even if None; the copy-offload parameters take precedence
     storage_migration_map = get_storage_migration_map(
         fixture_store=fixture_store,
         target_namespace=target_namespace,
         source_provider=source_provider,
         destination_provider=destination_provider,
         ocp_admin_client=ocp_admin_client,
-        source_provider_inventory=source_provider_inventory,  # type: ignore[arg-type]
+        source_provider_inventory=source_provider_inventory,
         vms=vms,
         storage_class=storage_class,
         # Copy-offload specific parameters trigger copy-offload mode

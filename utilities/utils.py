@@ -126,6 +126,9 @@ def create_source_provider(
     source_provider_secret: Secret | None = None
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
+    
+    # Check if copy-offload configuration is present
+    has_copyoffload = "copyoffload" in source_provider_data_copy
 
     secret_string_data = {
         "url": source_provider_data_copy["api_url"],
@@ -152,7 +155,7 @@ def create_source_provider(
         secret_string_data["user"] = source_provider_data_copy["username"]
         secret_string_data["password"] = source_provider_data_copy["password"]
         # Pass copyoffload configuration if present
-        if "copyoffload" in source_provider_data_copy:
+        if has_copyoffload:
             provider_args["copyoffload"] = source_provider_data_copy["copyoffload"]
 
     elif rhv_provider(provider_data=source_provider_data_copy):
@@ -217,7 +220,7 @@ def create_source_provider(
 
     # Add copy-offload annotation only when copy-offload is configured
     provider_annotations = {}
-    if vmware_provider(provider_data=source_provider_data_copy) and "copyoffload" in source_provider_data_copy:
+    if vmware_provider(provider_data=source_provider_data_copy) and has_copyoffload:
         provider_annotations["forklift.konveyor.io/empty-vddk-init-image"] = "yes"
 
     ocp_resource_provider = create_and_store_resource(

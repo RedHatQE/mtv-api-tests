@@ -7,12 +7,9 @@ vSphere and OpenShift environments.
 """
 import pytest
 from pytest_testconfig import config as py_config
-from simple_logger.logger import get_logger
 
 from utilities.copyoffload_migration import migrate_vms_with_copyoffload
 from utilities.mtv_migration import get_network_migration_map
-
-LOGGER = get_logger(__name__)
 
 
 @pytest.mark.copyoffload
@@ -59,14 +56,18 @@ def test_copyoffload_thin_migration(
     "copyoffload": {
         "storage_vendor_product": "ontap",  # or "vantara"
         "datastore_id": "datastore-123",    # vSphere datastore ID
-        "template_name": "<copyoffload-template-name>"
+        "template_name": "<copyoffload-template-name>",
+        "storage_hostname": "storage.example.com",
+        "storage_username": "admin",
+        "storage_password": "password",
+        "ontap_svm": "vserver-name"  # For NetApp ONTAP only
     }
 
-    Environment Variables (optional, overrides config):
-    - STORAGE_HOSTNAME: Storage array management hostname
-    - STORAGE_USERNAME: Storage array admin username
-    - STORAGE_PASSWORD: Storage array admin password
-    - ONTAP_SVM: NetApp ONTAP SVM name (for ONTAP only)
+    Optional Environment Variables (override .providers.json values):
+    - COPYOFFLOAD_STORAGE_HOSTNAME
+    - COPYOFFLOAD_STORAGE_USERNAME
+    - COPYOFFLOAD_STORAGE_PASSWORD
+    - COPYOFFLOAD_ONTAP_SVM
 
     Args:
         request: Pytest request object
@@ -80,7 +81,7 @@ def test_copyoffload_thin_migration(
         multus_network_name: Multus network configuration name
         source_provider_inventory: Source provider inventory
         source_vms_namespace: Source VMs namespace
-        validate_copyoffload_config: Fixture that validates copyoffload configuration
+        copyoffload_config: Fixture that validates copyoffload configuration
     """
 
     # Create network migration map
@@ -110,8 +111,3 @@ def test_copyoffload_thin_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
     )
-
-    # Log success message
-    LOGGER.info("Copy-offload migration test completed successfully!")
-    LOGGER.info(f"Migrated VMs: {[vm['name'] for vm in plan['virtual_machines']]}")
-    LOGGER.info(f"Target namespace: {target_namespace}")

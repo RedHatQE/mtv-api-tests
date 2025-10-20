@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from typing import Any
 
@@ -9,6 +10,8 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
+from ocp_resources.resource import ResourceEditor
+
 from pytest import FixtureRequest
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -159,15 +162,14 @@ def run_migration(
     }
 
     plan = create_and_store_resource(**plan_kwargs)
-    
+
     # Add copy-offload specific parameters if enabled
     # Since Plan class doesn't support pvcNameTemplate parameter, we need to update the Plan after creation
     if copyoffload:
         # When using copy-offload with generateName, we need to provide a template
         # According to the Forklift API, pvcNameTemplate should be set when pvcNameTemplateUseGenerateName is true
         # NOTE: Do NOT end with hyphen - Kubernetes adds the hyphen automatically with generateName
-        from ocp_resources.resource import ResourceEditor
-        
+
         LOGGER.info("Adding pvcNameTemplate field to Plan for copy-offload migration")
         ResourceEditor(
             patches={
@@ -188,6 +190,12 @@ def run_migration(
         LOGGER.error(f"Source provider: {source_provider.instance}")
         LOGGER.error(f"Destinaion provider: {dest_provider.instance}")
         raise
+
+    # Workaround for race condition: give time for plan-specific secret creation
+    if copyoffload:
+        LOGGER.info("Copy-offload: waiting 10s for Forklift to create plan-specific secret...")
+        time.sleep(10)
+
     create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
@@ -300,8 +308,8 @@ def get_storage_migration_map(
     if not destination_provider.ocp_resource:
         raise ValueError("destination_provider.ocp_resource is not set")
 
-    # Determine storage class
-    storage_map_from_config: str = storage_class or py_config["storage_class"]
+    # Determine storage class (from parameter or config)
+    target_storage_class: str = storage_class or py_config["storage_class"]
 
     # Build storage map list based on migration type
     storage_map_list: list[dict[str, Any]] = []
@@ -311,7 +319,7 @@ def get_storage_migration_map(
         # Copy-offload migration mode
         LOGGER.info(f"Creating copy-offload storage map for datastore ID: {datastore_id}")
         destination_config = {
-            "storageClass": storage_map_from_config,
+            "storageClass": target_storage_class,
         }
 
         # Add copy-offload specific destination settings
@@ -326,12 +334,11 @@ def get_storage_migration_map(
             "offloadPlugin": offload_plugin_config,
         })
     else:
-        # Standard migration mode (original behavior - unchanged)
         LOGGER.info(f"Creating standard storage map for VMs: {vms}")
         storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
         for storage in storage_migration_map:
             storage_map_list.append({
-                "destination": {"storageClass": storage_map_from_config},
+                "destination": {"storageClass": target_storage_class},
                 "source": storage,
             })
 

@@ -66,6 +66,25 @@ docker run --rm \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:standard-csi \
   --tc=target_ocp_version:4.18
+
+# Example with full configuration
+docker run --rm \
+  -v .providers.json:/app/.providers.json:ro \
+  -v jira.cfg:/app/jira.cfg:ro \
+  -v kubeconfig:/app/kubeconfig:ro \
+  -e KUBECONFIG=/app/kubeconfig \
+  quay.io/openshift-cnv/mtv-tests:latest \
+  uv run pytest -s \
+  --tc=cluster_host:https://api.example.cluster:6443 \
+  --tc=cluster_username:kubeadmin \
+  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=target_ocp_version:4.20 \
+  --tc=source_provider_type:vsphere \
+  --tc=source_provider_version:8.0.1 \
+  --tc=target_namespace:mtv-api-tests-vmware8 \
+  --tc=storage_class:standard-csi \
+  --tc=release_test:true \
+  --skip-data-collector
 ```
 
 ### Required Files
@@ -238,7 +257,19 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
 - PowerMax: `powermax_symmetrix_id`
 - PowerFlex: `powerflex_system_id`
 
-**Security Note:** Never commit real credentials to `.providers.json`. Use environment variables to override config values in production (e.g., `STORAGE_PASSWORD`).
+**Security Note:** For development/testing, credentials can be stored in `.providers.json`. For production/CI, use environment variables to override sensitive values without modifying config files:
+
+```bash
+# Optional: Override credentials with environment variables (overrides .providers.json)
+export COPYOFFLOAD_STORAGE_HOSTNAME=storage.example.com
+export COPYOFFLOAD_STORAGE_USERNAME=admin
+export COPYOFFLOAD_STORAGE_PASSWORD=secretpassword
+export COPYOFFLOAD_ONTAP_SVM=vserver-name  # For NetApp ONTAP only
+```
+
+If credentials are already in `.providers.json`, environment variables are not required.
+
+**Run the tests:**
 
 ```bash
 uv run pytest -m copyoffload \
