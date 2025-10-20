@@ -81,7 +81,6 @@ def test_copyoffload_thin_migration(
         multus_network_name: Multus network configuration name
         source_provider_inventory: Source provider inventory
         source_vms_namespace: Source VMs namespace
-        copyoffload_config: Fixture that validates copyoffload configuration
     """
 
     # Create network migration map

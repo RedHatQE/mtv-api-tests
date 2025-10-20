@@ -23,25 +23,6 @@ from utilities.resources import create_and_store_resource
 LOGGER = get_logger(__name__)
 
 
-def get_copyoffload_config(source_provider_data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Get and validate copyoffload configuration from source provider data.
-
-    Args:
-        source_provider_data: Source provider configuration data
-
-    Returns:
-        dict: Copyoffload configuration dictionary
-
-    Raises:
-        ValueError: If copyoffload configuration is not found
-    """
-    if "copyoffload" not in source_provider_data:
-        raise ValueError("copyoffload configuration not found in source provider data")
-
-    return source_provider_data["copyoffload"]
-
-
 def get_copyoffload_credential(
     credential_name: str,
     copyoffload_config: dict[str, Any],
@@ -65,7 +46,7 @@ def create_storage_secret_for_copyoffload(
     fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
     target_namespace: str,
-    source_provider_data: dict[str, Any],
+    copyoffload_config: dict[str, Any],
 ) -> Secret:
     """
     Create a storage secret for copy-offload functionality.
@@ -74,7 +55,7 @@ def create_storage_secret_for_copyoffload(
         fixture_store: Pytest fixture store for resource tracking
         ocp_admin_client: OpenShift admin client
         target_namespace: Target namespace for the secret
-        source_provider_data: Source provider configuration data
+        copyoffload_config: Copy-offload configuration dictionary
 
     Returns:
         Secret: Created storage secret resource
@@ -82,8 +63,6 @@ def create_storage_secret_for_copyoffload(
     Raises:
         ValueError: If required copyoffload configuration is missing
     """
-    copyoffload_config = get_copyoffload_config(source_provider_data)
-
     # Get storage credentials from environment variables or provider config
     storage_hostname = get_copyoffload_credential("storage_hostname", copyoffload_config)
     storage_username = get_copyoffload_credential("storage_username", copyoffload_config)
@@ -143,6 +122,11 @@ def migrate_vms_with_copyoffload(
     source_provider_inventory: ForkliftInventory,
 ) -> None:
     """Migrate VMs using copy-offload functionality."""
+    if "copyoffload" not in source_provider_data:
+        raise ValueError("copyoffload configuration not found in source provider data")
+
+    copyoffload_config = source_provider_data["copyoffload"]
+
     LOGGER.info("Starting copy-offload migration")
     LOGGER.info(f"VMs to migrate: {[vm['name'] for vm in plan['virtual_machines']]}")
 
@@ -160,15 +144,11 @@ def migrate_vms_with_copyoffload(
         ocp_admin_client=ocp_admin_client,
         fixture_store=fixture_store,
         target_namespace=target_namespace,
-        source_provider_data=source_provider_data,
+        copyoffload_config=copyoffload_config,
     )
 
-    # Create storage map using copy-offload configuration
-    copyoffload_config = get_copyoffload_config(source_provider_data)
-
-    # Get storage_vendor_product
+    # Get configuration values
     storage_vendor_product = copyoffload_config.get("storage_vendor_product")
-
     datastore_id = copyoffload_config.get("datastore_id")
     if not datastore_id:
         raise ValueError("datastore_id not found in copyoffload configuration")
@@ -187,7 +167,7 @@ def migrate_vms_with_copyoffload(
 
     # Use consolidated storage map creation function with copy-offload parameters
     vms = [vm["name"] for vm in plan["virtual_machines"]]
-    
+
     storage_migration_map = get_storage_migration_map(
         fixture_store=fixture_store,
         target_namespace=target_namespace,
@@ -219,7 +199,4 @@ def migrate_vms_with_copyoffload(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
     )
-
-    LOGGER.info("Copy-offload migration completed")
-
 

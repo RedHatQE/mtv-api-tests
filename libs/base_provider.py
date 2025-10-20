@@ -72,7 +72,7 @@ class BaseProvider(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str) -> Any:
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str, **kwargs) -> Any:
         pass
 
     @abc.abstractmethod

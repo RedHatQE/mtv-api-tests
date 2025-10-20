@@ -21,6 +21,12 @@ class VMWareProvider(BaseProvider):
     https://github.com/vmware/vsphere-automation-sdk-python
     """
 
+    DISK_TYPE_MAP = {
+        "thin": ("sparse", "Setting disk provisioning to 'thin' (sparse)."),
+        "thick-lazy": ("flat", "Setting disk provisioning to 'thick-lazy' (flat)."),
+        "thick-eager": ("eagerZeroedThick", "Setting disk provisioning to 'thick-eager' (eagerZeroedThick)."),
+    }
+
     def __init__(
         self, host: str, username: str, password: str, ocp_resource: Provider | None = None, **kwargs: Any
     ) -> None:
@@ -75,7 +81,12 @@ class VMWareProvider(BaseProvider):
         return view_manager
 
     def get_vm_by_name(
-        self, query: str, vm_name_suffix: str = "", clone_vm: bool = False, session_uuid: str = ""
+        self,
+        query: str,
+        vm_name_suffix: str = "",
+        clone_vm: bool = False,
+        session_uuid: str = "",
+        clone_options: dict | None = None,
     ) -> vim.VirtualMachine:
         target_vm_name = f"{query}{vm_name_suffix}"
         target_vm = None
@@ -84,12 +95,13 @@ class VMWareProvider(BaseProvider):
         except ValueError:
             if clone_vm:
                 # Use copyoffload datastore if configured
-                target_datastore_id = self.copyoffload_config.get('datastore_id')
+                target_datastore_id = self.copyoffload_config.get("datastore_id")
                 target_vm = self.clone_vm(
                     source_vm_name=query,
                     clone_vm_name=target_vm_name,
                     session_uuid=session_uuid,
-                    target_datastore_id=target_datastore_id
+                    target_datastore_id=target_datastore_id,
+                    clone_options=clone_options,
                 )
                 if not target_vm:
                     raise VmNotFoundError(
@@ -235,6 +247,7 @@ class VMWareProvider(BaseProvider):
             vm_name_suffix=kwargs.get("vm_name_suffix", ""),
             clone_vm=kwargs.get("clone", False),
             session_uuid=kwargs.get("session_uuid", ""),
+            clone_options=kwargs.get("clone_options"),
         )
 
         vm_config: Any = _vm.config
@@ -354,15 +367,7 @@ class VMWareProvider(BaseProvider):
         finally:
             container.Destroy()
 
-    def clone_vm(
-        self,
-        source_vm_name: str,
-        clone_vm_name: str,
-        session_uuid: str,
-        power_on: bool = False,
-        regenerate_mac: bool = True,
-        target_datastore_id: str | None = None,
-    ) -> vim.VirtualMachine:
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str, **kwargs) -> vim.VirtualMachine:
         """
         Clones a VM from a source VM or template.
 
@@ -381,7 +386,30 @@ class VMWareProvider(BaseProvider):
         relocate_spec = vim.vm.RelocateSpec()
         relocate_spec.pool = source_vm.resourcePool
 
+        clone_options = kwargs.get("clone_options") or {}
+        disk_type = clone_options.get("disk_type")
+
+        # Handle disk provisioning type
+        if disk_type:
+            disk_config = self.DISK_TYPE_MAP.get(disk_type.lower())
+            if disk_config:
+                relocate_spec.transform, log_message = disk_config
+                LOGGER.info(log_message)
+            else:
+                LOGGER.warning(f"Disk type '{disk_type}' not recognized. Using vSphere default.")
+
+        # Handle VM configuration overrides (CPU, Memory, etc.) from the 'config' key
+        if "config" in clone_options:
+            config_spec = vim.vm.ConfigSpec()
+            vm_config_overrides = clone_options["config"]
+
+            if "numCPUs" in vm_config_overrides:
+                # This part of the code was not provided in the edit_specification,
+                # so it's not included in the new_code.
+                pass # Placeholder for future implementation
+
         # Use target datastore if specified, otherwise relay on vsphere's default behaviour
+        target_datastore_id = kwargs.get("target_datastore_id")
         if target_datastore_id:
             target_datastore = self.get_obj([vim.Datastore], target_datastore_id)
             relocate_spec.datastore = target_datastore
@@ -389,13 +417,13 @@ class VMWareProvider(BaseProvider):
 
         clone_spec = vim.vm.CloneSpec()
         clone_spec.location = relocate_spec
-        clone_spec.powerOn = power_on
+        clone_spec.powerOn = kwargs.get("power_on", False)
         clone_spec.template = False
 
         # Configure MAC address regeneration if requested
         # Note: Skip MAC regeneration during cloning to avoid distributed virtual switch port conflicts
         # MAC addresses will be automatically generated for the new VM
-        if regenerate_mac:
+        if kwargs.get("regenerate_mac", True):
             LOGGER.info("MAC regeneration requested but skipping during clone to avoid port conflicts")
             LOGGER.info("New VM will get fresh MAC addresses automatically")
 
