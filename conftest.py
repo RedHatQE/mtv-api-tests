@@ -572,6 +572,7 @@ def plan(
                 clone=True,
                 vm_name_suffix=vm_name_suffix,
                 session_uuid=fixture_store["session_uuid"],
+                clone_options=vm,
             )
             vm["name"] = source_vm_details["name"]
 
@@ -750,13 +751,15 @@ def copyoffload_config(source_provider, source_provider_data, plan, target_names
             "Add 'copyoffload' section to your provider in .providers.json"
         )
 
+    config = source_provider_data["copyoffload"]
+
     # Validate required storage credentials are available (from either env vars or .providers.json)
     required_credentials = ["storage_hostname", "storage_username", "storage_password"]
     missing_credentials = []
 
     for cred in required_credentials:
         # Check if credential is available from either env var or config file
-        if not get_copyoffload_credential(cred, copyoffload_config):
+        if not get_copyoffload_credential(cred, config):
             missing_credentials.append(cred)
 
     if missing_credentials:
@@ -765,5 +768,3 @@ def copyoffload_config(source_provider, source_provider_data, plan, target_names
             f"Add them to .providers.json copyoffload section or set environment variables: "
             f"{', '.join([f'COPYOFFLOAD_{c.upper()}' for c in missing_credentials])}"
         )
-
-    return copyoffload_config
