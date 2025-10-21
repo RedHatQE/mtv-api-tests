@@ -49,6 +49,15 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> None:
+    # Populate VM IDs from Forklift inventory for all VMs
+    # This ensures we always use IDs in the Plan CR (works for all provider types)
+    if source_provider_inventory:
+        for vm in plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+            LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
+    
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
         plan=plan,

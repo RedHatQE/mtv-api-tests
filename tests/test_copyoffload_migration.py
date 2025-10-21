@@ -31,6 +31,7 @@ def test_copyoffload_thin_migration(
     multus_network_name,
     source_provider_inventory,
     source_vms_namespace,
+    copyoffload_config,
 ):
     """
     Test copy-offload migration of a thin-provisioned VM disk.

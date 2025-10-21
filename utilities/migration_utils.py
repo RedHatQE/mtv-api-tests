@@ -210,18 +210,8 @@ def prepare_migration_for_tests(
     test_name = request._pyfuncitem.name
     _source_provider_type = py_config.get("source_provider_type")
 
-    # Plan CR accepts VM name or id
-    virtual_machines_list: list[dict[str, str]] = []
-    for vm in plan["virtual_machines"]:
-        if "id" in vm:
-            # Use ONLY VM ID for copy-offload (don't include name to avoid conflicts)
-            vm_entry = {"id": vm["id"]}
-        else:
-            # Use VM name for regular migrations
-            vm_entry = {"name": vm["name"]}
-        virtual_machines_list.append(vm_entry)
-
-    LOGGER.info(f"Plan VM list: {virtual_machines_list}")
+    # Plan CR accepts VM id
+    virtual_machines_list: list[dict[str, str]] = [{"id": vm["id"]} for vm in plan["virtual_machines"]]
 
     if _source_provider_type == Provider.ProviderType.OPENSHIFT:
         for idx in range(len(virtual_machines_list)):

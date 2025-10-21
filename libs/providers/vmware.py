@@ -114,28 +114,14 @@ class VMWareProvider(BaseProvider):
         if not target_vm:
             raise VmNotFoundError(f"VM {target_vm_name} not found on host [{self.host}]")
 
+        # Perform health checks on the VM
+        if self.is_vm_missing_vmx_file(vm=target_vm):
+            raise VmMissingVmxError(vm=target_vm.name)
+
+        if self.is_vm_with_bad_datastore(vm=target_vm):
+            raise VmBadDatastoreError(vm=target_vm.name)
+
         return target_vm
-
-    def get_vms_by_cluster(self, cluster_name: str) -> list[vim.VirtualMachine]:
-        """
-        Get all VMs from a specific cluster.
-        """
-        LOGGER.info(f"Attempting to find VMs in cluster '{cluster_name}'")
-        try:
-            # Find the cluster by name
-            cluster_obj = self.get_obj([vim.ClusterComputeResource], cluster_name)
-            if not cluster_obj:
-                raise ValueError(f"Cluster '{cluster_name}' not found.")
-
-            # Create a container view for the cluster's VMs
-            container = self.view_manager.CreateContainerView(cluster_obj, [vim.VirtualMachine], True)
-            vms = container.view
-            container.Destroy()
-            LOGGER.info(f"Found {len(vms)} VMs in cluster '{cluster_name}'")
-            return vms
-        except Exception as e:
-            LOGGER.error(f"Failed to get VMs from cluster '{cluster_name}': {e}")
-            raise ValueError(f"Could not find VMs in cluster '{cluster_name}'") from e
 
     def wait_task(self, task: vim.Task, action_name: str, wait_timeout: int = 60, sleep: int = 1) -> Any:
         """
@@ -193,26 +179,26 @@ class VMWareProvider(BaseProvider):
     def _get_network_name_from_device(self, device: vim.vm.device.VirtualEthernetCard) -> str:
         """
         Extract network name from a virtual ethernet device.
-        
+
         Handles different network backing types:
         - Standard network backing (vSwitch)
         - Distributed Virtual Switch (DVS) portgroups
-        
+
         Args:
             device: Virtual ethernet card device
-            
+
         Returns:
             str: Network name or "Unknown" if unable to determine
         """
         network_name = "Unknown"
-        
+
         if not device.backing:
             return network_name
-            
+
         # Standard network backing (vSwitch)
         if hasattr(device.backing, 'network') and device.backing.network:
             return device.backing.network.name
-            
+
         # Distributed virtual port backing (DVS)
         if hasattr(device.backing, 'port') and device.backing.port:
             port = device.backing.port
@@ -227,7 +213,7 @@ class VMWareProvider(BaseProvider):
                             network_name = pg.name
                             break
                     container.Destroy()
-                    
+
                     # If we didn't find it, fall back to the key
                     if network_name == "Unknown":
                         network_name = f"DVS-{port.portgroupKey}"
@@ -236,7 +222,7 @@ class VMWareProvider(BaseProvider):
                     network_name = f"DVS-{port.portgroupKey}"
             else:
                 network_name = "Distributed Virtual Switch"
-                
+
         return network_name
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
@@ -421,18 +407,55 @@ class VMWareProvider(BaseProvider):
         clone_spec.template = False
 
         # Configure MAC address regeneration if requested
-        # Note: Skip MAC regeneration during cloning to avoid distributed virtual switch port conflicts
-        # MAC addresses will be automatically generated for the new VM
-        if kwargs.get("regenerate_mac", True):
-            LOGGER.info("MAC regeneration requested but skipping during clone to avoid port conflicts")
-            LOGGER.info("New VM will get fresh MAC addresses automatically")
+        regenerate_mac = kwargs.get("regenerate_mac", True)
+        if regenerate_mac:
+            device_changes = []
+            source_config = source_vm.config
+
+            if source_config and source_config.hardware and source_config.hardware.device:
+                for device in source_config.hardware.device:
+                    if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                        # Create device spec for MAC regeneration
+                        device_spec = vim.vm.device.VirtualDeviceSpec()
+                        device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+                        device_spec.device = device
+                        # Set address type to generate new MAC address
+                        device_spec.device.addressType = "generated"
+                        device_changes.append(device_spec)
+                        LOGGER.info(
+                            f"Configured MAC regeneration for network device: {device.deviceInfo.label if device.deviceInfo else 'Unknown'}"
+                        )
+
+            # Add device changes to clone spec if any network devices found
+            if device_changes:
+                config_spec = vim.vm.ConfigSpec()
+                config_spec.deviceChange = device_changes
+                clone_spec.config = config_spec
+                LOGGER.info(f"Configured {len(device_changes)} network devices for MAC regeneration")
 
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
         LOGGER.info(f"Clone task started for {clone_vm_name}. Waiting for completion...")
 
-        res = self.wait_task(
-            task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}", wait_timeout=60 * 20, sleep=5
-        )
+        try:
+            res = self.wait_task(
+                task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}", wait_timeout=60 * 20, sleep=5
+            )
+        except VmCloneError as e:
+            # Retry without MAC regeneration if we hit a resource conflict error
+            if regenerate_mac and "in use" in str(e).lower():
+                LOGGER.warning(f"Clone failed with resource conflict, retrying without MAC regeneration")
+
+                clone_spec_no_mac = vim.vm.CloneSpec()
+                clone_spec_no_mac.location = relocate_spec
+                clone_spec_no_mac.powerOn = kwargs.get("power_on", False)
+                clone_spec_no_mac.template = False
+
+                task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec_no_mac)
+                res = self.wait_task(
+                    task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name} (retry)", wait_timeout=60 * 20, sleep=5
+                )
+            else:
+                raise
         if res and self.fixture_store:
             self.fixture_store["teardown"].setdefault(self.type, []).append({
                 "name": clone_vm_name,

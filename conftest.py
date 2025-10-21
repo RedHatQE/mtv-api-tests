@@ -723,18 +723,17 @@ def multus_cni_config() -> str:
 
 
 @pytest.fixture(scope="function")
-def copyoffload_config(source_provider, source_provider_data, plan, target_namespace):
+def copyoffload_config(source_provider, source_provider_data):
     """
-    Validate copy-offload configuration and log test setup details.
+    Validate copy-offload configuration before running copy-offload tests.
 
-    This fixture performs all necessary validations before running copy-offload tests:
+    This fixture performs all necessary validations:
     - Verifies vSphere provider type
     - Checks for copyoffload configuration
-    - Validates plan configuration
-    - Checks for storage credentials
-    - Logs test configuration details
+    - Validates storage credentials availability
+    
+    If any validation fails, the test will fail early with a clear error message.
     """
-
     LOGGER = get_logger(__name__)
 
     # Validate that this is a vSphere provider
@@ -768,3 +767,5 @@ def copyoffload_config(source_provider, source_provider_data, plan, target_names
             f"Add them to .providers.json copyoffload section or set environment variables: "
             f"{', '.join([f'COPYOFFLOAD_{c.upper()}' for c in missing_credentials])}"
         )
+    
+    LOGGER.info("✓ Copy-offload configuration validated successfully")
