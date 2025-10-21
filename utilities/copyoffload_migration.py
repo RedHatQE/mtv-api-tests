@@ -130,15 +130,6 @@ def migrate_vms_with_copyoffload(
     LOGGER.info("Starting copy-offload migration")
     LOGGER.info(f"VMs to migrate: {[vm['name'] for vm in plan['virtual_machines']]}")
 
-    # Get VM IDs from Forklift inventory (works for both cloned and existing VMs)
-    for vm in plan["virtual_machines"]:
-        vm_name = vm["name"]
-        vm_data = source_provider_inventory.get_vm(vm_name)
-        vm["id"] = vm_data["id"]
-        LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
-
-    LOGGER.info(f"Final plan VMs before migration: {plan['virtual_machines']}")
-
     # Create storage secret
     storage_secret = create_storage_secret_for_copyoffload(
         ocp_admin_client=ocp_admin_client,
