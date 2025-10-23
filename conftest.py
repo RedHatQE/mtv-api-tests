@@ -5,14 +5,17 @@ import json
 import logging
 import os
 import pickle
+import random
 import shutil
 from pathlib import Path
 from shutil import rmtree
 from typing import Any
 
 import pytest
+from kubernetes import client
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
+from kubernetes.utils import parse_quantity
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -58,6 +61,7 @@ from utilities.utils import (
     create_source_provider,
     get_cluster_client,
     get_value_from_py_config,
+    is_mtv_version_supported,
 )
 from utilities.ssh_utils import SSHConnectionManager
 
@@ -649,6 +653,141 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
     yield OCPProvider(ocp_resource=provider, fixture_store=fixture_store)
+
+
+@pytest.fixture(scope="function")
+def labeled_worker_node(session_uuid, ocp_admin_client, plan):
+    """Label a random worker node with test label for targetNodeSelector testing."""
+
+    # Only create fixture if target_node_selector is configured
+    target_node_selector = plan.get("target_node_selector", {})
+    if not target_node_selector:
+        yield None
+        return
+
+    # Feature IS configured - check MTV version support
+    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
+        pytest.skip("targetNodeSelector requires MTV 2.10.0+")
+
+    # Use CoreV1Api for reliable node retrieval
+    v1 = client.CoreV1Api(api_client=ocp_admin_client.client)
+    nodes_response = v1.list_node()
+    nodes = nodes_response.items
+
+    worker_nodes = [node.metadata.name for node in nodes if "node-role.kubernetes.io/worker" in node.metadata.labels]
+
+    if not worker_nodes:
+        pytest.skip("No worker nodes found")
+
+    # Select worker node with highest available memory (using Metrics API)
+    try:
+        # Get allocatable memory for each worker node
+        allocatable_memory_per_node = {}
+        for node in nodes:
+            if node.metadata.name in worker_nodes:
+                allocatable = parse_quantity(node.status.allocatable.get("memory", "0"))
+                allocatable_memory_per_node[node.metadata.name] = allocatable
+
+        # Get actual memory usage from Metrics API
+        custom_api = client.CustomObjectsApi(api_client=ocp_admin_client.client)
+        node_metrics: dict[str, Any] = custom_api.list_cluster_custom_object(
+            group="metrics.k8s.io", version="v1beta1", plural="nodes"
+        )
+
+        # Calculate available memory: allocatable - used
+        available_memory_per_node = {}
+        for item in node_metrics.get("items", []):
+            node_name = item.get("metadata", {}).get("name")
+            if node_name in worker_nodes:
+                memory_usage_str = item.get("usage", {}).get("memory", "0")
+                used = parse_quantity(memory_usage_str)
+                allocatable = allocatable_memory_per_node[node_name]
+                available = allocatable - used
+                available_memory_per_node[node_name] = available
+
+        # Select node with highest available memory
+        if not available_memory_per_node:
+            LOGGER.warning("No memory metrics available for worker nodes, selecting randomly")
+            target_node = random.choice(worker_nodes)
+        else:
+            max_available = max(available_memory_per_node.values())
+            nodes_with_max_memory = [
+                node for node, available in available_memory_per_node.items() if available == max_available
+            ]
+            target_node = random.choice(nodes_with_max_memory)
+            LOGGER.info(
+                f"Selected node {target_node} with {available_memory_per_node[target_node] // (1024**3)}Gi available"
+            )
+
+    except Exception as e:
+        # Fallback: choose random worker node
+        LOGGER.warning(f"Could not determine node memory, selecting random worker node: {e}")
+        target_node = random.choice(worker_nodes)
+
+    # Extract key and value from plan config
+    label_key = list(target_node_selector.keys())[0]
+    config_value = list(target_node_selector.values())[0]
+
+    # Generate label value
+    if config_value == "auto":
+        label_value = session_uuid
+    else:
+        label_value = config_value
+
+    node = v1.read_node(name=target_node)
+
+    # Update labels
+    if not node.metadata.labels:
+        node.metadata.labels = {}
+    node.metadata.labels[label_key] = label_value
+
+    # Patch the node
+    v1.patch_node(name=target_node, body=node)
+
+    LOGGER.info(f"Labeled worker node {target_node} with {label_key}={label_value}")
+
+    result = {"node_name": target_node, "label_key": label_key, "label_value": label_value}
+    LOGGER.info(f"labeled_worker_node fixture returning: {result}")
+
+    yield result
+
+    # Cleanup - use strategic merge patch to avoid race conditions
+    try:
+        patch_body = {"metadata": {"labels": {label_key: None}}}
+        v1.patch_node(name=target_node, body=patch_body)
+        LOGGER.info(f"Removed label {label_key} from node {target_node}")
+    except Exception as e:
+        LOGGER.warning(f"Failed to cleanup label {label_key} from node {target_node}: {e}")
+
+
+@pytest.fixture(scope="function")
+def labeled_vm(session_uuid, ocp_admin_client, plan):
+    """Generate VM labels for targetLabels testing."""
+
+    # Only create fixture if target_labels is configured
+    target_labels = plan.get("target_labels", {})
+    if not target_labels:
+        yield None
+        return
+
+    # Feature IS configured - check MTV version support
+    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
+        pytest.skip("targetLabels requires MTV 2.10.0+")
+
+    # Generate label values
+    vm_labels = {}
+    for label_key, config_value in target_labels.items():
+        if config_value == "auto":
+            label_value = session_uuid
+        else:
+            label_value = config_value  # Use specified value
+        vm_labels[label_key] = label_value
+        LOGGER.info(f"Generated VM label: {label_key}={label_value}")
+
+    result = {"vm_labels": vm_labels}
+    LOGGER.info(f"labeled_vm fixture returning: {result}")
+
+    yield result
 
 
 @pytest.fixture(scope="function")

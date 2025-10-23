@@ -26,6 +26,7 @@ from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
 from utilities.utils import gen_network_map_list, get_value_from_py_config
+from utilities.utils import is_mtv_version_supported
 
 LOGGER = get_logger(__name__)
 
@@ -50,6 +51,8 @@ def migrate_vms(
     after_hook_namespace: str | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
     vm_target_namespace: str | None = None,
+    labeled_worker_node: dict | None = None,
+    labeled_vm: dict | None = None,
 ) -> None:
     _vm_target_namespace: str = vm_target_namespace if vm_target_namespace is not None else target_namespace
     # Populate VM IDs from Forklift inventory for all VMs
@@ -60,6 +63,15 @@ def migrate_vms(
             vm_data = source_provider_inventory.get_vm(vm_name)
             vm["id"] = vm_data["id"]
             LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
+
+    # Check MTV version support for target_affinity
+    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
+        LOGGER.warning("targetAffinity requires MTV 2.10.0+, skipping affinity configuration")
+        target_affinity = None
+    else:
+        target_affinity = plan.get("target_affinity")
+        if target_affinity:
+            LOGGER.info(f"Using target_affinity: {target_affinity}")
 
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
@@ -77,6 +89,9 @@ def migrate_vms(
         after_hook_name=after_hook_name,
         after_hook_namespace=after_hook_namespace,
         source_vms_namespace=source_vms_namespace,
+        labeled_worker_node=labeled_worker_node,
+        labeled_vm=labeled_vm,
+        target_affinity=target_affinity,
     )
 
     migration_plan = run_migration(**run_migration_kwargs)
@@ -99,6 +114,8 @@ def migrate_vms(
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
             vm_target_namespace=_vm_target_namespace,
+            labeled_worker_node=labeled_worker_node,
+            labeled_vm=labeled_vm,
         )
 
 
@@ -126,6 +143,9 @@ def run_migration(
     preserve_static_ips: bool = False,
     pvc_name_template: str | None = None,
     pvc_name_template_use_generate_name: bool | None = None,
+    target_node_selector: dict[str, str] | None = None,
+    target_labels: dict[str, str] | None = None,
+    target_affinity: dict | None = None,
 ) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -179,6 +199,9 @@ def run_migration(
         "preserve_static_ips": preserve_static_ips,
         "pvc_name_template": pvc_name_template,
         "pvc_name_template_use_generate_name": pvc_name_template_use_generate_name,
+        "target_node_selector": target_node_selector,
+        "target_labels": target_labels,
+        "target_affinity": target_affinity,
     }
 
     # Add copy-offload specific parameters if enabled

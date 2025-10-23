@@ -200,6 +200,9 @@ def prepare_migration_for_tests(
     pre_hook_namespace: str | None = None,
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
+    labeled_worker_node: dict | None = None,
+    labeled_vm: dict | None = None,
+    target_affinity: dict | None = None,
 ) -> dict[str, Any]:
     if not source_provider.ocp_resource:
         raise ValueError("source_provider.ocp_resource is not set")
@@ -231,6 +234,18 @@ def prepare_migration_for_tests(
         for idx in range(len(virtual_machines_list)):
             virtual_machines_list[idx].update({"namespace": source_vms_namespace})
 
+    # Prepare target_node_selector
+    target_node_selector = None
+    if plan.get("target_node_selector") and labeled_worker_node is not None:
+        target_node_selector = {labeled_worker_node["label_key"]: labeled_worker_node["label_value"]}
+        LOGGER.info(f"Using target_node_selector: {target_node_selector}")
+
+    # Prepare target_labels
+    target_labels = None
+    if plan.get("target_labels") and labeled_vm is not None:
+        target_labels = labeled_vm["vm_labels"]
+        LOGGER.info(f"Using target_labels: {target_labels}")
+
     return {
         "ocp_admin_client": ocp_admin_client,
         "source_provider_name": source_provider.ocp_resource.name,
@@ -255,6 +270,9 @@ def prepare_migration_for_tests(
         "preserve_static_ips": plan.get("preserve_static_ips", False),
         "pvc_name_template": plan.get("pvc_name_template"),
         "pvc_name_template_use_generate_name": plan.get("pvc_name_template_use_generate_name"),
+        "target_node_selector": target_node_selector,
+        "target_labels": target_labels,
+        "target_affinity": target_affinity,
     }
 
 

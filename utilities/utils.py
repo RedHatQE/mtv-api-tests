@@ -29,6 +29,7 @@ from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.resources import create_and_store_resource
+from packaging import version
 
 LOGGER = get_logger(__name__)
 
@@ -102,6 +103,61 @@ def _fetch_and_store_cacert(
     )
     secret_string_data["cacert"] = cert_file.read_text()
     return cert_file
+
+
+def get_mtv_version(ocp_admin_client: DynamicClient) -> str:
+    """
+    Get MTV operator version from the cluster.
+
+    Raises:
+        RuntimeError: If MTV operator not found or version cannot be determined
+    """
+    mtv_version: str | None = None
+
+    try:
+        csv_resource = ocp_admin_client.resources.get(
+            api_version="operators.coreos.com/v1alpha1", kind="ClusterServiceVersion"
+        )
+        csvs = csv_resource.get()
+
+        # Access the items attribute (it's a list, not a method)
+        if hasattr(csvs, "items") and csvs.items:
+            csv_list = list(csvs.items)
+        else:
+            csv_list = [csvs] if csvs is not None else []
+
+        # Search for MTV operator by display name
+        for csv in csv_list:
+            if csv is None:
+                continue
+
+            if hasattr(csv, "spec") and csv.spec:
+                display_name = getattr(csv.spec, "displayName", None)
+                mtv_version_str = getattr(csv.spec, "version", None)
+
+                if display_name and display_name == "Migration Toolkit for Virtualization Operator":
+                    mtv_version = mtv_version_str
+                    break
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to determine MTV version: {e}") from e
+
+    if not mtv_version:
+        raise RuntimeError("MTV operator version not found")
+
+    LOGGER.info(f"Found MTV operator version: {mtv_version}")
+    return mtv_version
+
+
+def is_mtv_version_supported(ocp_admin_client: DynamicClient, min_version: str) -> bool:
+    """
+    Check if MTV version supports target features.
+
+    Raises:
+        RuntimeError: If MTV version cannot be determined
+    """
+    mtv_version = get_mtv_version(ocp_admin_client)
+    return version.parse(mtv_version) >= version.parse(min_version)
 
 
 def background(func):

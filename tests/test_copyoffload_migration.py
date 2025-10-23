@@ -51,6 +51,8 @@ def test_copyoffload_thin_migration(
     copyoffload_config,
     copyoffload_storage_secret,
     vm_ssh_connections,
+    labeled_worker_node,
+    labeled_vm,
 ):
     """
     Test copy-offload migration of a thin-provisioned VM disk.
@@ -167,6 +169,8 @@ def test_copyoffload_thin_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         vm_target_namespace=plan.get("_vm_target_namespace"),
+        labeled_worker_node=labeled_worker_node,
+        labeled_vm=labeled_vm,
     )
 
 
@@ -197,6 +201,8 @@ def test_copyoffload_thick_lazy_migration(
     copyoffload_config,
     copyoffload_storage_secret,
     vm_ssh_connections,
+    labeled_worker_node,
+    labeled_vm,
 ):
     """
     Test copy-offload migration of a thick (lazy) disk VM.
@@ -324,6 +330,8 @@ def test_copyoffload_thick_lazy_migration(
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
         vm_target_namespace=plan.get("_vm_target_namespace"),
+        labeled_worker_node=labeled_worker_node,
+        labeled_vm=labeled_vm,
     )
 
 
