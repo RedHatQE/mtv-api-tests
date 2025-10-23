@@ -9,7 +9,6 @@ from pathlib import Path
 from shutil import rmtree
 from typing import Any
 from ocp_resources.provider import Provider
-from simple_logger.logger import get_logger
 
 import pytest
 from kubernetes.dynamic import DynamicClient
@@ -731,11 +730,9 @@ def copyoffload_config(source_provider, source_provider_data):
     - Verifies vSphere provider type
     - Checks for copyoffload configuration
     - Validates storage credentials availability
-    
+
     If any validation fails, the test will fail early with a clear error message.
     """
-    LOGGER = get_logger(__name__)
-
     # Validate that this is a vSphere provider
     if source_provider.type != Provider.ProviderType.VSPHERE:
         pytest.fail(
@@ -767,5 +764,46 @@ def copyoffload_config(source_provider, source_provider_data):
             f"Add them to .providers.json copyoffload section or set environment variables: "
             f"{', '.join([f'COPYOFFLOAD_{c.upper()}' for c in missing_credentials])}"
         )
-    
+
     LOGGER.info("✓ Copy-offload configuration validated successfully")
+
+
+@pytest.fixture(scope="function")
+def copyoffload_storage_secret(
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    source_provider_data,
+    copyoffload_config,
+):
+    """
+    Create a storage secret for copy-offload functionality.
+
+    This fixture creates the storage secret required for copy-offload migrations
+    with credentials from environment variables or .providers.json.
+
+    Args:
+        fixture_store: Pytest fixture store for resource tracking
+        ocp_admin_client: OpenShift admin client
+        target_namespace: Target namespace for the secret
+        source_provider_data: Source provider configuration data
+        copyoffload_config: Copy-offload configuration (validates prerequisites)
+
+    Returns:
+        Secret: Created storage secret resource
+    """
+    from utilities.copyoffload_migration import create_storage_secret_for_copyoffload
+
+    LOGGER.info("Creating copy-offload storage secret")
+
+    copyoffload_cfg = source_provider_data["copyoffload"]
+
+    storage_secret = create_storage_secret_for_copyoffload(
+        fixture_store=fixture_store,
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        copyoffload_config=copyoffload_cfg,
+    )
+
+    LOGGER.info(f"✓ Copy-offload storage secret created: {storage_secret.name}")
+    return storage_secret
