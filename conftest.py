@@ -792,17 +792,50 @@ def copyoffload_storage_secret(
     Returns:
         Secret: Created storage secret resource
     """
-    from utilities.copyoffload_migration import create_storage_secret_for_copyoffload
-
     LOGGER.info("Creating copy-offload storage secret")
 
     copyoffload_cfg = source_provider_data["copyoffload"]
+    
+    # Get storage credentials from environment variables or provider config
+    storage_hostname = get_copyoffload_credential("storage_hostname", copyoffload_cfg)
+    storage_username = get_copyoffload_credential("storage_username", copyoffload_cfg)
+    storage_password = get_copyoffload_credential("storage_password", copyoffload_cfg)
 
-    storage_secret = create_storage_secret_for_copyoffload(
+    if not all([storage_hostname, storage_username, storage_password]):
+        raise ValueError(
+            "Storage credentials are required. Set COPYOFFLOAD_STORAGE_HOSTNAME, COPYOFFLOAD_STORAGE_USERNAME, "
+            "and COPYOFFLOAD_STORAGE_PASSWORD environment variables or include them in .providers.json"
+        )
+
+    # Validate storage vendor product
+    storage_vendor = copyoffload_cfg.get("storage_vendor_product")
+    if not storage_vendor:
+        raise ValueError(
+            "storage_vendor_product is required in copyoffload configuration. "
+            "Valid values: 'ontap', 'vantara'"
+        )
+
+    # Base secret data
+    secret_data = {
+        "STORAGE_HOSTNAME": storage_hostname,
+        "STORAGE_USERNAME": storage_username,
+        "STORAGE_PASSWORD": storage_password,
+    }
+
+    # Add vendor-specific configuration
+    if storage_vendor == "ontap":
+        ontap_svm = get_copyoffload_credential("ontap_svm", copyoffload_cfg)
+        if ontap_svm:
+            secret_data["ONTAP_SVM"] = ontap_svm
+
+    LOGGER.info(f"Creating storage secret for copy-offload with vendor: {storage_vendor}")
+
+    storage_secret = create_and_store_resource(
+        client=ocp_admin_client,
         fixture_store=fixture_store,
-        ocp_admin_client=ocp_admin_client,
-        target_namespace=target_namespace,
-        copyoffload_config=copyoffload_cfg,
+        resource=Secret,
+        namespace=target_namespace,
+        string_data=secret_data,
     )
 
     LOGGER.info(f"✓ Copy-offload storage secret created: {storage_secret.name}")
