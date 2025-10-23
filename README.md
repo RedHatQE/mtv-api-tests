@@ -212,7 +212,29 @@ tests_params: dict = {
         # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
         "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,  # Boolean to control template usage
-    },
+        "target_node_selector": { # Set a node label which the VMs will be migrated to, random node will be labeled
+            "mtv-test-node": "auto"  # "auto" = generate with session UUID, or specify custom value
+        },
+        # Note: The labeled_worker_node fixture attempts to select the worker node with the highest available memory.
+        # If cluster metrics are unavailable, it falls back to random node selection with a warning logged.
+        "target_labels": { # Set a list of VM labels for migrated VMs to be labeled
+            "mtv-test-label": "auto",  # "auto" = generate with session UUID, or specify custom value
+            "mtv-test-label2": "testing"
+        },
+        "target_affinity": {  # Set the Pod affinity with existing labels or use
+                              # preferredDuringSchedulingIgnoredDuringExecution type for testing purposes
+            "podAffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [{
+                    "weight": 100,
+                    "podAffinityTerm": {
+                        "labelSelector": {
+                            "matchLabels": {"app": "my-app"}
+                        },
+                        "topologyKey": "kubernetes.io/hostname"
+                    }
+                }]
+            }
+        },
 }
 ```
 

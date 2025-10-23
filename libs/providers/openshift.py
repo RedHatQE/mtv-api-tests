@@ -6,6 +6,7 @@ from typing import Any, Self
 
 import humanfriendly
 from kubernetes.client.exceptions import ApiException
+from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource
@@ -153,11 +154,33 @@ class OCPProvider(BaseProvider):
         firmware_spec: dict[str, Any] | None = cnv_vm.instance.spec.template.spec.domain.get("firmware")
         result_vm_info["serial"] = firmware_spec.get("serial") if firmware_spec else None
 
+        # VM labels - from template.metadata.labels (VMI template)
+        template_metadata = cnv_vm.instance.spec.template.metadata if cnv_vm.instance.spec.template else None
+        result_vm_info["labels"] = template_metadata.labels if template_metadata and template_metadata.labels else {}
+
+        # VM affinity - from template.spec.affinity (VMI template)
+        template_spec = cnv_vm.instance.spec.template.spec if cnv_vm.instance.spec.template else None
+        result_vm_info["affinity"] = template_spec.affinity if template_spec and template_spec.affinity else None
+
         self.start_vm(cnv_vm)
         # True guest agent is reporting all ok
         result_vm_info["guest_agent_running"] = (
             self.wait_for_cnv_vm_guest_agent(vm_dict=result_vm_info) if wait_for_guest_agent else False
         )
+
+        # Node name - where the VM is scheduled (collected after VM start)
+        node_name = None
+        try:
+            if (
+                cnv_vm.vmi
+                and cnv_vm.vmi.instance
+                and cnv_vm.vmi.instance.status
+                and hasattr(cnv_vm.vmi.instance.status, "nodeName")
+            ):
+                node_name = cnv_vm.vmi.instance.status.nodeName
+        except (AttributeError, NotFoundError):
+            node_name = None
+        result_vm_info["node_name"] = node_name
 
         for interface in cnv_vm.vmi.interfaces:
             matching_networks = [

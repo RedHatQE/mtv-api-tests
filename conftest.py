@@ -5,12 +5,20 @@ import json
 import logging
 import os
 import pickle
+import random
 import shutil
+import socket
+import ssl
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from shutil import rmtree
 from typing import Any
+from urllib.error import URLError
 
 import pytest
+from kubernetes import client
+from kubernetes.client.exceptions import ApiException
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.forklift_controller import ForkliftController
@@ -19,6 +27,7 @@ from ocp_resources.network_attachment_definition import NetworkAttachmentDefinit
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
+from ocp_resources.route import Route
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_profile import StorageProfile
@@ -59,6 +68,7 @@ from utilities.utils import (
     create_source_provider,
     get_cluster_client,
     get_value_from_py_config,
+    is_mtv_version_supported,
 )
 from utilities.virtctl import download_virtctl_from_cluster
 from utilities.ssh_utils import SSHConnectionManager
@@ -67,6 +77,7 @@ RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
+PROMETHEUS_QUERY_TIMEOUT_SECONDS: int = 30
 
 
 # Pytest start
@@ -637,6 +648,198 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
         provider_type=Provider.ProviderType.OPENSHIFT,
     )
     yield OCPProvider(ocp_resource=provider, fixture_store=fixture_store)
+
+
+def _get_worker_nodes(v1: client.CoreV1Api) -> list[str]:
+    """Get list of worker node names."""
+    return [
+        node.metadata.name for node in v1.list_node().items if "node-role.kubernetes.io/worker" in node.metadata.labels
+    ]
+
+
+def _get_prometheus_url(ocp_admin_client: DynamicClient) -> str | None:
+    """Get Prometheus/Thanos querier URL from OpenShift monitoring."""
+    try:
+        thanos_route = Route(
+            client=ocp_admin_client,
+            name="thanos-querier",
+            namespace="openshift-monitoring",
+        )
+        if thanos_route.exists:
+            return f"https://{thanos_route.instance.spec.host}"
+    except (NotFoundError, ApiException) as e:
+        LOGGER.warning(f"Could not get Thanos querier route: {e}")
+    return None
+
+
+def _query_prometheus(url: str, query: str, token: str, insecure: bool = True) -> list[dict[str, Any]] | None:
+    """Query Prometheus API and return results."""
+    try:
+        request_url = f"{url}/api/v1/query?query={urllib.parse.quote(query)}"
+        req = urllib.request.Request(request_url)
+        req.add_header("Authorization", f"Bearer {token}")
+
+        ssl_context = ssl.create_default_context()
+        if insecure:
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
+        with urllib.request.urlopen(req, context=ssl_context, timeout=PROMETHEUS_QUERY_TIMEOUT_SECONDS) as response:
+            data = json.loads(response.read().decode())
+            if data.get("status") == "success":
+                return data.get("data", {}).get("result", [])
+    except (URLError, TimeoutError, socket.timeout, json.JSONDecodeError) as e:
+        LOGGER.warning(f"Prometheus query failed for '{query}': {e}")
+    return None
+
+
+def _parse_prometheus_memory_metrics(
+    worker_nodes: list[str], prom_url: str, token: str
+) -> dict[str, dict[str, int]] | None:
+    """Query Prometheus for memory metrics and return structured data."""
+    allocatable_query = 'kube_node_status_allocatable{resource="memory"}'
+    requested_query = 'sum by (node) (kube_pod_container_resource_requests{resource="memory"} * on(namespace, pod) group_left() (kube_pod_status_phase{phase="Running"} == 1))'
+
+    allocatable_result = _query_prometheus(prom_url, allocatable_query, token)
+    requested_result = _query_prometheus(prom_url, requested_query, token)
+
+    if not allocatable_result:
+        return None
+
+    metrics: dict[str, dict[str, int]] = {}
+    for item in allocatable_result:
+        node = item.get("metric", {}).get("node")
+        if node in worker_nodes:
+            value = float(item.get("value", [None, "0"])[1])
+            metrics.setdefault(node, {})["allocatable"] = int(value)
+
+    if requested_result:
+        for item in requested_result:
+            node = item.get("metric", {}).get("node")
+            if node in worker_nodes and node in metrics:
+                value = float(item.get("value", [None, "0"])[1])
+                metrics[node]["requested"] = int(value)
+
+    for node in metrics:
+        metrics[node].setdefault("requested", 0)
+        metrics[node]["available"] = metrics[node]["allocatable"] - metrics[node]["requested"]
+
+    return metrics if metrics else None
+
+
+def _select_node_by_available_memory(
+    ocp_admin_client: DynamicClient,
+    worker_nodes: list[str],
+) -> str:
+    """Select worker node with highest available memory using Prometheus metrics."""
+    if not worker_nodes:
+        raise ValueError("No worker nodes available for selection")
+
+    auth_header = ocp_admin_client.configuration.api_key.get("authorization", "")
+    token_parts = auth_header.split()
+    token = token_parts[-1] if token_parts else ""
+    if not token:
+        LOGGER.warning("No auth token available, selecting random worker node")
+        return random.choice(worker_nodes)
+
+    prom_url = _get_prometheus_url(ocp_admin_client)
+    if not prom_url:
+        LOGGER.warning("Prometheus URL not found, selecting random worker node")
+        return random.choice(worker_nodes)
+
+    metrics = _parse_prometheus_memory_metrics(worker_nodes, prom_url, token)
+    if not metrics:
+        LOGGER.warning("No valid memory metrics available, selecting random worker node")
+        return random.choice(worker_nodes)
+
+    max_available = max(node_metrics["available"] for node_metrics in metrics.values())
+    nodes_with_max = [node for node, node_metrics in metrics.items() if node_metrics["available"] == max_available]
+    selected_node = random.choice(nodes_with_max)
+
+    LOGGER.info(f"Selected node {selected_node} with highest available memory for scheduling")
+
+    return selected_node
+
+
+def _label_node(v1: client.CoreV1Api, node_name: str, label_key: str, label_value: str) -> None:
+    """Apply label to a node."""
+    node = v1.read_node(name=node_name)
+    if not node.metadata.labels:
+        node.metadata.labels = {}
+    node.metadata.labels[label_key] = label_value
+    v1.patch_node(name=node_name, body=node)
+
+
+def _cleanup_node_label(v1: client.CoreV1Api, node_name: str, label_key: str) -> None:
+    """Remove label from node using strategic merge patch."""
+    try:
+        patch_body = {"metadata": {"labels": {label_key: None}}}
+        v1.patch_node(name=node_name, body=patch_body)
+        LOGGER.info(f"Removed label {label_key} from node {node_name}")
+    except ApiException as e:
+        LOGGER.warning(f"Failed to cleanup label {label_key} from node {node_name}: {e}")
+
+
+@pytest.fixture(scope="function")
+def labeled_worker_node(session_uuid, ocp_admin_client, plan):
+    """Label a worker node with test label for targetNodeSelector testing."""
+    target_node_selector = plan.get("target_node_selector", {})
+    if not target_node_selector:
+        yield None
+        return
+
+    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
+        pytest.skip("targetNodeSelector requires MTV 2.10.0+")
+
+    v1 = client.CoreV1Api(api_client=ocp_admin_client.client)
+    worker_nodes = _get_worker_nodes(v1)
+
+    if not worker_nodes:
+        pytest.skip("No worker nodes found")
+
+    target_node = _select_node_by_available_memory(ocp_admin_client, worker_nodes)
+
+    label_key = list(target_node_selector.keys())[0]
+    config_value = list(target_node_selector.values())[0]
+    label_value = session_uuid if config_value == "auto" else config_value
+
+    _label_node(v1, target_node, label_key, label_value)
+    LOGGER.info(f"Labeled worker node {target_node} with {label_key}={label_value}")
+
+    result = {"node_name": target_node, "label_key": label_key, "label_value": label_value}
+    yield result
+
+    _cleanup_node_label(v1, target_node, label_key)
+
+
+@pytest.fixture(scope="function")
+def labeled_vm(session_uuid, ocp_admin_client, plan):
+    """Generate VM labels for targetLabels testing."""
+
+    # Only create fixture if target_labels is configured
+    target_labels = plan.get("target_labels", {})
+    if not target_labels:
+        yield None
+        return
+
+    # Feature IS configured - check MTV version support
+    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
+        pytest.skip("targetLabels requires MTV 2.10.0+")
+
+    # Generate label values
+    vm_labels = {}
+    for label_key, config_value in target_labels.items():
+        if config_value == "auto":
+            label_value = session_uuid
+        else:
+            label_value = config_value  # Use specified value
+        vm_labels[label_key] = label_value
+        LOGGER.info(f"Generated VM label: {label_key}={label_value}")
+
+    result = {"vm_labels": vm_labels}
+    LOGGER.info(f"labeled_vm fixture returning: {result}")
+
+    yield result
 
 
 @pytest.fixture(scope="function")
