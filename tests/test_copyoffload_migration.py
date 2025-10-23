@@ -8,8 +8,7 @@ vSphere and OpenShift environments.
 import pytest
 from pytest_testconfig import config as py_config
 
-from utilities.copyoffload_migration import migrate_vms_with_copyoffload
-from utilities.mtv_migration import get_network_migration_map
+from utilities.mtv_migration import get_network_migration_map, get_storage_migration_map, migrate_vms
 
 
 @pytest.mark.copyoffload
@@ -32,6 +31,7 @@ def test_copyoffload_thin_migration(
     source_provider_inventory,
     source_vms_namespace,
     copyoffload_config,
+    copyoffload_storage_secret,
 ):
     """
     Test copy-offload migration of a thin-provisioned VM disk.
@@ -41,10 +41,13 @@ def test_copyoffload_thin_migration(
     reducing migration time from hours to minutes.
 
     Test Workflow:
-    1. Creates storage secrets for storage array authentication
-    2. Creates storage maps with vsphere-xcopy-volume-populator configuration
-    3. Executes migration using copy-offload technology
-    4. Verifies successful migration and VM operation in OpenShift
+    1. Validates copy-offload configuration (via copyoffload_config fixture)
+    2. Creates storage secret for storage array authentication (via copyoffload_storage_secret fixture)
+    3. Creates network migration map
+    4. Builds copy-offload plugin configuration
+    5. Creates storage map with copy-offload parameters
+    6. Executes migration using copy-offload technology
+    7. Verifies successful migration and VM operation in OpenShift
 
     Requirements:
     - vSphere provider with VMs on XCOPY-capable storage
@@ -82,8 +85,16 @@ def test_copyoffload_thin_migration(
         multus_network_name: Multus network configuration name
         source_provider_inventory: Source provider inventory
         source_vms_namespace: Source VMs namespace
+        copyoffload_config: Copy-offload configuration validation fixture
+        copyoffload_storage_secret: Storage secret for copy-offload authentication
     """
 
+    # Get copy-offload configuration
+    copyoffload_config_data = source_provider_data["copyoffload"]
+    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
+    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_class = py_config["storage_class"]
+    
     # Create network migration map
     vms = [vm["name"] for vm in plan["virtual_machines"]]
     network_migration_map = get_network_migration_map(
@@ -97,8 +108,33 @@ def test_copyoffload_thin_migration(
         vms=vms,
     )
 
+    # Build offload plugin configuration
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": copyoffload_storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    # Create storage migration map with copy-offload configuration
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,
+        vms=vms,
+        storage_class=storage_class,
+        # Copy-offload specific parameters
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
     # Execute copy-offload migration
-    migrate_vms_with_copyoffload(
+    migrate_vms(
         ocp_admin_client=ocp_admin_client,
         request=request,
         fixture_store=fixture_store,
@@ -106,6 +142,7 @@ def test_copyoffload_thin_migration(
         destination_provider=destination_provider,
         plan=plan,
         network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
