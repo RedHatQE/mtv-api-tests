@@ -190,7 +190,7 @@ class OCPProvider(BaseProvider):
 
         return result_vm_info
 
-    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str) -> Any:
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str, **kwargs: Any) -> Any:
         return
 
     def delete_vm(self, vm_name: str) -> Any:

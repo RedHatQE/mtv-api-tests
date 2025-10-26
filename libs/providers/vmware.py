@@ -31,7 +31,7 @@ class VMWareProvider(BaseProvider):
         self, host: str, username: str, password: str, ocp_resource: Provider | None = None, **kwargs: Any
     ) -> None:
         # Extract copyoffload configuration before calling parent
-        self.copyoffload_config = kwargs.pop('copyoffload', {})
+        self.copyoffload_config = kwargs.pop("copyoffload", {})
 
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
 
@@ -134,7 +134,11 @@ class VMWareProvider(BaseProvider):
                 func=lambda: task.info.state == vim.TaskInfo.State.success,
             ):
                 if task.info.error:
-                    error_msg = str(task.info.error.localizedMessage) if hasattr(task.info.error, 'localizedMessage') else str(task.info.error)
+                    error_msg = (
+                        str(task.info.error.localizedMessage)
+                        if hasattr(task.info.error, "localizedMessage")
+                        else str(task.info.error)
+                    )
                     raise VmCloneError(f"vSphere task failed: {error_msg}")
 
                 if sample:
@@ -196,19 +200,19 @@ class VMWareProvider(BaseProvider):
             return network_name
 
         # Standard network backing (vSwitch)
-        if hasattr(device.backing, 'network') and device.backing.network:
+        if hasattr(device.backing, "network") and device.backing.network:
             return device.backing.network.name
 
         # Distributed virtual port backing (DVS)
-        if hasattr(device.backing, 'port') and device.backing.port:
+        if hasattr(device.backing, "port") and device.backing.port:
             port = device.backing.port
-            if hasattr(port, 'portgroupKey'):
+            if hasattr(port, "portgroupKey"):
                 # Resolve the portgroup key to its name by searching all DVS portgroups
                 try:
                     container = self.view_manager.CreateContainerView(
                         self.content.rootFolder, [vim.dvs.DistributedVirtualPortgroup], True
                     )
-                    for pg in container.view:
+                    for pg in container.view:  # type: ignore[attr-defined]
                         if pg.key == port.portgroupKey:
                             network_name = pg.name
                             break
@@ -253,9 +257,7 @@ class VMWareProvider(BaseProvider):
                 result_vm_info["network_interfaces"].append({
                     "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "macAddress": device.macAddress,
-                    "network": {
-                        "name": network_name
-                    },
+                    "network": {"name": network_name},
                 })
 
             # Disks
@@ -345,7 +347,7 @@ class VMWareProvider(BaseProvider):
                 if obj.name == name:
                     return obj
                 # For datastores, also check by MoRef ID
-                if vimtype == [vim.Datastore] and hasattr(obj, '_moId') and obj._moId == name:
+                if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
                     return obj
 
             raise ValueError(f"Object of type {vimtype} with name '{name}' not found.")
@@ -353,7 +355,7 @@ class VMWareProvider(BaseProvider):
         finally:
             container.Destroy()
 
-    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str, **kwargs) -> vim.VirtualMachine:
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str, **kwargs: Any) -> vim.VirtualMachine:
         """
         Clones a VM from a source VM or template.
 
@@ -392,7 +394,7 @@ class VMWareProvider(BaseProvider):
             if "numCPUs" in vm_config_overrides:
                 # This part of the code was not provided in the edit_specification,
                 # so it's not included in the new_code.
-                pass # Placeholder for future implementation
+                pass  # Placeholder for future implementation
 
         # Use target datastore if specified, otherwise relay on vsphere's default behaviour
         target_datastore_id = kwargs.get("target_datastore_id")
@@ -438,12 +440,15 @@ class VMWareProvider(BaseProvider):
 
         try:
             res = self.wait_task(
-                task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}", wait_timeout=60 * 20, sleep=5
+                task=task,
+                action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}",
+                wait_timeout=60 * 20,
+                sleep=5,
             )
         except VmCloneError as e:
             # Retry without MAC regeneration if we hit a resource conflict error
             if regenerate_mac and "in use" in str(e).lower():
-                LOGGER.warning(f"Clone failed with resource conflict, retrying without MAC regeneration")
+                LOGGER.warning("Clone failed with resource conflict, retrying without MAC regeneration")
 
                 clone_spec_no_mac = vim.vm.CloneSpec()
                 clone_spec_no_mac.location = relocate_spec
@@ -452,7 +457,10 @@ class VMWareProvider(BaseProvider):
 
                 task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec_no_mac)
                 res = self.wait_task(
-                    task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name} (retry)", wait_timeout=60 * 20, sleep=5
+                    task=task,
+                    action_name=f"Cloning VM {clone_vm_name} from {source_vm_name} (retry)",
+                    wait_timeout=60 * 20,
+                    sleep=5,
                 )
             else:
                 raise

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from datetime import datetime
 from typing import Any
 
@@ -22,6 +21,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from report import create_migration_scale_report
+from utilities.copyoffload_migration import wait_for_plan_secret
 from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
@@ -57,7 +57,7 @@ def migrate_vms(
             vm_data = source_provider_inventory.get_vm(vm_name)
             vm["id"] = vm_data["id"]
             LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
-    
+
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
         plan=plan,
@@ -75,7 +75,7 @@ def migrate_vms(
         after_hook_namespace=after_hook_namespace,
         source_vms_namespace=source_vms_namespace,
     )
-    
+
     migration_plan = run_migration(**run_migration_kwargs)
 
     wait_for_migration_complate(plan=migration_plan)
@@ -180,15 +180,7 @@ def run_migration(
         # NOTE: Do NOT end with hyphen - Kubernetes adds the hyphen automatically with generateName
 
         LOGGER.info("Adding pvcNameTemplate field to Plan for copy-offload migration")
-        ResourceEditor(
-            patches={
-                plan: {
-                    "spec": {
-                        "pvcNameTemplate": "pvc"
-                    }
-                }
-            }
-        ).update()
+        ResourceEditor(patches={plan: {"spec": {"pvcNameTemplate": "pvc"}}}).update()
 
     try:
         plan.wait_for_condition(condition=Plan.Condition.READY, status=Plan.Condition.Status.TRUE, timeout=360)
@@ -200,10 +192,9 @@ def run_migration(
         LOGGER.error(f"Destinaion provider: {dest_provider.instance}")
         raise
 
-    # Workaround for race condition: give time for plan-specific secret creation
+    # Wait for Forklift to create plan-specific secret for copy-offload (race condition)
     if copyoffload:
-        LOGGER.info("Copy-offload: waiting 10s for Forklift to create plan-specific secret...")
-        time.sleep(10)
+        wait_for_plan_secret(ocp_admin_client, target_namespace, plan.name)
 
     create_and_store_resource(
         client=ocp_admin_client,

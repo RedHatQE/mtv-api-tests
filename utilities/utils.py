@@ -126,7 +126,7 @@ def create_source_provider(
     source_provider_secret: Secret | None = None
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
-    
+
     # Check if copy-offload configuration is present
     has_copyoffload = "copyoffload" in source_provider_data_copy
 

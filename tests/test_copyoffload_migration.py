@@ -5,6 +5,7 @@ This module implements tests for copy-offload functionality using the
 vsphere-xcopy-volume-populator to migrate VMs with shared storage between
 vSphere and OpenShift environments.
 """
+
 import pytest
 from pytest_testconfig import config as py_config
 
@@ -94,7 +95,7 @@ def test_copyoffload_thin_migration(
     storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
     datastore_id = copyoffload_config_data.get("datastore_id")
     storage_class = py_config["storage_class"]
-    
+
     # Create network migration map
     vms = [vm["name"] for vm in plan["virtual_machines"]]
     network_migration_map = get_network_migration_map(

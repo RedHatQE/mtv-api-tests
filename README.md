@@ -234,7 +234,8 @@ uv run pytest -m tier1 \
 
 ## Run Copy-Offload Tests
 
-Copy-offload tests leverage shared storage for faster migrations. Add `copyoffload` config to `.providers.json` and ensure template VM has QEMU guest agent installed.
+Copy-offload tests leverage shared storage for faster migrations. Add `copyoffload` config to `.providers.json`
+and ensure template VM has QEMU guest agent installed.
 
 **Configuration in `.providers.json`:**
 Add the `copyoffload` section under your vSphere provider configuration (see `.providers.json.example` for complete example):
@@ -252,12 +253,14 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
 ```
 
 **Vendor-specific fields:**
+
 - NetApp ONTAP: `ontap_svm` (SVM name)
 - Pure Storage: `pure_cluster_prefix`
 - PowerMax: `powermax_symmetrix_id`
 - PowerFlex: `powerflex_system_id`
 
-**Security Note:** For development/testing, credentials can be stored in `.providers.json`. For production/CI, use environment variables to override sensitive values without modifying config files:
+**Security Note:** For development/testing, credentials can be stored in `.providers.json`.
+For production/CI, use environment variables to override sensitive values without modifying config files:
 
 ```bash
 # Optional: Override credentials with environment variables (overrides .providers.json)

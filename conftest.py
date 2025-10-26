@@ -17,7 +17,6 @@ from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.pod import Pod
-from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
@@ -360,11 +359,13 @@ def nfs_storage_profile(ocp_admin_client):
     else:
         yield
 
+
 @pytest.fixture(scope="session")
 def session_uuid(fixture_store):
     _session_uuid = generate_name_with_uuid(name="mtv-api-tests")
     fixture_store["session_uuid"] = _session_uuid
     return _session_uuid
+
 
 @pytest.fixture(scope="session")
 def mtv_namespace():
@@ -795,7 +796,7 @@ def copyoffload_storage_secret(
     LOGGER.info("Creating copy-offload storage secret")
 
     copyoffload_cfg = source_provider_data["copyoffload"]
-    
+
     # Get storage credentials from environment variables or provider config
     storage_hostname = get_copyoffload_credential("storage_hostname", copyoffload_cfg)
     storage_username = get_copyoffload_credential("storage_username", copyoffload_cfg)
@@ -811,8 +812,7 @@ def copyoffload_storage_secret(
     storage_vendor = copyoffload_cfg.get("storage_vendor_product")
     if not storage_vendor:
         raise ValueError(
-            "storage_vendor_product is required in copyoffload configuration. "
-            "Valid values: 'ontap', 'vantara'"
+            "storage_vendor_product is required in copyoffload configuration. Valid values: 'ontap', 'vantara'"
         )
 
     # Base secret data
