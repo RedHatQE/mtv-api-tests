@@ -9,7 +9,6 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
-from ocp_resources.resource import ResourceEditor
 
 from pytest import FixtureRequest
 from pytest_testconfig import py_config
@@ -170,17 +169,14 @@ def run_migration(
         "after_hook_namespace": after_hook_namespace,
     }
 
-    plan = create_and_store_resource(**plan_kwargs)
-
     # Add copy-offload specific parameters if enabled
-    # Since Plan class doesn't support pvcNameTemplate parameter, we need to update the Plan after creation
     if copyoffload:
-        # When using copy-offload with generateName, we need to provide a template
-        # According to the Forklift API, pvcNameTemplate should be set when pvcNameTemplateUseGenerateName is true
-        # NOTE: Do NOT end with hyphen - Kubernetes adds the hyphen automatically with generateName
+        # Set PVC naming template for copy-offload migrations
+        # The volume populator framework requires this to generate consistent PVC names
+        # Note: generateName is enabled by default, so Kubernetes adds random suffix automatically
+        plan_kwargs["pvc_name_template"] = "pvc"
 
-        LOGGER.info("Adding pvcNameTemplate field to Plan for copy-offload migration")
-        ResourceEditor(patches={plan: {"spec": {"pvcNameTemplate": "pvc"}}}).update()
+    plan = create_and_store_resource(**plan_kwargs)
 
     try:
         plan.wait_for_condition(condition=Plan.Condition.READY, status=Plan.Condition.Status.TRUE, timeout=360)
