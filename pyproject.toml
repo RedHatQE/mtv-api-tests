@@ -7,6 +7,9 @@ output-format = "grouped"
 [tool.ruff.format]
 exclude = [".git", ".venv", ".mypy_cache", ".tox", "__pycache__"]
 
+[tool.ruff.lint]
+select = ["PLC0415"]
+
 [tool.mypy]
 disallow_any_generics = false
 disallow_incomplete_defs = true
@@ -15,11 +18,7 @@ show_error_codes = true
 warn_unused_ignores = true
 
 [dependency-groups]
-dev = [
-  "ipdb>=0.13.13",
-  "ipython>=8.12.3",
-  "python-jenkins>=1.8.2",
-]
+dev = ["ipdb>=0.13.13", "ipython>=8.12.3", "python-jenkins>=1.8.2"]
 
 [project]
 requires-python = ">=3.12"
