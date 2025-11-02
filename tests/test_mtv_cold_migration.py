@@ -57,6 +57,7 @@ def test_sanity_cold_mtv_migration(
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
     )
 
 

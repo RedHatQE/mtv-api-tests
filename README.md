@@ -50,14 +50,12 @@ docker push mtv-api-tests quay.io/openshift-cnv/mtv-tests:latest
 
 ## Running Tests with Container
 
-### Container Test Execution
+**Note:** For Podman/SELinux (RHEL/Fedora), add `:z` to volume mounts: `-v $(pwd)/.providers.json:/app/.providers.json:ro,z`
 
 ```bash
-# Basic container test run
 docker run --rm \
-  -v .providers.json:/app/.providers.json:ro \
-  -v jira.cfg:/app/jira.cfg:ro \
-  -v kubeconfig:/app/kubeconfig:ro \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  -v $(pwd)/kubeconfig:/app/kubeconfig:ro \
   -e KUBECONFIG=/app/kubeconfig \
   quay.io/openshift-cnv/mtv-tests:latest \
   uv run pytest -s \
@@ -66,7 +64,8 @@ docker run --rm \
   --tc=cluster_password:'YOUR_PASSWORD' \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
-  --tc=storage_class:standard-csi
+  --tc=storage_class:standard-csi \
+  --tc=target_ocp_version:4.18
 
 # Example with full configuration
 docker run --rm \
@@ -99,11 +98,11 @@ docker run --rm \
 - `--tc=cluster_host`: OpenShift API URL (e.g., <https://api.example.cluster:6443>) [required]
 - `--tc=cluster_username`: Cluster username (e.g., kubeadmin) [required]
 - `--tc=cluster_password`: Cluster password [required]
-- `--tc=source_provider_type`: vsphere, rhv, openstack, etc.
-- `--tc=source_provider_version`: Provider version (6.5, 7.0.3, 8.0.1)
-- `--tc=storage_class`: Storage class for testing
-- `--tc=target_namespace`: Namespace for test resources
-- `--tc=target_ocp_version`: Target OpenShift version
+- `--tc=source_provider_type`: vsphere, rhv, openstack, etc. [required]
+- `--tc=source_provider_version`: Provider version (6.5, 7.0.3, 8.0.1) [required]
+- `--tc=storage_class`: Storage class for testing [required]
+- `--tc=target_ocp_version`: Target OpenShift version (e.g., 4.18) [required]
+- `--tc=target_namespace`: Namespace for test resources [optional]
 
 #### Authentication notes
 
@@ -134,7 +133,8 @@ uv run pytest -s \
   --tc=cluster_password:'YOUR_PASSWORD' \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
-  --tc=storage_class:standard-csi
+  --tc=storage_class:standard-csi \
+  --tc=target_ocp_version:4.18
 ```
 
 Set log collector folder: (default to `/tmp/mtv-api-tests`)
@@ -226,7 +226,63 @@ uv run pytest -m tier1 \
   --tc=cluster_host:https://api.example.cluster:6443 \
   --tc=cluster_username:kubeadmin \
   --tc=cluster_password:'YOUR_PASSWORD' \
-  --tc=storage_class:<storage_class>
+  --tc=source_provider_type:vsphere \
+  --tc=source_provider_version:8.0.1 \
+  --tc=storage_class:<storage_class> \
+  --tc=target_ocp_version:4.18
+```
+
+## Run Copy-Offload Tests
+
+Copy-offload tests leverage shared storage for faster migrations. Add `copyoffload` config to `.providers.json`
+and ensure template VM has QEMU guest agent installed.
+
+**Configuration in `.providers.json`:**
+Add the `copyoffload` section under your vSphere provider configuration (see `.providers.json.example` for complete example):
+
+```json
+"copyoffload": {
+  "storage_vendor_product": "ontap",
+  "datastore_id": "datastore-123",
+  "template_name": "rhel9-template",
+  "storage_hostname": "storage.example.com",
+  "storage_username": "admin",
+  "storage_password": "password",
+  "ontap_svm": "vserver-name"
+}
+```
+
+**Vendor-specific fields:**
+
+- NetApp ONTAP: `ontap_svm` (SVM name)
+- Pure Storage: `pure_cluster_prefix`
+- PowerMax: `powermax_symmetrix_id`
+- PowerFlex: `powerflex_system_id`
+
+**Security Note:** For development/testing, credentials can be stored in `.providers.json`.
+For production/CI, use environment variables to override sensitive values without modifying config files:
+
+```bash
+# Optional: Override credentials with environment variables (overrides .providers.json)
+export COPYOFFLOAD_STORAGE_HOSTNAME=storage.example.com
+export COPYOFFLOAD_STORAGE_USERNAME=admin
+export COPYOFFLOAD_STORAGE_PASSWORD=secretpassword
+export COPYOFFLOAD_ONTAP_SVM=vserver-name  # For NetApp ONTAP only
+```
+
+If credentials are already in `.providers.json`, environment variables are not required.
+
+**Run the tests:**
+
+```bash
+uv run pytest -m copyoffload \
+  --tc=cluster_host:https://api.example.cluster:6443 \
+  --tc=cluster_username:kubeadmin \
+  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=source_provider_type:vsphere \
+  --tc=source_provider_version:8.0.3.00400 \
+  --tc=storage_class:rhosqe-ontap-san-block \
+  --tc=target_ocp_version:4.18
 ```
 
 ## Release new version
@@ -248,7 +304,7 @@ npm install --save-dev @release-it/bumper
 
 ### usage
 
-- Create a release, run from the relevant branch.  
+- Create a release, run from the relevant branch.
   To create a release, run:
 
 ```bash

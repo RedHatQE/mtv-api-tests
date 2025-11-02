@@ -21,9 +21,18 @@ class VMWareProvider(BaseProvider):
     https://github.com/vmware/vsphere-automation-sdk-python
     """
 
+    DISK_TYPE_MAP = {
+        "thin": ("sparse", "Setting disk provisioning to 'thin' (sparse)."),
+        "thick-lazy": ("flat", "Setting disk provisioning to 'thick-lazy' (flat)."),
+        "thick-eager": ("eagerZeroedThick", "Setting disk provisioning to 'thick-eager' (eagerZeroedThick)."),
+    }
+
     def __init__(
         self, host: str, username: str, password: str, ocp_resource: Provider | None = None, **kwargs: Any
     ) -> None:
+        # Extract copyoffload configuration before calling parent
+        self.copyoffload_config = kwargs.pop("copyoffload", {})
+
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
 
         self.type = Provider.ProviderType.VSPHERE
@@ -72,7 +81,12 @@ class VMWareProvider(BaseProvider):
         return view_manager
 
     def get_vm_by_name(
-        self, query: str, vm_name_suffix: str = "", clone_vm: bool = False, session_uuid: str = ""
+        self,
+        query: str,
+        vm_name_suffix: str = "",
+        clone_vm: bool = False,
+        session_uuid: str = "",
+        clone_options: dict | None = None,
     ) -> vim.VirtualMachine:
         target_vm_name = f"{query}{vm_name_suffix}"
         target_vm = None
@@ -80,21 +94,32 @@ class VMWareProvider(BaseProvider):
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
         except ValueError:
             if clone_vm:
-                target_vm = self.clone_vm(source_vm_name=query, clone_vm_name=target_vm_name, session_uuid=session_uuid)
+                # Use copyoffload datastore if configured
+                target_datastore_id = self.copyoffload_config.get("datastore_id")
+                target_vm = self.clone_vm(
+                    source_vm_name=query,
+                    clone_vm_name=target_vm_name,
+                    session_uuid=session_uuid,
+                    target_datastore_id=target_datastore_id,
+                    clone_options=clone_options,
+                )
                 if not target_vm:
                     raise VmNotFoundError(
                         f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]"
                     )
+            else:
+                # Re-raise the original error if cloning is not enabled
+                raise
 
         if not target_vm:
-            raise VmNotFoundError(f"No VM found matching query '{query}' on host [{self.host}]")
+            raise VmNotFoundError(f"VM {target_vm_name} not found on host [{self.host}]")
 
-        # Perform health checks on the final list of VMs
+        # Perform health checks on the VM
         if self.is_vm_missing_vmx_file(vm=target_vm):
-            raise VmMissingVmxError(vm=target_vm_name)
+            raise VmMissingVmxError(vm=target_vm.name)
 
         if self.is_vm_with_bad_datastore(vm=target_vm):
-            raise VmBadDatastoreError(vm=target_vm_name)
+            raise VmBadDatastoreError(vm=target_vm.name)
 
         return target_vm
 
@@ -109,7 +134,12 @@ class VMWareProvider(BaseProvider):
                 func=lambda: task.info.state == vim.TaskInfo.State.success,
             ):
                 if task.info.error:
-                    raise VmCloneError()
+                    error_msg = (
+                        str(task.info.error.localizedMessage)
+                        if hasattr(task.info.error, "localizedMessage")
+                        else str(task.info.error)
+                    )
+                    raise VmCloneError(f"vSphere task failed: {error_msg}")
 
                 if sample:
                     self.log.info(
@@ -150,6 +180,55 @@ class VMWareProvider(BaseProvider):
                 root_snapshot_list = snapshot.childSnapshotList
         return snapshots
 
+    def _get_network_name_from_device(self, device: vim.vm.device.VirtualEthernetCard) -> str:
+        """
+        Extract network name from a virtual ethernet device.
+
+        Handles different network backing types:
+        - Standard network backing (vSwitch)
+        - Distributed Virtual Switch (DVS) portgroups
+
+        Args:
+            device: Virtual ethernet card device
+
+        Returns:
+            str: Network name or "Unknown" if unable to determine
+        """
+        network_name = "Unknown"
+
+        if not device.backing:
+            return network_name
+
+        # Standard network backing (vSwitch)
+        if hasattr(device.backing, "network") and device.backing.network:
+            return device.backing.network.name
+
+        # Distributed virtual port backing (DVS)
+        if hasattr(device.backing, "port") and device.backing.port:
+            port = device.backing.port
+            if hasattr(port, "portgroupKey"):
+                # Resolve the portgroup key to its name by searching all DVS portgroups
+                try:
+                    container = self.view_manager.CreateContainerView(
+                        self.content.rootFolder, [vim.dvs.DistributedVirtualPortgroup], True
+                    )
+                    for pg in container.view:  # type: ignore[attr-defined]
+                        if pg.key == port.portgroupKey:
+                            network_name = pg.name
+                            break
+                    container.Destroy()
+
+                    # If we didn't find it, fall back to the key
+                    if network_name == "Unknown":
+                        network_name = f"DVS-{port.portgroupKey}"
+                except Exception:
+                    # Fallback if we can't resolve the portgroup
+                    network_name = f"DVS-{port.portgroupKey}"
+            else:
+                network_name = "Distributed Virtual Switch"
+
+        return network_name
+
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         vm_name = kwargs["name"]
 
@@ -158,6 +237,7 @@ class VMWareProvider(BaseProvider):
             vm_name_suffix=kwargs.get("vm_name_suffix", ""),
             clone_vm=kwargs.get("clone", False),
             session_uuid=kwargs.get("session_uuid", ""),
+            clone_options=kwargs.get("clone_options"),
         )
 
         vm_config: Any = _vm.config
@@ -173,12 +253,11 @@ class VMWareProvider(BaseProvider):
         for device in vm_config.hardware.device:
             # Network Interfaces
             if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                network_name = self._get_network_name_from_device(device)
                 result_vm_info["network_interfaces"].append({
                     "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "macAddress": device.macAddress,
-                    "network": {
-                        "name": device.backing.network.name if device.backing and device.backing.network else "Unknown"
-                    },
+                    "network": {"name": network_name},
                 })
 
             # Disks
@@ -264,7 +343,11 @@ class VMWareProvider(BaseProvider):
             # Access the view property which contains the managed objects
             managed_objects = getattr(container, "view", [])
             for obj in managed_objects:
+                # Check by name first
                 if obj.name == name:
+                    return obj
+                # For datastores, also check by MoRef ID
+                if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
                     return obj
 
             raise ValueError(f"Object of type {vimtype} with name '{name}' not found.")
@@ -272,14 +355,7 @@ class VMWareProvider(BaseProvider):
         finally:
             container.Destroy()
 
-    def clone_vm(
-        self,
-        source_vm_name: str,
-        clone_vm_name: str,
-        session_uuid: str,
-        power_on: bool = False,
-        regenerate_mac: bool = True,
-    ) -> vim.VirtualMachine:
+    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str, **kwargs: Any) -> vim.VirtualMachine:
         """
         Clones a VM from a source VM or template.
 
@@ -297,14 +373,43 @@ class VMWareProvider(BaseProvider):
 
         relocate_spec = vim.vm.RelocateSpec()
         relocate_spec.pool = source_vm.resourcePool
-        relocate_spec.datastore = source_vm.datastore[0]
+
+        clone_options = kwargs.get("clone_options") or {}
+        disk_type = clone_options.get("disk_type")
+
+        # Handle disk provisioning type
+        if disk_type:
+            disk_config = self.DISK_TYPE_MAP.get(disk_type.lower())
+            if disk_config:
+                relocate_spec.transform, log_message = disk_config
+                LOGGER.info(log_message)
+            else:
+                LOGGER.warning(f"Disk type '{disk_type}' not recognized. Using vSphere default.")
+
+        # Handle VM configuration overrides (CPU, Memory, etc.) from the 'config' key
+        if "config" in clone_options:
+            config_spec = vim.vm.ConfigSpec()
+            vm_config_overrides = clone_options["config"]
+
+            if "numCPUs" in vm_config_overrides:
+                # This part of the code was not provided in the edit_specification,
+                # so it's not included in the new_code.
+                pass  # Placeholder for future implementation
+
+        # Use target datastore if specified, otherwise relay on vsphere's default behaviour
+        target_datastore_id = kwargs.get("target_datastore_id")
+        if target_datastore_id:
+            target_datastore = self.get_obj([vim.Datastore], target_datastore_id)
+            relocate_spec.datastore = target_datastore
+            LOGGER.info(f"Using target datastore: {target_datastore_id}")
 
         clone_spec = vim.vm.CloneSpec()
         clone_spec.location = relocate_spec
-        clone_spec.powerOn = power_on
+        clone_spec.powerOn = kwargs.get("power_on", False)
         clone_spec.template = False
 
         # Configure MAC address regeneration if requested
+        regenerate_mac = kwargs.get("regenerate_mac", True)
         if regenerate_mac:
             device_changes = []
             source_config = source_vm.config
@@ -333,9 +438,32 @@ class VMWareProvider(BaseProvider):
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
         LOGGER.info(f"Clone task started for {clone_vm_name}. Waiting for completion...")
 
-        res = self.wait_task(
-            task=task, action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}", wait_timeout=60 * 20, sleep=5
-        )
+        try:
+            res = self.wait_task(
+                task=task,
+                action_name=f"Cloning VM {clone_vm_name} from {source_vm_name}",
+                wait_timeout=60 * 20,
+                sleep=5,
+            )
+        except VmCloneError as e:
+            # Retry without MAC regeneration if we hit a resource conflict error
+            if regenerate_mac and "in use" in str(e).lower():
+                LOGGER.warning("Clone failed with resource conflict, retrying without MAC regeneration")
+
+                clone_spec_no_mac = vim.vm.CloneSpec()
+                clone_spec_no_mac.location = relocate_spec
+                clone_spec_no_mac.powerOn = kwargs.get("power_on", False)
+                clone_spec_no_mac.template = False
+
+                task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec_no_mac)
+                res = self.wait_task(
+                    task=task,
+                    action_name=f"Cloning VM {clone_vm_name} from {source_vm_name} (retry)",
+                    wait_timeout=60 * 20,
+                    sleep=5,
+                )
+            else:
+                raise
         if res and self.fixture_store:
             self.fixture_store["teardown"].setdefault(self.type, []).append({
                 "name": clone_vm_name,

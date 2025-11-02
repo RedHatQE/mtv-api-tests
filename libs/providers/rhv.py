@@ -311,6 +311,7 @@ class OvirtProvider(BaseProvider):
         clone_vm_name: str,
         session_uuid: str,
         power_on: bool = False,
+        **kwargs: Any,
     ) -> types.Vm:
         """
         Clones a VM from a template.

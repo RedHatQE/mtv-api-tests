@@ -205,6 +205,7 @@ class OpenStackProvider(BaseProvider):
         clone_vm_name: str,
         session_uuid: str,
         power_on: bool = False,
+        **kwargs: Any,
     ) -> OSP_Server:
         """
         Clones a VM, always reusing the flavor and network from the source.
