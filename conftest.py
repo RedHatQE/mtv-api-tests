@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 from shutil import rmtree
 from typing import Any
+from ocp_resources.provider import Provider
 
 import pytest
 from kubernetes.dynamic import DynamicClient
@@ -16,7 +17,6 @@ from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.pod import Pod
-from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
@@ -41,6 +41,7 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.openshift import OCPProvider
+from utilities.copyoffload_migration import get_copyoffload_credential
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
@@ -279,6 +280,11 @@ def autouse_fixtures(source_provider_data, nfs_storage_profile, base_resource_na
 @pytest.fixture(scope="session")
 def base_resource_name(fixture_store, session_uuid, source_provider_data):
     _name = f"{session_uuid}-source-{source_provider_data['type']}-{source_provider_data['version'].replace('.', '-')}"
+
+    # Add copyoffload indicator for Plan/StorageMap/NetworkMap names
+    if "copyoffload" in source_provider_data:
+        _name = f"{_name}-xcopy"
+
     fixture_store["base_resource_name"] = _name
 
 
@@ -303,6 +309,7 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
         "pod-security.kubernetes.io/enforce-version": "latest",
         "mutatevirtualmachines.kubemacpool.io": "ignore",
     }
+
     _target_namespace: str = py_config["target_namespace_prefix"]
 
     # replace mtv-api-tests since session_uuid already include mtv-api-tests in the name
@@ -547,9 +554,7 @@ def plan(
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
-        vm_name_suffix = get_vm_suffix(
-            warm_migration=warm_migration,
-        )
+        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration)
 
         if openshift_source_provider:
             create_source_cnv_vms(
@@ -567,6 +572,7 @@ def plan(
                 clone=True,
                 vm_name_suffix=vm_name_suffix,
                 session_uuid=fixture_store["session_uuid"],
+                clone_options=vm,
             )
             vm["name"] = source_vm_details["name"]
 
@@ -714,3 +720,123 @@ def multus_cni_config() -> str:
     bridge_type_and_name = "cnv-bridge"
     config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}
     return json.dumps(config)
+
+
+@pytest.fixture(scope="function")
+def copyoffload_config(source_provider, source_provider_data):
+    """
+    Validate copy-offload configuration before running copy-offload tests.
+
+    This fixture performs all necessary validations:
+    - Verifies vSphere provider type
+    - Checks for copyoffload configuration
+    - Validates storage credentials availability
+
+    If any validation fails, the test will fail early with a clear error message.
+    """
+    # Validate that this is a vSphere provider
+    if source_provider.type != Provider.ProviderType.VSPHERE:
+        pytest.fail(
+            f"Copy-offload tests require vSphere provider, but got '{source_provider.type}'. "
+            "Check your provider configuration in .providers.json"
+        )
+
+    # Validate copy-offload configuration exists
+    if "copyoffload" not in source_provider_data:
+        pytest.fail(
+            "Copy-offload configuration not found in source provider data. "
+            "Add 'copyoffload' section to your provider in .providers.json"
+        )
+
+    config = source_provider_data["copyoffload"]
+
+    # Validate required storage credentials are available (from either env vars or .providers.json)
+    required_credentials = ["storage_hostname", "storage_username", "storage_password"]
+    missing_credentials = []
+
+    for cred in required_credentials:
+        # Check if credential is available from either env var or config file
+        if not get_copyoffload_credential(cred, config):
+            missing_credentials.append(cred)
+
+    if missing_credentials:
+        pytest.fail(
+            f"Required storage credentials not found: {missing_credentials}. "
+            f"Add them to .providers.json copyoffload section or set environment variables: "
+            f"{', '.join([f'COPYOFFLOAD_{c.upper()}' for c in missing_credentials])}"
+        )
+
+    LOGGER.info("✓ Copy-offload configuration validated successfully")
+
+
+@pytest.fixture(scope="function")
+def copyoffload_storage_secret(
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    source_provider_data,
+    copyoffload_config,
+):
+    """
+    Create a storage secret for copy-offload functionality.
+
+    This fixture creates the storage secret required for copy-offload migrations
+    with credentials from environment variables or .providers.json.
+
+    Args:
+        fixture_store: Pytest fixture store for resource tracking
+        ocp_admin_client: OpenShift admin client
+        target_namespace: Target namespace for the secret
+        source_provider_data: Source provider configuration data
+        copyoffload_config: Copy-offload configuration (validates prerequisites)
+
+    Returns:
+        Secret: Created storage secret resource
+    """
+    LOGGER.info("Creating copy-offload storage secret")
+
+    copyoffload_cfg = source_provider_data["copyoffload"]
+
+    # Get storage credentials from environment variables or provider config
+    storage_hostname = get_copyoffload_credential("storage_hostname", copyoffload_cfg)
+    storage_username = get_copyoffload_credential("storage_username", copyoffload_cfg)
+    storage_password = get_copyoffload_credential("storage_password", copyoffload_cfg)
+
+    if not all([storage_hostname, storage_username, storage_password]):
+        raise ValueError(
+            "Storage credentials are required. Set COPYOFFLOAD_STORAGE_HOSTNAME, COPYOFFLOAD_STORAGE_USERNAME, "
+            "and COPYOFFLOAD_STORAGE_PASSWORD environment variables or include them in .providers.json"
+        )
+
+    # Validate storage vendor product
+    storage_vendor = copyoffload_cfg.get("storage_vendor_product")
+    if not storage_vendor:
+        raise ValueError(
+            "storage_vendor_product is required in copyoffload configuration. Valid values: 'ontap', 'vantara'"
+        )
+
+    # Base secret data
+    secret_data = {
+        "STORAGE_HOSTNAME": storage_hostname,
+        "STORAGE_USERNAME": storage_username,
+        "STORAGE_PASSWORD": storage_password,
+    }
+
+    # Add vendor-specific configuration
+    if storage_vendor == "ontap":
+        ontap_svm = get_copyoffload_credential("ontap_svm", copyoffload_cfg)
+        if ontap_svm:
+            secret_data["ONTAP_SVM"] = ontap_svm
+
+    LOGGER.info(f"Creating storage secret for copy-offload with vendor: {storage_vendor}")
+
+    storage_secret = create_and_store_resource(
+        client=ocp_admin_client,
+        fixture_store=fixture_store,
+        resource=Secret,
+        namespace=target_namespace,
+        string_data=secret_data,
+    )
+
+    LOGGER.info(f"✓ Copy-offload storage secret created: {storage_secret.name}")
+    return storage_secret

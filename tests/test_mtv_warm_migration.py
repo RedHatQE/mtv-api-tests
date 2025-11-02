@@ -68,6 +68,7 @@ def test_sanity_warm_mtv_migration(
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
     )
 
 
@@ -117,6 +118,7 @@ def test_mtv_migration_warm_2disks2nics(
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
     )
 
 

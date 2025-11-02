@@ -210,8 +210,8 @@ def prepare_migration_for_tests(
     test_name = request._pyfuncitem.name
     _source_provider_type = py_config.get("source_provider_type")
 
-    # Plan CR accepts only VM name/id
-    virtual_machines_list: list[dict[str, str]] = [{"name": vm["name"]} for vm in plan["virtual_machines"]]
+    # Plan CR accepts VM id
+    virtual_machines_list: list[dict[str, str]] = [{"id": vm["id"]} for vm in plan["virtual_machines"]]
 
     if _source_provider_type == Provider.ProviderType.OPENSHIFT:
         for idx in range(len(virtual_machines_list)):
@@ -237,6 +237,7 @@ def prepare_migration_for_tests(
         "destination_provider_namespace": destination_provider.ocp_resource.namespace,
         "fixture_store": fixture_store,
         "test_name": test_name,
+        "copyoffload": plan.get("copyoffload", False),
     }
 
 

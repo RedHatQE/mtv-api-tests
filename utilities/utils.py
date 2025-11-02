@@ -127,6 +127,9 @@ def create_source_provider(
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
 
+    # Check if copy-offload configuration is present
+    has_copyoffload = "copyoffload" in source_provider_data_copy
+
     secret_string_data = {
         "url": source_provider_data_copy["api_url"],
         "insecureSkipVerify": "true" if insecure else "false",
@@ -151,6 +154,9 @@ def create_source_provider(
         provider_args["host"] = source_provider_data_copy["fqdn"]
         secret_string_data["user"] = source_provider_data_copy["username"]
         secret_string_data["password"] = source_provider_data_copy["password"]
+        # Pass copyoffload configuration if present
+        if has_copyoffload:
+            provider_args["copyoffload"] = source_provider_data_copy["copyoffload"]
 
     elif rhv_provider(provider_data=source_provider_data_copy):
         source_provider = OvirtProvider
@@ -212,6 +218,11 @@ def create_source_provider(
     if not source_provider_secret:
         raise ValueError("Failed to create source provider secret")
 
+    # Add copy-offload annotation only when copy-offload is configured
+    provider_annotations = {}
+    if vmware_provider(provider_data=source_provider_data_copy) and has_copyoffload:
+        provider_annotations["forklift.konveyor.io/empty-vddk-init-image"] = "yes"
+
     ocp_resource_provider = create_and_store_resource(
         fixture_store=fixture_store,
         resource=Provider,
@@ -222,6 +233,7 @@ def create_source_provider(
         url=source_provider_data_copy["api_url"],
         provider_type=source_provider_data_copy["type"],
         vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
+        annotations=provider_annotations or None,
     )
     ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
 
