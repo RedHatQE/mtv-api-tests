@@ -12,6 +12,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
 from libs.base_provider import BaseProvider
+from utilities.naming import generate_name_with_uuid
 
 LOGGER = get_logger(__name__)
 
@@ -366,7 +367,9 @@ class VMWareProvider(BaseProvider):
             regenerate_mac: Whether to regenerate MAC addresses for network interfaces.
                           Prevents MAC address conflicts between cloned VMs. Default: True.
         """
-        clone_vm_name = f"{session_uuid}-{clone_vm_name}"
+
+        # generate new uuid for uniqueness of a test
+        clone_vm_name = generate_name_with_uuid(f"{session_uuid}-{clone_vm_name}")
         LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
