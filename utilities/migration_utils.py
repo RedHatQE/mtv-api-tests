@@ -211,7 +211,7 @@ def prepare_migration_for_tests(
     _source_provider_type = py_config.get("source_provider_type")
 
     # Plan CR accepts VM id
-    virtual_machines_list: list[dict[str, str]] = [{"id": vm["id"]} for vm in plan["virtual_machines"]]
+    virtual_machines_list: list[dict[str, str]] = [{"id": vm.get("id", vm["name"])} for vm in plan["virtual_machines"]]
 
     if _source_provider_type == Provider.ProviderType.OPENSHIFT:
         for idx in range(len(virtual_machines_list)):
