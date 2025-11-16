@@ -168,4 +168,5 @@ def test_warm_remote_ocp(
         cut_over=get_cutover_value(),
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
     )

@@ -105,4 +105,5 @@ def test_cold_remote_ocp(
         source_provider_data=source_provider_data,
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
     )
