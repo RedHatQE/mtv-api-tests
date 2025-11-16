@@ -8,7 +8,6 @@ import shutil
 from pathlib import Path
 from shutil import rmtree
 from typing import Any
-from ocp_resources.provider import Provider
 
 import pytest
 from kubernetes.dynamic import DynamicClient
@@ -17,6 +16,7 @@ from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.pod import Pod
+from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
@@ -203,12 +203,12 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_collection_modifyitems(session, config, items):
     _session_store = get_fixture_store(session)
-    vms_for_current_session: list[str] = []
+    vms_for_current_session: set = set()
 
     for item in items:
         item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
         for _vm in py_config["tests_params"][item.originalname]["virtual_machines"]:
-            vms_for_current_session.append(_vm["name"])
+            vms_for_current_session.add(_vm["name"])
 
     _session_store["vms_for_current_session"] = vms_for_current_session
 
