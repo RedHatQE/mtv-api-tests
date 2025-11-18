@@ -97,7 +97,7 @@ def test_copyoffload_thin_migration(
     storage_class = py_config["storage_class"]
 
     # Create network migration map
-    vms = [vm["name"] for vm in plan["virtual_machines"]]
+    vms_names = [vm["name"] for vm in plan["virtual_machines"]]
     network_migration_map = get_network_migration_map(
         fixture_store=fixture_store,
         source_provider=source_provider,
@@ -106,7 +106,7 @@ def test_copyoffload_thin_migration(
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        vms=vms,
+        vms=vms_names,
     )
 
     # Build offload plugin configuration
@@ -125,7 +125,7 @@ def test_copyoffload_thin_migration(
         destination_provider=destination_provider,
         ocp_admin_client=ocp_admin_client,
         source_provider_inventory=source_provider_inventory,
-        vms=vms,
+        vms=vms_names,
         storage_class=storage_class,
         # Copy-offload specific parameters
         datastore_id=datastore_id,
@@ -238,8 +238,15 @@ def test_copyoffload_thick_lazy_migration(
     datastore_id = copyoffload_config_data.get("datastore_id")
     storage_class = py_config["storage_class"]
 
+    # Validate required copy-offload parameters
+    if not all([storage_vendor_product, datastore_id]):
+        pytest.fail(
+            "Missing required copy-offload parameters in config: "
+            "'storage_vendor_product' and 'datastore_id' must be set."
+        )
+
     # Create network migration map
-    vms = [vm["name"] for vm in plan["virtual_machines"]]
+    vms_names = [vm["name"] for vm in plan["virtual_machines"]]
     network_migration_map = get_network_migration_map(
         fixture_store=fixture_store,
         source_provider=source_provider,
@@ -248,7 +255,7 @@ def test_copyoffload_thick_lazy_migration(
         ocp_admin_client=ocp_admin_client,
         multus_network_name=multus_network_name,
         target_namespace=target_namespace,
-        vms=vms,
+        vms=vms_names,
     )
 
     # Build offload plugin configuration
@@ -267,7 +274,7 @@ def test_copyoffload_thick_lazy_migration(
         destination_provider=destination_provider,
         ocp_admin_client=ocp_admin_client,
         source_provider_inventory=source_provider_inventory,
-        vms=vms,
+        vms=vms_names,
         storage_class=storage_class,
         # Copy-offload specific parameters
         datastore_id=datastore_id,
