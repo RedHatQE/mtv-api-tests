@@ -506,7 +506,7 @@ def multus_network_name(fixture_store, target_namespace, ocp_admin_client, multu
 def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
     api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
     if not api_key:
-        raise ValueError("API key not found in configuration, please login with `oc login` first")
+        raise ValueError("API key not found in configuration")
 
     secret = create_and_store_resource(
         client=ocp_admin_client,
