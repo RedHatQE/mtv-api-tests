@@ -377,6 +377,16 @@ class VMWareProvider(BaseProvider):
         relocate_spec = vim.vm.RelocateSpec()
         relocate_spec.pool = source_vm.resourcePool
 
+        # If source is a template, it usually has no resource pool, so we pick one from the environment
+        if not relocate_spec.pool:
+            container = self.view_manager.CreateContainerView(self.content.rootFolder, [vim.ComputeResource], True)
+            view = container.view  # type: ignore[attr-defined]
+            relocate_spec.pool = next((cr.resourcePool for cr in view if cr.resourcePool), None)
+            container.Destroy()
+
+        if not relocate_spec.pool:
+            raise VmCloneError("Could not determine a valid resource pool for cloning.")
+
         clone_options = kwargs.get("clone_options") or {}
         disk_type = clone_options.get("disk_type")
 
