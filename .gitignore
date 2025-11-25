@@ -159,10 +159,8 @@ jira.cfg
 
 # AI
 .cursor/
-CLAUDE.md
-.agent-os/
 .cursorrules
-.claude/
+!.claude/commands
 
 # ENV
 .env
