@@ -420,3 +420,31 @@ def create_storagemap_and_networkmap(
         vms=vms,
     )
     return storage_migration_map, network_migration_map
+
+
+def verify_vm_disk_count(destination_provider, plan, target_namespace):
+    """
+    Verifies that the number of disks on the migrated VM matches the expected count from the plan.
+
+    Args:
+        destination_provider: The provider object for the destination cluster (OCP).
+        plan (dict): The test plan dictionary containing VM configuration.
+        target_namespace (str): The namespace where the VM was migrated.
+    """
+    LOGGER.info("Verifying disks on migrated VM in OpenShift.")
+    vm_config = plan["virtual_machines"][0]
+    source_vm_name = vm_config["name"]
+
+    # Calculate expected disks: 1 base disk + number of disks in "add_disks"
+    num_added_disks = len(vm_config.get("add_disks", []))
+    expected_disks = 1 + num_added_disks
+
+    LOGGER.info(f"Fetching details for migrated VM: {source_vm_name} in namespace {target_namespace}")
+    migrated_vm_info = destination_provider.vm_dict(name=source_vm_name, namespace=target_namespace)
+    num_disks_migrated = len(migrated_vm_info.get("disks", []))
+    LOGGER.info(f"Found {num_disks_migrated} disks on migrated VM '{source_vm_name}'. Expecting {expected_disks}.")
+
+    assert num_disks_migrated == expected_disks, (
+        f"Expected {expected_disks} disks on migrated VM, but found {num_disks_migrated}."
+    )
+    LOGGER.info(f"Successfully verified {expected_disks} disks on the migrated VM.")
