@@ -365,15 +365,33 @@ class VMWareProvider(BaseProvider):
         self, source_vm: vim.VirtualMachine, disks_to_add: list[dict[str, Any]]
     ) -> list[vim.vm.device.VirtualDeviceSpec]:
         """
-        Generates a list of VirtualDeviceSpec objects for adding new disks to a VM.
+        Helper method to generate VirtualDeviceSpec for adding new disks.
 
         Args:
-            source_vm: The pyVmomi VirtualMachine object to add disks to.
-            disks_to_add: A list of dictionaries, each describing a disk to add.
+            source_vm: The source VM object.
+            disks_to_add: List of dictionaries, each specifying details for a new disk.
 
         Returns:
-            A list of VirtualDeviceSpec objects for the deviceChange configuration.
+            A list of VirtualDeviceSpec objects for the new disks.
         """
+        # 1. Pre-calculate required space and check datastore capacity for thick disks
+        required_space_gb = sum(
+            disk["size_gb"] for disk in disks_to_add if disk.get("provision_type", "thin").lower() != "thin"
+        )
+        if required_space_gb > 0:
+            datastore = source_vm.datastore[0]  # Assuming single datastore
+            free_space_gb = datastore.summary.freeSpace / (1024**3)
+            LOGGER.info(
+                f"Validating datastore capacity for thick disks. "
+                f"Required: {required_space_gb:.2f} GB, "
+                f"Available on '{datastore.name}': {free_space_gb:.2f} GB"
+            )
+            if required_space_gb > free_space_gb:
+                raise VmCloneError(
+                    f"Insufficient free space on datastore '{datastore.name}' for thick-provisioned disks. "
+                    f"Required: {required_space_gb:.2f} GB, Available: {free_space_gb:.2f} GB"
+                )
+
         # 1. Find a suitable SCSI controller on the source VM
         scsi_controller = next(
             (dev for dev in source_vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualSCSIController)),
