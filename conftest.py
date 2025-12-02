@@ -213,8 +213,7 @@ def pytest_collection_modifyitems(session, config, items):
     _session_store["vms_for_current_session"] = vms_for_current_session
 
     if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
-        vms_str = "\n".join(vms_for_current_session)
-        LOGGER.info(f"Base VMS names for current session:\n {vms_str}")
+        LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
 def pytest_exception_interact(node, call, report):
