@@ -76,7 +76,7 @@ def test_copyoffload_thin_migration(
         "template_name": "<copyoffload-template-name>",
         "storage_hostname": "storage.example.com",
         "storage_username": "admin",
-        "storage_password": "password",
+        "storage_password": "password",  # pragma: allowlist secret
         "ontap_svm": "vserver-name"  # For NetApp ONTAP only
     }
 
@@ -218,7 +218,7 @@ def test_copyoffload_thick_lazy_migration(
         "template_name": "<copyoffload-template-name>",
         "storage_hostname": "storage.example.com",
         "storage_username": "admin",
-        "storage_password": "password",
+        "storage_password": "password",  # pragma: allowlist secret
         "ontap_svm": "vserver-name"  # For NetApp ONTAP only
     }
 
@@ -366,7 +366,7 @@ def test_copyoffload_multi_disk_migration(
         "template_name": "<copyoffload-template-name>",
         "storage_hostname": "storage.example.com",
         "storage_username": "admin",
-        "storage_password": "password",
+        "storage_password": "password",  # pragma: allowlist secret
         "ontap_svm": "vserver-name"  # For NetApp ONTAP only
     }
 
