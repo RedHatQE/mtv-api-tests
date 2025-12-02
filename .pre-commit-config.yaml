@@ -1,6 +1,6 @@
 ---
 default_language_version:
-  python: python3
+  python: python3.13
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -29,12 +29,11 @@ repos:
         args: [--config=.flake8]
         additional_dependencies: [flake8-mutable]
 
-  # TOD: enable once we open source the repository
-  # - repo: https://github.com/Yelp/detect-secrets
-  #   rev: v1.5.0
-  #   hooks:
-  #     - id: detect-secrets
-  #
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        exclude: ^README\.md$|^.providers.json.example$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.10
@@ -42,11 +41,10 @@ repos:
       - id: ruff
       - id: ruff-format
 
-  # TODO: enable once we open source the repository
-  # - repo: https://github.com/gitleaks/gitleaks
-  #   rev: v8.20.1
-  #   hooks:
-  #     - id: gitleaks
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.20.1
+    hooks:
+      - id: gitleaks
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.15.0
