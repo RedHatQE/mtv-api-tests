@@ -5,7 +5,8 @@ import ipaddress
 from typing import Any, Self
 
 from ocp_resources.provider import Provider
-from ocp_resources.resource import Resource
+from ocp_resources.resource import Resource, ResourceEditor
+from ocp_resources.secret import Secret
 from pyVim.connect import Disconnect, SmartConnect
 from pyVmomi import vim
 from simple_logger.logger import get_logger
@@ -50,11 +51,85 @@ class VMWareProvider(BaseProvider):
         self.copyoffload_config = kwargs.pop("copyoffload", {})
 
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
-
+        self.update_provider_clone_method()
         self.type = Provider.ProviderType.VSPHERE
         self.host = host
         self.username = username
         self.password = password
+
+    def update_provider_clone_method(self) -> None:
+        """
+        Update the provider's esxiCloneMethod setting if specified in the config.
+        """
+        clone_method = self.copyoffload_config.get("esxi_clone_method")
+        # Only patch the provider if the method is explicitly set to 'ssh'.
+        # The default is 'vib', so no action is needed if it's 'vib' or not present.
+        if self.ocp_resource and clone_method == "ssh":
+            LOGGER.info(f"Setting esxiCloneMethod to '{clone_method}' for provider {self.ocp_resource.name}")
+            patch = {"spec": {"settings": {"esxiCloneMethod": clone_method}}}
+            try:
+                ResourceEditor(patches={self.ocp_resource: patch}).update()
+                LOGGER.info("Provider updated successfully, waiting for it to be ready.")
+                self.ocp_resource.wait_for_condition(
+                    condition="Validated",
+                    status="True",
+                    timeout=180,
+                )
+            except Exception as e:
+                LOGGER.error(f"Failed to update provider with esxiCloneMethod: {e}")
+                raise
+
+    def get_ssh_public_key(self, wait_timeout: int = 120) -> str:
+        """
+        Retrieves the SSH public key from the secret created by the provider.
+
+        Args:
+            wait_timeout (int): Time in seconds to wait for the secret to be created.
+
+        Returns:
+            str: The decoded SSH public key.
+        """
+        if not self.ocp_resource:
+            raise ValueError("OCP resource for provider not available.")
+
+        provider_name = self.ocp_resource.name
+        secret_name = f"offload-ssh-keys-{provider_name}-public"
+        LOGGER.info(f"Waiting for SSH public key secret '{secret_name}' in namespace '{self.ocp_resource.namespace}'")
+
+        secret = Secret(client=self.ocp_resource.client, name=secret_name, namespace=self.ocp_resource.namespace)
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=wait_timeout,
+                sleep=5,
+                func=lambda: secret.exists,
+            ):
+                if sample:
+                    LOGGER.info(f"Found secret '{secret_name}'")
+                    public_key_b64 = secret.instance.data["public-key"]
+                    return base64.b64decode(public_key_b64).decode("utf-8")
+
+        except TimeoutExpiredError:
+            LOGGER.error(f"Timed out waiting for secret '{secret_name}' to be created.")
+            raise VmCloneError(f"SSH public key secret '{secret_name}' not found.")
+
+        # This part should not be reached if TimeoutSampler works as expected
+        raise VmCloneError(f"Could not retrieve SSH public key from secret '{secret_name}'.")
+
+    def get_datastore_name_by_id(self, datastore_id: str) -> str:
+        """
+        Gets the datastore name by its MoRef ID.
+
+        Args:
+            datastore_id (str): The MoRef ID of the datastore (e.g., 'datastore-123').
+
+        Returns:
+            str: The name of the datastore.
+        """
+        datastore = self.get_obj([vim.Datastore], datastore_id)
+        if not datastore:
+            raise VmBadDatastoreError(f"Datastore with ID '{datastore_id}' not found.")
+        return datastore.name
 
     def disconnect(self) -> None:
         LOGGER.info(f"Disconnecting VMWareProvider source provider {self.host}")

@@ -17,6 +17,10 @@ no_implicit_optional = true
 show_error_codes = true
 warn_unused_ignores = true
 
+[[tool.mypy.overrides]]
+module = "paramiko"
+ignore_missing_imports = true
+
 [dependency-groups]
 dev = ["ipdb>=0.13.13", "ipython>=8.12.3", "python-jenkins>=1.8.2"]
 

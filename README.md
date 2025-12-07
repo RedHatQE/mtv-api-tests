@@ -273,6 +273,9 @@ uv run pytest -m tier1 \
 Copy-offload tests leverage shared storage for faster migrations. Add `copyoffload` config to `.providers.json`
 and ensure template VM has QEMU guest agent installed.
 
+The `esxi_clone_method` allows specifying `ssh` to perform disk cloning directly on the ESXi host,
+as an alternative to the default VIB-based method. This requires providing ESXi host credentials.
+
 **Configuration in `.providers.json`:**
 Add the `copyoffload` section under your vSphere provider configuration (see `.providers.json.example` for complete example):
 
@@ -284,9 +287,16 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
   "storage_hostname": "storage.example.com",
   "storage_username": "admin",
   "storage_password": "password",
-  "ontap_svm": "vserver-name"
+  "ontap_svm": "vserver-name",
+  "esxi_clone_method": "ssh", # default 'vib'
+  "esxi_host": "your-esxi-host.example.com",
+  "esxi_user": "root",
+  "esxi_password": "your-esxi-password"
 }
 ```
+
+The `esxi_clone_method` allows specifying `ssh` to perform disk cloning directly on the ESXi host,
+as an alternative to the default VIB-based method. This requires providing ESXi host credentials.
 
 **Vendor-specific fields:**
 
