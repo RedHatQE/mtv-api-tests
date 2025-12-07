@@ -962,7 +962,7 @@ dependencies = [
     { name = "ovirt-python-sdk" },
     { name = "packaging" },
     { name = "pandas" },
-    { name = "py-go-template" },
+    { name = "paramiko" },
     { name = "pyhelper-utils" },
     { name = "pytest" },
     { name = "pytest-harvest" },
@@ -981,6 +981,7 @@ dependencies = [
     { name = "setuptools" },
     { name = "shortuuid" },
     { name = "typer" },
+    { name = "types-paramiko" },
 ]
 
 [package.dev-dependencies]
@@ -1002,7 +1003,7 @@ requires-dist = [
     { name = "ovirt-python-sdk", specifier = ">=1.2.0" },
     { name = "packaging" },
     { name = "pandas", specifier = ">=2.2.3" },
-    { name = "py-go-template", specifier = ">=0.2.0" },
+    { name = "paramiko", specifier = ">=3.1.0" },
     { name = "pyhelper-utils", specifier = ">=1.0.9" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-harvest", specifier = ">=1.10.5" },
@@ -1021,6 +1022,7 @@ requires-dist = [
     { name = "setuptools", specifier = ">=75.8.0" },
     { name = "shortuuid", specifier = ">=1.0.13" },
     { name = "typer", specifier = ">=0.15.1" },
+    { name = "types-paramiko", specifier = ">=3.1.0.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -1490,16 +1492,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cd/05/0a34433a064256a578f1783a10da6df098ceaa4a57bbeaa96a6c0352786b/pure_eval-0.2.3.tar.gz", hash = "sha256:5f4e983f40564c576c7c8635ae88db5956bb2229d7e9237d03b3c0b0190eaf42", size = 19752, upload-time = "2024-07-21T12:58:21.801Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593a18957422533ff0f87ede7c9c6ea010a2177d738fb82f/pure_eval-0.2.3-py3-none-any.whl", hash = "sha256:1db8e35b67b3d218d818ae653e27f06c3aa420901fa7b081ca98cbedc874e0d0", size = 11842, upload-time = "2024-07-21T12:58:20.04Z" },
-]
-
-[[package]]
-name = "py-go-template"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/33/5d3486f2ace7fa8a411ce6416dc4e40f279fb00d0feb9885f633be4061b5/py_go_template-1.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:43f44dc79e7480d4c144b23c77fc6fd9ba451913a570334f9a46147a04fd6334", size = 2264809, upload-time = "2023-07-13T06:05:52.126Z" },
-    { url = "https://files.pythonhosted.org/packages/a4/b6/2d985ba1480ebae3fa81009c37a41b8a925d2f558676da7c2d8d768246e6/py_go_template-1.0.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:c681d3b94118276438ea2473aa8ac174a5b74d8db42c632fad92b17e0a4244ac", size = 2441973, upload-time = "2023-07-13T06:05:56.473Z" },
-    { url = "https://files.pythonhosted.org/packages/c9/5d/7e83ec3b808c8faa824f96852817815c5877e8ce7f8fd600db5b13f0c6cd/py_go_template-1.0.0-py3-none-win_amd64.whl", hash = "sha256:4991aba8d26e6ec4cddec2a99dd5e1a37c114a480934f7dd66b5f7134c61e2cb", size = 2419036, upload-time = "2023-07-13T06:05:59.189Z" },
 ]
 
 [[package]]
@@ -2366,6 +2358,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/92/e8/2a73ccf9874ec4c7638f172efc8972ceab13a0e3480b389d6ed822f7a822/typer-0.17.4.tar.gz", hash = "sha256:b77dc07d849312fd2bb5e7f20a7af8985c7ec360c45b051ed5412f64d8dc1580", size = 103734, upload-time = "2025-09-05T18:14:40.746Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/93/72/6b3e70d32e89a5cbb6a4513726c1ae8762165b027af569289e19ec08edd8/typer-0.17.4-py3-none-any.whl", hash = "sha256:015534a6edaa450e7007eba705d5c18c3349dcea50a6ad79a5ed530967575824", size = 46643, upload-time = "2025-09-05T18:14:39.166Z" },
+]
+
+[[package]]
+name = "types-paramiko"
+version = "4.0.0.20250822"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/b8/c6ff3b10c2f7b9897650af746f0dc6c5cddf054db857bc79d621f53c7d22/types_paramiko-4.0.0.20250822.tar.gz", hash = "sha256:1b56b0cbd3eec3d2fd123c9eb2704e612b777e15a17705a804279ea6525e0c53", size = 28730, upload-time = "2025-08-22T03:03:43.262Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/79/a1/b3774ed924a66ee2c041224d89c36f0c21f4f6cf75036d6ee7698bf8a4b9/types_paramiko-4.0.0.20250822-py3-none-any.whl", hash = "sha256:55bdb14db75ca89039725ec64ae3fa26b8d57b6991cfb476212fa8f83a59753c", size = 38833, upload-time = "2025-08-22T03:03:42.072Z" },
 ]
 
 [[package]]
