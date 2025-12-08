@@ -758,6 +758,68 @@ class VMWareProvider(BaseProvider):
         LOGGER.info(f"Configured {len(disks_to_add)} new disks for cloning")
         return device_changes
 
+    def add_rdm_disk_to_vm(self, vm: vim.VirtualMachine, rdm_type: str = "virtual") -> None:
+        """
+        Add an RDM disk to an existing VM. Must be called post-clone since RDM requires VMFS datastore.
+
+        Args:
+            vm: The target VM object.
+            rdm_type: "virtual" (default) or "physical" compatibility mode.
+        """
+        lun_uuid = self.copyoffload_config.get("rdm_lun_uuid")
+        datastore_id = self.copyoffload_config.get("datastore_id")
+
+        if not lun_uuid:
+            raise ValueError("rdm_lun_uuid required in copyoffload config for RDM disk")
+        if not datastore_id:
+            raise ValueError("datastore_id required in copyoffload config for RDM disk")
+
+        compatibility_mode = "virtualMode" if rdm_type == "virtual" else "physicalMode"
+        LOGGER.info(f"Adding RDM disk to VM '{vm.name}': type={rdm_type}, LUN={lun_uuid}")
+
+        # Get VMFS datastore for RDM mapping file
+        vmfs_datastore = self.get_obj([vim.Datastore], datastore_id)
+
+        # Find SCSI controller and available unit
+        scsi_controller = next(
+            (dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualSCSIController)), None
+        )
+        if not scsi_controller:
+            raise RuntimeError(f"No SCSI controller found on VM '{vm.name}'")
+
+        used_units = {dev.unitNumber for dev in vm.config.hardware.device if dev.controllerKey == scsi_controller.key}
+        unit_number = next((i for i in range(16) if i != 7 and i not in used_units), None)
+        if unit_number is None:
+            raise RuntimeError(f"No available unit number on VM '{vm.name}'")
+
+        # Create RDM disk spec
+        spec = vim.vm.device.VirtualDeviceSpec()
+        spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        spec.fileOperation = vim.vm.device.VirtualDeviceSpec.FileOperation.create
+
+        disk = vim.vm.device.VirtualDisk()
+        disk.key = -101
+        disk.controllerKey = scsi_controller.key
+        disk.unitNumber = unit_number
+
+        backing = vim.vm.device.VirtualDisk.RawDiskMappingVer1BackingInfo()
+        backing.deviceName = f"/vmfs/devices/disks/{lun_uuid}"
+        backing.compatibilityMode = compatibility_mode
+        backing.diskMode = "independent_persistent"
+        backing.datastore = vmfs_datastore
+        if rdm_type == "virtual":
+            backing.lunUuid = lun_uuid
+
+        disk.backing = backing
+        spec.device = disk
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.deviceChange = [spec]
+
+        task = vm.ReconfigVM_Task(spec=config_spec)
+        self.wait_task(task=task, action_name=f"Adding RDM disk to VM {vm.name}", wait_timeout=120)
+        LOGGER.info(f"Successfully added RDM disk to VM '{vm.name}'")
+
     def clone_vm(
         self,
         source_vm_name: str,
@@ -838,11 +900,14 @@ class VMWareProvider(BaseProvider):
             else:
                 LOGGER.warning("Disk type '%s' not recognized. Using vSphere default.", disk_type)
 
-        disks_to_add = kwargs.get("add_disks")
-        if disks_to_add:
+        # Handle adding new disks - RDM disks are filtered out and added post-clone
+        disks_to_add = kwargs.get("add_disks", [])
+        rdm_disks = [d for d in disks_to_add if "rdm_type" in d]
+        regular_disks = [d for d in disks_to_add if "rdm_type" not in d]
+        if regular_disks:
             disk_device_specs = self._get_add_disk_device_specs(
                 source_vm=source_vm,
-                disks_to_add=disks_to_add,
+                disks_to_add=regular_disks,
                 clone_vm_name=clone_vm_name,
                 target_datastore=target_datastore,
             )
@@ -921,6 +986,11 @@ class VMWareProvider(BaseProvider):
 
         if res and self.fixture_store:
             self.fixture_store["teardown"].setdefault(self.type, []).append({"name": clone_vm_name})
+
+        # Add RDM disks post-clone (RDM requires VMFS datastore, can't be added during clone on NFS)
+        for rdm_config in rdm_disks:
+            self.add_rdm_disk_to_vm(vm=res, rdm_type=rdm_config.get("rdm_type", "virtual"))
+
         return res
 
     def delete_vm(self, vm_name: str) -> None:

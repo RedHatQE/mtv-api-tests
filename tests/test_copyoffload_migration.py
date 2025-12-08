@@ -608,3 +608,101 @@ def test_copyoffload_multi_disk_different_path_migration(
 
     # Verify that the correct number of disks were migrated
     verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
+
+
+@pytest.mark.copyoffload
+@pytest.mark.parametrize(
+    "plan",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_rdm_virtual_disk_migration"])],
+    indirect=True,
+    ids=["copyoffload-rdm-virtual"],
+)
+def test_copyoffload_rdm_virtual_disk_migration(
+    request,
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    destination_provider,
+    plan,
+    source_provider,
+    source_provider_data,
+    multus_network_name,
+    source_provider_inventory,
+    source_vms_namespace,
+    copyoffload_config,
+    copyoffload_storage_secret,
+):
+    """
+    Test copy-offload migration of a VM with an RDM (Raw Device Mapping) disk.
+
+    This test validates that a VM with an RDM disk in virtual compatibility mode
+    can be migrated using storage array XCOPY capabilities. The RDM disk is added
+    post-clone since RDM requires VMFS datastore (not NFS).
+
+    RDM Types (foundation for physical mode in place):
+    -   virtual: RDM appears as virtual disk to guest. Supports snapshots. (tested here)
+    -   physical: Direct SCSI passthrough to LUN. (future test)
+
+    Requires in .providers.json copyoffload section:
+    -   rdm_lun_uuid: LUN NAA identifier (e.g., "naa.600a098038313954492458313032306f")
+    """
+    copyoffload_config_data = source_provider_data["copyoffload"]
+    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
+    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_class = py_config["storage_class"]
+
+    # Validate RDM LUN is configured
+    if not copyoffload_config_data.get("rdm_lun_uuid"):
+        pytest.fail("rdm_lun_uuid is required in copyoffload configuration for RDM disk tests")
+
+    vms = [vm["name"] for vm in plan["virtual_machines"]]
+    network_migration_map = get_network_migration_map(
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        vms=vms,
+    )
+
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": copyoffload_storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,
+        vms=vms,
+        storage_class=storage_class,
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
+    migrate_vms(
+        ocp_admin_client=ocp_admin_client,
+        request=request,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plan=plan,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+        source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
+    )
+
+    # Verify that the correct number of disks were migrated (1 base + 1 RDM = 2)
+    verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
