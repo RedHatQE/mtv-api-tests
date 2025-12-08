@@ -4,6 +4,7 @@ import copy
 import ipaddress
 from typing import Any, Self
 
+from kubernetes.client.exceptions import ApiException
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.secret import Secret
@@ -77,6 +78,9 @@ class VMWareProvider(BaseProvider):
                 )
             except TimeoutExpiredError:
                 LOGGER.error(f"Timed out waiting for provider {self.ocp_resource.name} to be validated after update")
+                raise
+            except ApiException as e:
+                LOGGER.error(f"Kubernetes API error updating provider with esxiCloneMethod: {e.reason}")
                 raise
             except (ValueError, RuntimeError) as e:
                 LOGGER.error(f"Failed to update provider with esxiCloneMethod: {e}")
