@@ -5,7 +5,11 @@ from simple_logger.logger import get_logger
 LOGGER = get_logger(__name__)
 
 
-def install_ssh_key_on_esxi(host, username, password, public_key, datastore_name):
+class ESXiError(Exception):
+    """Exception raised for ESXi-related errors."""
+
+
+def install_ssh_key_on_esxi(host: str, username: str, password: str, public_key: str, datastore_name: str) -> None:
     """
     Installs an SSH public key on an ESXi host with command restrictions.
     This method uses SFTP to write a temporary file and then moves it into place,
@@ -42,7 +46,7 @@ def install_ssh_key_on_esxi(host, username, password, public_key, datastore_name
         exit_status = stdout.channel.recv_exit_status()
         if exit_status != 0:
             error = stderr.read().decode("utf-8")
-            raise Exception(f"Failed to create directory {key_dir}. Error: {error}")
+            raise ESXiError(f"Failed to create directory {key_dir}. Error: {error}")
 
         # Read existing content
         content = ""
@@ -80,7 +84,7 @@ def install_ssh_key_on_esxi(host, username, password, public_key, datastore_name
                 sftp.remove(temp_authorized_keys_path)
             except Exception as e:
                 LOGGER.warning(f"Failed to remove temporary file {temp_authorized_keys_path}: {e}")
-            raise Exception(f"Failed to move key file and set permissions. Exit status: {exit_status}. Error: {error}")
+            raise ESXiError(f"Failed to move key file and set permissions. Exit status: {exit_status}. Error: {error}")
 
     finally:
         if sftp:
@@ -90,7 +94,7 @@ def install_ssh_key_on_esxi(host, username, password, public_key, datastore_name
             LOGGER.info("SSH connection to ESXi host closed.")
 
 
-def remove_ssh_key_from_esxi(host, username, password, public_key):
+def remove_ssh_key_from_esxi(host: str, username: str, password: str, public_key: str) -> None:
     """
     Removes an SSH public key from an ESXi host's authorized_keys file.
     This method uses a temporary file to safely rewrite the authorized_keys file.
@@ -146,7 +150,7 @@ def remove_ssh_key_from_esxi(host, username, password, public_key):
                 sftp.remove(temp_authorized_keys_path)
             except Exception as e:
                 LOGGER.warning(f"Failed to remove temporary file {temp_authorized_keys_path}: {e}")
-            raise Exception(f"Failed to replace authorized_keys file. Exit status: {exit_status}. Error: {error}")
+            raise ESXiError(f"Failed to replace authorized_keys file. Exit status: {exit_status}. Error: {error}")
 
         LOGGER.info("SSH key removed successfully.")
     finally:

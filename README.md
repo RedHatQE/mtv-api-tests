@@ -295,9 +295,6 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
 }
 ```
 
-The `esxi_clone_method` allows specifying `ssh` to perform disk cloning directly on the ESXi host,
-as an alternative to the default VIB-based method. This requires providing ESXi host credentials.
-
 **Vendor-specific fields:**
 
 - NetApp ONTAP: `ontap_svm` (SVM name)

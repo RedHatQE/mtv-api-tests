@@ -49,6 +49,7 @@ class ForkliftInventory(abc.ABC):
             LOGGER.error(f"Timed out waiting for provider {self.provider_name} to appear in inventory.")
             raise
 
+        # Unreachable: TimeoutSampler raises TimeoutExpiredError on timeout, but mypy needs this in order to pass type checking
         raise ValueError(f"Provider {self.provider_name} not found in inventory after waiting.")
 
     def get_data(self) -> dict[str, Any]:

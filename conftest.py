@@ -964,11 +964,13 @@ def copyoffload_storage_secret(
 
 
 @pytest.fixture(scope="function")
-def setup_copyoffload_ssh(source_provider, source_provider_data):
+def setup_copyoffload_ssh(source_provider, source_provider_data, copyoffload_config):
     """
     Sets up SSH key on ESXi host for copy-offload if SSH method is enabled.
+
+    Depends on copyoffload_config to ensure validation runs first.
     """
-    copyoffload_cfg = source_provider_data.get("copyoffload", {})
+    copyoffload_cfg = source_provider_data["copyoffload"]  # Safe: copyoffload_config validates this exists
     if copyoffload_cfg.get("esxi_clone_method") != "ssh":
         LOGGER.info("SSH clone method not configured, skipping SSH key setup.")
         yield

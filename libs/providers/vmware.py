@@ -75,7 +75,10 @@ class VMWareProvider(BaseProvider):
                     status="True",
                     timeout=180,
                 )
-            except Exception as e:
+            except TimeoutExpiredError:
+                LOGGER.error(f"Timed out waiting for provider {self.ocp_resource.name} to be validated after update")
+                raise
+            except (ValueError, RuntimeError) as e:
                 LOGGER.error(f"Failed to update provider with esxiCloneMethod: {e}")
                 raise
 
