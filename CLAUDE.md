@@ -38,12 +38,12 @@ PROHIBITED.**
 
 ### When MUST You Use Agents
 
-| Operation | Agent Required | Example |
-|-----------|----------------|---------|
-| Python code (any .py file) | `python-expert` | Write test, fix bug, add utility function |
-| Git operations | `git-expert` | Commit, branch, push, create PR |
-| Documentation (README, docs) | `technical-documentation-writer` | Update docs, write guides |
-| Code review | `code-reviewer` | Review after ANY code change |
+| Operation                    | Agent Required                   | Example                                   |
+| ---------------------------- | -------------------------------- | ----------------------------------------- |
+| Python code (any .py file)   | `python-expert`                  | Write test, fix bug, add utility function |
+| Git operations               | `git-expert`                     | Commit, branch, push, create PR           |
+| Documentation (README, docs) | `technical-documentation-writer` | Update docs, write guides                 |
+| Code review                  | `code-reviewer`                  | Review after ANY code change              |
 
 ### What is FORBIDDEN
 
@@ -160,39 +160,61 @@ If you modify code directly instead of using an agent:
 
 ### CRITICAL: Deterministic Tests - No Defaults/Fallbacks
 
-**All code must be deterministic with NO assumptions or default values.**
+**All code must be deterministic with NO assumptions or default values for configurations WE CONTROL.**
 
-**Rules:**
+**This rule applies to configurations defined in our codebase:**
 
-- ❌ **NEVER** add fallback values
-- ❌ **NEVER** assume defaults for missing configuration
-- ✅ **ALWAYS** let code fail fast if values missing
+- `py_config` - test configuration we define in `tests/tests_config/config.py`
+- `plan` - test plan parameters we define in test parametrization
+- `tests_params` - test parameters dictionary we define
+- Any configuration dictionary or structure defined in our codebase
 
-**Examples:**
+**For OUR configurations - NEVER use defaults:**
 
 ```python
-# ❌ WRONG - Uses fallback/default
+# ❌ WRONG - Uses fallback/default for OUR configuration
 storage_class = py_config.get("storage_class", "default-storage")
 vm_name = plan.get("vm_name", "default-vm")
+timeout = py_config.get("plan_wait_timeout", 3600)
 
-# ✅ CORRECT - Deterministic, fails fast
-storage_class = py_config["storage_class"]  # KeyError if missing
+# ✅ CORRECT - Deterministic, fails fast with KeyError
+storage_class = py_config["storage_class"]
 vm_name = plan["virtual_machines"][0]["name"]
+timeout = py_config["plan_wait_timeout"]
 ```
 
-**Why:**
-
-- Tests must fail immediately if configuration is incomplete
-- No silent failures with wrong defaults
-- Clear error messages about missing configuration
-- Prevents tests from running with incorrect assumptions
-
-**Exception:** Only use `.get()` when checking for optional features:
+**For external/provider configurations - `.get()` with validation is acceptable:**
 
 ```python
-# ✅ OK - Optional feature check
-if plan.get("warm_migration", False):  # Optional boolean flag
+# ✅ ACCEPTABLE - External config with explicit validation and meaningful error
+vm_id = provider_data.get("vm_id")
+if not vm_id:
+    raise ValueError(f"VM ID not found in provider data for VM '{vm_name}'.")
+
+# ✅ ACCEPTABLE - Provider API response with validation
+disk_type = vm_details.get("disk_type")
+if disk_type not in ["thin", "thick-lazy", "thick-eager"]:
+    raise ValueError(f"Unsupported disk type '{disk_type}' for VM '{vm_name}'")
+```
+
+**Why this distinction:**
+
+- **Our config:** We control it, should be complete, fail fast if missing (KeyError)
+- **External data:** We don't control it, explicit validation provides better error messages than raw KeyError
+- Tests must fail immediately if OUR configuration is incomplete
+- External data validation should provide context-rich error messages
+
+**Exception - Optional feature flags in OUR config:**
+
+```python
+# ✅ OK - Optional boolean feature flag in our config
+if plan.get("warm_migration", False):  # Optional feature, defaults to False
     setup_warm_migration()
+
+# ✅ OK - Optional list in our config
+hooks = plan.get("pre_migration_hooks", [])  # Optional hooks, defaults to empty
+for hook in hooks:
+    execute_hook(hook)
 ```
 
 ### Resource Creation Pattern - MANDATORY
@@ -396,7 +418,7 @@ def test_name_here(
    ```
 
 5. **Add pytest markers**:
-   - **Required:** `@pytest.mark.tier0` (or tier1, tier2)
+   <!-- - **Required:** `@pytest.mark.tier0` (or tier1, tier2) -->
    - **Optional:** `@pytest.mark.warm`, `@pytest.mark.remote`, `@pytest.mark.copyoffload`
 
 6. **Define test function** with standard fixtures (see example above)
