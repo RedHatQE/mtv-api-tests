@@ -8,8 +8,20 @@ vSphere and OpenShift environments.
 
 import pytest
 from pytest_testconfig import config as py_config
+from simple_logger.logger import get_logger
+import time
 
-from utilities.mtv_migration import get_network_migration_map, get_storage_migration_map, migrate_vms
+from urllib.parse import urlparse
+
+from utilities.mtv_migration import (
+    get_network_migration_map,
+    get_storage_migration_map,
+    migrate_vms,
+    verify_vm_disk_count,
+)
+
+
+LOGGER = get_logger(__name__)
 
 
 @pytest.mark.copyoffload
@@ -64,7 +76,7 @@ def test_copyoffload_thin_migration(
         "template_name": "<copyoffload-template-name>",
         "storage_hostname": "storage.example.com",
         "storage_username": "admin",
-        "storage_password": "password",
+        "storage_password": "password",  # pragma: allowlist secret
         "ontap_svm": "vserver-name"  # For NetApp ONTAP only
     }
 
@@ -206,7 +218,7 @@ def test_copyoffload_thick_lazy_migration(
         "template_name": "<copyoffload-template-name>",
         "storage_hostname": "storage.example.com",
         "storage_username": "admin",
-        "storage_password": "password",
+        "storage_password": "password",  # pragma: allowlist secret
         "ontap_svm": "vserver-name"  # For NetApp ONTAP only
     }
 
@@ -298,3 +310,150 @@ def test_copyoffload_thick_lazy_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
     )
+
+
+@pytest.mark.copyoffload
+@pytest.mark.parametrize(
+    "plan",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_multi_disk_migration"])],
+    indirect=True,
+    ids=["copyoffload-multi-disk"],
+)
+def test_copyoffload_multi_disk_migration(
+    request,
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    destination_provider,
+    plan,
+    source_provider,
+    source_provider_data,
+    multus_network_name,
+    source_provider_inventory,
+    source_vms_namespace,
+    copyoffload_config,
+    copyoffload_storage_secret,
+):
+    """
+    Test copy-offload migration of a VM with multiple disks.
+
+    This test validates that a VM with multiple disks (an OS disk plus one or more
+    data disks) can be successfully migrated using storage array XCOPY capabilities.
+    It ensures that all disks associated with the VM are correctly handled during
+    the accelerated migration process.
+
+    Test Workflow:
+    1.  Clones a VM from a template and dynamically adds one or more data disks
+        as defined in the test configuration (via the 'plan' fixture).
+    2.  Validates the copy-offload configuration (via copyoffload_config fixture).
+    3.  Creates a storage secret for storage array authentication (via copyoffload_storage_secret fixture).
+    4.  Creates network and storage migration maps with the appropriate copy-offload parameters.
+    5.  Executes the migration using copy-offload.
+    6.  Verifies that the migrated VM in OpenShift has the correct total number of disks.
+
+    Requirements:
+    -   vSphere provider with VMs on XCOPY-capable storage (e.g., NetApp iSCSI).
+    -   Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara).
+    -   Storage class in OpenShift that supports the same storage type as the source.
+    -   Storage credentials via environment variables or .providers.json config.
+    -   ForkliftController with feature_copy_offload: "true" (must be pre-configured).
+    -   Proper datastore_id configuration matching the VM's datastore.
+
+    Configuration in .providers.json:
+    "copyoffload": {
+        "storage_vendor_product": "ontap",  # or "vantara"
+        "datastore_id": "datastore-123",    # vSphere datastore ID (must support xcopyoff)
+        "template_name": "<copyoffload-template-name>",
+        "storage_hostname": "storage.example.com",
+        "storage_username": "admin",
+        "storage_password": "password",  # pragma: allowlist secret
+        "ontap_svm": "vserver-name"  # For NetApp ONTAP only
+    }
+
+    Optional Environment Variables (override .providers.json values):
+    -   COPYOFFLOAD_STORAGE_HOSTNAME
+    -   COPYOFFLOAD_STORAGE_USERNAME
+    -   COPYOFFLOAD_STORAGE_PASSWORD
+    -   COPYOFFLOAD_ONTAP_SVM
+
+    Args:
+        plan: Migration plan configuration from test parameters.
+        source_provider: Source provider (vSphere).
+        source_provider_inventory: Source provider inventory.
+        target_namespace: Target namespace for migration.
+        ocp_admin_client: OpenShift admin client.
+        copyoffload_config: Copy-offload configuration validation fixture.
+        copyoffload_storage_secret: Storage secret for copy-offload authentication.
+        multus_network_name: Multus network configuration name.
+        source_vms_network: Source VMs network configuration.
+        source_vms_namespace: Source VMs namespace.
+        warm_migration: Boolean flag for warm migration.
+        destination_provider: Destination provider (OpenShift).
+        request: Pytest request object.
+        fixture_store: Pytest fixture store for resource tracking.
+    """
+    # The 'plan' fixture handles cloning the VM with the additional disk.
+    # This test function will execute after the VM is cloned.
+
+    # Get copy-offload configuration
+    copyoffload_config_data = source_provider_data["copyoffload"]
+    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
+    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_class = py_config["storage_class"]
+
+    # Create network migration map
+    vms = [vm["name"] for vm in plan["virtual_machines"]]
+    network_migration_map = get_network_migration_map(
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        vms=vms,
+    )
+
+    # Build offload plugin configuration
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": copyoffload_storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    # Create storage migration map with copy-offload configuration
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,
+        vms=vms,
+        storage_class=storage_class,
+        # Copy-offload specific parameters
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
+    # Execute copy-offload migration
+    migrate_vms(
+        ocp_admin_client=ocp_admin_client,
+        request=request,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plan=plan,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+        source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
+    )
+
+    # Verify that the correct number of disks were migrated
+    verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
