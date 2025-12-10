@@ -664,12 +664,13 @@ def plan(
             )
 
             # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
-            if vm.get("source_vm_power") == "on":
+            source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
+            if source_vm_power == "on":
                 source_provider.start_vm(provider_vm_api)
                 # Wait for guest info to become available (VMware only)
                 if source_provider.type == Provider.ProviderType.VSPHERE:
                     source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=60)
-            elif vm.get("source_vm_power") == "off":
+            elif source_vm_power == "off":
                 source_provider.stop_vm(provider_vm_api)
 
             # NOW call vm_dict() with VM in correct power state for guest info

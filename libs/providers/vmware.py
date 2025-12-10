@@ -332,6 +332,7 @@ class VMWareProvider(BaseProvider):
 
             # Try to get gateway information from guest IP stack routing table
             gateway_ip = None
+            dns_servers = None
             if hasattr(vm.guest, "ipStack") and vm.guest.ipStack:
                 # Look for default gateway routes (0.0.0.0/0) that match this NIC
                 device_id = str(device.key - VSPHERE_NIC_DEVICE_KEY_OFFSET)
@@ -363,6 +364,12 @@ class VMWareProvider(BaseProvider):
                                         f" gateway IP {route.gateway.ipAddress}"
                                     )
 
+                # Extract DNS servers if available
+                for ip_stack in vm.guest.ipStack:
+                    if hasattr(ip_stack, "dnsConfig") and ip_stack.dnsConfig:
+                        dns_servers = ip_stack.dnsConfig.ipAddress
+                        break
+
             # Process each IPv4 address
             for ip_info in ipv4_addresses:
                 ip_config = {
@@ -370,6 +377,10 @@ class VMWareProvider(BaseProvider):
                     "subnet_mask": ip_info.prefixLength,
                     "gateway": gateway_ip,  # Same gateway for all IPs on this interface
                 }
+
+                # Add DNS servers if available
+                if dns_servers:
+                    ip_config["dns_servers"] = dns_servers
 
                 # Get definitive IP assignment method from VMware API
                 if hasattr(ip_info, "origin"):
