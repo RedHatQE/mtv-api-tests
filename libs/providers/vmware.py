@@ -758,21 +758,16 @@ class VMWareProvider(BaseProvider):
         LOGGER.info(f"Configured {len(disks_to_add)} new disks for cloning")
         return device_changes
 
-    def add_rdm_disk_to_vm(self, vm: vim.VirtualMachine, rdm_type: str = "virtual") -> None:
+    def add_rdm_disk_to_vm(self, vm: vim.VirtualMachine, rdm_type: Literal["virtual", "physical"]) -> None:
         """
         Add an RDM disk to an existing VM. Must be called post-clone since RDM requires VMFS datastore.
 
         Args:
             vm: The target VM object.
-            rdm_type: "virtual" (default) or "physical" compatibility mode.
+            rdm_type: "virtual" or "physical" compatibility mode.
         """
-        lun_uuid = self.copyoffload_config.get("rdm_lun_uuid")
-        datastore_id = self.copyoffload_config.get("datastore_id")
-
-        if not lun_uuid:
-            raise ValueError("rdm_lun_uuid required in copyoffload config for RDM disk")
-        if not datastore_id:
-            raise ValueError("datastore_id required in copyoffload config for RDM disk")
+        lun_uuid = self.copyoffload_config["rdm_lun_uuid"]
+        datastore_id = self.copyoffload_config["datastore_id"]
 
         compatibility_mode = "virtualMode" if rdm_type == "virtual" else "physicalMode"
         LOGGER.info(f"Adding RDM disk to VM '{vm.name}': type={rdm_type}, LUN={lun_uuid}")
@@ -788,6 +783,7 @@ class VMWareProvider(BaseProvider):
             raise RuntimeError(f"No SCSI controller found on VM '{vm.name}'")
 
         used_units = {dev.unitNumber for dev in vm.config.hardware.device if dev.controllerKey == scsi_controller.key}
+        # Unit 7 reserved for SCSI controller
         unit_number = next((i for i in range(16) if i != 7 and i not in used_units), None)
         if unit_number is None:
             raise RuntimeError(f"No available unit number on VM '{vm.name}'")
@@ -798,6 +794,7 @@ class VMWareProvider(BaseProvider):
         spec.fileOperation = vim.vm.device.VirtualDeviceSpec.FileOperation.create
 
         disk = vim.vm.device.VirtualDisk()
+        # Temporary key for new device; vSphere assigns actual key on creation
         disk.key = -101
         disk.controllerKey = scsi_controller.key
         disk.unitNumber = unit_number
@@ -989,7 +986,7 @@ class VMWareProvider(BaseProvider):
 
         # Add RDM disks post-clone (RDM requires VMFS datastore, can't be added during clone on NFS)
         for rdm_config in rdm_disks:
-            self.add_rdm_disk_to_vm(vm=res, rdm_type=rdm_config.get("rdm_type", "virtual"))
+            self.add_rdm_disk_to_vm(vm=res, rdm_type=rdm_config["rdm_type"])
 
         return res
 

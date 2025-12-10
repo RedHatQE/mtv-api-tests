@@ -264,13 +264,6 @@ def test_copyoffload_thick_lazy_migration(
     datastore_id = copyoffload_config_data["datastore_id"]
     storage_class = py_config["storage_class"]
 
-    # Validate required copy-offload parameters
-    if not all([storage_vendor_product, datastore_id]):
-        pytest.fail(
-            "Missing required copy-offload parameters in config: "
-            "'storage_vendor_product' and 'datastore_id' must be set."
-        )
-
     # Create network migration map
     vms_names = [vm["name"] for vm in plan["virtual_machines"]]
     network_migration_map = get_network_migration_map(
@@ -647,12 +640,12 @@ def test_copyoffload_rdm_virtual_disk_migration(
     -   rdm_lun_uuid: LUN NAA identifier (e.g., "naa.600a098038313954492458313032306f")
     """
     copyoffload_config_data = source_provider_data["copyoffload"]
-    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+    datastore_id = copyoffload_config_data["datastore_id"]
     storage_class = py_config["storage_class"]
 
     # Validate RDM LUN is configured
-    if not copyoffload_config_data.get("rdm_lun_uuid"):
+    if "rdm_lun_uuid" not in copyoffload_config_data or not copyoffload_config_data["rdm_lun_uuid"]:
         pytest.fail("rdm_lun_uuid is required in copyoffload configuration for RDM disk tests")
 
     vms = [vm["name"] for vm in plan["virtual_machines"]]
