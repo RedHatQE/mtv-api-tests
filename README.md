@@ -243,7 +243,7 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
 ```json
 "copyoffload": {
   "storage_vendor_product": "ontap",
-  "datastore_id": "datastore-123",
+  "datastore_ids": ["datastore-123", "datastore-456"],
   "template_name": "rhel9-template",
   "storage_hostname": "storage.example.com",
   "storage_username": "admin",
@@ -251,6 +251,10 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
   "ontap_svm": "vserver-name"
 }
 ```
+
+**Note:** `datastore_ids` is a list of datastore IDs that support copy-offload.
+The first datastore in the list serves as the default for VMs without explicit datastore assignments.
+Multiple datastores enable migration of VMs with disks distributed across different datastores on the same storage system.
 
 **Vendor-specific fields:**
 

@@ -37,7 +37,7 @@ class VMWareProvider(BaseProvider):
         self, host: str, username: str, password: str, ocp_resource: Provider | None = None, **kwargs: Any
     ) -> None:
         # Extract copyoffload configuration before calling parent
-        self.copyoffload_config = kwargs.pop("copyoffload", {})
+        self.copyoffload_config: dict[str, Any] = kwargs.pop("copyoffload", {})
 
         super().__init__(ocp_resource=ocp_resource, host=host, username=username, password=password, **kwargs)
 
@@ -100,8 +100,9 @@ class VMWareProvider(BaseProvider):
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
         except ValueError:
             if clone_vm:
-                # Use copyoffload datastore if configured
-                target_datastore_id = self.copyoffload_config.get("datastore_id")
+                # Use copyoffload datastore if configured (use first datastore from list as default)
+                datastore_ids = self.copyoffload_config.get("datastore_ids", [])
+                target_datastore_id = datastore_ids[0] if datastore_ids else None
                 target_vm = self.clone_vm(
                     source_vm_name=query,
                     clone_vm_name=target_vm_name,
@@ -362,7 +363,10 @@ class VMWareProvider(BaseProvider):
             container.Destroy()
 
     def _get_add_disk_device_specs(
-        self, source_vm: vim.VirtualMachine, disks_to_add: list[dict[str, Any]]
+        self,
+        source_vm: vim.VirtualMachine,
+        disks_to_add: list[dict[str, Any]],
+        datastore_map: dict[str, Any] | None = None,
     ) -> list[vim.vm.device.VirtualDeviceSpec]:
         """
         Helper method to generate VirtualDeviceSpec for adding new disks.
@@ -370,16 +374,45 @@ class VMWareProvider(BaseProvider):
         Args:
             source_vm: The source VM object.
             disks_to_add: List of dictionaries, each specifying details for a new disk.
+            datastore_map: Optional dictionary mapping datastore IDs to datastore objects.
+                If provided, will be used to resolve datastore_ids items to datastore objects.
 
         Returns:
             A list of VirtualDeviceSpec objects for the new disks.
         """
         # 1. Pre-calculate required space and check datastore capacity for thick disks
-        required_space_gb = sum(
-            disk["size_gb"] for disk in disks_to_add if disk.get("provision_type", "thin").lower() != "thin"
-        )
-        if required_space_gb > 0:
-            datastore = source_vm.datastore[0]  # Assuming single datastore
+        # Group by datastore to check capacity per datastore
+        datastore_requirements: dict[str, float] = {}
+        for disk in disks_to_add:
+            if disk.get("provision_type", "thin").lower() != "thin":
+                disk_datastore_id = disk.get("datastore_id")
+                if disk_datastore_id:
+                    datastore_requirements[disk_datastore_id] = (
+                        datastore_requirements.get(disk_datastore_id, 0) + disk["size_gb"]
+                    )
+                else:
+                    # Use source VM's datastore if not specified
+                    default_datastore_id = source_vm.datastore[0]._moId if source_vm.datastore else None
+                    if default_datastore_id:
+                        datastore_requirements[default_datastore_id] = (
+                            datastore_requirements.get(default_datastore_id, 0) + disk["size_gb"]
+                        )
+
+        # Validate capacity for each datastore
+        for datastore_id, required_space_gb in datastore_requirements.items():
+            if datastore_map and datastore_id in datastore_map:
+                datastore = datastore_map[datastore_id]
+            else:
+                # Try to get datastore by ID
+                try:
+                    datastore = self.get_obj([vim.Datastore], datastore_id)
+                except ValueError:
+                    # Fall back to source VM's datastore
+                    datastore = source_vm.datastore[0] if source_vm.datastore else None
+                    if not datastore:
+                        LOGGER.warning(f"Could not resolve datastore {datastore_id}, skipping capacity check")
+                        continue
+
             free_space_gb = datastore.summary.freeSpace / (1024**3)
             LOGGER.info(
                 f"Validating datastore capacity for thick disks. "
@@ -441,6 +474,34 @@ class VMWareProvider(BaseProvider):
                     f"Disk provisioning type '{provision_type}' not recognized for disk {available_unit_number}. "
                     f"Defaulting to 'thin'."
                 )
+
+            # Set datastore for this disk if specified
+            disk_datastore_id = disk_config.get("datastore_id")
+            if disk_datastore_id:
+                if datastore_map and disk_datastore_id in datastore_map:
+                    target_datastore = datastore_map[disk_datastore_id]
+                else:
+                    # Resolve datastore by ID
+                    try:
+                        target_datastore = self.get_obj([vim.Datastore], disk_datastore_id)
+                        if datastore_map is None:
+                            datastore_map = {}
+                        datastore_map[disk_datastore_id] = target_datastore
+                    except ValueError:
+                        LOGGER.warning(
+                            f"Could not find datastore '{disk_datastore_id}' for disk {available_unit_number}. "
+                            f"Using default datastore."
+                        )
+                        target_datastore = None
+
+                if target_datastore:
+                    backing_info.datastore = target_datastore
+                    # Set fileName to force disk creation on the specified datastore
+                    # Format: [datastore_name] vm_name/disk_name.vmdk
+                    backing_info.fileName = f"[{target_datastore.name}]"
+                    LOGGER.info(
+                        f"Setting disk {available_unit_number} datastore to: {target_datastore.name} ({disk_datastore_id})"
+                    )
 
             disk_device.backing = backing_info
             spec.device = disk_device
@@ -513,7 +574,45 @@ class VMWareProvider(BaseProvider):
         # Handle adding new disks by calling the helper method
         disks_to_add = clone_options.get("add_disks")
         if disks_to_add:
-            disk_device_specs = self._get_add_disk_device_specs(source_vm, disks_to_add)
+            # Resolve special datastore markers (e.g., "SECONDARY_DATASTORE")
+            # This allows test configs to use markers that get resolved to actual datastore IDs
+            datastore_ids = self.copyoffload_config.get("datastore_ids", [])
+
+            for disk_config in disks_to_add:
+                disk_datastore_id = disk_config.get("datastore_id")  # type: ignore[union-attr]
+
+                # If no datastore_id specified, use primary datastore if available
+                if disk_datastore_id is None:
+                    if datastore_ids:
+                        disk_config["datastore_id"] = datastore_ids[0]  # type: ignore[index]
+                        LOGGER.info(f"No datastore_id specified for disk, using primary datastore: {datastore_ids[0]}")
+                # Resolve SECONDARY_DATASTORE marker to actual secondary datastore ID
+                elif disk_datastore_id == "SECONDARY_DATASTORE":
+                    if len(datastore_ids) >= 2:
+                        disk_config["datastore_id"] = datastore_ids[1]  # type: ignore[index]
+                        LOGGER.info(f"Resolved SECONDARY_DATASTORE marker to datastore ID: {datastore_ids[1]}")
+                    else:
+                        LOGGER.warning(
+                            f"SECONDARY_DATASTORE marker found but only {len(datastore_ids)} datastore(s) configured. "
+                            "Using default datastore."
+                        )
+                        disk_config["datastore_id"] = None  # type: ignore[index]
+
+            # Build datastore map for disk datastore resolution
+            datastore_map: dict[str, Any] = {}
+            # Pre-resolve any datastore IDs mentioned in disk configs
+            for disk_config in disks_to_add:
+                disk_datastore_id = disk_config.get("datastore_id")  # type: ignore[union-attr]
+                if disk_datastore_id and disk_datastore_id not in datastore_map:
+                    try:
+                        datastore_map[disk_datastore_id] = self.get_obj([vim.Datastore], disk_datastore_id)
+                        LOGGER.info(
+                            f"Resolved datastore ID '{disk_datastore_id}' to datastore '{datastore_map[disk_datastore_id].name}'"
+                        )
+                    except ValueError:
+                        LOGGER.warning(f"Could not resolve datastore ID '{disk_datastore_id}', will use default")
+
+            disk_device_specs = self._get_add_disk_device_specs(source_vm, disks_to_add, datastore_map)
             device_changes.extend(disk_device_specs)
 
         # Handle VM configuration overrides (CPU, Memory, etc.) from the 'config' key

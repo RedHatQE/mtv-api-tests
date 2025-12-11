@@ -26,7 +26,7 @@
     "guest_vm_win_password": "WINDOWS VMS PASSWORD",
     "copyoffload": {
       "storage_vendor_product": "ontap",  # or "vantara"
-      "datastore_id": "datastore-12345",
+      "datastore_ids": ["datastore-12345", "datastore-67890"],  # List of datastore IDs (first is default)
       "template_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",

@@ -100,6 +100,27 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_multi_datastore_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "add_disks": [
+                    {
+                        "size_gb": 30,
+                        "disk_mode": "persistent",
+                        "provision_type": "thin",
+                        "datastore_id": "SECONDARY_DATASTORE",
+                    },
+                ],
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
 }
 
 for _dir in dir():
