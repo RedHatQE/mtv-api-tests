@@ -110,8 +110,8 @@ def test_copyoffload_thin_migration(
 
     # Get copy-offload configuration
     copyoffload_config_data = source_provider_data["copyoffload"]
-    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+    datastore_id = copyoffload_config_data["datastore_id"]
     storage_class = py_config["storage_class"]
 
     # Create network migration map
@@ -258,8 +258,8 @@ def test_copyoffload_thick_lazy_migration(
 
     # Get copy-offload configuration
     copyoffload_config_data = source_provider_data["copyoffload"]
-    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+    datastore_id = copyoffload_config_data["datastore_id"]
     storage_class = py_config["storage_class"]
 
     # Validate required copy-offload parameters
@@ -416,8 +416,8 @@ def test_copyoffload_multi_disk_migration(
 
     # Get copy-offload configuration
     copyoffload_config_data = source_provider_data["copyoffload"]
-    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+    datastore_id = copyoffload_config_data["datastore_id"]
     storage_class = py_config["storage_class"]
 
     # Create network migration map
