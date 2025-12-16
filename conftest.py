@@ -661,6 +661,7 @@ def plan(
                 vm_name_suffix=vm_name_suffix,
                 clone_vm=True,
                 session_uuid=fixture_store["session_uuid"],
+                clone_options=vm,
             )
 
             # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
