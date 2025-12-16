@@ -481,8 +481,13 @@ def test_copyoffload_multi_disk_migration(
 
 @pytest.mark.copyoffload
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_multi_disk_different_path_migration"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_multi_disk_different_path_migration"],
+            py_config["tests_params"]["test_copyoffload_multi_disk_different_path_migration"],
+        )
+    ],
     indirect=True,
     ids=["copyoffload-multi-disk-different-path"],
 )
