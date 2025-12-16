@@ -24,14 +24,39 @@ Each source provider requires pre-existing base VMs or templates for test execut
 **Note**: The base VM/template names are referenced in test configurations. Ensure these resources exist in your
 source provider before running tests.
 
-install [uv](https://github.com/astral-sh/uv)
+## Prerequisites
+
+Before running the test suite, ensure the following tools are installed and available in your PATH:
+
+### Required Tools
+
+1. **uv** - Python package manager
+   - Install: [uv installation guide](https://github.com/astral-sh/uv)
+
+2. **oc** - OpenShift CLI client
+   - Ensure `oc` is in your PATH:
+
+     ```bash
+     export PATH="<oc path>:$PATH"
+     ```
+
+3. **virtctl** - Kubernetes virtualization CLI
+   - Required for SSH connections to migrated VMs
+   - Must be compatible with your target OpenShift cluster version
+   - Installation options:
+     - **From OpenShift cluster**: Download from the OpenShift web console under "Command Line Tools"
+     - **From GitHub releases**: [kubevirt/kubevirt releases](https://github.com/kubevirt/kubevirt/releases)
+   - Verify installation:
+
+     ```bash
+     virtctl version
+     ```
+
+### Setup
 
 ```bash
+# Install dependencies
 uv sync
-
-# make sure oc client path in $PATH
-export PATH="<oc path>:$PATH"
-
 ```
 
 Run openshift-python-wrapper in DEBUG (show the yamls requests)
@@ -182,6 +207,7 @@ tests_params: dict = {
             },
         ],
         "warm_migration": True,  # True for warm, False for cold
+        "preserve_static_ips": True, # True for preserving source Vm's Static IP
     },
 }
 ```
@@ -193,8 +219,13 @@ import pytest
 from pytest_testconfig import py_config
 
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_your_new_test"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_your_new_test"],
+            py_config["tests_params"]["test_your_new_test"],
+        )
+    ],
     indirect=True,
     ids=["descriptive-id"],
 )

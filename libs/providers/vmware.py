@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import ipaddress
 from typing import Any, Self
 
 from ocp_resources.provider import Provider
@@ -15,6 +16,12 @@ from libs.base_provider import BaseProvider
 from utilities.naming import generate_name_with_uuid
 
 LOGGER = get_logger(__name__)
+
+# VMware vSphere NIC device key offset
+# In vSphere, network adapter device keys start at 4000
+# The gateway routing table uses device IDs without this offset
+# Reference: VMware vSphere API VirtualEthernetCard documentation
+VSPHERE_NIC_DEVICE_KEY_OFFSET = 4000
 
 
 class VMWareProvider(BaseProvider):
@@ -235,16 +242,193 @@ class VMWareProvider(BaseProvider):
 
         return network_name
 
-    def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        vm_name = kwargs["name"]
+    def _extract_nic_ip_info(self, vm: vim.VirtualMachine, device: vim.vm.device.VirtualEthernetCard) -> dict[str, Any]:
+        """
+        Extract IP address information from a virtual network interface.
 
-        _vm = self.get_vm_by_name(
-            query=f"{vm_name}",
-            vm_name_suffix=kwargs.get("vm_name_suffix", ""),
-            clone_vm=kwargs.get("clone", False),
-            session_uuid=kwargs.get("session_uuid", ""),
-            clone_options=kwargs.get("clone_options"),
-        )
+        This method retrieves IP configuration from VMware Tools guest information including:
+        - IPv4 addresses (filters out link-local and IPv6)
+        - Subnet masks (prefix lengths)
+        - Default gateway (from guest routing table)
+        - IP assignment method (static vs DHCP)
+
+        Args:
+            vm: VMware VM object
+            device: Virtual ethernet card device
+
+        Returns:
+            dict: IP information containing 'ip_addresses' list or empty dict if no IP info available
+        """
+        result: dict[str, Any] = {}
+
+        # Check if guest info is available
+        if not (
+            hasattr(vm, "guest")
+            and vm.guest
+            and hasattr(vm, "runtime")
+            and vm.runtime.powerState == "poweredOn"
+            and vm.guest.net
+        ):
+            # Log why guest info is not available for debugging
+            reasons = []
+            if not hasattr(vm, "guest") or not vm.guest:
+                reasons.append("guest object not available")
+            if not hasattr(vm, "runtime") or vm.runtime.powerState != "poweredOn":
+                reasons.append(
+                    f"VM not powered on (state: {
+                        getattr(vm.runtime, 'powerState', 'unknown') if hasattr(vm, 'runtime') else 'no runtime'
+                    })"
+                )
+            if hasattr(vm, "guest") and vm.guest and not vm.guest.net:
+                reasons.append("guest network info not available")
+
+            LOGGER.debug(f"VM {vm.name} NIC {device.deviceInfo.label}: Cannot get IP info - {', '.join(reasons)}")
+            return result
+
+        LOGGER.debug(f"Guest info available for VM {vm.name}, checking {len(vm.guest.net)} guest NICs")
+
+        # Loop through guest NICs to find matching MAC address
+        for guest_nic in vm.guest.net:
+            LOGGER.debug(f"Guest NIC: MAC={guest_nic.macAddress}, Device MAC={device.macAddress}")
+
+            # Match by MAC address
+            if not (guest_nic.macAddress and guest_nic.macAddress.lower() == device.macAddress.lower()):
+                LOGGER.debug("MAC addresses don't match")
+                continue
+
+            LOGGER.debug("  MAC addresses match, checking IP config")
+
+            if not (guest_nic.ipConfig and guest_nic.ipConfig.ipAddress):
+                LOGGER.debug("No IP config or IP addresses found for guest NIC")
+                break
+
+            LOGGER.debug(f"Found {len(guest_nic.ipConfig.ipAddress)} IP addresses")
+
+            # Look for IPv4 addresses specifically
+            ipv4_addresses = []
+            for ip_info in guest_nic.ipConfig.ipAddress:
+                LOGGER.debug(f"IP: {ip_info.ipAddress}, Origin: {getattr(ip_info, 'origin', 'N/A')}")
+                try:
+                    # Use built-in ipaddress module to check if it's IPv4
+                    ip_obj = ipaddress.ip_address(ip_info.ipAddress)
+                    if isinstance(ip_obj, ipaddress.IPv4Address) and not ip_obj.is_link_local:
+                        ipv4_addresses.append(ip_info)
+                        LOGGER.debug(f"IPv4 address found: {ip_info.ipAddress}")
+                    else:
+                        LOGGER.debug(f"Non-IPv4 or link-local address skipped: {ip_info.ipAddress}")
+                except ValueError:
+                    LOGGER.debug(f"Invalid IP address skipped: {ip_info.ipAddress}")
+
+            # Store all IPv4 addresses found
+            if not ipv4_addresses:
+                LOGGER.warning(
+                    f"VM {vm.name} NIC {device.deviceInfo.label}: No valid IPv4 addresses found "
+                    f"(skipped link-local and non-IPv4)"
+                )
+                break
+
+            # Initialize ip_addresses as a list to store multiple IP configurations
+            result["ip_addresses"] = []
+
+            # Try to get gateway information from guest IP stack routing table
+            gateway_ip = None
+            dns_servers = None
+            if hasattr(vm.guest, "ipStack") and vm.guest.ipStack:
+                # Look for default gateway routes (0.0.0.0/0) that match this NIC
+                device_id = str(device.key - VSPHERE_NIC_DEVICE_KEY_OFFSET)
+
+                for ip_stack in vm.guest.ipStack:
+                    if hasattr(ip_stack, "ipRouteConfig") and ip_stack.ipRouteConfig:
+                        for route in ip_stack.ipRouteConfig.ipRoute:
+                            # Look for default routes (0.0.0.0/0) with IPv4 gateway
+                            if (
+                                route.network == "0.0.0.0"
+                                and route.prefixLength == 0
+                                and hasattr(route.gateway, "ipAddress")
+                                and route.gateway.ipAddress
+                                and route.gateway.device == device_id
+                            ):
+                                # Check if it's IPv4 (not IPv6)
+                                try:
+                                    ip_obj = ipaddress.ip_address(route.gateway.ipAddress)
+                                    if isinstance(ip_obj, ipaddress.IPv4Address):
+                                        gateway_ip = route.gateway.ipAddress
+                                        LOGGER.info(
+                                            f"VM {vm.name} NIC {device.deviceInfo.label}:"
+                                            f" Gateway={route.gateway.ipAddress}"
+                                        )
+                                        break
+                                except ValueError:
+                                    LOGGER.info(
+                                        f"VM {vm.name} NIC {device.deviceInfo.label}: Invalid"
+                                        f" gateway IP {route.gateway.ipAddress}"
+                                    )
+
+                # Extract DNS servers if available
+                for ip_stack in vm.guest.ipStack:
+                    if hasattr(ip_stack, "dnsConfig") and ip_stack.dnsConfig:
+                        dns_servers = ip_stack.dnsConfig.ipAddress
+                        break
+
+            # Process each IPv4 address
+            for ip_info in ipv4_addresses:
+                ip_config = {
+                    "ip_address": ip_info.ipAddress,
+                    "subnet_mask": ip_info.prefixLength,
+                    "gateway": gateway_ip,  # Same gateway for all IPs on this interface
+                }
+
+                # Add DNS servers if available
+                if dns_servers:
+                    ip_config["dns_servers"] = dns_servers
+
+                # Get definitive IP assignment method from VMware API
+                if hasattr(ip_info, "origin"):
+                    ip_config["ip_origin"] = ip_info.origin
+                    ip_config["is_static_ip"] = ip_info.origin == "manual"
+                    LOGGER.info(
+                        f"VM {vm.name} NIC {device.deviceInfo.label}: IPv4={ip_info.ipAddress}"
+                        f" Origin={ip_info.origin} Static={ip_info.origin == 'manual'}"
+                    )
+                else:
+                    ip_config["ip_origin"] = None
+                    ip_config["is_static_ip"] = None
+                    LOGGER.warning(f"VM {vm.name} NIC {device.deviceInfo.label}: IP origin not available")
+
+                result["ip_addresses"].append(ip_config)
+
+            # Log summary of all IPv4 addresses found
+            if len(ipv4_addresses) > 1:
+                LOGGER.info(
+                    f"Multiple IPv4 addresses found on {device.deviceInfo.label}: "
+                    f"{[ip.ipAddress for ip in ipv4_addresses]}"
+                )
+            else:
+                LOGGER.info(f"Single IPv4 address found on {device.deviceInfo.label}: {ipv4_addresses[0].ipAddress}")
+
+            if not gateway_ip:
+                LOGGER.info(
+                    f"VM {vm.name} NIC {device.deviceInfo.label} Device ID {device.key}: "
+                    f"No default gateway found for this NIC"
+                )
+
+            break  # Found matching MAC, exit loop
+
+        return result
+
+    def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
+        # If VM object already provided, use it directly (avoids re-searching for cloned VMs)
+        _vm = kwargs.get("provider_vm_api")
+
+        if not _vm:
+            vm_name = kwargs["name"]
+            _vm = self.get_vm_by_name(
+                query=f"{vm_name}",
+                vm_name_suffix=kwargs.get("vm_name_suffix", ""),
+                clone_vm=kwargs.get("clone", False),
+                session_uuid=kwargs.get("session_uuid", ""),
+                clone_options=kwargs.get("clone_options"),
+            )
 
         vm_config: Any = _vm.config
         if not vm_config:
@@ -260,11 +444,18 @@ class VMWareProvider(BaseProvider):
             # Network Interfaces
             if isinstance(device, vim.vm.device.VirtualEthernetCard):
                 network_name = self._get_network_name_from_device(device)
-                result_vm_info["network_interfaces"].append({
+                nic_info = {
                     "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "macAddress": device.macAddress,
                     "network": {"name": network_name},
-                })
+                }
+
+                # Extract IP information using helper method
+                ip_data = self._extract_nic_ip_info(vm=_vm, device=device)
+                nic_info.update(ip_data)
+
+                LOGGER.info(f"Final NIC info for VM {_vm.name} NIC {device.deviceInfo.label}: {nic_info}")
+                result_vm_info["network_interfaces"].append(nic_info)
 
             # Disks
             if isinstance(device, vim.vm.device.VirtualDisk):
@@ -552,7 +743,9 @@ class VMWareProvider(BaseProvider):
                         device_spec.device.addressType = "generated"
                         device_changes.append(device_spec)
                         LOGGER.info(
-                            f"Configured MAC regeneration for network device: {device.deviceInfo.label if device.deviceInfo else 'Unknown'}"
+                            f"Configured MAC regeneration for network device: {
+                                device.deviceInfo.label if device.deviceInfo else 'Unknown'
+                            }"
                         )
 
         # Add device changes to clone spec if any
@@ -608,3 +801,50 @@ class VMWareProvider(BaseProvider):
         self.stop_vm(vm=vm)
         task = vm.Destroy_Task()
         self.wait_task(task=task, action_name=f"Deleting VM {vm_name}")
+
+    def wait_for_vmware_guest_info(self, vm: vim.VirtualMachine, timeout: int = 60) -> bool:
+        """
+        Wait for VMware guest information to become available after VM power-on.
+
+        Args:
+            vm: VMware VM object (vim.VirtualMachine)
+            timeout: Maximum time to wait in seconds (default: 60)
+
+        Returns:
+            bool: True if guest info becomes available, False if timeout
+        """
+        LOGGER.info(f"Waiting for VMware Tools guest info for VM {vm.name} (timeout: {timeout}s)")
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=5,
+                func=lambda: (
+                    hasattr(vm, "guest")
+                    and vm.guest
+                    and hasattr(vm, "runtime")
+                    and vm.runtime.powerState == "poweredOn"
+                    and vm.guest.net
+                    and len(vm.guest.net) > 0
+                    and vm.guest.toolsStatus in ["toolsOk", "toolsOld"]  # Accept toolsOld too
+                ),
+            ):
+                if sample:
+                    LOGGER.info(
+                        f"VMware Tools guest info available for VM {vm.name} (tools status: {vm.guest.toolsStatus})"
+                    )
+                    return True
+
+        except Exception as e:
+            LOGGER.warning(f"Error waiting for guest info on VM {vm.name}: {e}")
+            return False
+
+        # Log diagnostic info only on timeout
+        power_state = getattr(vm.runtime, "powerState", "unknown") if hasattr(vm, "runtime") else "no runtime"
+        tools_status = getattr(vm.guest, "toolsStatus", "unknown") if hasattr(vm, "guest") and vm.guest else "no guest"
+        net_count = len(vm.guest.net) if hasattr(vm, "guest") and vm.guest and vm.guest.net else 0
+        LOGGER.warning(
+            f"Timeout waiting for VMware Tools guest info on VM {vm.name} after {timeout}s "
+            f"(power={power_state}, tools={tools_status}, networks={net_count})"
+        )
+        return False

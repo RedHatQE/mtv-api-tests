@@ -24,6 +24,7 @@ from utilities.copyoffload_migration import wait_for_plan_secret
 from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
+from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
 from utilities.utils import gen_network_map_list, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
@@ -47,6 +48,7 @@ def migrate_vms(
     pre_hook_namespace: str | None = None,
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
+    vm_ssh_connections: SSHConnectionManager | None = None,
 ) -> None:
     # Populate VM IDs from Forklift inventory for all VMs
     # This ensures we always use IDs in the Plan CR (works for all provider types)
@@ -93,6 +95,7 @@ def migrate_vms(
             storage_map_resource=storage_migration_map,
             source_vms_namespace=source_vms_namespace,
             source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
         )
 
 
@@ -117,6 +120,7 @@ def run_migration(
     fixture_store: Any,
     test_name: str,
     copyoffload: bool = False,
+    preserve_static_ips: bool = False,
 ) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -167,6 +171,7 @@ def run_migration(
         "pre_hook_namespace": pre_hook_namespace,
         "after_hook_name": after_hook_name,
         "after_hook_namespace": after_hook_namespace,
+        "preserve_static_ips": preserve_static_ips,
     }
 
     # Add copy-offload specific parameters if enabled

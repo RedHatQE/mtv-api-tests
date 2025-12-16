@@ -89,19 +89,28 @@ def gen_network_map_list(
 ) -> list[dict[str, dict[str, str]]]:
     network_map_list: list[dict[str, dict[str, str]]] = []
     _destination_pod: dict[str, str] = {"type": "pod"}
-    _destination_multus: dict[str, str] = {
-        "name": multus_network_name,
-        "namespace": target_namespace,
-        "type": "multus",
-    }
-    _destination: dict[str, str] = _destination_pod
+    multus_counter = 1
 
     for index, network in enumerate(source_provider_inventory.vms_networks_mappings(vms=vms)):
-        if not pod_only:
-            if index == 0:
-                _destination = _destination_pod
+        if pod_only or index == 0:
+            # First network or pod_only mode → pod network
+            _destination = _destination_pod
+        else:
+            # Generate unique NAD name for each additional network
+            if multus_network_name:
+                # Use consistent naming: {base_name}-1, {base_name}-2, etc.
+                # Where base_name includes unique test identifier (e.g., cnv-bridge-abc12345)
+                nad_name = f"{multus_network_name}-{multus_counter}"
             else:
-                _destination = _destination_multus
+                # Default naming scheme
+                nad_name = f"migration-nad-{multus_counter}"
+
+            _destination = {
+                "name": nad_name,
+                "namespace": target_namespace,
+                "type": "multus",
+            }
+            multus_counter += 1  # Increment for next NAD
 
         network_map_list.append({
             "destination": _destination,

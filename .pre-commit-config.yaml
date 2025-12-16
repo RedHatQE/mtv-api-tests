@@ -57,6 +57,7 @@ repos:
             "types-six",
             "types-pytz",
             "types-PyYAML",
+            "types-paramiko",
           ]
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
