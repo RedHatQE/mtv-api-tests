@@ -629,6 +629,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    vm_ssh_connections,
 ):
     """
     Test copy-offload migration of a VM with an RDM (Raw Device Mapping) disk.
@@ -700,6 +701,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
 
     # Verify that the correct number of disks were migrated (1 base + 1 RDM = 2)

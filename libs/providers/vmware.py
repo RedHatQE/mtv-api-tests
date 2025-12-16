@@ -689,10 +689,12 @@ class VMWareProvider(BaseProvider):
         backing = vim.vm.device.VirtualDisk.RawDiskMappingVer1BackingInfo()
         backing.deviceName = f"/vmfs/devices/disks/{lun_uuid}"
         backing.compatibilityMode = compatibility_mode
-        backing.diskMode = "independent_persistent"
         backing.datastore = vmfs_datastore
         if rdm_type == "virtual":
             backing.lunUuid = lun_uuid
+            backing.diskMode = "persistent"
+        else:
+            backing.diskMode = "independent_persistent"
 
         disk.backing = backing
         spec.device = disk
