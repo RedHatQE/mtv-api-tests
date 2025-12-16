@@ -114,7 +114,7 @@ class VMWareProvider(BaseProvider):
                     clone_vm_name=target_vm_name,
                     session_uuid=session_uuid,
                     target_datastore_id=target_datastore_id,
-                    clone_options=clone_options,
+                    **(clone_options or {}),
                 )
                 if not target_vm:
                     raise VmNotFoundError(
@@ -553,7 +553,11 @@ class VMWareProvider(BaseProvider):
             container.Destroy()
 
     def _get_add_disk_device_specs(
-        self, source_vm: vim.VirtualMachine, disks_to_add: list[dict[str, Any]]
+        self,
+        source_vm: vim.VirtualMachine,
+        disks_to_add: list[dict[str, Any]],
+        clone_vm_name: str,
+        target_datastore: vim.Datastore,
     ) -> list[vim.vm.device.VirtualDeviceSpec]:
         """
         Helper method to generate VirtualDeviceSpec for adding new disks.
@@ -561,138 +565,175 @@ class VMWareProvider(BaseProvider):
         Args:
             source_vm: The source VM object.
             disks_to_add: List of dictionaries, each specifying details for a new disk.
+            clone_vm_name: The name of the cloned VM.
+            target_datastore: The datastore where the new disks should be created.
 
         Returns:
             A list of VirtualDeviceSpec objects for the new disks.
         """
-        # 1. Pre-calculate required space and check datastore capacity for thick disks
-        required_space_gb = sum(
-            disk["size_gb"] for disk in disks_to_add if disk.get("provision_type", "thin").lower() != "thin"
-        )
-        if required_space_gb > 0:
-            datastore = source_vm.datastore[0]  # Assuming single datastore
-            free_space_gb = datastore.summary.freeSpace / (1024**3)
-            LOGGER.info(
-                f"Validating datastore capacity for thick disks. "
-                f"Required: {required_space_gb:.2f} GB, "
-                f"Available on '{datastore.name}': {free_space_gb:.2f} GB"
-            )
-            if required_space_gb > free_space_gb:
-                raise VmCloneError(
-                    f"Insufficient free space on datastore '{datastore.name}' for thick-provisioned disks. "
-                    f"Required: {required_space_gb:.2f} GB, Available: {free_space_gb:.2f} GB"
-                )
-
-        # 1. Find a suitable SCSI controller on the source VM
+        device_changes = []
         scsi_controller = next(
-            (dev for dev in source_vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualSCSIController)),
+            (
+                device
+                for device in source_vm.config.hardware.device
+                if isinstance(device, vim.vm.device.VirtualSCSIController)
+            ),
             None,
         )
         if not scsi_controller:
             raise RuntimeError(f"Could not find a SCSI controller on VM '{source_vm.name}' to add new disks.")
 
-        # 2. Find all currently used unit numbers on that controller
         used_unit_numbers = {
-            dev.unitNumber for dev in source_vm.config.hardware.device if dev.controllerKey == scsi_controller.key
+            device.unitNumber
+            for device in source_vm.config.hardware.device
+            if device.controllerKey == scsi_controller.key
         }
-
-        # 3. Find the first available unit number (0-15, excluding 7 which is reserved for the controller)
         available_unit_number = next((i for i in range(16) if i != 7 and i not in used_unit_numbers), None)
         if available_unit_number is None:
             raise RuntimeError(f"No available unit number on SCSI controller for VM '{source_vm.name}'.")
 
-        device_specs = []
-        new_disk_key = -101
+        required_space_gb = sum(
+            disk["size_gb"] for disk in disks_to_add if disk.get("provision_type", "thin").lower() != "thin"
+        )
+        available_space_gb = target_datastore.summary.freeSpace / (1024**3)
 
-        # 4. Create a spec for each disk to be added
-        for disk_config in disks_to_add:
-            spec = vim.vm.device.VirtualDeviceSpec()
-            spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
-            spec.fileOperation = vim.vm.device.VirtualDeviceSpec.FileOperation.create
+        if required_space_gb > 0:
+            if required_space_gb > available_space_gb:
+                raise VmCloneError(
+                    f"Insufficient datastore capacity for thick-provisioned disks on '{target_datastore.name}'. "
+                    f"Required: {required_space_gb:.2f} GB, Available: {available_space_gb:.2f} GB."
+                )
+            LOGGER.info(
+                f"Validating datastore capacity for thick disks. "
+                f"Required: {required_space_gb:.2f} GB, Available on '{target_datastore.name}': {available_space_gb:.2f} GB"
+            )
+        else:
+            LOGGER.info("No thick-provisioned disks to add; skipping datastore capacity check.")
 
-            disk_device = vim.vm.device.VirtualDisk()
-            disk_device.key = new_disk_key
-            disk_device.controllerKey = scsi_controller.key
-            disk_device.unitNumber = available_unit_number
-            disk_device.capacityInKB = disk_config["size_gb"] * 1024 * 1024
+        new_disk_key_counter = -101
+        for disk in disks_to_add:
+            new_disk_spec = vim.vm.device.VirtualDeviceSpec()
+            new_disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+            new_disk_spec.fileOperation = vim.vm.device.VirtualDeviceSpec.FileOperation.create
+            new_disk_spec.device = vim.vm.device.VirtualDisk()
+            new_disk_spec.device.key = new_disk_key_counter
+            new_disk_spec.device.controllerKey = scsi_controller.key
+            new_disk_spec.device.unitNumber = available_unit_number
+            new_disk_spec.device.capacityInKB = disk["size_gb"] * 1024 * 1024
 
             backing_info = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
-            backing_info.diskMode = disk_config.get("disk_mode", "persistent")
+            backing_info.diskMode = disk.get("disk_mode", "persistent")
 
-            provision_type = disk_config.get("provision_type", "thin").lower()
-            provision_config = self.DISK_PROVISION_TYPE_MAP.get(provision_type)
-
-            if provision_config:
-                backing_info.thinProvisioned = provision_config["thinProvisioned"]
-                backing_info.eagerlyScrub = provision_config["eagerlyScrub"]
-                LOGGER.info(f"Setting disk {available_unit_number} provisioning to: {provision_type}")
-            else:
-                backing_info.thinProvisioned = True
-                LOGGER.warning(
-                    f"Disk provisioning type '{provision_type}' not recognized for disk {available_unit_number}. "
-                    f"Defaulting to 'thin'."
+            datastore_path = disk.get("datastore_path")
+            if datastore_path:
+                full_path = (
+                    f"[{target_datastore.name}] {datastore_path}/{clone_vm_name}_disk_{available_unit_number}.vmdk"
                 )
+                LOGGER.info(f"Ensuring directory '[{target_datastore.name}] {datastore_path}' exists on datastore.")
+                try:
+                    file_manager = self.content.fileManager
+                    datacenter = self.api.content.rootFolder.childEntity[0]
+                    dir_path_for_creation = f"[{target_datastore.name}] {datastore_path}"
+                    file_manager.MakeDirectory(
+                        name=dir_path_for_creation, datacenter=datacenter, createParentDirectories=True
+                    )
+                except (vim.fault.FileAlreadyExists, vim.fault.CannotCreateFile):
+                    LOGGER.debug(f"Directory '{datastore_path}' already exists, proceeding.")
+                except Exception as e:
+                    LOGGER.warning(f"Could not automatically create directory '{datastore_path}': {e}")
+                LOGGER.info(f"Setting custom path for new disk on datastore '{target_datastore.name}': {full_path}")
+                backing_info.fileName = full_path
+            else:
+                backing_info.fileName = f"[{target_datastore.name}]"
 
-            disk_device.backing = backing_info
-            spec.device = disk_device
-            device_specs.append(spec)
+            provision_type_config = self.DISK_PROVISION_TYPE_MAP.get(
+                disk.get("provision_type", "thin").lower(), self.DISK_PROVISION_TYPE_MAP["thin"]
+            )
+            backing_info.thinProvisioned = provision_type_config["thinProvisioned"]
+            backing_info.eagerlyScrub = provision_type_config["eagerlyScrub"]
+            LOGGER.info(f"Setting disk {available_unit_number} provisioning to: {disk.get('provision_type', 'thin')}")
 
-            # Increment for the next disk
+            backing_info.datastore = target_datastore
+
+            new_disk_spec.device.backing = backing_info
+            device_changes.append(new_disk_spec)
             available_unit_number += 1
-            new_disk_key -= 1
-
+            new_disk_key_counter -= 1
         LOGGER.info(f"Configured {len(disks_to_add)} new disks for cloning")
-        return device_specs
+        return device_changes
 
-    def clone_vm(self, source_vm_name: str, clone_vm_name: str, session_uuid: str, **kwargs: Any) -> vim.VirtualMachine:
+    def clone_vm(
+        self,
+        source_vm_name: str,
+        clone_vm_name: str,
+        session_uuid: str,
+        power_on: bool = False,
+        regenerate_mac: bool = True,
+        **kwargs: Any,
+    ) -> vim.VirtualMachine:
         """
-        Clones a VM from a source VM or template.
+        Clones a virtual machine from an existing VM or template.
 
         Args:
             source_vm_name: The name of the VM or template to clone from.
-            clone_vm_name: The name of the new VM to be created.
-            power_on: Whether to power on the VM after cloning.
+            clone_vm_name: The name for the new cloned VM.
+            session_uuid: A unique identifier for the session, used for naming.
+            power_on: Whether to power on the VM after cloning. Defaults to False.
             regenerate_mac: Whether to regenerate MAC addresses for network interfaces.
                           Prevents MAC address conflicts between cloned VMs. Default: True.
-        """
+            **kwargs: Additional keyword arguments for cloning options.
+                add_disks (list[dict]): A list of dictionaries, where each dict
+                    defines a new disk to be added to the cloned VM.
+                    Supported keys for each disk:
+                    - 'size_gb' (int): The size of the disk in gigabytes.
+                    - 'provision_type' (str): 'thin', 'thick-lazy', or 'thick-eager'.
+                    - 'disk_mode' (str): e.g., 'persistent', 'independent_persistent'.
+                    - 'datastore_path' (str, optional): A custom folder path on the datastore
+                                        where the disk's .vmdk file should be placed.
+                                        E.g., "shared_disks". If not provided, defaults
+                                        to the VM's main folder.
+                target_datastore_id (str, optional): The MoRef ID of the specific datastore
+                                        to use for the cloned VM and all its disks.
+                                        If not provided, defaults to the source VM's datastore.
 
-        # generate new uuid for uniqueness of a test
+        Returns:
+            vim.VirtualMachine: The cloned VM object.
+        """
         clone_vm_name = generate_name_with_uuid(f"{session_uuid}-{clone_vm_name}")
         LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
 
         relocate_spec = vim.vm.RelocateSpec()
-        # Explicitly set the datastore for the entire clone operation to ensure correct disk provisioning
-        if source_vm.datastore:
+
+        target_datastore_id = kwargs.get("target_datastore_id")
+        if target_datastore_id:
+            target_datastore = self.get_obj([vim.Datastore], target_datastore_id)
+            LOGGER.info(f"Using target datastore from config: {target_datastore.name} ({target_datastore_id})")
+        elif source_vm.datastore:
             target_datastore = source_vm.datastore[0]
-            relocate_spec.datastore = target_datastore
-            LOGGER.info(f"Setting target datastore for clone to: {target_datastore.name}")
+            LOGGER.info(f"Using source VM's default datastore: {target_datastore.name}")
         else:
-            LOGGER.warning(
-                f"Source VM '{source_vm_name}' has no datastores. Datastore for clone will be chosen by vSphere."
-            )
+            raise VmCloneError(f"Could not determine a target datastore for cloning '{source_vm_name}'.")
 
-        relocate_spec.pool = source_vm.resourcePool
+        relocate_spec.datastore = target_datastore  # Ensure relocate_spec uses the determined datastore
 
-        # If source is a template, it usually has no resource pool, so we pick one from the environment
-        if not relocate_spec.pool:
+        # If the source is a template, it may not have a resource pool; find a suitable one from the cluster.
+        if not source_vm.resourcePool:
             container = self.view_manager.CreateContainerView(self.content.rootFolder, [vim.ComputeResource], True)
             view = container.view  # type: ignore[attr-defined]
             relocate_spec.pool = next((cr.resourcePool for cr in view if cr.resourcePool), None)
             container.Destroy()
+        else:
+            relocate_spec.pool = source_vm.resourcePool
 
         if not relocate_spec.pool:
             raise VmCloneError("Could not determine a valid resource pool for cloning.")
 
-        clone_spec = vim.vm.CloneSpec(location=relocate_spec, powerOn=False, template=False)
-
-        clone_options = kwargs.get("clone_options") or {}
-        disk_type = clone_options.get("disk_type")
         config_spec = vim.vm.ConfigSpec()
         device_changes = []
 
-        # Handle disk provisioning type
+        disk_type = kwargs.get("disk_type")
         if disk_type:
             disk_config = self.DISK_TYPE_MAP.get(disk_type.lower())
             if disk_config:
@@ -701,45 +742,24 @@ class VMWareProvider(BaseProvider):
             else:
                 LOGGER.warning(f"Disk type '{disk_type}' not recognized. Using vSphere default.")
 
-        # Handle adding new disks by calling the helper method
-        disks_to_add = clone_options.get("add_disks")
+        disks_to_add = kwargs.get("add_disks")
         if disks_to_add:
-            disk_device_specs = self._get_add_disk_device_specs(source_vm, disks_to_add)
+            disk_device_specs = self._get_add_disk_device_specs(
+                source_vm=source_vm,
+                disks_to_add=disks_to_add,
+                clone_vm_name=clone_vm_name,
+                target_datastore=target_datastore,
+            )
             device_changes.extend(disk_device_specs)
 
-        # Handle VM configuration overrides (CPU, Memory, etc.) from the 'config' key
-        if "config" in clone_options:
-            vm_config_overrides = clone_options["config"]
-
-            if "numCPUs" in vm_config_overrides:
-                # This part of the code was not provided in the edit_specification,
-                # so it's not included in the new_code.
-                pass  # Placeholder for future implementation
-
-        # Use target datastore if specified, otherwise relay on vsphere's default behaviour
-        target_datastore_id = kwargs.get("target_datastore_id")
-        if target_datastore_id:
-            target_datastore = self.get_obj([vim.Datastore], target_datastore_id)
-            relocate_spec.datastore = target_datastore
-            LOGGER.info(f"Using target datastore: {target_datastore_id}")
-
-        clone_spec.location = relocate_spec
-        clone_spec.powerOn = kwargs.get("power_on", False)
-        clone_spec.template = False
-
-        # Configure MAC address regeneration if requested
-        regenerate_mac = kwargs.get("regenerate_mac", True)
         if regenerate_mac:
             source_config = source_vm.config
-
             if source_config and source_config.hardware and source_config.hardware.device:
                 for device in source_config.hardware.device:
                     if isinstance(device, vim.vm.device.VirtualEthernetCard):
-                        # Create device spec for MAC regeneration
                         device_spec = vim.vm.device.VirtualDeviceSpec()
                         device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
                         device_spec.device = device
-                        # Set address type to generate new MAC address
                         device_spec.device.addressType = "generated"
                         device_changes.append(device_spec)
                         LOGGER.info(
@@ -748,11 +768,13 @@ class VMWareProvider(BaseProvider):
                             }"
                         )
 
-        # Add device changes to clone spec if any
         if device_changes:
             config_spec.deviceChange = device_changes
-            clone_spec.config = config_spec
             LOGGER.info(f"Applied {len(device_changes)} device changes to the clone specification.")
+
+        clone_spec = vim.vm.CloneSpec(
+            location=relocate_spec, powerOn=power_on, template=False, config=config_spec if device_changes else None
+        )
 
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
         LOGGER.info(f"Clone task started for {clone_vm_name}. Waiting for completion...")
@@ -765,11 +787,8 @@ class VMWareProvider(BaseProvider):
                 sleep=5,
             )
         except VmCloneError as e:
-            # Retry without MAC regeneration if we hit a resource conflict error
             if regenerate_mac and "in use" in str(e).lower():
                 LOGGER.warning("Clone failed with resource conflict, retrying without MAC regeneration")
-
-                # On retry, remove only the MAC regeneration settings from the clone_spec
                 if clone_spec.config and clone_spec.config.deviceChange:
                     non_mac_changes = [
                         change
@@ -779,8 +798,7 @@ class VMWareProvider(BaseProvider):
                     if non_mac_changes:
                         clone_spec.config.deviceChange = non_mac_changes
                     else:
-                        clone_spec.config = None  # Unset config if no other changes are left
-
+                        clone_spec.config = None
                 task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
                 res = self.wait_task(
                     task=task,
@@ -790,10 +808,9 @@ class VMWareProvider(BaseProvider):
                 )
             else:
                 raise
+
         if res and self.fixture_store:
-            self.fixture_store["teardown"].setdefault(self.type, []).append({
-                "name": clone_vm_name,
-            })
+            self.fixture_store["teardown"].setdefault(self.type, []).append({"name": clone_vm_name})
         return res
 
     def delete_vm(self, vm_name: str) -> None:
