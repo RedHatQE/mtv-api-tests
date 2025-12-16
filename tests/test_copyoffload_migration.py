@@ -50,6 +50,7 @@ def test_copyoffload_thin_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    setup_copyoffload_ssh,
     vm_ssh_connections,
 ):
     """
@@ -195,6 +196,7 @@ def test_copyoffload_thick_lazy_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    setup_copyoffload_ssh,
     vm_ssh_connections,
 ):
     """
@@ -351,6 +353,7 @@ def test_copyoffload_multi_disk_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    setup_copyoffload_ssh,
     vm_ssh_connections,
 ):
     """
@@ -505,6 +508,7 @@ def test_copyoffload_multi_disk_different_path_migration(
     source_vms_namespace,
     copyoffload_config,
     copyoffload_storage_secret,
+    setup_copyoffload_ssh,
 ):
     """
     Test copy-offload migration of a multi-disk VM where an additional disk
