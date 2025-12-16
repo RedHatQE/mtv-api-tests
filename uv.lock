@@ -962,7 +962,6 @@ dependencies = [
     { name = "ovirt-python-sdk" },
     { name = "packaging" },
     { name = "pandas" },
-    { name = "paramiko" },
     { name = "pyhelper-utils" },
     { name = "pytest" },
     { name = "pytest-harvest" },
@@ -981,7 +980,6 @@ dependencies = [
     { name = "setuptools" },
     { name = "shortuuid" },
     { name = "typer" },
-    { name = "types-paramiko" },
 ]
 
 [package.dev-dependencies]
@@ -1003,7 +1001,6 @@ requires-dist = [
     { name = "ovirt-python-sdk", specifier = ">=1.2.0" },
     { name = "packaging" },
     { name = "pandas", specifier = ">=2.2.3" },
-    { name = "paramiko", specifier = ">=3.1.0" },
     { name = "pyhelper-utils", specifier = ">=1.0.9" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-harvest", specifier = ">=1.10.5" },
@@ -1022,7 +1019,6 @@ requires-dist = [
     { name = "setuptools", specifier = ">=75.8.0" },
     { name = "shortuuid", specifier = ">=1.0.13" },
     { name = "typer", specifier = ">=0.15.1" },
-    { name = "types-paramiko", specifier = ">=3.1.0.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -2358,18 +2354,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/92/e8/2a73ccf9874ec4c7638f172efc8972ceab13a0e3480b389d6ed822f7a822/typer-0.17.4.tar.gz", hash = "sha256:b77dc07d849312fd2bb5e7f20a7af8985c7ec360c45b051ed5412f64d8dc1580", size = 103734, upload-time = "2025-09-05T18:14:40.746Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/93/72/6b3e70d32e89a5cbb6a4513726c1ae8762165b027af569289e19ec08edd8/typer-0.17.4-py3-none-any.whl", hash = "sha256:015534a6edaa450e7007eba705d5c18c3349dcea50a6ad79a5ed530967575824", size = 46643, upload-time = "2025-09-05T18:14:39.166Z" },
-]
-
-[[package]]
-name = "types-paramiko"
-version = "4.0.0.20250822"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/b8/c6ff3b10c2f7b9897650af746f0dc6c5cddf054db857bc79d621f53c7d22/types_paramiko-4.0.0.20250822.tar.gz", hash = "sha256:1b56b0cbd3eec3d2fd123c9eb2704e612b777e15a17705a804279ea6525e0c53", size = 28730, upload-time = "2025-08-22T03:03:43.262Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/a1/b3774ed924a66ee2c041224d89c36f0c21f4f6cf75036d6ee7698bf8a4b9/types_paramiko-4.0.0.20250822-py3-none-any.whl", hash = "sha256:55bdb14db75ca89039725ec64ae3fa26b8d57b6991cfb476212fa8f83a59753c", size = 38833, upload-time = "2025-08-22T03:03:42.072Z" },
 ]
 
 [[package]]
