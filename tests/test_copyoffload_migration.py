@@ -605,8 +605,13 @@ def test_copyoffload_multi_disk_different_path_migration(
 
 @pytest.mark.copyoffload
 @pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_rdm_virtual_disk_migration"])],
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_rdm_virtual_disk_migration"],
+            py_config["tests_params"]["test_copyoffload_rdm_virtual_disk_migration"],
+        )
+    ],
     indirect=True,
     ids=["copyoffload-rdm-virtual"],
 )
