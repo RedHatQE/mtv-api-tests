@@ -119,7 +119,7 @@ class OpenStackProvider(BaseProvider):
         # Retrieve the specific instance
         instance_obj = self.get_instance_obj(name_filter=vm_name)
         if not instance_obj:
-            LOGGER.error(f"Instance {vm_name} not found.")
+            LOGGER.warning(f"Instance {vm_name} not found.")
             return None
 
         return next(
@@ -136,17 +136,20 @@ class OpenStackProvider(BaseProvider):
             return volume.volume_image_metadata
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        base_vm_name = kwargs["name"]
-        vm_name: str = f"{base_vm_name}{kwargs.get('vm_name_suffix', '')}"
+        # If provider_vm_api is passed, use it directly (VM already retrieved/cloned)
+        source_vm = kwargs.get("provider_vm_api")
 
-        source_vm = self.get_instance_obj(vm_name)
-
-        if not source_vm and kwargs.get("clone"):
-            source_vm = self.clone_vm(
-                source_vm_name=base_vm_name, clone_vm_name=vm_name, session_uuid=kwargs["session_uuid"]
+        if not source_vm:
+            base_vm_name = kwargs["name"]
+            source_vm = self.get_vm_by_name(
+                query=base_vm_name,
+                vm_name_suffix=kwargs.get("vm_name_suffix", ""),
+                clone_vm=kwargs.get("clone", False),
+                session_uuid=kwargs.get("session_uuid", ""),
+                clone_options=kwargs.get("clone_options"),
             )
-            # Update vm_name to the actual cloned VM name (includes session_uuid prefix)
-            vm_name = source_vm.name
+
+        vm_name = source_vm.name
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = "openstack"
@@ -221,8 +224,7 @@ class OpenStackProvider(BaseProvider):
         """
         clone_vm_name = f"{session_uuid}-{clone_vm_name}"
         LOGGER.info(f"Starting clone of '{source_vm_name}' to '{clone_vm_name}'")
-        source_vm: OSP_Server | None = self.get_instance_obj(name_filter=source_vm_name)
-
+        source_vm = self.get_instance_obj(name_filter=source_vm_name)
         if not source_vm:
             raise VmNotFoundError(f"Source VM '{source_vm_name}' not found.")
 
@@ -287,8 +289,7 @@ class OpenStackProvider(BaseProvider):
             vm_name: The name of the VM to delete.
         """
         LOGGER.info(f"Attempting to delete VM '{vm_name}'")
-        vm_to_delete: OSP_Server | None = self.get_instance_obj(name_filter=vm_name)
-
+        vm_to_delete = self.get_instance_obj(name_filter=vm_name)
         if not vm_to_delete:
             LOGGER.warning(f"VM '{vm_name}' not found. Nothing to delete.")
             return
@@ -299,3 +300,92 @@ class OpenStackProvider(BaseProvider):
             LOGGER.info(f"Successfully deleted VM '{vm_name}'.")
         except Exception as e:
             LOGGER.error(f"An error occurred while deleting VM '{vm_name}': {e}")
+
+    def get_vm_by_name(
+        self,
+        query: str,
+        vm_name_suffix: str = "",
+        clone_vm: bool = False,
+        session_uuid: str = "",
+        clone_options: dict | None = None,
+    ) -> OSP_Server:
+        """
+        Retrieves a VM instance by name, optionally cloning if not found.
+
+        Args:
+            query: The base name of the VM to retrieve.
+            vm_name_suffix: Optional suffix to append to the VM name.
+            clone_vm: If True, clone the VM if not found.
+            session_uuid: Session UUID for cloning operations.
+            clone_options: Additional options for cloning (currently unused).
+
+        Returns:
+            OSP_Server: The server object.
+
+        Raises:
+            VmNotFoundError: If the VM is not found and clone_vm is False.
+        """
+        vm_name = f"{query}{vm_name_suffix}"
+        LOGGER.info(f"Searching for VM '{vm_name}', {clone_vm=}")
+        vm = self.get_instance_obj(name_filter=vm_name)
+
+        if not vm:
+            if clone_vm:
+                vm = self.clone_vm(
+                    source_vm_name=query,
+                    clone_vm_name=vm_name,
+                    session_uuid=session_uuid,
+                )
+            else:
+                LOGGER.debug(f"VM '{vm_name}' not found in OpenStack.")
+                raise VmNotFoundError(f"VM '{vm_name}' not found.")
+
+        return vm
+
+    def stop_vm(self, vm: OSP_Server) -> None:
+        """
+        Stops a running VM instance.
+
+        Args:
+            vm: The server object to stop.
+        """
+        # Refresh server state to get current status
+        current_vm = self.api.compute.get_server(vm.id)
+
+        # Check if VM is already stopped
+        if current_vm.status == "SHUTOFF":
+            LOGGER.info(f"VM '{vm.name}' is already stopped (SHUTOFF). Skipping stop operation.")
+            return
+
+        LOGGER.info(f"Stopping VM '{vm.name}'")
+        try:
+            self.api.compute.stop_server(vm)
+            self.api.compute.wait_for_server(vm, status="SHUTOFF")
+            LOGGER.info(f"Successfully stopped VM '{vm.name}'")
+        except Exception as e:
+            LOGGER.error(f"An error occurred while stopping VM '{vm.name}': {e}")
+            raise
+
+    def start_vm(self, vm: OSP_Server) -> None:
+        """
+        Starts a stopped VM instance.
+
+        Args:
+            vm: The server object to start.
+        """
+        # Refresh server state to get current status
+        current_vm = self.api.compute.get_server(vm.id)
+
+        # Check if VM is already running
+        if current_vm.status == "ACTIVE":
+            LOGGER.info(f"VM '{vm.name}' is already running (ACTIVE). Skipping start operation.")
+            return
+
+        LOGGER.info(f"Starting VM '{vm.name}'")
+        try:
+            self.api.compute.start_server(vm)
+            self.api.compute.wait_for_server(vm, status="ACTIVE")
+            LOGGER.info(f"Successfully started VM '{vm.name}'")
+        except Exception as e:
+            LOGGER.error(f"An error occurred while starting VM '{vm.name}': {e}")
+            raise
