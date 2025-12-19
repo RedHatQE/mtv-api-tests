@@ -13,13 +13,16 @@ SOURCE_PROVIDER_TYPE = py_config.get("source_provider_type")
 
 
 pytestmark = [
-    pytest.mark.jira("MTV-2846", run=py_config.get("source_provider_type") != Provider.ProviderType.RHV),
     pytest.mark.skipif(
         SOURCE_PROVIDER_TYPE
         in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT, Provider.ProviderType.OVA),
         reason=f"{SOURCE_PROVIDER_TYPE} warm migration is not supported.",
     ),
 ]
+
+# Only apply Jira marker for RHV - skip if issue unresolved, run normally if resolved
+if SOURCE_PROVIDER_TYPE == Provider.ProviderType.RHV:
+    pytestmark.append(pytest.mark.jira("MTV-2846", run=False))
 
 
 @pytest.mark.tier0
