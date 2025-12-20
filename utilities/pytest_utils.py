@@ -16,7 +16,6 @@ from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
-from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
@@ -108,7 +107,6 @@ def teardown_resources(
 
     # Resources that was created by running migration
     pods = session_teardown_resources.get(Pod.kind, [])
-    virtual_machines = session_teardown_resources.get(VirtualMachine.kind, [])
 
     # Clean all resources that was created by the tests
     for migration in migrations:
@@ -190,18 +188,6 @@ def teardown_resources(
             leftovers.setdefault(NetworkMap.kind, []).append(networkmap)
 
     # Check that resources that was created by running migration are deleted
-    for virtual_machine in virtual_machines:
-        try:
-            virtual_machine_obj = VirtualMachine(
-                name=virtual_machine["name"], namespace=virtual_machine["namespace"], client=ocp_client
-            )
-            if virtual_machine_obj.exists:
-                if not virtual_machine_obj.clean_up(wait=True):
-                    leftovers = append_leftovers(leftovers=leftovers, resource=virtual_machine_obj)
-        except Exception as exc:
-            LOGGER.error(f"Failed to cleanup VirtualMachine {virtual_machine['name']}: {exc}")
-            leftovers.setdefault(VirtualMachine.kind, []).append(virtual_machine)
-
     for pod in pods:
         try:
             pod_obj = Pod(name=pod["name"], namespace=pod["namespace"], client=ocp_client)

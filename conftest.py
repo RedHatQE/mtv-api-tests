@@ -724,24 +724,20 @@ def plan(
 
     yield plan
 
+    # Delete VMs immediately after test (function-scoped cleanup)
+    # Pods are garbage collected by Kubernetes via ownerReferences
     for vm in plan["virtual_machines"]:
-        vm_obj = VirtualMachine(
-            client=ocp_admin_client,
-            name=vm["name"],
-            namespace=target_namespace,
-        )
-        fixture_store["teardown"].setdefault(vm_obj.kind, []).append({
-            "name": vm_obj.name,
-            "namespace": vm_obj.namespace,
-            "module": vm_obj.__module__,
-        })
-
-    for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
-        fixture_store["teardown"].setdefault(pod.kind, []).append({
-            "name": pod.name,
-            "namespace": pod.namespace,
-            "module": pod.__module__,
-        })
+        try:
+            vm_obj = VirtualMachine(
+                client=ocp_admin_client,
+                name=vm["name"],
+                namespace=target_namespace,
+            )
+            if vm_obj.exists:
+                LOGGER.info(f"Deleting VM {vm_obj.name} after test")
+                vm_obj.clean_up(wait=True)
+        except Exception:
+            LOGGER.exception("Failed to delete VM %s", vm["name"])
 
 
 @pytest.fixture(scope="session")
