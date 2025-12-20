@@ -3,7 +3,7 @@ global config
 insecure_verify_skip: str = "true"
 number_of_vms: int = 1
 check_vms_signals: bool = True
-target_namespace_prefix: str = "mtv-api-tests"
+target_namespace_prefix: str = "auto"
 mtv_namespace: str = "openshift-mtv"
 vm_name_search_pattern: str = ""
 remote_ocp_cluster: str = ""

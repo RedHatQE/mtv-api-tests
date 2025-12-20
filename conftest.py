@@ -318,8 +318,8 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
 
     _target_namespace: str = py_config["target_namespace_prefix"]
 
-    # replace mtv-api-tests since session_uuid already include mtv-api-tests in the name
-    _target_namespace = _target_namespace.replace("mtv-api-tests", "")
+    # Remove prefix value to avoid duplication - session_uuid is already generated from this prefix
+    _target_namespace = _target_namespace.replace("auto", "")
 
     # Generate a unique namespace name to avoid conflicts and support run multiple runs with the same provider configs
     unique_namespace_name = f"{session_uuid}{_target_namespace}"[:63]
@@ -368,7 +368,7 @@ def nfs_storage_profile(ocp_admin_client):
 
 @pytest.fixture(scope="session")
 def session_uuid(fixture_store):
-    _session_uuid = generate_name_with_uuid(name="mtv-api-tests")
+    _session_uuid = generate_name_with_uuid(name="auto")
     fixture_store["session_uuid"] = _session_uuid
     return _session_uuid
 

@@ -507,7 +507,7 @@ global config
 insecure_verify_skip: str = "true"
 number_of_vms: int = 1
 check_vms_signals: bool = True
-target_namespace_prefix: str = "mtv-api-tests"
+target_namespace_prefix: str = "auto"
 mtv_namespace: str = "openshift-mtv"
 plan_wait_timeout: int = 3600
 remote_ocp_cluster: str = ""
@@ -621,7 +621,7 @@ def ocp_admin_client():
 @pytest.fixture(scope="session")
 def session_uuid(fixture_store):
     """Unique identifier for this test session"""
-    _uuid = generate_name_with_uuid(name="mtv-api-tests")
+    _uuid = generate_name_with_uuid(name="auto")
     fixture_store["session_uuid"] = _uuid
     return _uuid
 
@@ -710,8 +710,8 @@ def my_resource(fixture_store, ocp_admin_client):
 
 ```python
 {
-    "session_uuid": "mtv-api-tests-abc123",
-    "base_resource_name": "mtv-api-tests-abc123-vsphere-8-0",
+    "session_uuid": "auto-abc123",
+    "base_resource_name": "auto-abc123-vsphere-8-0",
     "vms_for_current_session": {"vm1", "vm2", "vm3"},
     "teardown": {
         "Namespace": [{"name": "ns1", ...}],
