@@ -125,6 +125,24 @@ class OCPProvider(BaseProvider):
 
         result_vm_info["provider_vm_api"] = cnv_vm
 
+        # Wait for VM to reach stable state before recording power state
+        # Transitional states (Starting, Stopping, Provisioning, Migrating) would cause incorrect state recording
+        STABLE_STATES = (cnv_vm.Status.RUNNING, cnv_vm.Status.STOPPED)
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=120,
+                sleep=2,
+                func=lambda: cnv_vm.instance.status.printableStatus in STABLE_STATES,
+            ):
+                if sample:
+                    break
+        except TimeoutExpiredError:
+            LOGGER.warning(
+                f"VM {cnv_vm_name} did not reach stable state within 120s. "
+                f"Current state: {cnv_vm.instance.status.printableStatus}"
+            )
+
         # Power state
         result_vm_info["power_state"] = (
             "on" if cnv_vm.instance.status.printableStatus == cnv_vm.Status.RUNNING else "off"
