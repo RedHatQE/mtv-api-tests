@@ -124,6 +124,7 @@ class OCPProvider(BaseProvider):
         )
 
         result_vm_info["provider_vm_api"] = cnv_vm
+        result_vm_info["id"] = cnv_vm.instance.metadata.uid
 
         # Wait for VM to reach stable state before recording power state
         # Transitional states (Starting, Stopping, Provisioning, Migrating) would cause incorrect state recording
@@ -174,6 +175,7 @@ class OCPProvider(BaseProvider):
                 "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[1],
             })
 
+        disk_idx = 0
         for pvc in cnv_vm.vmi.instance.spec.volumes:
             if not _source:
                 name = pvc.persistentVolumeClaim.claimName
@@ -197,7 +199,10 @@ class OCPProvider(BaseProvider):
                     "name": _pvc.instance.spec.storageClassName,
                     "access_mode": _pvc.instance.spec.accessModes,
                 },
+                "device_key": _pvc.name,  # PVC name as unique identifier
+                "unit_number": disk_idx,  # Order in volumes list (excluding cloud-init)
             })
+            disk_idx += 1
 
         result_vm_info["cpu"]["num_cores"] = cnv_vm.vmi.instance.spec.domain.cpu.cores
         result_vm_info["cpu"]["num_sockets"] = cnv_vm.vmi.instance.spec.domain.cpu.sockets

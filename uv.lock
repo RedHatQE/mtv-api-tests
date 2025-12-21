@@ -961,6 +961,7 @@ dependencies = [
     { name = "openstacksdk" },
     { name = "ovirt-python-sdk" },
     { name = "pandas" },
+    { name = "py-go-template" },
     { name = "pyhelper-utils" },
     { name = "pytest" },
     { name = "pytest-harvest" },
@@ -999,6 +1000,7 @@ requires-dist = [
     { name = "openstacksdk", specifier = ">=4.0.0" },
     { name = "ovirt-python-sdk", specifier = ">=1.2.0" },
     { name = "pandas", specifier = ">=2.2.3" },
+    { name = "py-go-template", specifier = ">=0.2.0" },
     { name = "pyhelper-utils", specifier = ">=1.0.9" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-harvest", specifier = ">=1.10.5" },
@@ -1486,6 +1488,16 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cd/05/0a34433a064256a578f1783a10da6df098ceaa4a57bbeaa96a6c0352786b/pure_eval-0.2.3.tar.gz", hash = "sha256:5f4e983f40564c576c7c8635ae88db5956bb2229d7e9237d03b3c0b0190eaf42", size = 19752, upload-time = "2024-07-21T12:58:21.801Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593a18957422533ff0f87ede7c9c6ea010a2177d738fb82f/pure_eval-0.2.3-py3-none-any.whl", hash = "sha256:1db8e35b67b3d218d818ae653e27f06c3aa420901fa7b081ca98cbedc874e0d0", size = 11842, upload-time = "2024-07-21T12:58:20.04Z" },
+]
+
+[[package]]
+name = "py-go-template"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/33/5d3486f2ace7fa8a411ce6416dc4e40f279fb00d0feb9885f633be4061b5/py_go_template-1.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:43f44dc79e7480d4c144b23c77fc6fd9ba451913a570334f9a46147a04fd6334", size = 2264809, upload-time = "2023-07-13T06:05:52.126Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/b6/2d985ba1480ebae3fa81009c37a41b8a925d2f558676da7c2d8d768246e6/py_go_template-1.0.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:c681d3b94118276438ea2473aa8ac174a5b74d8db42c632fad92b17e0a4244ac", size = 2441973, upload-time = "2023-07-13T06:05:56.473Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/5d/7e83ec3b808c8faa824f96852817815c5877e8ce7f8fd600db5b13f0c6cd/py_go_template-1.0.0-py3-none-win_amd64.whl", hash = "sha256:4991aba8d26e6ec4cddec2a99dd5e1a37c114a480934f7dd66b5f7134c61e2cb", size = 2419036, upload-time = "2023-07-13T06:05:59.189Z" },
 ]
 
 [[package]]
