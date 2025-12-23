@@ -11,6 +11,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from subprocess import STDOUT, check_output
 from typing import Any
+import paramiko
 
 import pytest
 from kubernetes.dynamic import DynamicClient
@@ -664,3 +665,42 @@ def download_virtctl_from_cluster(client: DynamicClient) -> Path:
 
     LOGGER.info(f"Successfully downloaded and configured virtctl at {virtctl_binary}")
     return virtctl_binary
+
+
+def get_guest_credential(credential_name: str, provider_data: dict) -> str:
+    """
+    Get guest VM credential from environment variable or provider config.
+
+    Environment variables take precedence over config file values.
+
+    Args:
+        credential_name: Name of the credential (e.g., "guest_vm_linux_user")
+        provider_data: Provider configuration dictionary
+
+    Returns:
+        str: Credential value from env var or config
+    """
+    env_var_name = f"{credential_name.upper()}"
+    return os.getenv(env_var_name) or provider_data.get(credential_name, "")
+
+
+def run_ssh_command(vm_ip: str, command: str, username: str, password: str) -> str:
+    """
+    Execute a command on a VM via SSH and return the output.
+
+    Args:
+        vm_ip: IP address of the VM
+        command: Command to execute
+        username: SSH username
+        password: SSH password
+
+    Returns:
+        Command output as string
+    """
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(vm_ip, username=username, password=password, timeout=60)
+    stdin, stdout, stderr = ssh.exec_command(command)
+    result = stdout.read().decode().strip()
+    ssh.close()
+    return result

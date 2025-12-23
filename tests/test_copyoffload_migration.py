@@ -13,13 +13,18 @@ import time
 
 from urllib.parse import urlparse
 
+from ocp_resources.virtual_machine import VirtualMachine
 from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
     migrate_vms,
     verify_vm_disk_count,
 )
-
+from utilities.utils import (
+    get_guest_credential,
+    run_ssh_command,
+)
+from utilities.ssh_utils import VMSSHConnection
 
 LOGGER = get_logger(__name__)
 
@@ -666,6 +671,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
         vms=vms,
     )
 
+    # Build offload plugin configuration
     offload_plugin_config = {
         "vsphereXcopyConfig": {
             "secretRef": copyoffload_storage_secret.name,
@@ -706,3 +712,177 @@ def test_copyoffload_rdm_virtual_disk_migration(
 
     # Verify that the correct number of disks were migrated (1 base + 1 RDM = 2)
     verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
+
+
+@pytest.mark.copyoffload
+@pytest.mark.parametrize(
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"],
+            py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"],
+        )
+    ],
+    indirect=True,
+    ids=["copyoffload-thin-snapshots"],
+)
+def test_copyoffload_thin_snapshots_migration(
+    request,
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    destination_provider,
+    plan,
+    source_provider,
+    source_provider_data,
+    multus_network_name,
+    source_provider_inventory,
+    source_vms_namespace,
+    copyoffload_config,
+    copyoffload_storage_secret,
+    vm_ssh_connections,
+):
+    """
+    Test copy-offload migration of a thin-provisioned VM disk with snapshots.
+
+    This test validates that copy-offload migration works correctly for VMs
+    that have snapshots. It uses storage array XCOPY capabilities to accelerate
+    the migration of VM disks from VMware vSphere to OpenShift.
+
+    Test Workflow:
+    1. Creates one or more snapshots for the source VM.
+    2. Creates a folder on the source VM after snapshots are taken to ensure the latest state is migrated.
+    3. Validates copy-offload configuration (via copyoffload_config fixture).
+    4. Creates a storage secret for storage array authentication (via copyoffload_storage_secret fixture).
+    5. Creates a network migration map.
+    6. Builds the copy-offload plugin configuration.
+    7. Creates a storage map with copy-offload parameters.
+    8. Executes the migration using copy-offload technology.
+    9. Verifies successful migration and VM operation in OpenShift.
+    10. Confirms the VM is alive after migration.
+
+    Requirements:
+    - vSphere provider with VMs on XCOPY-capable storage (e.g., NetApp iSCSI).
+    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara).
+    - Storage class in OpenShift that supports the same storage type as the source.
+    - Storage credentials via environment variables or .providers.json config.
+    - ForkliftController with feature_copy_offload: "true" (must be pre-configured).
+    - Proper datastore_id configuration matching the VM's datastore.
+    - The VM must be on a datastore that supports xcopy functionality.
+
+    Configuration in .providers.json:
+    "copyoffload": {
+        "storage_vendor_product": "ontap",  # or "vantara"
+        "datastore_id": "datastore-123",    # vSphere datastore ID (must support xcopy)
+        "template_name": "<copyoffload-template-name>",
+        "storage_hostname": "storage.example.com",
+        "storage_username": "admin",
+        "storage_password": "password",
+        "ontap_svm": "vserver-name"  # For NetApp ONTAP only
+    }
+
+    Optional Environment Variables (override .providers.json values):
+    - COPYOFFLOAD_STORAGE_HOSTNAME
+    - COPYOFFLOAD_STORAGE_USERNAME
+    - COPYOFFLOAD_STORAGE_PASSWORD
+    - COPYOFFLOAD_ONTAP_SVM
+    - GUEST_VM_LINUX_USER
+    - GUEST_VM_LINUX_PASSWORD
+    """
+    # Create snapshots and a folder on the source VM
+    test_folder = "/tmp/test_snapshot_folder"
+    for vm_data in plan["virtual_machines"]:
+        num_snapshots = vm_data.get("snapshots", 0)
+        LOGGER.info(f"VM: {vm_data['name']}, Snapshots to create: {num_snapshots}")
+        if num_snapshots > 0:
+            vm_api_obj = source_provider.get_vm_by_name(query=vm_data["name"])
+
+            # Power on the VM and get its IP
+            source_provider.start_vm(vm=vm_api_obj)
+            vm_ip = source_provider.get_vm_ip(vm=vm_api_obj)
+            if not vm_ip:
+                pytest.fail(f"Failed to get IP for VM '{vm_data['name']}'")
+
+            # Create snapshots
+            for i in range(num_snapshots):
+                source_provider.create_snapshot(vm=vm_api_obj, snapshot_name=f"{vm_data['name']}-snapshot-{i}")
+
+            # Get credentials and create folder via SSH
+            user = get_guest_credential("guest_vm_linux_user", source_provider_data)
+            password = get_guest_credential("guest_vm_linux_password", source_provider_data)
+
+            LOGGER.info(f"Attempting to create folder '{test_folder}' on VM '{vm_data['name']}' at {vm_ip}")
+            run_ssh_command(vm_ip=vm_ip, command=f"mkdir -p {test_folder}", username=user, password=password)
+            source_provider.stop_vm(vm=vm_api_obj)
+
+    # Get copy-offload configuration
+    copyoffload_config_data = source_provider_data["copyoffload"]
+    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
+    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_class = py_config["storage_class"]
+
+    # Create network migration map
+    vms_names = [vm["name"] for vm in plan["virtual_machines"]]
+    network_migration_map = get_network_migration_map(
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        vms=vms_names,
+    )
+
+    # Build offload plugin configuration
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": copyoffload_storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    # Create storage migration map with copy-offload configuration
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,
+        vms=vms_names,
+        storage_class=storage_class,
+        # Copy-offload specific parameters
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
+    # Execute copy-offload migration
+    migrate_vms(
+        ocp_admin_client=ocp_admin_client,
+        request=request,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plan=plan,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+        source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
+    )
+
+    # Verify that the folder created on the source VM exists on the migrated VM
+    for vm_data in plan["virtual_machines"]:
+        vm_name = vm_data["name"]
+        user = get_guest_credential("guest_vm_linux_user", source_provider_data)
+        password = get_guest_credential("guest_vm_linux_password", source_provider_data)
+
+        with vm_ssh_connections.create(vm_name=vm_name, username=user, password=password) as ssh_conn:
+            rrmngmnt_host = ssh_conn.get_rrmngmnt_host()
+            rc, _, err = rrmngmnt_host.run_command(f"test -d {test_folder}")
+            assert rc == 0, f"Folder '{test_folder}' not found on migrated VM '{vm_name}': {err}"

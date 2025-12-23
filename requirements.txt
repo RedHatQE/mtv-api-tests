@@ -1,0 +1,5 @@
+tenacity
+timeout-sampler
+-e .
+--extra-index-url=https://pypi.org/simple
+types-paramiko

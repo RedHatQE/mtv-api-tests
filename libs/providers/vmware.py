@@ -265,6 +265,34 @@ class VMWareProvider(BaseProvider):
         if vm.runtime.powerState == vm.runtime.powerState.poweredOn:
             self.wait_task(task=vm.PowerOff(), action_name=f"Stopping VM {vm.name}")
 
+    def get_vm_ip(self, vm: vim.VirtualMachine, timeout: int = 300) -> str | None:
+        """
+        Waits for the VM to have an IP address and returns it.
+        """
+        LOGGER.info(f"Waiting for IP address on VM '{vm.name}'")
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=10,
+                func=lambda: vm.guest.ipAddress
+                if vm.guest and vm.guest.ipAddress and vm.guest.ipAddress not in ["127.0.0.1", "::1"]
+                else None,
+            ):
+                if sample:
+                    LOGGER.info(f"VM '{vm.name}' has IP address: {sample}")
+                    return sample
+        except TimeoutExpiredError:
+            LOGGER.error(f"Timeout waiting for IP address on VM '{vm.name}'")
+        return None
+
+    def create_snapshot(self, vm, snapshot_name, description="Test snapshot"):
+        """
+        Creates a snapshot of the VM.
+        """
+        LOGGER.info(f"Creating snapshot '{snapshot_name}' for VM '{vm.name}'")
+        task = vm.CreateSnapshot_Task(name=snapshot_name, description=description, memory=False, quiesce=False)
+        self.wait_task(task=task, action_name=f"Creating snapshot for VM {vm.name}")
+
     @staticmethod
     def list_snapshots(vm):
         snapshots = []
