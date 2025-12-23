@@ -43,6 +43,7 @@ from libs.forklift_inventory import (
 )
 from libs.providers.openshift import OCPProvider
 from utilities.copyoffload_migration import get_copyoffload_credential
+from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
@@ -960,3 +961,58 @@ def copyoffload_storage_secret(
 
     LOGGER.info(f"✓ Copy-offload storage secret created: {storage_secret.name}")
     return storage_secret
+
+
+@pytest.fixture(scope="function")
+def setup_copyoffload_ssh(source_provider, source_provider_data, copyoffload_config):
+    """
+    Sets up SSH key on ESXi host for copy-offload if SSH method is enabled.
+
+    Depends on copyoffload_config to ensure validation runs first.
+    """
+    copyoffload_cfg = source_provider_data["copyoffload"]  # Safe: copyoffload_config validates this exists
+    if copyoffload_cfg.get("esxi_clone_method") != "ssh":
+        LOGGER.info("SSH clone method not configured, skipping SSH key setup.")
+        yield
+        return
+
+    LOGGER.info("Setting up SSH key for copy-offload.")
+
+    # Get public key
+    public_key = source_provider.get_ssh_public_key()
+
+    # Get datastore name
+    datastore_id = copyoffload_cfg.get("datastore_id")
+    if not datastore_id:
+        pytest.fail("datastore_id is required in copyoffload config for SSH method.")
+    datastore_name = source_provider.get_datastore_name_by_id(datastore_id)
+
+    # Get ESXi credentials from the 'copyoffload' config section
+    esxi_host = copyoffload_cfg.get("esxi_host")
+    esxi_user = copyoffload_cfg.get("esxi_user")
+    esxi_password = copyoffload_cfg.get("esxi_password")
+
+    if not all([esxi_host, esxi_user, esxi_password]):
+        pytest.fail(
+            "esxi_host, esxi_user, and esxi_password are required in the 'copyoffload' section of provider config for SSH method."
+        )
+
+    # Install the key
+    install_ssh_key_on_esxi(
+        host=esxi_host,
+        username=esxi_user,
+        password=esxi_password,
+        public_key=public_key,
+        datastore_name=datastore_name,
+    )
+
+    yield
+
+    # Teardown: Remove the key
+    LOGGER.info("Tearing down SSH key for copy-offload.")
+    remove_ssh_key_from_esxi(
+        host=esxi_host,
+        username=esxi_user,
+        password=esxi_password,
+        public_key=public_key,
+    )

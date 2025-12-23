@@ -31,7 +31,11 @@
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
       "storage_password": "your-password-here",
-      "ontap_svm": "vserver-name"  # optional, required for NetApp ONTAP
+      "ontap_svm": "vserver-name",  # optional, required for NetApp ONTAP
+      "esxi_clone_method": "ssh", # optional, can be "vib" (default) or "ssh"
+      "esxi_host": "your-esxi-host.example.com", # required for ssh method
+      "esxi_user": "root", # required for ssh method
+      "esxi_password": "your-esxi-password" # required for ssh method
     }
   },
 

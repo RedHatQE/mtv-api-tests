@@ -30,11 +30,27 @@ class ForkliftInventory(abc.ABC):
 
     @property
     def _provider_id(self) -> str:
-        for _provider in self._request(url_path=self.provider_type):
-            if _provider["name"] == self.provider_name:
-                return _provider["id"]
+        """
+        Get the provider ID from the inventory, retrying until it is found.
+        """
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=180,
+                sleep=5,
+                func=lambda: [
+                    _provider["id"]
+                    for _provider in self._request(url_path=self.provider_type)
+                    if _provider["name"] == self.provider_name
+                ],
+            ):
+                if sample:
+                    return sample[0]
+        except TimeoutExpiredError:
+            LOGGER.error(f"Timed out waiting for provider {self.provider_name} to appear in inventory.")
+            raise
 
-        raise ValueError(f"Provider {self.provider_name} not found")
+        # Unreachable: TimeoutSampler raises TimeoutExpiredError on timeout, but mypy needs this in order to pass type checking
+        raise ValueError(f"Provider {self.provider_name} not found in inventory after waiting.")
 
     def get_data(self) -> dict[str, Any]:
         return self._request(url_path=self.provider_url_path)
