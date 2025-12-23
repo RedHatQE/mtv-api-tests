@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
 import tempfile
 from pathlib import Path
-import ipaddress
 from typing import Any
 
 import go_template
@@ -79,7 +79,6 @@ def get_ssh_credentials_from_provider_config(
 def check_ssh_connectivity(
     vm_name: str,
     vm_ssh_connections: SSHConnectionManager,
-    vm_config: dict[str, Any],
     source_provider_data: dict[str, Any],
     source_vm_info: dict[str, Any],
 ) -> None:
@@ -89,7 +88,6 @@ def check_ssh_connectivity(
     Args:
         vm_name: Name of the VM to test
         vm_ssh_connections: SSH connections fixture manager
-        vm_config: VM configuration from the plan
         source_provider_data: Provider configuration from .providers.json
         source_vm_info: VM information including OS type
 
@@ -936,7 +934,6 @@ def check_vms(
                 check_ssh_connectivity(
                     vm_name=vm_name,
                     vm_ssh_connections=vm_ssh_connections,
-                    vm_config=vm,
                     source_provider_data=source_provider_data,
                     source_vm_info=source_vm,
                 )

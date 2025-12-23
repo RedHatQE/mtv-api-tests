@@ -1,13 +1,20 @@
 import copy
 import functools
 import multiprocessing
+import os
+import shutil
+import ssl
+import tarfile
+import urllib.request
+from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from subprocess import STDOUT, check_output
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from kubernetes.dynamic import DynamicClient
+from ocp_resources.console_cli_download import ConsoleCLIDownload
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.provider import Provider
@@ -68,9 +75,7 @@ def generate_ca_cert_file(provider_fqdn: dict[str, Any], cert_file: Path) -> Pat
 
 
 def background(func):
-    """
-    use @background above the function you want to run in the background
-    """
+    """Use @background above the function you want to run in the background"""
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -284,7 +289,7 @@ password: 123456
 user: rhel
 """,
                 run_strategy=VirtualMachine.RunStrategy.MANUAL,
-            )
+            ),
         )
 
     for vm in vms_to_create:
@@ -305,14 +310,12 @@ def get_value_from_py_config(value: str) -> Any:
         if config_value.lower() == "true":
             return True
 
-        elif config_value.lower() == "false":
+        if config_value.lower() == "false":
             return False
 
-        else:
-            return config_value
-
-    else:
         return config_value
+
+    return config_value
 
 
 def delete_all_vms(ocp_admin_client: DynamicClient, namespace: str) -> None:
@@ -322,8 +325,7 @@ def delete_all_vms(ocp_admin_client: DynamicClient, namespace: str) -> None:
 
 
 class VirtualMachineFromInstanceType(VirtualMachine):
-    """
-    Custom VirtualMachine class that simplifies VM creation with instancetype/preference
+    """Custom VirtualMachine class that simplifies VM creation with instancetype/preference
     and automatically builds the entire configuration from simple parameters.
     """
 
@@ -341,8 +343,7 @@ class VirtualMachineFromInstanceType(VirtualMachine):
         annotations: dict[str, str] | None = None,
         **kwargs: Any,
     ):
-        """
-        Initialize VirtualMachineFromInstanceType with automatic configuration
+        """Initialize VirtualMachineFromInstanceType with automatic configuration
 
         Args:
             instancetype_name: Name of the cluster instancetype (e.g., "u1.small")
@@ -356,6 +357,7 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             labels: Labels for the VM template
             annotations: Annotations for the VM
             **kwargs: Additional arguments passed to the base VirtualMachine class (name, namespace, client, etc.)
+
         """
         # Extract client from kwargs to use with resource creation before calling super()
         client = kwargs.get("client")
@@ -365,12 +367,14 @@ class VirtualMachineFromInstanceType(VirtualMachine):
 
         # Create instancetype object - required
         self.instancetype: VirtualMachineClusterInstancetype = VirtualMachineClusterInstancetype(
-            client=client, name=instancetype_name
+            client=client,
+            name=instancetype_name,
         )
 
         # Create preference object - required
         self.preference: VirtualMachineClusterPreference = VirtualMachineClusterPreference(
-            client=client, name=preference_name
+            client=client,
+            name=preference_name,
         )
 
         # Store configuration
@@ -493,3 +497,134 @@ def get_cluster_client() -> DynamicClient:
     if isinstance(_client, DynamicClient):
         return _client
     raise ValueError("Failed to get client for cluster")
+
+
+def download_virtctl_from_cluster(client: DynamicClient) -> Path:
+    """Download virtctl binary from the OpenShift cluster.
+
+    This function retrieves the ConsoleCLIDownload resource from the cluster,
+    extracts the download URL for Linux amd64 platform, downloads the virtctl
+    binary, extracts it, makes it executable, and adds it to PATH.
+
+    Args:
+        client: OpenShift DynamicClient instance
+
+    Returns:
+        Path to the downloaded virtctl binary
+
+    Raises:
+        ValueError: If ConsoleCLIDownload resource not found or download URL not found
+        RuntimeError: If download or extraction fails
+
+    """
+    LOGGER.info("Checking for virtctl availability...")
+
+    # Check if virtctl is already in PATH
+    existing_virtctl = shutil.which("virtctl")
+    if existing_virtctl:
+        LOGGER.info(f"virtctl already available in PATH at {existing_virtctl}")
+        return Path(existing_virtctl)
+
+    # Check if we previously downloaded it
+    download_dir = Path("/tmp/claude/virtctl")
+    virtctl_binary = download_dir / "virtctl"
+    if virtctl_binary.exists() and os.access(virtctl_binary, os.X_OK):
+        LOGGER.info(f"virtctl already exists at {virtctl_binary}, adding to PATH")
+        virtctl_dir = str(virtctl_binary.parent)
+        current_path = os.environ.get("PATH", "")
+        if virtctl_dir not in current_path:
+            os.environ["PATH"] = f"{virtctl_dir}:{current_path}"
+        return virtctl_binary
+
+    LOGGER.info("virtctl not found, downloading from cluster...")
+
+    # Get the ConsoleCLIDownload resource
+    try:
+        console_cli_download = ConsoleCLIDownload(
+            client=client,
+            name="virtctl-clidownloads-kubevirt-hyperconverged",
+        )
+        if not console_cli_download.exists:
+            raise ValueError(
+                "ConsoleCLIDownload resource 'virtctl-clidownloads-kubevirt-hyperconverged' not found in cluster. "
+                "Ensure KubeVirt/OpenShift Virtualization is installed.",
+            )
+    except Exception as e:
+        raise ValueError(f"Failed to retrieve ConsoleCLIDownload resource: {e}") from e
+
+    # Extract download URL for Linux amd64
+    download_url: str | None = None
+    links = console_cli_download.instance.spec.get("links")
+    if not links:
+        raise ValueError("No links found in ConsoleCLIDownload resource spec")
+
+    for link in links:
+        link_text = link.get("text", "").lower()
+        if "linux" in link_text and "x86_64" in link_text:
+            download_url = link.get("href")
+            LOGGER.info(f"Found virtctl download URL for Linux amd64: {download_url}")
+            break
+
+    if not download_url:
+        raise ValueError(
+            f"Could not find download URL for Linux amd64 platform in ConsoleCLIDownload resource. "
+            f"Available links: {[link.get('text') for link in links]}",
+        )
+
+    # Create download directory (already defined at function start for idempotency check)
+    download_dir.mkdir(parents=True, exist_ok=True)
+    LOGGER.info(f"Created download directory: {download_dir}")
+
+    # Download the tar.gz file
+    tar_file_path = download_dir / "virtctl.tar.gz"
+    try:
+        LOGGER.info(f"Downloading virtctl from {download_url}...")
+        # Disable SSL verification for self-signed certificates
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        with urllib.request.urlopen(download_url, context=ssl_context) as response:
+            tar_file_path.write_bytes(response.read())
+        LOGGER.info(f"Downloaded virtctl to {tar_file_path}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to download virtctl from {download_url}: {e}") from e
+
+    # Extract the tar.gz file
+    try:
+        LOGGER.info(f"Extracting {tar_file_path}...")
+        with tarfile.open(tar_file_path, "r:gz") as tar:
+            tar.extractall(path=download_dir, filter="data")
+        LOGGER.info(f"Extracted virtctl binary to {download_dir}")
+        # Remove tar file after successful extraction
+        tar_file_path.unlink(missing_ok=True)
+        LOGGER.info(f"Removed temporary tar file: {tar_file_path}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to extract {tar_file_path}: {e}") from e
+
+    # Find the virtctl binary
+    virtctl_binary = download_dir / "virtctl"
+    if not virtctl_binary.exists():
+        # Try to find it in subdirectories
+        virtctl_candidates = list(download_dir.rglob("virtctl"))
+        if virtctl_candidates:
+            virtctl_binary = virtctl_candidates[0]
+        else:
+            raise RuntimeError(f"virtctl binary not found in {download_dir} after extraction")
+
+    # Make it executable
+    try:
+        virtctl_binary.chmod(0o755)
+        LOGGER.info(f"Made {virtctl_binary} executable")
+    except Exception as e:
+        raise RuntimeError(f"Failed to make {virtctl_binary} executable: {e}") from e
+
+    # Add to PATH
+    virtctl_dir = str(virtctl_binary.parent)
+    current_path = os.environ.get("PATH", "")
+    if virtctl_dir not in current_path:
+        os.environ["PATH"] = f"{virtctl_dir}:{current_path}"
+        LOGGER.info(f"Added {virtctl_dir} to PATH")
+
+    LOGGER.info(f"Successfully downloaded and configured virtctl at {virtctl_binary}")
+    return virtctl_binary

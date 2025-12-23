@@ -25,9 +25,7 @@ VSPHERE_NIC_DEVICE_KEY_OFFSET = 4000
 
 
 class VMWareProvider(BaseProvider):
-    """
-    https://github.com/vmware/vsphere-automation-sdk-python
-    """
+    """https://github.com/vmware/vsphere-automation-sdk-python"""
 
     DISK_TYPE_MAP = {
         "thin": ("sparse", "Setting disk provisioning to 'thin' (sparse)."),
@@ -41,7 +39,12 @@ class VMWareProvider(BaseProvider):
     }
 
     def __init__(
-        self, host: str, username: str, password: str, ocp_resource: Provider | None = None, **kwargs: Any
+        self,
+        host: str,
+        username: str,
+        password: str,
+        ocp_resource: Provider | None = None,
+        **kwargs: Any,
     ) -> None:
         # Extract copyoffload configuration before calling parent
         self.copyoffload_config = kwargs.pop("copyoffload", {})
@@ -118,7 +121,7 @@ class VMWareProvider(BaseProvider):
                 )
                 if not target_vm:
                     raise VmNotFoundError(
-                        f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]"
+                        f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]",
                     )
             else:
                 # Re-raise the original error if cloning is not enabled
@@ -137,9 +140,7 @@ class VMWareProvider(BaseProvider):
         return target_vm
 
     def wait_task(self, task: vim.Task, action_name: str, wait_timeout: int = 60, sleep: int = 1) -> Any:
-        """
-        Waits and provides updates on a vSphere task.
-        """
+        """Waits and provides updates on a vSphere task."""
         try:
             for sample in TimeoutSampler(
                 wait_timeout=wait_timeout,
@@ -159,7 +160,7 @@ class VMWareProvider(BaseProvider):
                         msg=(
                             f"{action_name} completed successfully. "
                             f"{f'result: {task.info.result}' if task.info.result else ''}"
-                        )
+                        ),
                     )
                     return task.info.result
 
@@ -168,7 +169,7 @@ class VMWareProvider(BaseProvider):
                 except TypeError:
                     progress = "N/A"
 
-                LOGGER.info(f"{action_name} progress: {progress}")
+                LOGGER.info("%s progress: %s", action_name, progress)
         except TimeoutExpiredError:
             self.log.error(msg=f"{action_name} did not complete successfully: {task.info.error}")
             raise
@@ -194,8 +195,7 @@ class VMWareProvider(BaseProvider):
         return snapshots
 
     def _get_network_name_from_device(self, device: vim.vm.device.VirtualEthernetCard) -> str:
-        """
-        Extract network name from a virtual ethernet device.
+        """Extract network name from a virtual ethernet device.
 
         Handles different network backing types:
         - Standard network backing (vSwitch)
@@ -206,6 +206,7 @@ class VMWareProvider(BaseProvider):
 
         Returns:
             str: Network name or "Unknown" if unable to determine
+
         """
         network_name = "Unknown"
 
@@ -223,7 +224,9 @@ class VMWareProvider(BaseProvider):
                 # Resolve the portgroup key to its name by searching all DVS portgroups
                 try:
                     container = self.view_manager.CreateContainerView(
-                        self.content.rootFolder, [vim.dvs.DistributedVirtualPortgroup], True
+                        self.content.rootFolder,
+                        [vim.dvs.DistributedVirtualPortgroup],
+                        True,
                     )
                     for pg in container.view:  # type: ignore[attr-defined]
                         if pg.key == port.portgroupKey:
@@ -243,8 +246,7 @@ class VMWareProvider(BaseProvider):
         return network_name
 
     def _extract_nic_ip_info(self, vm: vim.VirtualMachine, device: vim.vm.device.VirtualEthernetCard) -> dict[str, Any]:
-        """
-        Extract IP address information from a virtual network interface.
+        """Extract IP address information from a virtual network interface.
 
         This method retrieves IP configuration from VMware Tools guest information including:
         - IPv4 addresses (filters out link-local and IPv6)
@@ -258,6 +260,7 @@ class VMWareProvider(BaseProvider):
 
         Returns:
             dict: IP information containing 'ip_addresses' list or empty dict if no IP info available
+
         """
         result: dict[str, Any] = {}
 
@@ -277,7 +280,7 @@ class VMWareProvider(BaseProvider):
                 reasons.append(
                     f"VM not powered on (state: {
                         getattr(vm.runtime, 'powerState', 'unknown') if hasattr(vm, 'runtime') else 'no runtime'
-                    })"
+                    })",
                 )
             if hasattr(vm, "guest") and vm.guest and not vm.guest.net:
                 reasons.append("guest network info not available")
@@ -323,7 +326,7 @@ class VMWareProvider(BaseProvider):
             if not ipv4_addresses:
                 LOGGER.warning(
                     f"VM {vm.name} NIC {device.deviceInfo.label}: No valid IPv4 addresses found "
-                    f"(skipped link-local and non-IPv4)"
+                    f"(skipped link-local and non-IPv4)",
                 )
                 break
 
@@ -355,13 +358,13 @@ class VMWareProvider(BaseProvider):
                                         gateway_ip = route.gateway.ipAddress
                                         LOGGER.info(
                                             f"VM {vm.name} NIC {device.deviceInfo.label}:"
-                                            f" Gateway={route.gateway.ipAddress}"
+                                            f" Gateway={route.gateway.ipAddress}",
                                         )
                                         break
                                 except ValueError:
                                     LOGGER.info(
                                         f"VM {vm.name} NIC {device.deviceInfo.label}: Invalid"
-                                        f" gateway IP {route.gateway.ipAddress}"
+                                        f" gateway IP {route.gateway.ipAddress}",
                                     )
 
                 # Extract DNS servers if available
@@ -388,7 +391,7 @@ class VMWareProvider(BaseProvider):
                     ip_config["is_static_ip"] = ip_info.origin == "manual"
                     LOGGER.info(
                         f"VM {vm.name} NIC {device.deviceInfo.label}: IPv4={ip_info.ipAddress}"
-                        f" Origin={ip_info.origin} Static={ip_info.origin == 'manual'}"
+                        f" Origin={ip_info.origin} Static={ip_info.origin == 'manual'}",
                     )
                 else:
                     ip_config["ip_origin"] = None
@@ -401,7 +404,7 @@ class VMWareProvider(BaseProvider):
             if len(ipv4_addresses) > 1:
                 LOGGER.info(
                     f"Multiple IPv4 addresses found on {device.deviceInfo.label}: "
-                    f"{[ip.ipAddress for ip in ipv4_addresses]}"
+                    f"{[ip.ipAddress for ip in ipv4_addresses]}",
                 )
             else:
                 LOGGER.info(f"Single IPv4 address found on {device.deviceInfo.label}: {ipv4_addresses[0].ipAddress}")
@@ -409,7 +412,7 @@ class VMWareProvider(BaseProvider):
             if not gateway_ip:
                 LOGGER.info(
                     f"VM {vm.name} NIC {device.deviceInfo.label} Device ID {device.key}: "
-                    f"No default gateway found for this NIC"
+                    f"No default gateway found for this NIC",
                 )
 
             break  # Found matching MAC, exit loop
@@ -464,7 +467,9 @@ class VMWareProvider(BaseProvider):
                     "name": device.deviceInfo.label if device.deviceInfo else "Unknown",
                     "size_in_kb": device.capacityInKB,
                     "storage": dict(
-                        name=device.backing.datastore.name if device.backing and device.backing.datastore else "Unknown"
+                        name=device.backing.datastore.name
+                        if device.backing and device.backing.datastore
+                        else "Unknown",
                     ),
                     "device_key": device.key,
                     "unit_number": device.unitNumber,
@@ -486,7 +491,7 @@ class VMWareProvider(BaseProvider):
                     "id": snapshot.id,
                     "create_time": snapshot.createTime,
                     "state": snapshot.state,
-                })
+                }),
             )
 
         # Guest Agent Status (bool)
@@ -563,8 +568,7 @@ class VMWareProvider(BaseProvider):
         clone_vm_name: str,
         target_datastore: vim.Datastore,
     ) -> list[vim.vm.device.VirtualDeviceSpec]:
-        """
-        Helper method to generate VirtualDeviceSpec for adding new disks.
+        """Helper method to generate VirtualDeviceSpec for adding new disks.
 
         Args:
             source_vm: The source VM object.
@@ -574,6 +578,7 @@ class VMWareProvider(BaseProvider):
 
         Returns:
             A list of VirtualDeviceSpec objects for the new disks.
+
         """
         device_changes = []
         scsi_controller = next(
@@ -605,11 +610,11 @@ class VMWareProvider(BaseProvider):
             if required_space_gb > available_space_gb:
                 raise VmCloneError(
                     f"Insufficient datastore capacity for thick-provisioned disks on '{target_datastore.name}'. "
-                    f"Required: {required_space_gb:.2f} GB, Available: {available_space_gb:.2f} GB."
+                    f"Required: {required_space_gb:.2f} GB, Available: {available_space_gb:.2f} GB.",
                 )
             LOGGER.info(
                 f"Validating datastore capacity for thick disks. "
-                f"Required: {required_space_gb:.2f} GB, Available on '{target_datastore.name}': {available_space_gb:.2f} GB"
+                f"Required: {required_space_gb:.2f} GB, Available on '{target_datastore.name}': {available_space_gb:.2f} GB",
             )
         else:
             LOGGER.info("No thick-provisioned disks to add; skipping datastore capacity check.")
@@ -639,19 +644,22 @@ class VMWareProvider(BaseProvider):
                     datacenter = self.api.content.rootFolder.childEntity[0]
                     dir_path_for_creation = f"[{target_datastore.name}] {datastore_path}"
                     file_manager.MakeDirectory(
-                        name=dir_path_for_creation, datacenter=datacenter, createParentDirectories=True
+                        name=dir_path_for_creation,
+                        datacenter=datacenter,
+                        createParentDirectories=True,
                     )
                 except (vim.fault.FileAlreadyExists, vim.fault.CannotCreateFile):
-                    LOGGER.debug(f"Directory '{datastore_path}' already exists, proceeding.")
+                    LOGGER.debug("Directory '%s' already exists, proceeding.", datastore_path)
                 except Exception as e:
-                    LOGGER.warning(f"Could not automatically create directory '{datastore_path}': {e}")
+                    LOGGER.warning("Could not automatically create directory '%s': %s", datastore_path, e)
                 LOGGER.info(f"Setting custom path for new disk on datastore '{target_datastore.name}': {full_path}")
                 backing_info.fileName = full_path
             else:
                 backing_info.fileName = f"[{target_datastore.name}]"
 
             provision_type_config = self.DISK_PROVISION_TYPE_MAP.get(
-                disk.get("provision_type", "thin").lower(), self.DISK_PROVISION_TYPE_MAP["thin"]
+                disk.get("provision_type", "thin").lower(),
+                self.DISK_PROVISION_TYPE_MAP["thin"],
             )
             backing_info.thinProvisioned = provision_type_config["thinProvisioned"]
             backing_info.eagerlyScrub = provision_type_config["eagerlyScrub"]
@@ -675,8 +683,7 @@ class VMWareProvider(BaseProvider):
         regenerate_mac: bool = True,
         **kwargs: Any,
     ) -> vim.VirtualMachine:
-        """
-        Clones a virtual machine from an existing VM or template.
+        """Clones a virtual machine from an existing VM or template.
 
         Args:
             source_vm_name: The name of the VM or template to clone from.
@@ -702,9 +709,10 @@ class VMWareProvider(BaseProvider):
 
         Returns:
             vim.VirtualMachine: The cloned VM object.
+
         """
         clone_vm_name = generate_name_with_uuid(f"{session_uuid}-{clone_vm_name}")
-        LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
+        LOGGER.info("Starting clone process for '%s' from '%s'", clone_vm_name, source_vm_name)
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
 
@@ -744,7 +752,7 @@ class VMWareProvider(BaseProvider):
                 relocate_spec.transform, log_message = disk_config
                 LOGGER.info(log_message)
             else:
-                LOGGER.warning(f"Disk type '{disk_type}' not recognized. Using vSphere default.")
+                LOGGER.warning("Disk type '%s' not recognized. Using vSphere default.", disk_type)
 
         disks_to_add = kwargs.get("add_disks")
         if disks_to_add:
@@ -769,19 +777,32 @@ class VMWareProvider(BaseProvider):
                         LOGGER.info(
                             f"Configured MAC regeneration for network device: {
                                 device.deviceInfo.label if device.deviceInfo else 'Unknown'
-                            }"
+                            }",
                         )
 
         if device_changes:
             config_spec.deviceChange = device_changes
             LOGGER.info(f"Applied {len(device_changes)} device changes to the clone specification.")
 
+        # Enable Change Block Tracking (CBT) for warm migration support
+        cbt_option = vim.option.OptionValue()
+        cbt_option.key = "ctkEnabled"
+        cbt_option.value = "true"
+        if config_spec.extraConfig:
+            config_spec.extraConfig.append(cbt_option)
+        else:
+            config_spec.extraConfig = [cbt_option]
+        LOGGER.info("Enabling Change Block Tracking (CBT) on cloned VM '%s'", clone_vm_name)
+
         clone_spec = vim.vm.CloneSpec(
-            location=relocate_spec, powerOn=power_on, template=False, config=config_spec if device_changes else None
+            location=relocate_spec,
+            powerOn=power_on,
+            template=False,
+            config=config_spec,
         )
 
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
-        LOGGER.info(f"Clone task started for {clone_vm_name}. Waiting for completion...")
+        LOGGER.info("Clone task started for %s. Waiting for completion...", clone_vm_name)
 
         try:
             res = self.wait_task(
@@ -802,7 +823,8 @@ class VMWareProvider(BaseProvider):
                     if non_mac_changes:
                         clone_spec.config.deviceChange = non_mac_changes
                     else:
-                        clone_spec.config = None
+                        # Preserve extraConfig (CBT) by clearing only deviceChange
+                        clone_spec.config.deviceChange = []
                 task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
                 res = self.wait_task(
                     task=task,
@@ -824,8 +846,7 @@ class VMWareProvider(BaseProvider):
         self.wait_task(task=task, action_name=f"Deleting VM {vm_name}")
 
     def wait_for_vmware_guest_info(self, vm: vim.VirtualMachine, timeout: int = 60) -> bool:
-        """
-        Wait for VMware guest information to become available after VM power-on.
+        """Wait for VMware guest information to become available after VM power-on.
 
         Args:
             vm: VMware VM object (vim.VirtualMachine)
@@ -833,6 +854,7 @@ class VMWareProvider(BaseProvider):
 
         Returns:
             bool: True if guest info becomes available, False if timeout
+
         """
         LOGGER.info(f"Waiting for VMware Tools guest info for VM {vm.name} (timeout: {timeout}s)")
 
@@ -852,7 +874,7 @@ class VMWareProvider(BaseProvider):
             ):
                 if sample:
                     LOGGER.info(
-                        f"VMware Tools guest info available for VM {vm.name} (tools status: {vm.guest.toolsStatus})"
+                        f"VMware Tools guest info available for VM {vm.name} (tools status: {vm.guest.toolsStatus})",
                     )
                     return True
 
@@ -866,6 +888,6 @@ class VMWareProvider(BaseProvider):
         net_count = len(vm.guest.net) if hasattr(vm, "guest") and vm.guest and vm.guest.net else 0
         LOGGER.warning(
             f"Timeout waiting for VMware Tools guest info on VM {vm.name} after {timeout}s "
-            f"(power={power_state}, tools={tools_status}, networks={net_count})"
+            f"(power={power_state}, tools={tools_status}, networks={net_count})",
         )
         return False

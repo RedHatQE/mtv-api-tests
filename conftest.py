@@ -56,6 +56,7 @@ from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
+    download_virtctl_from_cluster,
     get_cluster_client,
     get_value_from_py_config,
 )
@@ -274,7 +275,9 @@ def pytest_harvest_xdist_cleanup():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def autouse_fixtures(source_provider_data, nfs_storage_profile, base_resource_name, forklift_pods_state):
+def autouse_fixtures(
+    source_provider_data, nfs_storage_profile, base_resource_name, forklift_pods_state, virtctl_binary
+):
     # source_provider_data called here to fail fast in provider not found in the providers list from config
     yield
 
@@ -387,6 +390,17 @@ def ocp_admin_client():
             raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
 
     yield _client
+
+
+@pytest.fixture(scope="session")
+def virtctl_binary(ocp_admin_client):
+    """
+    Download and configure virtctl binary from the cluster.
+
+    This fixture ensures virtctl is available in PATH for all tests
+    that need to interact with VMs via virtctl commands.
+    """
+    return download_virtctl_from_cluster(client=ocp_admin_client)
 
 
 @pytest.fixture(scope="session")
