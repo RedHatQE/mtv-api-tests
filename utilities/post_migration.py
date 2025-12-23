@@ -1101,10 +1101,10 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_false_vm_power_off - {str(exp)}")
 
-        for _vm_name, _errors in res.items():
-            if _errors:
-                should_fail = True
-                LOGGER.error(f"VM {_vm_name} failed checks: {_errors}")
+    for _vm_name, _errors in res.items():
+        if _errors:
+            should_fail = True
+            LOGGER.error(f"VM {_vm_name} failed checks: {_errors}")
 
     if should_fail:
         pytest.fail("Some of the VMs did not match")
