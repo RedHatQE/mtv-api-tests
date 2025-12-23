@@ -52,7 +52,7 @@ dependencies = [
   "typer>=0.15.1",
   "openshift-python-wrapper>=11.0.53",
   "pytest-jira>=0.3.22",
-  "marshmallow==3.26.1",
+  "marshmallow==3.26.2",
   "rich>=14.0.0",
   "python-rrmngmnt>=0.2.0",
   "jc>=1.25.0",
