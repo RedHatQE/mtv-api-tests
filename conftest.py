@@ -495,7 +495,7 @@ def source_provider(
         tmp_dir=tmp_path_factory,
         ocp_admin_client=ocp_admin_client,
         destination_ocp_secret=destination_ocp_secret,
-        insecure=get_value_from_py_config(value="insecure_verify_skip"),
+        insecure=get_value_from_py_config(value="source_provider_insecure_skip_verify"),
     ) as _source_provider:
         yield _source_provider
 

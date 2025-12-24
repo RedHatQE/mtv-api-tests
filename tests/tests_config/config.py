@@ -1,6 +1,7 @@
 global config
 
-insecure_verify_skip: str = "true"
+insecure_verify_skip: str = "true"  # SSL verification for OCP API connections
+source_provider_insecure_skip_verify: str = "true"  # SSL verification for source provider (VMware, RHV, etc.)
 number_of_vms: int = 1
 check_vms_signals: bool = True
 target_namespace_prefix: str = "mtv-api-tests"
