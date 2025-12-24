@@ -302,6 +302,20 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
 - PowerMax: `powermax_symmetrix_id`
 - PowerFlex: `powerflex_system_id`
 
+**RDM Disk Testing:**
+
+To test migration of VMs with RDM (Raw Device Mapping) disks, add `rdm_lun_uuid` to your copyoffload config:
+
+```json
+"copyoffload": {
+  "rdm_lun_uuid": "naa.XXXXXXXXXXXXXXX",
+  ...
+}
+```
+
+The RDM test (`test_copyoffload_rdm_virtual_disk_migration`) validates migration of VMs with RDM disks
+in virtual compatibility mode. Physical compatibility mode foundation is in place for future tests.
+
 **Security Note:** For development/testing, credentials can be stored in `.providers.json`.
 For production/CI, use environment variables to override sensitive values without modifying config files:
 
