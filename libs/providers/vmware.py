@@ -193,13 +193,15 @@ class VMWareProvider(BaseProvider):
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
         except ValueError:
             if clone_vm:
-                # Use copyoffload datastore if configured
+                # Use copyoffload datastore and host if configured
                 target_datastore_id = self.copyoffload_config.get("datastore_id")
+                target_esxi_host = self.copyoffload_config.get("esxi_host")
                 target_vm = self.clone_vm(
                     source_vm_name=query,
                     clone_vm_name=target_vm_name,
                     session_uuid=session_uuid,
                     target_datastore_id=target_datastore_id,
+                    target_esxi_host=target_esxi_host,
                     **(clone_options or {}),
                 )
                 if not target_vm:
@@ -874,6 +876,12 @@ class VMWareProvider(BaseProvider):
             raise VmCloneError(f"Could not determine a target datastore for cloning '{source_vm_name}'.")
 
         relocate_spec.datastore = target_datastore  # Ensure relocate_spec uses the determined datastore
+
+        target_esxi_host = kwargs.get("target_esxi_host")
+        if target_esxi_host:
+            host_obj = self.get_obj([vim.HostSystem], target_esxi_host)
+            relocate_spec.host = host_obj
+            LOGGER.info(f"Using target host from config: {host_obj.name}")
 
         # If the source is a template, it may not have a resource pool; find a suitable one from the cluster.
         if not source_vm.resourcePool:
