@@ -271,7 +271,7 @@ uv run pytest -m tier1 \
 ## Run Copy-Offload Tests
 
 Copy-offload tests leverage shared storage for faster migrations. Add `copyoffload` config to `.providers.json`
-and ensure template VM has QEMU guest agent installed.
+and ensure the source VM has QEMU guest agent installed.
 
 The `esxi_clone_method` allows specifying `ssh` to perform disk cloning directly on the ESXi host,
 as an alternative to the default VIB-based method. This requires providing ESXi host credentials.
@@ -291,7 +291,8 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
   "esxi_clone_method": "ssh", # default 'vib'
   "esxi_host": "your-esxi-host.example.com",
   "esxi_user": "root",
-  "esxi_password": "your-esxi-password"
+  "esxi_password": "your-esxi-password",
+  "default_vm_name": "custom-vm-name"  # Optional: Override source VM name
 }
 ```
 
@@ -301,6 +302,44 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
 - Pure Storage: `pure_cluster_prefix`
 - PowerMax: `powermax_symmetrix_id`
 - PowerFlex: `powerflex_system_id`
+
+**Customizing Source VM:**
+
+By default, copy-offload tests use VM names defined in `tests/tests_config/config.py` (e.g., `xcopy-template-test`).
+You can override the source VM name for all cloning operations without modifying code:
+
+```json
+"copyoffload": {
+  "default_vm_name": "my-custom-vm",
+  ...
+}
+```
+
+This allows you to:
+
+- Use a different VM for testing without changing test configuration
+- Point to environment-specific VMs (e.g., development vs staging golden images)
+- Test with your own custom base VM
+
+**Note:** The override only affects tests with `"clone": true` enabled. The source VM must exist in vSphere,
+be powered off, and be accessible before running tests.
+
+**Target ESXi Host Placement:**
+
+You can force cloned VMs to be placed on a specific ESXi host by specifying `esxi_host`:
+
+```json
+"copyoffload": {
+  "esxi_host": "<esxi-host-ip-or-hostname>",
+  ...
+}
+```
+
+This is useful for:
+
+- Storage array igroup configuration requirements
+- Testing specific host hardware or configurations
+- Ensuring VMs land on hosts with proper storage connectivity
 
 **RDM Disk Testing:**
 
