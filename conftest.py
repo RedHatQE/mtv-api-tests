@@ -655,6 +655,15 @@ def plan(
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     warm_migration = plan.get("warm_migration", False)
 
+    # Override VM names from provider config if specified
+    if hasattr(source_provider, "copyoffload_config") and source_provider.copyoffload_config:
+        default_vm_override = source_provider.copyoffload_config.get("default_vm_name")
+        if default_vm_override:
+            for vm in virtual_machines:
+                if vm.get("clone", False):  # Only override for cloned VMs
+                    LOGGER.info(f"Overriding VM name '{vm['name']}' with '{default_vm_override}' from provider config")
+                    vm["name"] = default_vm_override
+
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
