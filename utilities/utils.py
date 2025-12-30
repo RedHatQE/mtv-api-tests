@@ -562,7 +562,7 @@ def download_virtctl_from_cluster(client: DynamicClient) -> Path:
         return Path(existing_virtctl)
 
     # Check if we previously downloaded it
-    download_dir = Path("/tmp/claude/virtctl")
+    download_dir = Path("/tmp/virtctl")
     virtctl_binary = download_dir / "virtctl"
     if virtctl_binary.exists() and os.access(virtctl_binary, os.X_OK):
         LOGGER.info(f"virtctl already exists at {virtctl_binary}, adding to PATH")
