@@ -57,10 +57,10 @@ from utilities.resources import create_and_store_resource
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
-    download_virtctl_from_cluster,
     get_cluster_client,
     get_value_from_py_config,
 )
+from utilities.virtctl import download_virtctl_from_cluster
 from utilities.ssh_utils import SSHConnectionManager
 
 RESULTS_PATH = Path("./.xdist_results/")

@@ -81,6 +81,38 @@ If you modify code directly instead of using an agent:
 - **Code Simplicity:** Keep code simple and readable, avoid over-engineering
 - Every openshift resource must be created using `create_and_store_resource` function only.
 
+#### Function Size - Keep Functions Small
+
+**Large functions MUST be refactored into smaller, focused functions.**
+
+- **Maximum recommended size:** ~50 lines per function
+- **Single responsibility:** Each function should do ONE thing well
+- **Extract helpers:** Use private helper functions (prefixed with `_`) for sub-tasks
+- **Clear names:** Helper function names should describe what they do
+
+**Example refactoring pattern:**
+
+```python
+# ❌ WRONG - One large function doing everything
+def do_complex_task():
+    # 200 lines of code doing multiple things
+    pass
+
+# ✅ CORRECT - Small functions with clear responsibilities
+def _step_one() -> Result:
+    """Handle first step."""
+    ...
+
+def _step_two(input: Result) -> Output:
+    """Handle second step."""
+    ...
+
+def do_complex_task() -> Output:
+    """Orchestrate the complex task."""
+    result = _step_one()
+    return _step_two(result)
+```
+
 ### Testing Standards
 
 - **Real Environments:** Tests run against real clusters and real providers
