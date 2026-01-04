@@ -221,7 +221,7 @@ def teardown_resources(
         # Make sure all pods related to the test session are deleted (in parallel)
         try:
             pods_to_wait = [
-                _pod for _pod in Pod.get(dyn_client=ocp_client, namespace=target_namespace) if session_uuid in _pod.name
+                _pod for _pod in Pod.get(client=ocp_client, namespace=target_namespace) if session_uuid in _pod.name
             ]
 
             if pods_to_wait:

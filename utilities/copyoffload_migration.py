@@ -61,7 +61,7 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
             wait_timeout=60,
             sleep=2,
             func=lambda: any(
-                s.name.startswith(f"{plan_name}-") for s in Secret.get(dyn_client=ocp_admin_client, namespace=namespace)
+                s.name.startswith(f"{plan_name}-") for s in Secret.get(client=ocp_admin_client, namespace=namespace)
             ),
         ):
             break

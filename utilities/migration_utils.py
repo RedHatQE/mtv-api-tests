@@ -75,7 +75,7 @@ def archive_plan(plan: Plan) -> None:
 
     try:
         plan.wait_for_condition(condition=plan.Condition.ARCHIVED, status=plan.Condition.Status.TRUE)
-        for _pod in Pod.get(dyn_client=plan.client, namespace=plan.instance.spec.targetNamespace):
+        for _pod in Pod.get(client=plan.client, namespace=plan.instance.spec.targetNamespace):
             if plan.name in _pod.name:
                 if not _pod.wait_deleted():
                     LOGGER.error(f"Pod {_pod.name} was not deleted after plan {plan.name} was archived")
@@ -112,7 +112,7 @@ def check_dv_pvc_pv_deleted(
     dvs_to_wait = []
     try:
         dvs_to_wait = [
-            _dv for _dv in DataVolume.get(dyn_client=ocp_client, namespace=target_namespace) if partial_name in _dv.name
+            _dv for _dv in DataVolume.get(client=ocp_client, namespace=target_namespace) if partial_name in _dv.name
         ]
     except Exception as exc:
         LOGGER.error(f"Failed to get DataVolumes: {exc}")
@@ -131,7 +131,7 @@ def check_dv_pvc_pv_deleted(
     try:
         pvcs_to_wait = [
             _pvc
-            for _pvc in PersistentVolumeClaim.get(dyn_client=ocp_client, namespace=target_namespace)
+            for _pvc in PersistentVolumeClaim.get(client=ocp_client, namespace=target_namespace)
             if partial_name in _pvc.name
         ]
     except Exception as exc:
@@ -149,7 +149,7 @@ def check_dv_pvc_pv_deleted(
     # Check PVs in parallel
     pvs_to_wait = []
     try:
-        for _pv in PersistentVolume.get(dyn_client=ocp_client):
+        for _pv in PersistentVolume.get(client=ocp_client):
             with contextlib.suppress(NotFoundError):
                 _pv_spec = _pv.instance.spec.to_dict()
                 if partial_name in _pv_spec.get("claimRef", {}).get("name", ""):
