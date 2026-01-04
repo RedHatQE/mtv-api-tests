@@ -280,7 +280,7 @@ def create_source_provider(
         vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
         annotations=provider_annotations or None,
     )
-    ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600)
+    ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600, stop_status="ConnectionFailed")
 
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
