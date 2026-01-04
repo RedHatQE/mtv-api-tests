@@ -106,7 +106,7 @@ docker run --rm \
   --tc=target_ocp_version:4.20 \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
-  --tc=target_namespace:mtv-api-tests-vmware8 \
+  --tc=target_namespace:auto-vmware8 \
   --tc=storage_class:standard-csi \
   --tc=release_test:true \
   --skip-data-collector
@@ -162,7 +162,7 @@ uv run pytest -s \
   --tc=target_ocp_version:4.18
 ```
 
-Set log collector folder: (default to `/tmp/mtv-api-tests`)
+Set log collector folder: (default to `.data-collector`)
 
 ```bash
 uv run pytest .... --data-collector-path <path to log collector folder>

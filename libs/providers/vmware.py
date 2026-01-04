@@ -858,8 +858,8 @@ class VMWareProvider(BaseProvider):
             vim.VirtualMachine: The cloned VM object.
 
         """
-        clone_vm_name = generate_name_with_uuid(f"{session_uuid}-{clone_vm_name}")
-        LOGGER.info("Starting clone process for '%s' from '%s'", clone_vm_name, source_vm_name)
+        clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
+        LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
 

@@ -14,6 +14,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import OvirtMTVDatacenterNotFoundError, OvirtMTVDatacenterStatusError
 from libs.base_provider import BaseProvider
+from utilities.naming import generate_name_with_uuid
 
 LOGGER = get_logger(__name__)
 
@@ -321,7 +322,7 @@ class OvirtProvider(BaseProvider):
         In RHV/oVirt, source_vm_name is actually a template name.
         Raises an exception if the process fails.
         """
-        clone_vm_name = f"{session_uuid}-{clone_vm_name}"
+        clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
         LOGGER.info(f"Starting clone of '{source_vm_name}' template to '{clone_vm_name}'")
 
         # Get the template (not VM)
