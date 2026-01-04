@@ -292,7 +292,7 @@ def create_source_provider(
 
 def create_source_cnv_vms(
     fixture_store: dict[str, Any],
-    dyn_client: DynamicClient,
+    client: DynamicClient,
     vms: list[dict[str, Any]],
     namespace: str,
     network_name: str,
@@ -307,7 +307,7 @@ def create_source_cnv_vms(
                 fixture_store=fixture_store,
                 name=f"{vm_dict['name']}{vm_name_suffix}",
                 namespace=namespace,
-                client=dyn_client,
+                client=client,
                 instancetype_name="u1.small",
                 preference_name="rhel.9",
                 datasource_name="rhel9",
@@ -350,7 +350,7 @@ def get_value_from_py_config(value: str) -> Any:
 
 
 def delete_all_vms(ocp_admin_client: DynamicClient, namespace: str) -> None:
-    for vm in VirtualMachine.get(dyn_client=ocp_admin_client, namespace=namespace):
+    for vm in VirtualMachine.get(client=ocp_admin_client, namespace=namespace):
         with suppress(Exception):
             vm.clean_up(wait=True)
 
