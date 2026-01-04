@@ -672,7 +672,7 @@ def plan(
         if openshift_source_provider:
             create_source_cnv_vms(
                 fixture_store=fixture_store,
-                dyn_client=ocp_admin_client,
+                client=ocp_admin_client,
                 vms=virtual_machines,
                 namespace=source_vms_namespace,
                 network_name=multus_network_name,
@@ -736,7 +736,7 @@ def plan(
             "module": vm_obj.__module__,
         })
 
-    for pod in Pod.get(dyn_client=ocp_admin_client, namespace=target_namespace):
+    for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
         fixture_store["teardown"].setdefault(pod.kind, []).append({
             "name": pod.name,
             "namespace": pod.namespace,
@@ -750,7 +750,7 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
         controller_pod: str | None = None
         not_running_pods: list[str] = []
 
-        for pod in Pod.get(dyn_client=_admin_client, namespace=py_config["mtv_namespace"]):
+        for pod in Pod.get(client=_admin_client, namespace=py_config["mtv_namespace"]):
             if pod.name.startswith("forklift-"):
                 if pod.name.startswith("forklift-controller"):
                     controller_pod = pod
