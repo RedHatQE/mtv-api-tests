@@ -149,7 +149,7 @@ def do_complex_task() -> Output:
 
 - **Fixtures:** Session-scoped fixtures for resource management in `conftest.py`
 - **Parametrization:** Provider-specific test parametrization
-- **Markers:** tier0, tier1, scale markers for test categorization
+- **Markers:** tier0, warm, remote, copyoffload markers for test categorization
 - **Data Collection:** Automatic log and must-gather collection on failures
 
 ### Resource Management
@@ -369,8 +369,8 @@ from utilities.mtv_migration import create_storagemap_and_networkmap, migrate_vm
     indirect=True,  # REQUIRED - passes to plan fixture first
     ids=["descriptive-test-id"],
 )
-@pytest.mark.tier0  # or tier1, tier2
-@pytest.mark.warm   # optional: warm/remote/copyoffload/scale/negative
+@pytest.mark.tier0  # optional marker
+@pytest.mark.warm   # optional: warm/remote/copyoffload
 def test_name_here(
     request,                    # pytest request object
     fixture_store,              # resource tracking dictionary
@@ -450,7 +450,7 @@ def test_name_here(
    ```
 
 5. **Add pytest markers**:
-   <!-- - **Required:** `@pytest.mark.tier0` (or tier1, tier2) -->
+   - **Optional:** `@pytest.mark.tier0` (core functionality tests)
    - **Optional:** `@pytest.mark.warm`, `@pytest.mark.remote`, `@pytest.mark.copyoffload`
 
 6. **Define test function** with standard fixtures (see example above)
@@ -476,7 +476,7 @@ from utilities.mtv_migration import create_storagemap_and_networkmap, migrate_vm
     indirect=True,
     ids=["warm-rhel9"],
 )
-@pytest.mark.tier1
+@pytest.mark.tier0
 @pytest.mark.warm
 def test_my_warm_migration(
     request,
@@ -524,7 +524,7 @@ def test_my_warm_migration(
 - ❌ Skip parametrization
 - ❌ Hardcode VM names in test (use config)
 - ❌ Create resources without `create_and_store_resource()`
-- ❌ Skip markers (tier0/tier1/tier2 required)
+- ❌ Skip feature markers when applicable (warm, remote, copyoffload)
 
 ### Test Configuration Pattern
 
@@ -768,17 +768,12 @@ def my_resource(fixture_store, ocp_admin_client):
 
 **Available Markers (defined in `pytest.ini`):**
 
-| Marker          | Purpose                          | Example                         |
-| --------------- | -------------------------------- | ------------------------------- |
-| `tier0`         | Core functionality (smoke tests) | Basic cold migration            |
-| `tier1`         | Extended functionality           | Advanced features               |
-| `tier2`         | Additional scenarios             | Edge cases                      |
-| `warm`          | Warm migration tests             | Incremental snapshot migrations |
-| `remote`        | Remote cluster tests             | Cross-cluster migrations        |
-| `copyoffload`   | Copy-offload (XCOPY) tests       | VMware copyoffload              |
-| `scale`         | Scale/performance tests          | Multiple VMs                    |
-| `negative`      | Negative test cases              | Error conditions                |
-| `customer_case` | Customer-reported issues         | Bug reproductions               |
+| Marker        | Purpose                          | Example                         |
+| ------------- | -------------------------------- | ------------------------------- |
+| `tier0`       | Core functionality (smoke tests) | Basic cold migration            |
+| `warm`        | Warm migration tests             | Incremental snapshot migrations |
+| `remote`      | Remote cluster tests             | Cross-cluster migrations        |
+| `copyoffload` | Copy-offload (XCOPY) tests       | VMware copyoffload              |
 
 **How to Apply Markers:**
 
@@ -789,12 +784,13 @@ def test_basic_migration(...):
     pass
 
 # Multiple markers
-@pytest.mark.tier1
+@pytest.mark.tier0
 @pytest.mark.warm
 def test_warm_migration(...):
     pass
 
 # Conditional skip
+@pytest.mark.tier0
 @pytest.mark.remote
 @pytest.mark.skipif(
     not get_value_from_py_config("remote_ocp_cluster"),
@@ -803,19 +799,17 @@ def test_warm_migration(...):
 def test_remote_migration(...):
     pass
 
-# Customer case
-@pytest.mark.customer_case
+# Copy-offload test
 @pytest.mark.tier0
-def test_customer_issue_123(...):
+@pytest.mark.copyoffload
+def test_copyoffload_migration(...):
     pass
 ```
 
 **Marker Requirements:**
 
-- ✅ **REQUIRED:** Every test MUST have a tier marker (tier0, tier1, or tier2)
-- ✅ **OPTIONAL:** Add feature markers (warm, remote, copyoffload, scale, negative)
-- ✅ **DESCRIPTIVE:** Use customer_case for bug reproductions
-- ❌ **DON'T:** Create tests without tier markers
+- ✅ **OPTIONAL:** `tier0` marker for core functionality tests
+- ✅ **OPTIONAL:** Add feature markers (warm, remote, copyoffload)
 - ❌ **DON'T:** Use undefined markers (must be in pytest.ini)
 
 ### Parallel Execution Support
