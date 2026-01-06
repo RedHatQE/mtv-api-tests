@@ -11,8 +11,6 @@ remote_ocp_cluster: str = ""
 snapshots_interval: int = 2
 mins_before_cutover: int = 5
 plan_wait_timeout: int = 3600
-matrix_test: bool = True
-release_test: bool = False
 
 tests_params: dict = {
     "test_sanity_warm_mtv_migration": {
