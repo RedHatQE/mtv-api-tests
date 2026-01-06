@@ -5,11 +5,11 @@
     "fqdn": "SERVER FQDN/IP",
     "api_url": "<SERVER FQDN/IP>/sdk",
     "username": "USERNAME",
-    "password": "PASSWORD",
+    "password": "PASSWORD",  # pragma: allowlist secret
     "guest_vm_linux_user": "LINUX VMS USERNAME",
-    "guest_vm_linux_password": "LINUX VMS PASSWORD",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
     "guest_vm_win_user": "WINDOWS VMS USERNAME",
-    "guest_vm_win_password": "WINDOWS VMS PASSWORD",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
     "vddk_init_image": "<PATH TO VDDK INIT IMAGE>"
   },
 
@@ -19,23 +19,23 @@
     "fqdn": "SERVER FQDN/IP",
     "api_url": "<SERVER FQDN/IP>/sdk",
     "username": "USERNAME",
-    "password": "PASSWORD",
+    "password": "PASSWORD",  # pragma: allowlist secret
     "guest_vm_linux_user": "LINUX VMS USERNAME",
-    "guest_vm_linux_password": "LINUX VMS PASSWORD",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
     "guest_vm_win_user": "WINDOWS VMS USERNAME",
-    "guest_vm_win_password": "WINDOWS VMS PASSWORD",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
     "copyoffload": {
       "storage_vendor_product": "ontap",  # or "vantara"
       "datastore_id": "datastore-12345",
       "template_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
-      "storage_password": "your-password-here",
+      "storage_password": "your-password-here",  # pragma: allowlist secret
       "ontap_svm": "vserver-name",  # optional, required for NetApp ONTAP
       "esxi_clone_method": "ssh", # optional, can be "vib" (default) or "ssh"
       "esxi_host": "your-esxi-host.example.com", # required for ssh method
       "esxi_user": "root", # required for ssh method
-      "esxi_password": "your-esxi-password" # required for ssh method
+      "esxi_password": "your-esxi-password"  # pragma: allowlist secret # required for ssh method
     }
   },
 
@@ -45,7 +45,7 @@
     "fqdn": "SERVER FQDN/IP",
     "api_url": "<SERVER FQDN/IP>/ovirt-engine/api",
     "username": "USERNAME",
-    "password": "PASSWORD"
+    "password": "PASSWORD"  # pragma: allowlist secret
   },
   "openstack": {
     "type": "openstack",
@@ -53,14 +53,14 @@
     "fqdn": "SERVER FQDN/IP",
     "api_url": "<SERVER FQDN/IP>:<PORT>/v3",
     "username": "USERNAME",
-    "password": "PASSWORD",
+    "password": "PASSWORD",  # pragma: allowlist secret
     "user_domain_name": "<DOMAIN>",
     "region_name": "<REGION>",
     "project_name": "<PROJECT>",
     "user_domain_id": "<USER DOMAIN ID>",
     "project_domain_id": "PROJECT DOMAIN ID",
     "guest_vm_linux_user": "LINUX VMS USERNAME",
-    "guest_vm_linux_password": "LINUX VMS PASSWORD"
+    "guest_vm_linux_password": "LINUX VMS PASSWORD"  # pragma: allowlist secret
   },
   "openshift": {
     "type": "openshift",
@@ -68,7 +68,7 @@
     "fqdn": "",
     "api_url": "",
     "username": "",
-    "password": ""
+    "password": ""  # pragma: allowlist secret
   },
   "ova": {
     "type": "ova",
@@ -76,6 +76,6 @@
     "fqdn": "",
     "api_url": "<NFS SHARE URL>",
     "username": "<USERNAME>",
-    "password": ""
+    "password": ""  # pragma: allowlist secret
   }
 }

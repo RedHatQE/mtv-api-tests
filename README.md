@@ -86,7 +86,7 @@ docker run --rm \
   uv run pytest -s \
   --tc=cluster_host:https://api.example.cluster:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:standard-csi \
@@ -102,13 +102,12 @@ docker run --rm \
   uv run pytest -s \
   --tc=cluster_host:https://api.example.cluster:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
   --tc=target_ocp_version:4.20 \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=target_namespace:auto-vmware8 \
   --tc=storage_class:standard-csi \
-  --tc=release_test:true \
   --skip-data-collector
 ```
 
@@ -138,7 +137,7 @@ docker run --rm \
 ```bash
 export CLUSTER_HOST=https://api.example.cluster:6443
 export CLUSTER_USERNAME=kubeadmin
-export CLUSTER_PASSWORD='your-password'
+export CLUSTER_PASSWORD='your-password'  # pragma: allowlist secret
 uv run pytest -s \
   --tc=cluster_host:"$CLUSTER_HOST" \
   --tc=cluster_username:"$CLUSTER_USERNAME" \
@@ -155,7 +154,7 @@ uv run pytest -s \
 uv run pytest -s \
   --tc=cluster_host:https://api.example.cluster:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:standard-csi \
@@ -212,7 +211,7 @@ tests_params: dict = {
         # pvc_name_template to set Forklift PVC Name template, supports Go template syntax: {{.FileName}},
         # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
         "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
-        "pvc_name_template_use_generate_name": False,  # Boolean to control template usage  
+        "pvc_name_template_use_generate_name": False,  # Boolean to control template usage
     },
 }
 ```
@@ -246,7 +245,7 @@ You can create your own config file and use it with:
 # your_config.py
 cluster_host = "https://api.example.cluster:6443"
 cluster_username = "kubeadmin"
-cluster_password = "YOUR_PASSWORD"
+cluster_password = "YOUR_PASSWORD"  # pragma: allowlist secret
 ```
 
 Usage remains the same:
@@ -261,7 +260,7 @@ uv run pytest --tc-file=your_config.py
 uv run pytest -m tier1 \
   --tc=cluster_host:https://api.example.cluster:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:<storage_class> \
@@ -286,12 +285,12 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
   "template_name": "rhel9-template",
   "storage_hostname": "storage.example.com",
   "storage_username": "admin",
-  "storage_password": "password",
+  "storage_password": "password",  # pragma: allowlist secret
   "ontap_svm": "vserver-name",
   "esxi_clone_method": "ssh", # default 'vib'
   "esxi_host": "your-esxi-host.example.com",
   "esxi_user": "root",
-  "esxi_password": "your-esxi-password",
+  "esxi_password": "your-esxi-password",  # pragma: allowlist secret
   "default_vm_name": "custom-vm-name"  # Optional: Override source VM name
 }
 ```
@@ -374,7 +373,7 @@ If credentials are already in `.providers.json`, environment variables are not r
 uv run pytest -m copyoffload \
   --tc=cluster_host:https://api.example.cluster:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \
+  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.3.00400 \
   --tc=storage_class:rhosqe-ontap-san-block \
