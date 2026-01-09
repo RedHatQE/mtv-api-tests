@@ -26,7 +26,8 @@
     "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
     "copyoffload": {
       "storage_vendor_product": "ontap",  # or "vantara"
-      "datastore_id": "datastore-12345",
+      "datastore_id": "datastore-12345",  # Primary/default datastore ID
+      "secondary_datastore_id": "datastore-67890",  # Secondary datastore ID (same storage system)
       "template_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
@@ -35,7 +36,9 @@
       "esxi_clone_method": "ssh", # optional, can be "vib" (default) or "ssh"
       "esxi_host": "your-esxi-host.example.com", # required for ssh method
       "esxi_user": "root", # required for ssh method
-      "esxi_password": "your-esxi-password"  # pragma: allowlist secret # required for ssh method
+      "esxi_password": "your-esxi-password",  # pragma: allowlist secret # required for ssh method
+      "rdm_lun_uuid": "naa.XXXXXXXXXXXXXXX",  # optional, for RDM disk testing
+      "default_vm_name": "custom-vm-name"  # optional, override source VM name for cloning
     }
   },
 

@@ -277,6 +277,7 @@ def get_storage_migration_map(
     storage_class: str | None = None,
     # Copy-offload specific parameters
     datastore_id: str | None = None,
+    secondary_datastore_id: str | None = None,
     offload_plugin_config: dict[str, Any] | None = None,
     access_mode: str | None = None,
     volume_mode: str | None = None,
@@ -287,8 +288,9 @@ def get_storage_migration_map(
     This function supports both standard migrations and copy-offload migrations.
 
     Copy-offload migration (extended functionality):
-        When datastore_id and offload_plugin_config are provided, creates a copy-offload
-        storage map instead of querying the inventory.
+        When datastore_id and offload_plugin_config are provided, creates a
+        copy-offload storage map instead of querying the inventory.
+        Optionally supports secondary_datastore_id for multi-datastore scenarios.
 
     Args:
         fixture_store: Pytest fixture store for resource tracking
@@ -299,7 +301,8 @@ def get_storage_migration_map(
         source_provider_inventory: Source provider inventory (required for signature compatibility)
         vms: List of VM names (required for signature compatibility)
         storage_class: Storage class to use (optional, defaults to config value)
-        datastore_id: Datastore ID for copy-offload (optional, triggers copy-offload mode)
+        datastore_id: Primary datastore ID for copy-offload (optional, triggers copy-offload mode)
+        secondary_datastore_id: Secondary datastore ID for multi-datastore copy-offload (optional)
         offload_plugin_config: Copy-offload plugin configuration (optional, required if datastore_id is set)
         access_mode: Access mode for copy-offload (optional, used only in copy-offload mode)
         volume_mode: Volume mode for copy-offload (optional, used only in copy-offload mode)
@@ -325,22 +328,31 @@ def get_storage_migration_map(
     # Check if copy-offload parameters are provided
     if datastore_id and offload_plugin_config:
         # Copy-offload migration mode
-        LOGGER.info(f"Creating copy-offload storage map for datastore ID: {datastore_id}")
-        destination_config = {
-            "storageClass": target_storage_class,
-        }
+        datastores_to_map = [datastore_id]
+        if secondary_datastore_id:
+            datastores_to_map.append(secondary_datastore_id)
+            LOGGER.info(f"Creating copy-offload storage map for primary and secondary datastores: {datastores_to_map}")
+        else:
+            LOGGER.info(f"Creating copy-offload storage map for primary datastore: {datastore_id}")
 
-        # Add copy-offload specific destination settings
-        if access_mode:
-            destination_config["accessMode"] = access_mode
-        if volume_mode:
-            destination_config["volumeMode"] = volume_mode
+        # Create a storage map entry for each datastore
+        for ds_id in datastores_to_map:
+            destination_config = {
+                "storageClass": target_storage_class,
+            }
 
-        storage_map_list.append({
-            "destination": destination_config,
-            "source": {"id": datastore_id},
-            "offloadPlugin": offload_plugin_config,
-        })
+            # Add copy-offload specific destination settings
+            if access_mode:
+                destination_config["accessMode"] = access_mode
+            if volume_mode:
+                destination_config["volumeMode"] = volume_mode
+
+            storage_map_list.append({
+                "destination": destination_config,
+                "source": {"id": ds_id},
+                "offloadPlugin": offload_plugin_config,
+            })
+            LOGGER.info(f"Added storage map entry for datastore: {ds_id}")
     else:
         LOGGER.info(f"Creating standard storage map for VMs: {vms}")
         storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)

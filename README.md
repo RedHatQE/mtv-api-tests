@@ -282,6 +282,7 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
 "copyoffload": {
   "storage_vendor_product": "ontap",
   "datastore_id": "datastore-123",
+  "secondary_datastore_id": "datastore-456",
   "template_name": "rhel9-template",
   "storage_hostname": "storage.example.com",
   "storage_username": "admin",
@@ -294,6 +295,13 @@ Add the `copyoffload` section under your vSphere provider configuration (see `.p
   "default_vm_name": "custom-vm-name"  # Optional: Override source VM name
 }
 ```
+
+**Multi-Datastore Support:**
+
+- `datastore_id`: Primary/default datastore for VM base disks (required)
+- `secondary_datastore_id`: Secondary datastore on the same storage system for additional disks
+- Disks can explicitly reference `"datastore_id": "secondary_datastore_id"` in VM configuration
+- Enables migration of VMs with disks distributed across two different datastores on the same storage array
 
 **Vendor-specific fields:**
 

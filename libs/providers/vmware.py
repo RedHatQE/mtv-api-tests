@@ -721,7 +721,7 @@ class VMWareProvider(BaseProvider):
             source_vm: The source VM object.
             disks_to_add: List of dictionaries, each specifying details for a new disk.
             clone_vm_name: The name of the cloned VM.
-            target_datastore: The datastore where the new disks should be created.
+            target_datastore: The default datastore where new disks should be created.
 
         Returns:
             A list of VirtualDeviceSpec objects for the new disks.
@@ -748,26 +748,79 @@ class VMWareProvider(BaseProvider):
         if available_unit_number is None:
             raise RuntimeError(f"No available unit number on SCSI controller for VM '{source_vm.name}'.")
 
-        required_space_gb = sum(
-            disk["size_gb"] for disk in disks_to_add if disk.get("provision_type", "thin").lower() != "thin"
-        )
-        available_space_gb = target_datastore.summary.freeSpace / (1024**3)
+        # Get secondary datastore if configured
+        secondary_datastore_id = self.copyoffload_config.get("secondary_datastore_id")
+        secondary_datastore = None
+        if secondary_datastore_id:
+            secondary_datastore = self.get_obj([vim.Datastore], secondary_datastore_id)
+            LOGGER.info(f"Secondary datastore available: {secondary_datastore.name} ({secondary_datastore_id})")
 
-        if required_space_gb > 0:
-            if required_space_gb > available_space_gb:
+        # Validate datastore capacity per datastore (group disks by datastore)
+        datastore_capacity_requirements: dict[str, float] = {}
+        for disk in disks_to_add:
+            # Determine which datastore this disk will use
+            disk_datastore_id = disk.get("datastore_id")
+
+            # Check if this disk should use secondary datastore
+            if disk_datastore_id == "secondary_datastore_id" and secondary_datastore:
+                disk_datastore_id = secondary_datastore._moId
+            elif not disk_datastore_id:
+                # Use default/primary datastore
+                disk_datastore_id = target_datastore._moId
+
+            # Calculate required space per datastore (only for thick disks)
+            if disk.get("provision_type", "thin").lower() != "thin":
+                datastore_capacity_requirements[disk_datastore_id] = (
+                    datastore_capacity_requirements.get(disk_datastore_id, 0) + disk["size_gb"]
+                )
+
+        # Validate capacity for each datastore
+        for ds_id, required_gb in datastore_capacity_requirements.items():
+            if ds_id == target_datastore._moId:
+                datastore = target_datastore
+            elif secondary_datastore and ds_id == secondary_datastore._moId:
+                datastore = secondary_datastore
+            else:
+                datastore = self.get_obj([vim.Datastore], ds_id)
+            available_space_gb = datastore.summary.freeSpace / (1024**3)
+            if required_gb > available_space_gb:
                 raise VmCloneError(
-                    f"Insufficient datastore capacity for thick-provisioned disks on '{target_datastore.name}'. "
-                    f"Required: {required_space_gb:.2f} GB, Available: {available_space_gb:.2f} GB.",
+                    f"Insufficient datastore capacity for thick-provisioned disks on '{datastore.name}'. "
+                    f"Required: {required_gb:.2f} GB, Available: {available_space_gb:.2f} GB.",
                 )
             LOGGER.info(
                 f"Validating datastore capacity for thick disks. "
-                f"Required: {required_space_gb:.2f} GB, Available on '{target_datastore.name}': {available_space_gb:.2f} GB",
+                f"Required: {required_gb:.2f} GB, Available on '{datastore.name}': {available_space_gb:.2f} GB",
             )
-        else:
-            LOGGER.info("No thick-provisioned disks to add; skipping datastore capacity check.")
 
         new_disk_key_counter = -101
         for disk in disks_to_add:
+            # Determine which datastore to use for this disk
+            disk_datastore_id = disk.get("datastore_id")
+            LOGGER.info(f"Processing disk {available_unit_number}: datastore_id from config = '{disk_datastore_id}'")
+
+            # Check if this disk should use secondary datastore
+            if disk_datastore_id == "secondary_datastore_id" and secondary_datastore:
+                disk_datastore = secondary_datastore
+                LOGGER.info(
+                    f"Disk {available_unit_number}: Using secondary datastore '{disk_datastore.name}' "
+                    f"(ID: {disk_datastore._moId})"
+                )
+            elif disk_datastore_id and disk_datastore_id != "secondary_datastore_id":
+                # Custom datastore ID specified
+                disk_datastore = self.get_obj([vim.Datastore], disk_datastore_id)
+                LOGGER.info(
+                    f"Disk {available_unit_number}: Using custom datastore '{disk_datastore.name}' "
+                    f"(ID: {disk_datastore._moId})"
+                )
+            else:
+                # Use default/primary datastore
+                disk_datastore = target_datastore
+                LOGGER.info(
+                    f"Disk {available_unit_number}: Using default datastore '{disk_datastore.name}' "
+                    f"(ID: {disk_datastore._moId})"
+                )
+
             new_disk_spec = vim.vm.device.VirtualDeviceSpec()
             new_disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
             new_disk_spec.fileOperation = vim.vm.device.VirtualDeviceSpec.FileOperation.create
@@ -780,16 +833,20 @@ class VMWareProvider(BaseProvider):
             backing_info = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
             backing_info.diskMode = disk.get("disk_mode", "persistent")
 
+            # Set datastore and fileName for backing info
+            # IMPORTANT: Both datastore object and fileName must be set to force disk creation on correct datastore
+            backing_info.datastore = disk_datastore
+
             datastore_path = disk.get("datastore_path")
             if datastore_path:
                 full_path = (
-                    f"[{target_datastore.name}] {datastore_path}/{clone_vm_name}_disk_{available_unit_number}.vmdk"
+                    f"[{disk_datastore.name}] {datastore_path}/{clone_vm_name}_disk_{available_unit_number}.vmdk"
                 )
-                LOGGER.info(f"Ensuring directory '[{target_datastore.name}] {datastore_path}' exists on datastore.")
+                LOGGER.info(f"Ensuring directory '[{disk_datastore.name}] {datastore_path}' exists on datastore.")
                 try:
                     file_manager = self.content.fileManager
                     datacenter = self.api.content.rootFolder.childEntity[0]
-                    dir_path_for_creation = f"[{target_datastore.name}] {datastore_path}"
+                    dir_path_for_creation = f"[{disk_datastore.name}] {datastore_path}"
                     file_manager.MakeDirectory(
                         name=dir_path_for_creation,
                         datacenter=datacenter,
@@ -799,10 +856,15 @@ class VMWareProvider(BaseProvider):
                     LOGGER.debug("Directory '%s' already exists, proceeding.", datastore_path)
                 except Exception as e:
                     LOGGER.warning("Could not automatically create directory '%s': %s", datastore_path, e)
-                LOGGER.info(f"Setting custom path for new disk on datastore '{target_datastore.name}': {full_path}")
                 backing_info.fileName = full_path
+                LOGGER.info(f"Disk {available_unit_number}: fileName set to custom path: {full_path}")
             else:
-                backing_info.fileName = f"[{target_datastore.name}]"
+                # Set fileName to force vSphere to create disk on specified datastore
+                backing_info.fileName = f"[{disk_datastore.name}]"
+                LOGGER.info(
+                    f"Disk {available_unit_number}: fileName set to [{disk_datastore.name}] "
+                    f"to force creation on this datastore"
+                )
 
             provision_type_config = self.DISK_PROVISION_TYPE_MAP.get(
                 disk.get("provision_type", "thin").lower(),
@@ -810,9 +872,7 @@ class VMWareProvider(BaseProvider):
             )
             backing_info.thinProvisioned = provision_type_config["thinProvisioned"]
             backing_info.eagerlyScrub = provision_type_config["eagerlyScrub"]
-            LOGGER.info(f"Setting disk {available_unit_number} provisioning to: {disk.get('provision_type', 'thin')}")
-
-            backing_info.datastore = target_datastore
+            LOGGER.info(f"Disk {available_unit_number}: provisioning type: {disk.get('provision_type', 'thin')}")
 
             new_disk_spec.device.backing = backing_info
             device_changes.append(new_disk_spec)
@@ -911,6 +971,7 @@ class VMWareProvider(BaseProvider):
         disks_to_add = kwargs.get("add_disks", [])
         rdm_disks = [d for d in disks_to_add if "rdm_type" in d]
         regular_disks = [d for d in disks_to_add if "rdm_type" not in d]
+
         if regular_disks:
             disk_device_specs = self._get_add_disk_device_specs(
                 source_vm=source_vm,
