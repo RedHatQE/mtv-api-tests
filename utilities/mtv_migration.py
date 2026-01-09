@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from kubernetes.client.exceptions import ApiException
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
@@ -14,19 +15,56 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import MigrationPlanExecError
+from exceptions.exceptions import (
+    MigrationNotFoundError,
+    MigrationPlanExecError,
+    MigrationStatusError,
+    VmNotFoundError,
+    VmPipelineError,
+)
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from report import create_migration_scale_report
 from utilities.copyoffload_migration import wait_for_plan_secret
+from utilities.hooks import validate_all_vms_same_step, validate_expected_hook_failure
 from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
-from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
+from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import gen_network_map_list, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
+
+
+def _get_all_vms_failed_steps(
+    plan_resource: Plan,
+    vm_names: list[str],
+) -> dict[str, str | None]:
+    """
+    Get the failed step for all VMs and return a dictionary of results.
+
+    Does NOT validate consistency - returns all results. Caller should validate
+    if all VMs must fail at same step.
+
+    Args:
+        plan_resource: The Plan resource to check
+        vm_names: List of VM names to check
+
+    Returns:
+        Dictionary mapping VM names to their failed step names (or None if unknown)
+    """
+    failed_steps: dict[str, str | None] = {}
+
+    for vm_name in vm_names:
+        try:
+            failed_step = _get_failed_migration_step(plan_resource, vm_name)
+            failed_steps[vm_name] = failed_step
+        except (MigrationNotFoundError, MigrationStatusError, VmPipelineError, VmNotFoundError) as e:
+            LOGGER.warning("Could not get failed step for VM '%s': %s", vm_name, e)
+            failed_steps[vm_name] = None
+
+    return failed_steps
 
 
 def migrate_vms(
@@ -43,10 +81,6 @@ def migrate_vms(
     source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
     cut_over: datetime | None = None,
-    pre_hook_name: str | None = None,
-    pre_hook_namespace: str | None = None,
-    after_hook_name: str | None = None,
-    after_hook_namespace: str | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
 ) -> None:
     # Populate VM IDs from Forklift inventory for all VMs
@@ -57,6 +91,24 @@ def migrate_vms(
             vm_data = source_provider_inventory.get_vm(vm_name)
             vm["id"] = vm_data["id"]
             LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
+
+    # Extract hook references from plan dict (set by plan fixture in conftest.py)
+    pre_hook_name = plan.get("_pre_hook_name")
+    pre_hook_namespace = plan.get("_pre_hook_namespace")
+    after_hook_name = plan.get("_post_hook_name")
+    after_hook_namespace = plan.get("_post_hook_namespace")
+
+    # Validate consistency (name and namespace must both be set or both be None)
+    if (pre_hook_name is not None) != (pre_hook_namespace is not None):
+        raise ValueError(
+            "Fixture bug: plan has '_pre_hook_name' but missing '_pre_hook_namespace'. "
+            "Both must be set together by the plan fixture."
+        )
+    if (after_hook_name is not None) != (after_hook_namespace is not None):
+        raise ValueError(
+            "Fixture bug: plan has '_post_hook_name' but missing '_post_hook_namespace'. "
+            "Both must be set together by the plan fixture."
+        )
 
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
@@ -76,8 +128,56 @@ def migrate_vms(
         source_vms_namespace=source_vms_namespace,
     )
 
-    migration_plan = run_migration(**run_migration_kwargs)
+    expected_migration_result = plan.get("expected_migration_result", "succeed")
 
+    if expected_migration_result == "fail":
+        migration_plan = run_migration(**run_migration_kwargs)
+        try:
+            wait_for_migration_complate(plan=migration_plan)
+            raise AssertionError(
+                "Migration was expected to fail but succeeded. Plan config has expected_migration_result='fail'"
+            )
+        except MigrationPlanExecError:
+            LOGGER.info("Migration failed as expected")
+
+            vm_names = [vm["name"] for vm in plan["virtual_machines"]]
+            failed_steps = _get_all_vms_failed_steps(
+                plan_resource=migration_plan,
+                vm_names=vm_names,
+            )
+            LOGGER.info("Failed steps per VM: %s", failed_steps)
+
+            # Only validate hooks if hooks are configured (at least one hook present)
+            has_hooks = pre_hook_name is not None or after_hook_name is not None
+            actual_failed_step: str | None
+
+            if has_hooks:
+                # Hooks-specific validation
+                actual_failed_step = validate_all_vms_same_step(failed_steps)
+                validate_expected_hook_failure(
+                    actual_failed_step=actual_failed_step,
+                    plan_config=plan,
+                )
+
+                if actual_failed_step == "PostHook":
+                    LOGGER.info("PostHook failure - VMs are migrated, verifying with check_vms()")
+                    check_vms(
+                        plan=plan,
+                        source_provider=source_provider,
+                        source_provider_data=source_provider_data,
+                        destination_provider=destination_provider,
+                        destination_namespace=target_namespace,
+                        network_map_resource=network_migration_map,
+                        storage_map_resource=storage_migration_map,
+                        source_vms_namespace=source_vms_namespace,
+                        source_provider_inventory=source_provider_inventory,
+                        vm_ssh_connections=vm_ssh_connections,
+                    )
+
+        return
+
+    # Normal flow - expect success
+    migration_plan = run_migration(**run_migration_kwargs)
     wait_for_migration_complate(plan=migration_plan)
 
     if py_config.get("create_scale_report"):
@@ -111,10 +211,10 @@ def run_migration(
     virtual_machines_list: list,
     target_namespace: str,
     warm_migration: bool,
-    pre_hook_name: str,
-    pre_hook_namespace: str,
-    after_hook_name: str,
-    after_hook_namespace: str,
+    pre_hook_name: str | None,
+    pre_hook_namespace: str | None,
+    after_hook_name: str | None,
+    after_hook_namespace: str | None,
     cut_over: datetime,
     fixture_store: Any,
     test_name: str,
@@ -139,6 +239,10 @@ def run_migration(
          virtual_machines_list (array): an array of PlanVirtualMachineItem).
          target_namespace (str): destination provider target namespace
          warm_migration (bool): Warm Migration.
+         pre_hook_name (str | None): Name of the pre-hook resource (None if no pre-hook).
+         pre_hook_namespace (str | None): Namespace of the pre-hook resource (None if no pre-hook).
+         after_hook_name (str | None): Name of the post-hook resource (None if no post-hook).
+         after_hook_namespace (str | None): Namespace of the post-hook resource (None if no post-hook).
          cut_over (datetime): Finalize time (warm migration only).
          teardown (bool): Remove the MTV Resources.
          expected_plan_ready (bool): Migration CR should be created
@@ -478,3 +582,104 @@ def verify_vm_disk_count(destination_provider, plan, target_namespace):
         f"Expected {expected_disks} disks on migrated VM, but found {num_disks_migrated}."
     )
     LOGGER.info(f"Successfully verified {expected_disks} disks on the migrated VM.")
+
+
+def _find_migration_for_plan(plan: Plan) -> Migration:
+    """Find the Migration CR associated with a Plan.
+
+    Args:
+        plan: The Plan resource
+
+    Returns:
+        Migration resource for the plan (most recent if multiple exist)
+
+    Raises:
+        MigrationNotFoundError: If no Migration found
+        ApiException: On Kubernetes API errors (non-404)
+    """
+    migrations = []
+    try:
+        for migration_obj in Migration.get(dyn_client=plan.client, namespace=plan.namespace):
+            plan_ref = migration_obj.instance.get("spec", {}).get("plan", {})
+            if plan_ref.get("name") == plan.name and plan_ref.get("namespace") == plan.namespace:
+                migrations.append(migration_obj)
+    except ApiException as e:
+        if e.status == 404:
+            raise MigrationNotFoundError(plan_name=plan.name) from e
+        LOGGER.error(
+            f"Kubernetes API error getting Migrations for Plan {plan.name} in namespace {plan.namespace}: {e}",
+            exc_info=True,
+        )
+        raise
+
+    if not migrations:
+        raise MigrationNotFoundError(plan_name=plan.name)
+
+    if len(migrations) > 1:
+        LOGGER.warning("Found %s Migrations for Plan %s, using the most recent", len(migrations), plan.name)
+        migrations.sort(
+            key=lambda m: datetime.fromisoformat(
+                m.instance.get("metadata", {}).get("creationTimestamp", "1970-01-01T00:00:00Z").replace("Z", "+00:00")
+            )
+        )
+
+    return migrations[-1]
+
+
+def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
+    """Get the step name where migration failed for a specific VM.
+
+    Examines the Migration status (not Plan) to find which pipeline step failed.
+    The Migration CR contains the detailed VM pipeline execution status.
+
+    Args:
+        plan: The Plan resource (used to find the associated Migration)
+        vm_name: Name of the VM to check (matches against status.vms[].name or id)
+
+    Returns:
+        The failed step name (e.g., "PreHook", "PostHook", "DiskTransfer")
+
+    Raises:
+        MigrationNotFoundError: If Migration CR cannot be found for the Plan
+        MigrationStatusError: If Migration has no status or no vms in status
+        VmPipelineError: If VM has no pipeline or no failed step in pipeline
+        VmNotFoundError: If VM not found in Migration status
+        ApiException: On Kubernetes API errors (non-404)
+
+    Example:
+        >>> failed_step = _get_failed_migration_step(plan, "my-vm")
+        >>> assert failed_step == "PostHook", f"Expected PostHook failure, got {failed_step}"
+    """
+    # Find the Migration CR for this Plan
+    migration = _find_migration_for_plan(plan)
+
+    if not hasattr(migration.instance, "status") or not migration.instance.status:
+        raise MigrationStatusError(migration_name=migration.name)
+
+    vms_status = getattr(migration.instance.status, "vms", None)
+    if not vms_status:
+        raise MigrationStatusError(migration_name=migration.name)
+
+    for vm_status in vms_status:
+        # Match by name or id
+        vm_id = getattr(vm_status, "id", "")
+        vm_status_name = getattr(vm_status, "name", "")
+
+        if vm_name not in (vm_id, vm_status_name):
+            continue
+
+        # Check pipeline steps for errors
+        pipeline = getattr(vm_status, "pipeline", None)
+        if not pipeline:
+            raise VmPipelineError(vm_name=vm_name)
+
+        for step in pipeline:
+            step_error = getattr(step, "error", None)
+            if step_error:
+                step_name = step.name
+                LOGGER.info("VM %s failed at step '%s': %s", vm_name, step_name, step_error)
+                return step_name
+
+        raise VmPipelineError(vm_name=vm_name)
+
+    raise VmNotFoundError(f"VM {vm_name} not found in Migration {migration.name} status")

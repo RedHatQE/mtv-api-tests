@@ -212,9 +212,67 @@ tests_params: dict = {
         # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
         "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,  # Boolean to control template usage
+        # Hook configuration (optional) - runs Ansible playbooks before/after migration
+        "pre_hook": {
+            # Choose ONE option for this hook:
+            "expected_result": "succeed",  # Use "succeed" or "fail"
+            # DO NOT use both expected_result and playbook_base64 in the same hook
+            # "playbook_base64": "LSBuYW1lOi4uLg==",
+        },
+        "post_hook": {
+            # Choose ONE option for this hook:
+            # "expected_result": "succeed",
+            # DO NOT use both expected_result and playbook_base64 in the same hook
+            "playbook_base64": "LSBuYW1lOi4uLg==",
+        },
+        "expected_migration_result": "fail",  # Example negative test; defaults to "succeed" if omitted
     },
 }
 ```
+
+**Hook Configuration:**
+
+- `pre_hook`: Runs before migration starts
+- `post_hook`: Runs after migration completes
+- **Note:** Both `pre_hook` and `post_hook` can be present in the same test configuration
+
+**Hook Options (mutually exclusive within each hook):**
+
+For each hook (`pre_hook` or `post_hook`), choose ONE of:
+
+- `expected_result`: Use `"succeed"` or `"fail"` for predefined playbooks (accepts exactly these two values)
+- `playbook_base64`: Provide custom base64-encoded Ansible playbook
+
+If both `expected_result` and `playbook_base64` are provided in the same hook, validation fails with a `ValueError`
+indicating these options are mutually exclusive and explaining when to use each option.
+
+**Note:** Both `pre_hook` and `post_hook` can use different configuration options independently. You can mix
+options (e.g., `pre_hook` with `expected_result` and `post_hook` with `playbook_base64`) or use the same
+option for both hooks.
+
+**Creating Custom Base64-Encoded Playbooks:**
+
+To encode your Ansible playbook file for use with `playbook_base64`:
+
+```bash
+# Linux
+base64 -w0 playbook.yml
+
+# macOS/BSD
+base64 < playbook.yml
+```
+
+Copy the entire command output (single-line base64 string) into the `playbook_base64` field.
+
+The `-w0` flag (Linux) disables line wrapping. On macOS, input redirection (`< file`) produces unwrapped
+output. The `playbook_base64` field requires a single-line base64 string without line breaks.
+
+**Migration Result Control:**
+
+- `expected_migration_result`: Top-level option to set expected migration outcome
+  - `"succeed"` (default): Migration should complete successfully
+  - `"fail"`: For negative test scenarios where migration should fail
+  - This is independent of hook configuration
 
 ### Step 2: Create Test Function
 

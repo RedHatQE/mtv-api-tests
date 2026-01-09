@@ -44,6 +44,7 @@ from libs.forklift_inventory import (
 from libs.providers.openshift import OCPProvider
 from utilities.copyoffload_migration import get_copyoffload_credential
 from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
+from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
@@ -54,6 +55,7 @@ from utilities.pytest_utils import (
     session_teardown,
 )
 from utilities.resources import create_and_store_resource
+from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
@@ -61,7 +63,6 @@ from utilities.utils import (
     get_value_from_py_config,
 )
 from utilities.virtctl import download_virtctl_from_cluster
-from utilities.ssh_utils import SSHConnectionManager
 
 RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
@@ -721,6 +722,10 @@ def plan(
             vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
             # Store complete source VM data for post-migration checks
             vm["source_vm_data"] = source_vm_details
+
+    # Create hooks if configured
+    create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
+    create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 
     yield plan
 
