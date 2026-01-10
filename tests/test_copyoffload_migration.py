@@ -813,9 +813,7 @@ def test_copyoffload_multi_datastore_migration(
     if not datastore_id:
         missing_params.append("datastore_id")
     if missing_params:
-        pytest.fail(
-            f"Missing required copy-offload parameters in config: {', '.join(missing_params)}"
-        )
+        pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
 
     # For multi-datastore test, ensure secondary datastore is configured
     if not secondary_datastore_id:
