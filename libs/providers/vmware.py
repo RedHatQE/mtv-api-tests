@@ -26,6 +26,47 @@ LOGGER = get_logger(__name__)
 # Reference: VMware vSphere API VirtualEthernetCard documentation
 VSPHERE_NIC_DEVICE_KEY_OFFSET = 4000
 
+# Error messages for VM cloning operations
+ERR_SECONDARY_DS_NOT_CONFIGURED = (
+    "Disk requested secondary datastore but copyoffload.secondary_datastore_id is not configured"
+)
+
+
+def format_insufficient_capacity_message(datastore_name: str, required_gb: float, available_gb: float) -> str:
+    """
+    Format error/log message for insufficient datastore capacity.
+
+    Args:
+        datastore_name: Name of the datastore
+        required_gb: Required capacity in GB
+        available_gb: Available capacity in GB
+
+    Returns:
+        Formatted message string
+    """
+    return (
+        f"Insufficient datastore capacity for thick-provisioned disks on '{datastore_name}'. "
+        f"Required: {required_gb:.2f} GB, Available: {available_gb:.2f} GB."
+    )
+
+
+def format_capacity_validation_log(datastore_name: str, required_gb: float, available_gb: float) -> str:
+    """
+    Format log message for datastore capacity validation.
+
+    Args:
+        datastore_name: Name of the datastore
+        required_gb: Required capacity in GB
+        available_gb: Available capacity in GB
+
+    Returns:
+        Formatted log message string
+    """
+    return (
+        f"Validating datastore capacity for thick disks. "
+        f"Required: {required_gb:.2f} GB, Available on '{datastore_name}': {available_gb:.2f} GB"
+    )
+
 
 class VMWareProvider(BaseProvider):
     """https://github.com/vmware/vsphere-automation-sdk-python"""
@@ -764,9 +805,7 @@ class VMWareProvider(BaseProvider):
             # Check if this disk should use secondary datastore
             if disk_datastore_id == "secondary_datastore_id":
                 if not secondary_datastore:
-                    raise VmCloneError(
-                        "Disk requested secondary datastore but copyoffload.secondary_datastore_id is not configured",
-                    )
+                    raise VmCloneError(ERR_SECONDARY_DS_NOT_CONFIGURED)
                 disk_datastore_id = secondary_datastore._moId
             elif not disk_datastore_id:
                 # Use default/primary datastore
@@ -789,13 +828,9 @@ class VMWareProvider(BaseProvider):
             available_space_gb = datastore.summary.freeSpace / (1024**3)
             if required_gb > available_space_gb:
                 raise VmCloneError(
-                    f"Insufficient datastore capacity for thick-provisioned disks on '{datastore.name}'. "
-                    f"Required: {required_gb:.2f} GB, Available: {available_space_gb:.2f} GB.",
+                    format_insufficient_capacity_message(datastore.name, required_gb, available_space_gb)
                 )
-            LOGGER.info(
-                f"Validating datastore capacity for thick disks. "
-                f"Required: {required_gb:.2f} GB, Available on '{datastore.name}': {available_space_gb:.2f} GB",
-            )
+            LOGGER.info(format_capacity_validation_log(datastore.name, required_gb, available_space_gb))
 
         new_disk_key_counter = -101
         for disk in disks_to_add:
