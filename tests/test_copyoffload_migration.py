@@ -732,50 +732,58 @@ def test_copyoffload_multi_datastore_migration(
     multus_network_name,
     source_provider_inventory,
     source_vms_namespace,
-    copyoffload_config,
+    copyoffload_config,  # noqa: ARG001 - used for validation in fixture
     copyoffload_storage_secret,
 ):
     """
-    Test copy-offload migration of a VM with disks on multiple datastores using
+    Test copy-offload migration of a VM with disks on two different datastores using
     the same storage system.
+
     This test validates copy-offload functionality when a VM has:
     - One disk on the primary/default datastore (from the template)
-    - One additional disk on a secondary datastore on the same storage system.
+    - One additional disk on a secondary datastore on the same storage system
+
     This ensures that copy-offload can handle VMs with disks distributed across
-    multiple datastores.
+    two different datastores on the same storage array.
+
     Test Workflow:
     1. Validates copy-offload configuration (via copyoffload_config fixture)
     2. Creates storage secret for storage array authentication (via copyoffload_storage_secret fixture)
     3. Clones VM from template with an additional disk on the secondary datastore
     4. Creates network migration map
     5. Builds copy-offload plugin configuration
-    6. Creates storage map with multiple datastores (primary and secondary)
+    6. Creates storage map with both primary and secondary datastores
     7. Executes migration using copy-offload technology
     8. Verifies successful migration and VM operation in OpenShift
     9. Verifies that all disks were migrated correctly
+
     Requirements:
-    -   vSphere provider with VMs on XCOPY-capable storage (e.g., NetApp iSCSI).
-    -   Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara).
-    -   Storage class in OpenShift that supports the same storage type as the source.
-    -   Storage credentials via environment variables or .providers.json config.
-    -   ForkliftController with feature_copy_offload: "true" (must be pre-configured).
-    -   Two datastores configured using the same storage system.
-    -   Proper datastore_ids configuration matching the VM's datastores.
+    - vSphere provider with VMs on XCOPY-capable storage (e.g., NetApp iSCSI)
+    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara)
+    - Storage class in OpenShift that supports the same storage type as the source
+    - Storage credentials via environment variables or .providers.json config
+    - ForkliftController with feature_copy_offload: "true" (must be pre-configured)
+    - Two datastores configured on the same storage system
+    - Proper datastore_id and secondary_datastore_id configuration
+
     Configuration in .providers.json:
     "copyoffload": {
         "storage_vendor_product": "ontap",  # or "vantara"
-        "datastore_ids": ["datastore-123", "datastore-456"],    # List of vSphere datastore IDs that support copyoffload (first is default/primary)
+        "datastore_id": "datastore-123",              # Primary/default datastore
+        "secondary_datastore_id": "datastore-456",    # Secondary datastore (same storage system)
         "template_name": "<copyoffload-template-name>",
         "storage_hostname": "storage.example.com",
         "storage_username": "admin",
         "storage_password": "password",  # pragma: allowlist secret
         "ontap_svm": "vserver-name"  # For NetApp ONTAP only
     }
+
     Optional Environment Variables (override .providers.json values):
     - COPYOFFLOAD_STORAGE_HOSTNAME
     - COPYOFFLOAD_STORAGE_USERNAME
     - COPYOFFLOAD_STORAGE_PASSWORD
     - COPYOFFLOAD_ONTAP_SVM
+
     Args:
         request: Pytest request object
         fixture_store: Pytest fixture store for resource tracking

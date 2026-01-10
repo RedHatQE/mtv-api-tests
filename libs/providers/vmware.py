@@ -762,7 +762,11 @@ class VMWareProvider(BaseProvider):
             disk_datastore_id = disk.get("datastore_id")
 
             # Check if this disk should use secondary datastore
-            if disk_datastore_id == "secondary_datastore_id" and secondary_datastore:
+            if disk_datastore_id == "secondary_datastore_id":
+                if not secondary_datastore:
+                    raise VmCloneError(
+                        "Disk requested secondary datastore but copyoffload.secondary_datastore_id is not configured",
+                    )
                 disk_datastore_id = secondary_datastore._moId
             elif not disk_datastore_id:
                 # Use default/primary datastore
