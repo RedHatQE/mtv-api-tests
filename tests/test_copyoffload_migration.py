@@ -819,8 +819,8 @@ def test_copyoffload_multi_datastore_migration(
     if not secondary_datastore_id:
         pytest.fail("Multi-datastore test requires 'secondary_datastore_id' to be configured in copyoffload section.")
 
-    LOGGER.info(f"Multi-datastore migration using primary datastore: {datastore_id}")
-    LOGGER.info(f"Multi-datastore migration using secondary datastore: {secondary_datastore_id}")
+    LOGGER.info("Multi-datastore migration using primary datastore: %s", datastore_id)
+    LOGGER.info("Multi-datastore migration using secondary datastore: %s", secondary_datastore_id)
 
     # Create network migration map
     vms_names = [vm["name"] for vm in plan["virtual_machines"]]

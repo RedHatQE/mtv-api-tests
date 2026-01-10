@@ -753,7 +753,7 @@ class VMWareProvider(BaseProvider):
         secondary_datastore = None
         if secondary_datastore_id:
             secondary_datastore = self.get_obj([vim.Datastore], secondary_datastore_id)
-            LOGGER.info(f"Secondary datastore available: {secondary_datastore.name} ({secondary_datastore_id})")
+            LOGGER.info("Secondary datastore available: %s (%s)", secondary_datastore.name, secondary_datastore_id)
 
         # Validate datastore capacity per datastore (group disks by datastore)
         datastore_capacity_requirements: dict[str, float] = {}
