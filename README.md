@@ -1,410 +1,732 @@
-# mtv-api-tests
+# MTV API Test Suite
 
-## Source providers
+Test suite for validating VM migrations to OpenShift from VMware vSphere,
+RHV, and OpenStack using Migration Toolkit for Virtualization (MTV).
 
-File `.providers.json` in the root directory of the repository with the source providers data
-
-### Provider Requirements
-
-Each source provider requires pre-existing base VMs or templates for test execution:
-
-- **VMware vSphere**: Base VM must exist (e.g., `mtv-tests-rhel8`)
-  - Tests will clone from this base VM for migration testing
-  - VM should be powered off and in a ready state
-
-- **OpenStack**: Base VM/instance must exist (e.g., `mtv-tests-rhel8`)
-  - Tests will clone from this base instance using snapshots
-  - Instance should be in ACTIVE or SHUTOFF state
-
-- **RHV/oVirt**: Template must exist (e.g., `mtv-tests-rhel8`)
-  - Tests will create VMs from this template
-  - Template should have sufficient memory (minimum 1536 MiB recommended)
-  - Ensure template's "Physical Memory Guaranteed" setting is not misconfigured
-
-**Note**: The base VM/template names are referenced in test configurations. Ensure these resources exist in your
-source provider before running tests.
+---
 
 ## Prerequisites
 
-Before running the test suite, ensure the following tools are installed and available in your PATH:
+### Local Machine Requirements
 
-### Required Tools
+- **OpenShift cluster** with MTV operator installed
+- **oc CLI** - Download from your cluster console
+- **Docker or Podman** - To run the test container
 
-1. **uv** - Python package manager
-   - Install: [uv installation guide](https://github.com/astral-sh/uv)
+### Source Provider Requirements
 
-2. **oc** - OpenShift CLI client
-   - Ensure `oc` is in your PATH:
+You need a base VM/template in your source provider:
 
-     ```bash
-     export PATH="<oc path>:$PATH"
-     ```
+| Provider | Resource Type | Requirements |
+|----------|--------------|--------------|
+| **VMware vSphere** | VM | Powered off, QEMU guest agent installed |
+| **RHV/oVirt** | Template | Min 1536 MiB memory |
+| **OpenStack** | Instance | ACTIVE/SHUTOFF state, QEMU guest agent installed |
 
-3. **virtctl** - Kubernetes virtualization CLI
-   - Required for SSH connections to migrated VMs
-   - Must be compatible with your target OpenShift cluster version
-   - Installation options:
-     - **From OpenShift cluster**: Download from the OpenShift web console under "Command Line Tools"
-     - **From GitHub releases**: [kubevirt/kubevirt releases](https://github.com/kubevirt/kubevirt/releases)
-   - Verify installation:
+**For copy-offload tests only**: VM must have cloud-init script configured (available on request).
 
-     ```bash
-     virtctl version
-     ```
-
-### Setup
+### Verify Setup
 
 ```bash
-# Install dependencies
-uv sync
+oc whoami                                # Check cluster access
+oc get csv -n openshift-mtv | grep mtv  # Verify MTV operator
+docker --version                         # or: podman --version
 ```
 
-Run openshift-python-wrapper in DEBUG (show the yamls requests)
+---
+
+## Quick Start
+
+### 1. Grant Permissions
+
+Give your OpenShift user permissions to create MTV resources and VMs:
 
 ```bash
-export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+oc adm policy add-cluster-role-to-user cluster-admin $(oc whoami)
 ```
 
-## Update The Docker Image
+### 2. Configure Your Source Provider
 
-```bash
-docker build -f Dockerfile -t mtv-api-tests
-docker login quay.io
-docker push mtv-api-tests quay.io/openshift-cnv/mtv-tests:latest
-```
+**What is `.providers.json`?** A configuration file that tells the tests how to connect to your source
+virtualization platform.
 
-## Running Tests with Container
+**Why do you need it?** The tests need to:
 
-**Note:** For Podman/SELinux (RHEL/Fedora), add `:z` to volume mounts: `-v $(pwd)/.providers.json:/app/.providers.json:ro,z`
+- Connect to your source provider (vSphere, RHV, or OpenStack)
+- Find the base VM to clone for testing
+- Create test VMs and perform migrations
 
-```bash
-docker run --rm \
-  -v $(pwd)/.providers.json:/app/.providers.json:ro \
-  -v $(pwd)/kubeconfig:/app/kubeconfig:ro \
-  -e KUBECONFIG=/app/kubeconfig \
-  quay.io/openshift-cnv/mtv-tests:latest \
-  uv run pytest -s \
-  --tc=cluster_host:https://api.example.cluster:6443 \
-  --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
-  --tc=source_provider_type:vsphere \
-  --tc=source_provider_version:8.0.1 \
-  --tc=storage_class:standard-csi \
-  --tc=target_ocp_version:4.18
+**What should it include?**
 
-# Example with full configuration
-docker run --rm \
-  -v .providers.json:/app/.providers.json:ro \
-  -v jira.cfg:/app/jira.cfg:ro \
-  -v kubeconfig:/app/kubeconfig:ro \
-  -e KUBECONFIG=/app/kubeconfig \
-  quay.io/openshift-cnv/mtv-tests:latest \
-  uv run pytest -s \
-  --tc=cluster_host:https://api.example.cluster:6443 \
-  --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
-  --tc=target_ocp_version:4.20 \
-  --tc=source_provider_type:vsphere \
-  --tc=source_provider_version:8.0.1 \
-  --tc=target_namespace:auto-vmware8 \
-  --tc=storage_class:standard-csi \
-  --skip-data-collector
-```
+- Connection details (hostname, credentials)
+- Location information (datacenter, cluster)
+- Base VM/template name to use for testing
 
-### Required Files
+Create a `.providers.json` file in your current directory with your provider's details:
 
-- `.providers.json`: Source provider configurations
-- `jira.cfg`: Jira configuration file
-- `kubeconfig`: Kubernetes cluster access
+**VMware vSphere Example:**
 
-### Common Test Configuration Parameters
-
-- `--tc=cluster_host`: OpenShift API URL (e.g., <https://api.example.cluster:6443>) [required]
-- `--tc=cluster_username`: Cluster username (e.g., kubeadmin) [required]
-- `--tc=cluster_password`: Cluster password [required]
-- `--tc=source_provider_type`: vsphere, rhv, openstack, etc. [required]
-- `--tc=source_provider_version`: Provider version (6.5, 7.0.3, 8.0.1) [required]
-- `--tc=storage_class`: Storage class for testing [required]
-- `--tc=target_ocp_version`: Target OpenShift version (e.g., 4.18) [required]
-- `--tc=target_namespace`: Namespace for test resources [optional]
-
-#### Authentication notes
-
-- These three options are required for the test suite to authenticate to the cluster via API.
-- Keep the kubeconfig mount and KUBECONFIG env in container runs so oc adm must-gather can execute.
-- Quote passwords with special characters. Prefer passing secrets via environment variables to avoid shell history exposure.
-
-```bash
-export CLUSTER_HOST=https://api.example.cluster:6443
-export CLUSTER_USERNAME=kubeadmin
-export CLUSTER_PASSWORD='your-password'  # pragma: allowlist secret
-uv run pytest -s \
-  --tc=cluster_host:"$CLUSTER_HOST" \
-  --tc=cluster_username:"$CLUSTER_USERNAME" \
-  --tc=cluster_password:"$CLUSTER_PASSWORD" \
-  --tc=source_provider_type:vsphere \
-  --tc=source_provider_version:8.0.1 \
-  --tc=storage_class:standard-csi
-```
-
-## Pytest
-
-```bash
-# Local run example
-uv run pytest -s \
-  --tc=cluster_host:https://api.example.cluster:6443 \
-  --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
-  --tc=source_provider_type:vsphere \
-  --tc=source_provider_version:8.0.1 \
-  --tc=storage_class:standard-csi \
-  --tc=target_ocp_version:4.18
-```
-
-Set log collector folder: (default to `.data-collector`)
-
-```bash
-uv run pytest .... --data-collector-path <path to log collector folder>
-```
-
-After run there is `resources.json` file under `--data-collector-path` that hold all created resources during the run.
-To delete all created resources using the above file run:
-
-```bash
-uv run tools/clean_cluster.py <path-to-resources.json>
-```
-
-Run without data-collector:
-
-```bash
-uv run pytest .... --skip-data-collector
-```
-
-## Run options
-
-Run without calling teardown (Do not delete created resources)
-
-```bash
-uv run pytest --skip-teardown
-```
-
-## Adding New Tests
-
-### Step 1: Define Test Parameters
-
-Add your test configuration to `tests_params` in `tests/tests_config/config.py`:
-
-```python
-tests_params: dict = {
-    # ... existing tests
-    "test_your_new_test": {
-        "virtual_machines": [
-            {
-                "name": "vm-name-for-test",
-                "source_vm_power": "on",  # "on" for warm, "off" for cold
-                "guest_agent": True,
-                "target_power_state": "on",  # Optional: "on" or "off" - destination VM power state after migration
-            },
-        ],
-        "warm_migration": True,  # True for warm, False for cold
-        "preserve_static_ips": True, # True for preserving source Vm's Static IP
-        # pvc_name_template to set Forklift PVC Name template, supports Go template syntax: {{.FileName}},
-        # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
-        "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
-        "pvc_name_template_use_generate_name": False,  # Boolean to control template usage
-    },
-}
-```
-
-### Step 2: Create Test Function
-
-```python
-import pytest
-from pytest_testconfig import py_config
-
-@pytest.mark.parametrize(
-    "plan,multus_network_name",
-    [
-        pytest.param(
-            py_config["tests_params"]["test_your_new_test"],
-            py_config["tests_params"]["test_your_new_test"],
-        )
-    ],
-    indirect=True,
-    ids=["descriptive-id"],
-)
-def test_your_new_test(request, fixture_store, ...):
-    # Your test implementation
-```
-
-### Custom Configuration
-
-You can create your own config file and use it with:
-
-```python
-# your_config.py
-cluster_host = "https://api.example.cluster:6443"
-cluster_username = "kubeadmin"
-cluster_password = "YOUR_PASSWORD"  # pragma: allowlist secret
-```
-
-Usage remains the same:
-
-```bash
-uv run pytest --tc-file=your_config.py
-```
-
-## Run Functional Tests tier1
-
-```bash
-uv run pytest -m tier1 \
-  --tc=cluster_host:https://api.example.cluster:6443 \
-  --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
-  --tc=source_provider_type:vsphere \
-  --tc=source_provider_version:8.0.1 \
-  --tc=storage_class:<storage_class> \
-  --tc=target_ocp_version:4.18
-```
-
-## Run Copy-Offload Tests
-
-Copy-offload tests leverage shared storage for faster migrations. Add `copyoffload` config to `.providers.json`
-and ensure the source VM has QEMU guest agent installed.
-
-The `esxi_clone_method` allows specifying `ssh` to perform disk cloning directly on the ESXi host,
-as an alternative to the default VIB-based method. This requires providing ESXi host credentials.
-
-**Configuration in `.providers.json`:**
-Add the `copyoffload` section under your vSphere provider configuration (see `.providers.json.example` for complete example):
-
+<!-- pragma: allowlist secret -->
 ```json
-"copyoffload": {
-  "storage_vendor_product": "ontap",
-  "datastore_id": "datastore-123",
-  "template_name": "rhel9-template",
-  "storage_hostname": "storage.example.com",
-  "storage_username": "admin",
-  "storage_password": "password",  # pragma: allowlist secret
-  "ontap_svm": "vserver-name",
-  "esxi_clone_method": "ssh", # default 'vib'
-  "esxi_host": "your-esxi-host.example.com",
-  "esxi_user": "root",
-  "esxi_password": "your-esxi-password",  # pragma: allowlist secret
-  "default_vm_name": "custom-vm-name"  # Optional: Override source VM name
+{
+  "vsphere": {
+    "version": "8.0.1",
+    "hostname": "vcenter.example.com",
+    "username": "administrator@vsphere.local",
+    "password": "your-password",  <!-- pragma: allowlist secret -->
+    "datacenter": "DC1",
+    "cluster": "Cluster1",
+    "vm_base_name": "rhel8-template"
+  }
 }
 ```
 
-**Vendor-specific fields:**
+**Field descriptions**:
 
-- NetApp ONTAP: `ontap_svm` (SVM name)
+- `version` - Your vSphere version
+- `hostname` - vCenter hostname or IP address
+- `username` - vCenter admin username
+- `password` - vCenter password
+- `datacenter` - Your datacenter name
+- `cluster` - Your cluster name
+- `vm_base_name` - Base VM to clone for tests (must exist and be powered off)
+
+**All fields are required.**
+
+---
+
+**RHV Example:**
+
+<!-- pragma: allowlist secret -->
+```json
+{
+  "rhv": {
+    "version": "4.4",
+    "hostname": "rhvm.example.com",
+    "username": "admin@internal",
+    "password": "your-password", <!-- pragma: allowlist secret -->
+    "datacenter": "Default",
+    "cluster": "Default",
+    "template_name": "rhel8-template",
+    "ca_cert": ""
+  }
+}
+```
+
+**Field descriptions**:
+
+- `version` - RHV version
+- `hostname` - RHV Manager hostname
+- `username` - RHV admin username
+- `password` - RHV password
+- `datacenter` - Your datacenter name
+- `cluster` - Your cluster name
+- `template_name` - Template to use for tests (must exist)
+- `ca_cert` - Optional: Path to CA cert file (leave empty to skip verification)
+
+**Required fields**: All except `ca_cert` (optional).
+
+---
+
+**OpenStack Example:**
+
+<!-- pragma: allowlist secret -->
+```json
+{
+  "openstack": {
+    "version": "17.1",
+    "auth_url": "https://openstack.example.com:5000/v3",
+    "username": "admin",
+    "password": "your-password", <!-- pragma: allowlist secret -->
+    "project_name": "admin",
+    "domain_name": "Default",
+    "region": "RegionOne",
+    "base_vm_name": "rhel8-template"
+  }
+}
+```
+
+**Field descriptions**:
+
+- `version` - OpenStack version
+- `auth_url` - Keystone authentication URL
+- `username` - OpenStack username
+- `password` - OpenStack password
+- `project_name` - Project/tenant name
+- `domain_name` - Domain name
+- `region` - Region name
+- `base_vm_name` - Base instance to clone for tests (must exist)
+
+**All fields are required.**
+
+---
+
+### 3. Find Your Storage Class
+
+Check which storage classes are available in your OpenShift cluster:
+
+```bash
+oc get storageclass
+```
+
+Pick one that supports block storage (e.g., `ocs-storagecluster-ceph-rbd`, `ontap-san-block`).
+You'll use this name in the next step.
+
+### 4. Run Your First Test
+
+Execute tier1 tests (smoke tests) using the containerized test suite:
+
+**Using Docker**:
+
+```bash
+docker run --rm \
+  -v ~/.kube/config:/root/.kube/config:ro \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  quay.io/openshift-cnv/mtv-tests:latest \
+  uv run pytest -m tier1 -v \
+    --tc=source_provider_type:vsphere \
+    --tc=source_provider_version:8.0.1 \
+    --tc=storage_class:YOUR-STORAGE-CLASS
+```
+
+**Using Podman** (RHEL/Fedora with SELinux):
+
+```bash
+podman run --rm \
+  -v ~/.kube/config:/root/.kube/config:ro,z \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro,z \
+  quay.io/openshift-cnv/mtv-tests:latest \
+  uv run pytest -m tier1 -v \
+    --tc=source_provider_type:vsphere \
+    --tc=source_provider_version:8.0.1 \
+    --tc=storage_class:YOUR-STORAGE-CLASS
+```
+
+**Replace**:
+
+- `YOUR-STORAGE-CLASS` → Your storage class from step 3
+- `vsphere` → `rhv` or `openstack` if using different provider
+- `8.0.1` → Your provider version
+
+---
+
+## Running Different Test Categories
+
+The Quick Start runs **tier1** tests (smoke tests). You can run other test categories by changing the `-m` marker:
+
+| Marker | What It Tests | When to Use |
+|--------|---------------|-------------|
+| `tier1` | Smoke tests - critical paths | First run, quick validation |
+| `tier2` | Full functional test suite | Complete testing |
+| `copyoffload` | Fast migrations via shared storage | Testing storage arrays |
+| `warm` | Warm migrations (VMs stay running) | Specific scenario testing |
+| `cold` | Cold migrations (VMs powered off) | Specific scenario testing |
+
+**Examples** - Change `-m tier1` to run different tests:
+
+```bash
+# Tier2 tests
+docker run ... uv run pytest -m tier2 -v --tc=source_provider_type:vsphere ...
+
+# Copy-offload tests
+docker run ... uv run pytest -m copyoffload -v --tc=source_provider_type:vsphere ...
+
+# Combine markers
+docker run ... uv run pytest -m "tier1 or tier2" -v --tc=source_provider_type:vsphere ...
+```
+
+---
+
+## Copy-Offload: Accelerated Migrations (Advanced)
+
+**What is copy-offload?** A feature that speeds up migrations 3-5x when your source and target use shared
+storage arrays.
+
+**When to use this**: If your vSphere datastore and OpenShift storage use the same storage backend
+(NetApp ONTAP, Pure Storage, Dell PowerMax/PowerFlex).
+
+**Requirements**:
+
+- Shared storage array between source and target
+- Source VM must have cloud-init configured (contact team for cloud-init script)
+
+**Setup**: Add `copyoffload` section to your `.providers.json`:
+
+<!-- pragma: allowlist secret -->
+```json
+{
+  "vsphere": {
+    "version": "8.0.3.00400",
+    "hostname": "vcenter.example.com",
+    "username": "administrator@vsphere.local",
+    "password": "your-password", <!-- pragma: allowlist secret -->
+    "datacenter": "DC1",
+    "cluster": "Cluster1",
+    "vm_base_name": "rhel8-template",
+    "copyoffload": {
+      "storage_vendor_product": "ontap",
+      "datastore_id": "datastore-123",
+      "template_name": "rhel9-template",
+      "storage_hostname": "storage.example.com",
+      "storage_username": "admin",
+      "storage_password": "password",  <!-- pragma: allowlist secret -->
+      "ontap_svm": "vserver-name",
+      "esxi_host": "esxi01.example.com"
+    }
+  }
+}
+```
+
+**Vendor-specific fields**:
+
+- NetApp ONTAP: `ontap_svm`
 - Pure Storage: `pure_cluster_prefix`
 - PowerMax: `powermax_symmetrix_id`
 - PowerFlex: `powerflex_system_id`
 
-**Customizing Source VM:**
-
-By default, copy-offload tests use VM names defined in `tests/tests_config/config.py` (e.g., `xcopy-template-test`).
-You can override the source VM name for all cloning operations without modifying code:
-
-```json
-"copyoffload": {
-  "default_vm_name": "my-custom-vm",
-  ...
-}
-```
-
-This allows you to:
-
-- Use a different VM for testing without changing test configuration
-- Point to environment-specific VMs (e.g., development vs staging golden images)
-- Test with your own custom base VM
-
-**Note:** The override only affects tests with `"clone": true` enabled. The source VM must exist in vSphere,
-be powered off, and be accessible before running tests.
-
-**Target ESXi Host Placement:**
-
-You can force cloned VMs to be placed on a specific ESXi host by specifying `esxi_host`:
-
-```json
-"copyoffload": {
-  "esxi_host": "<esxi-host-ip-or-hostname>",
-  ...
-}
-```
-
-This is useful for:
-
-- Storage array igroup configuration requirements
-- Testing specific host hardware or configurations
-- Ensuring VMs land on hosts with proper storage connectivity
-
-**RDM Disk Testing:**
-
-To test migration of VMs with RDM (Raw Device Mapping) disks, add `rdm_lun_uuid` to your copyoffload config:
-
-```json
-"copyoffload": {
-  "rdm_lun_uuid": "naa.XXXXXXXXXXXXXXX",
-  ...
-}
-```
-
-The RDM test (`test_copyoffload_rdm_virtual_disk_migration`) validates migration of VMs with RDM disks
-in virtual compatibility mode. Physical compatibility mode foundation is in place for future tests.
-
-**Security Note:** For development/testing, credentials can be stored in `.providers.json`.
-For production/CI, use environment variables to override sensitive values without modifying config files:
+**Run copy-offload tests**:
 
 ```bash
-# Optional: Override credentials with environment variables (overrides .providers.json)
-export COPYOFFLOAD_STORAGE_HOSTNAME=storage.example.com
-export COPYOFFLOAD_STORAGE_USERNAME=admin
-export COPYOFFLOAD_STORAGE_PASSWORD=secretpassword
-export COPYOFFLOAD_ONTAP_SVM=vserver-name  # For NetApp ONTAP only
+docker run --rm -v ~/.kube/config:/root/.kube/config:ro \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  quay.io/openshift-cnv/mtv-tests:latest \
+  uv run pytest -m copyoffload -v \
+    --tc=source_provider_type:vsphere \
+    --tc=source_provider_version:8.0.3.00400 \
+    --tc=storage_class:ontap-san-block
 ```
 
-If credentials are already in `.providers.json`, environment variables are not required.
+---
 
-**Run the tests:**
+## Useful Test Options
+
+### Debug and Troubleshooting Flags
+
+Add these flags to any test run (Docker, Podman, or local) for debugging:
 
 ```bash
-uv run pytest -m copyoffload \
-  --tc=cluster_host:https://api.example.cluster:6443 \
+# Enable verbose output
+pytest -v                      # Verbose test names
+
+# Enable debug logging
+pytest -s -vv                  # Very verbose with output capture disabled
+
+# Set MTV/OpenShift debug level
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+docker run -e OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG ...
+
+# Keep resources after test for inspection
+pytest --skip-teardown         # Don't delete VMs, plans, etc. after tests
+
+# Skip data collector (faster, but no resource tracking)
+pytest --skip-data-collector   # Don't track created resources
+
+# Change data collector output location
+pytest --data-collector-path /tmp/my-logs
+
+# Run a specific test from a marker/suite
+pytest -k test_name  # Run only tests matching pattern
+pytest -m copyoffload -k test_copyoffload_thin_migration  # Run only thin test from copyoffload marker
+```
+
+**Example - Run tier1 with debug mode and keep resources**:
+
+```bash
+docker run --rm \
+  -v ~/.kube/config:/root/.kube/config:ro \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  -e OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG \
+  quay.io/openshift-cnv/mtv-tests:latest \
+  uv run pytest -s -vv -m tier1 --skip-teardown \
+    --tc=source_provider_type:vsphere \
+    --tc=storage_class:YOUR-STORAGE-CLASS
+```
+
+**When to use these flags**:
+
+- `--skip-teardown` - Test failed and you want to inspect the created VMs/plans
+- `--skip-data-collector` - Running many quick tests and don't need resource tracking
+- `-s -vv` - Test is failing and you need detailed output to diagnose
+- `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` - Need to see all API calls to OpenShift
+- `-k` - Run only specific tests by name pattern (useful for debugging or running individual tests)
+
+### Running Specific Tests with `-k`
+
+The `-k` flag allows you to run specific tests by matching their names:
+
+```bash
+# Run only the thin migration test from copyoffload
+docker run ... uv run pytest -k test_copyoffload_thin_migration -v \
+  --tc=source_provider_type:vsphere --tc=storage_class:ontap-san-block
+
+# Run multiple tests with pattern matching
+docker run ... uv run pytest -k "test_copyoffload_multi_disk" -v ...  # Matches both multi-disk tests
+docker run ... uv run pytest -k "thin or thick" -v ...                 # Matches thin and thick tests
+```
+
+Use `pytest --collect-only -q` to list all available test names in the suite.
+
+---
+
+## Running as OpenShift Job
+
+The Quick Start runs tests from your local machine. For **long-running or automated tests**,
+run them as OpenShift Jobs instead.
+
+| | Local Docker/Podman (Quick Start) | OpenShift Job |
+|---|---|---|
+| **Best for** | Quick tier1 tests, development | Tier2 tests, overnight runs, CI/CD |
+| **Runs where** | Your local machine | Inside OpenShift cluster |
+| **Config source** | Local `.providers.json` file | OpenShift secret |
+| **Can disconnect?** | ❌ No - must stay connected | ✅ Yes - tests continue |
+| **Setup** | Simple - just run docker command | Requires creating secret + Job |
+
+**How OpenShift Jobs work**:
+
+1. **Create secret**: Store your `.providers.json` in OpenShift (one-time setup)
+2. **Create Job**: Define what tests to run (tier1, tier2, copyoffload, etc.)
+3. **Job executes**: OpenShift schedules and runs the test container
+4. **View logs**: Use `oc logs` to see results
+
+### 1. Store Configuration as Secret
+
+This stores your provider credentials securely in OpenShift:
+
+```bash
+oc create namespace mtv-tests
+oc create secret generic mtv-test-config \
+  --from-file=providers.json=.providers.json \
+  -n mtv-tests
+```
+
+### 2. Create and Run Job
+
+Choose which tests to run. Each example below creates a Job that:
+
+- Pulls the test container image
+- Loads your provider config from the secret
+- Executes the specified tests
+- Writes results to pod logs
+
+### Example 1: Run tier1 tests (smoke tests)
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mtv-tier1-tests
+  namespace: mtv-tests
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: tests
+        image: quay.io/openshift-cnv/mtv-tests:latest
+        command:
+          - uv
+          - run
+          - pytest
+          - -m
+          - tier1
+          - -v
+          - --tc=source_provider_type:vsphere
+          - --tc=source_provider_version:8.0.1
+          - --tc=storage_class:YOUR-STORAGE-CLASS
+        volumeMounts:
+        - name: config
+          mountPath: /app/.providers.json
+          subPath: providers.json
+      volumes:
+      - name: config
+        secret:
+          secretName: mtv-test-config
+EOF
+```
+
+### Example 2: Run copy-offload tests (fast migrations)
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mtv-copyoffload-tests
+  namespace: mtv-tests
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: tests
+        image: quay.io/openshift-cnv/mtv-tests:latest
+        command:
+          - uv
+          - run
+          - pytest
+          - -m
+          - copyoffload
+          - -v
+          - --tc=source_provider_type:vsphere
+          - --tc=source_provider_version:8.0.3.00400
+          - --tc=storage_class:ontap-san-block
+        volumeMounts:
+        - name: config
+          mountPath: /app/.providers.json
+          subPath: providers.json
+      volumes:
+      - name: config
+        secret:
+          secretName: mtv-test-config
+EOF
+```
+
+### 3. Monitor and Manage Jobs
+
+**View test execution logs** (follow in real-time):
+
+```bash
+oc logs -n mtv-tests job/mtv-tier1-tests -f
+```
+
+**Check if Job completed successfully**:
+
+```bash
+oc get jobs -n mtv-tests
+# Look for "COMPLETIONS" showing 1/1 = success
+```
+
+**Clean up after tests finish**:
+
+```bash
+oc delete job mtv-tier1-tests -n mtv-tests
+```
+
+---
+
+## Test Results and Reports
+
+Tests automatically generate a **JUnit XML report** (`junit-report.xml`) containing:
+
+- Test results (passed/failed/skipped)
+- Execution times
+- Error messages and stack traces
+- Test metadata
+
+**Accessing the report**:
+
+**From local Docker/Podman run**:
+
+```bash
+# Mount a volume to save the report
+docker run --rm \
+  -v ~/.kube/config:/root/.kube/config:ro \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  -v $(pwd)/results:/app \
+  quay.io/openshift-cnv/mtv-tests:latest \
+  uv run pytest -m tier1 -v \
+    --tc=source_provider_type:vsphere \
+    --tc=storage_class:YOUR-STORAGE-CLASS
+
+# Report will be saved to ./results/junit-report.xml
+```
+
+**From OpenShift Job**:
+
+```bash
+# Copy report from completed pod
+POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-tier1-tests -o jsonpath='{.items[0].metadata.name}')
+oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
+```
+
+**View report in CI/CD tools**: Most CI/CD platforms (Jenkins, GitLab CI, GitHub Actions) can parse JUnit XML
+for test result dashboards.
+
+---
+
+## Troubleshooting
+
+### Error: "pytest: command not found"
+
+Make sure you're using `uv run pytest` (not just `pytest`):
+
+```bash
+# ✅ Correct
+docker run ... uv run pytest -m tier1 ...
+
+# ❌ Wrong
+docker run ... pytest -m tier1 ...
+```
+
+### Authentication Failed
+
+```bash
+oc whoami
+oc auth can-i create virtualmachines
+```
+
+### Provider Connection Failed
+
+```bash
+# Test connectivity from cluster
+oc run test-curl --rm -it --image=curlimages/curl -- curl -k https://vcenter.example.com
+
+# Verify credentials
+cat .providers.json | jq '.vsphere'
+```
+
+### Storage Class Not Found
+
+```bash
+oc get storageclass  # Use actual storage class name
+```
+
+### Migration Stuck
+
+```bash
+# Check MTV operator logs
+oc logs -n openshift-mtv deployment/forklift-controller -f
+
+# Check plan status
+oc get plans -A
+oc describe plan <plan-name> -n openshift-mtv
+```
+
+### Collect Debug Information
+
+```bash
+oc adm must-gather --image=quay.io/konveyor/forklift-must-gather:latest --dest-dir=/tmp/mtv-logs
+```
+
+### Manual Resource Cleanup
+
+If tests fail or you used `--skip-teardown`, clean up manually:
+
+```bash
+# Using resource tracker (if data collector was enabled)
+uv run tools/clean_cluster.py .data-collector/resources.json
+
+# Or manually delete resources
+oc delete vm --all -n <test-namespace>
+oc delete plan --all -n openshift-mtv
+oc delete provider <provider-name> -n openshift-mtv
+```
+
+---
+
+## FAQ
+
+**Q: Do I need Python/pytest/uv on my machine?**  
+A: No. Everything runs inside the container. You only need Docker/Podman and `oc` CLI.
+
+**Q: How long do tests take?**  
+A: Test duration varies. Tier1 tests are fastest (smoke tests), tier2 runs the full suite, and copy-offload
+tests are optimized for speed with shared storage.
+
+**Q: Can I run on SNO (Single Node OpenShift)?**  
+A: Yes. Tests work on SNO clusters.
+
+**Q: What's the difference between Docker run and OpenShift Job?**  
+A: Docker run uses local `.providers.json`. Job uses OpenShift secret and runs inside the cluster.
+
+**Q: Where do I get cloud-init script for copy-offload?**  
+A: Contact the team if you need the cloud-init configuration for copy-offload testing.
+
+**Q: Do tests generate reports?**  
+A: Yes. Tests automatically generate a JUnit XML report (`junit-report.xml`) with test results, execution times,
+and error details. See the "Test Results and Reports" section for how to access it.
+
+**Q: How do I debug a failing test?**  
+A: Use `--skip-teardown` to keep resources after test, and `-s -vv` for verbose output.
+Set `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` for API call logs. See the "Useful Test Options" section for details.
+
+---
+
+## Advanced Topics
+
+### Building the Container Image Locally
+
+If you need to build the test image yourself (for development or customization):
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/mtv-api-tests.git
+cd mtv-api-tests
+
+# Build with Docker
+docker build -t mtv-api-tests:latest .
+
+# Or build with Podman
+podman build -t mtv-api-tests:latest .
+
+# Run your locally built image
+docker run --rm \
+  -v ~/.kube/config:/root/.kube/config:ro \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  mtv-api-tests:latest \
+  uv run pytest -m tier1 -v \
+    --tc=source_provider_type:vsphere \
+    --tc=storage_class:YOUR-STORAGE-CLASS
+```
+
+**Optional: Push to your own registry**:
+
+```bash
+docker tag mtv-api-tests:latest quay.io/your-org/mtv-tests:latest
+docker push quay.io/your-org/mtv-tests:latest
+```
+
+---
+
+### Running Locally Without Container
+
+**For test developers** who want to run tests directly on their machine (requires manual setup).
+
+### Prerequisites (Must Install Manually)
+
+**System packages**:
+
+```bash
+# RHEL/Fedora
+sudo dnf install gcc clang python3-devel libxml2-devel libcurl-devel openssl-devel
+
+# Ubuntu/Debian
+sudo apt install gcc clang python3-dev libxml2-dev libcurl4-openssl-dev libssl-dev
+
+# macOS
+brew install gcc python@3.12 libxml2 curl openssl
+```
+
+**Required tools**:
+
+- Python 3.12+
+- uv package manager
+- oc CLI
+- virtctl
+
+### Setup and Run
+
+```bash
+# 1. Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 2. Clone repository and install dependencies
+git clone https://github.com/your-org/mtv-api-tests.git  # Replace with actual repo URL
+cd mtv-api-tests
+uv sync
+
+# 3. Run tests
+uv run pytest -v \
+  --tc=cluster_host:https://api.cluster.com:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'YOUR_PASSWORD' \  # pragma: allowlist secret
+  --tc=cluster_password:'PASSWORD' \  # pragma: allowlist secret
   --tc=source_provider_type:vsphere \
-  --tc=source_provider_version:8.0.3.00400 \
-  --tc=storage_class:rhosqe-ontap-san-block \
-  --tc=target_ocp_version:4.18
+  --tc=source_provider_version:8.0.1 \
+  --tc=storage_class:standard-csi
+
+# For debug options (--skip-teardown, -s -vv, etc.), see "Useful Test Options" section above
 ```
 
-## Release new version
-
-### requirements
-
-- Export GitHub token
-
-```bash
-export GITHUB_TOKEN=<your_github_token>
-```
-
-- [release-it](https://github.com/release-it/release-it)
-
-```bash
-sudo npm install --global release-it
-npm install --save-dev @release-it/bumper
-```
-
-### usage
-
-- Create a release, run from the relevant branch.
-  To create a release, run:
-
-```bash
-git main
-git pull
-release-it # Follow the instructions
-
-```
+> **Note**: The containerized approach (Quick Start) is **strongly recommended**. Local setup requires manual
+> installation of system dependencies and is primarily for test development.
