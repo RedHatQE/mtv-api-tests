@@ -807,10 +807,14 @@ def test_copyoffload_multi_datastore_migration(
     storage_class = py_config["storage_class"]
 
     # Validate required copy-offload parameters
-    if not all([storage_vendor_product, datastore_id]):
+    missing_params = []
+    if not storage_vendor_product:
+        missing_params.append("storage_vendor_product")
+    if not datastore_id:
+        missing_params.append("datastore_id")
+    if missing_params:
         pytest.fail(
-            "Missing required copy-offload parameters in config: "
-            "'storage_vendor_product' and 'datastore_id' must be set."
+            f"Missing required copy-offload parameters in config: {', '.join(missing_params)}"
         )
 
     # For multi-datastore test, ensure secondary datastore is configured
