@@ -326,6 +326,12 @@ def get_storage_migration_map(
     storage_map_list: list[dict[str, Any]] = []
 
     # Check if copy-offload parameters are provided
+    if secondary_datastore_id and not datastore_id:
+        raise ValueError("secondary_datastore_id requires datastore_id to be set")
+
+    if datastore_id and not offload_plugin_config:
+        raise ValueError("datastore_id requires offload_plugin_config to be set")
+
     if datastore_id and offload_plugin_config:
         # Copy-offload migration mode
         datastores_to_map = [datastore_id]
