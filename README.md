@@ -43,10 +43,17 @@ oc get csv -n openshift-mtv | grep mtv  # Verify MTV operator
 
 ### 1. Build and Push the Test Image
 
-**Important**: The test image is not available in a public registry. You must build and push it to your own registry first.
+**Important**: A pre-built public image is available at `ghcr.io/redhatqe/mtv-api-tests:latest`. You can use it directly
+or build and push your own custom image.
 
-> **TBD**: A pre-built public image will be provided in the future. Once available, you can skip this step and use
-> the public image directly.
+**Option A: Use the public image** (recommended):
+
+```bash
+# Use the pre-built image directly
+IMAGE=ghcr.io/redhatqe/mtv-api-tests:latest
+```
+
+**Option B: Build your own custom image**:
 
 ```bash
 # Clone the repository
@@ -136,7 +143,9 @@ Create a `.providers.json` file in your current directory with your provider's d
     "fqdn": "rhvm.example.com",
     "api_url": "https://rhvm.example.com/ovirt-engine/api",
     "username": "admin@internal",
-    "password": "your-password"  <!-- pragma: allowlist secret -->
+    "password": "your-password",  <!-- pragma: allowlist secret -->
+    "guest_vm_linux_user": "root",
+    "guest_vm_linux_password": "your-vm-password"  <!-- pragma: allowlist secret -->
   }
 }
 ```
@@ -150,6 +159,42 @@ Create a `.providers.json` file in your current directory with your provider's d
 - `api_url` - RHV API endpoint (format: `https://{fqdn}/ovirt-engine/api`)
 - `username` - RHV admin username
 - `password` - RHV password
+- `guest_vm_linux_user` - Username for SSH to Linux VMs (usually `root`)
+- `guest_vm_linux_password` - Password for Linux VMs
+
+**All fields are required.**
+
+---
+
+**OVA Example:**
+
+<!-- pragma: allowlist secret -->
+```json
+{
+  "ova-1.0": {
+    "type": "ova",
+    "version": "1.0",
+    "fqdn": "nfs-server.example.com",
+    "api_url": "nfs://nfs-server.example.com/path/to/ova-files",
+    "username": "nfs-user",
+    "password": "your-password",  <!-- pragma: allowlist secret -->
+    "guest_vm_linux_user": "root",
+    "guest_vm_linux_password": "your-vm-password"  <!-- pragma: allowlist secret -->
+  }
+}
+```
+
+**Field descriptions**:
+
+- **Key format**: `"ova-1.0"` - Must be `{type}-{version}`
+- `type` - Provider type (always `"ova"`)
+- `version` - Version placeholder (can be any value, e.g., "1.0")
+- `fqdn` - NFS server hostname or IP address
+- `api_url` - NFS share URL where OVA files are located (format: `nfs://{hostname}/path`)
+- `username` - NFS username (if authentication required)
+- `password` - NFS password (if authentication required)
+- `guest_vm_linux_user` - Username for SSH to Linux VMs (usually `root`)
+- `guest_vm_linux_password` - Password for Linux VMs
 
 **All fields are required.**
 
@@ -217,7 +262,7 @@ Execute tier0 tests (smoke tests) using the containerized test suite:
 ```bash
 docker run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
-  <YOUR-REGISTRY>/mtv-tests:latest \
+  ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
@@ -231,7 +276,6 @@ docker run --rm \
 
 **Replace**:
 
-- `<YOUR-REGISTRY>` → Your container registry from step 1 (e.g., `quay.io/youruser`)
 - `https://api.your-cluster.com:6443` → Your OpenShift API URL
 - `kubeadmin` → Your cluster username
 - `your-cluster-password` → Your cluster password
@@ -338,7 +382,7 @@ storage arrays.
 ```bash
 docker run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
-  <YOUR-REGISTRY>/mtv-tests:latest \
+  ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m copyoffload -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
@@ -387,7 +431,7 @@ pytest -m copyoffload -k test_copyoffload_thin_migration  # Run only thin test f
 docker run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -e OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG \
-  <YOUR-REGISTRY>/mtv-tests:latest \
+  ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -s -vv -m tier0 --skip-teardown \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
@@ -477,7 +521,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: tests
-        image: <YOUR-REGISTRY>/mtv-tests:latest
+        image: ghcr.io/redhatqe/mtv-api-tests:latest
         command:
           - uv
           - run
@@ -517,7 +561,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: tests
-        image: <YOUR-REGISTRY>/mtv-tests:latest
+        image: ghcr.io/redhatqe/mtv-api-tests:latest
         command:
           - uv
           - run
@@ -583,7 +627,7 @@ Tests automatically generate a **JUnit XML report** (`junit-report.xml`) contain
 docker run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -v $(pwd)/results:/app \
-  <YOUR-REGISTRY>/mtv-tests:latest \
+  ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
