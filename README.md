@@ -1029,6 +1029,3 @@ uv run pytest -v \
 
 # For debug options (--skip-teardown, -s -vv, etc.), see "Useful Test Options" section above
 ```
-
-> **Note**: The containerized approach (Quick Start) is **strongly recommended**. Local setup requires manual
-> installation of system dependencies and is primarily for test development.
