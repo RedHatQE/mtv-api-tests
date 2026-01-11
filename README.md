@@ -25,7 +25,8 @@ You need a base VM/template in your source provider:
 | **OpenStack** | Instance | ACTIVE/SHUTOFF state, QEMU guest agent installed |
 | **OVA** ⚠️ Tech Preview | OVA file | NFS-accessible OVA files |
 
-**For copy-offload tests only**: VM must have cloud-init script configured (available on request).
+> **Note**: Copy-offload tests have additional prerequisites. See the
+> [Copy-Offload Testing Guide](docs/how-to-run-copyoffload-tests.md) for details.
 
 ### Verify Setup
 
@@ -117,7 +118,7 @@ virtualization platform.
 > repository's pre-commit hooks** but are **NOT valid JSON**. Do NOT copy these comments to your actual
 > `.providers.json` file. They exist only for documentation tooling, not security.
 
-Create a `.providers.json` file in your current directory with your provider's details:
+Create a `.providers.json` file in your current directory with your provider's details.
 
 **VMware vSphere Example:**
 
@@ -136,130 +137,22 @@ Create a `.providers.json` file in your current directory with your provider's d
 }
 ```
 
-**Field descriptions**:
+**Key requirements:**
 
-- **Key format**: `"vsphere-8.0.1"` - Must be `{type}-{version}`
-- `type` - Provider type (always `"vsphere"`)
-- `version` - Your vSphere version (must match the key)
-- `fqdn` - vCenter hostname or IP address
-- `api_url` - vCenter API endpoint (format: `https://{fqdn}/sdk`)
-- `username` - vCenter admin username
-- `password` - vCenter password
-- `guest_vm_linux_user` - Username for SSH to Linux VMs (usually `root`)
-- `guest_vm_linux_password` - Password for Linux VMs
+- Configuration key must follow pattern: `{type}-{version}` (e.g., `"vsphere-8.0.1"` for vSphere 8.0.1)
+- Replace `8.0.1` with your actual vSphere version - both the key and `version` field must match
+- All fields shown above are required
+- Replace placeholder values with your actual credentials and endpoints
 
-**All fields are required.**
+**For other providers** (RHV, OpenStack, OVA, or copy-offload configuration):
 
----
-
-**RHV Example:**
-
-```json
-{
-  "ovirt-4.4": {
-    "type": "ovirt",
-    "version": "4.4",
-    "fqdn": "rhvm.example.com",
-    "api_url": "https://rhvm.example.com/ovirt-engine/api",
-    "username": "admin@internal",
-    "password": "your-password",  # pragma: allowlist secret
-    "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "your-vm-password"  # pragma: allowlist secret
-  }
-}
+```bash
+# Use the example file as a template
+cp .providers.json.example .providers.json
+# Edit with your actual values
 ```
 
-**Field descriptions**:
-
-- **Key format**: `"ovirt-4.4"` - Must be `{type}-{version}`
-- `type` - Provider type (always `"ovirt"`)
-- `version` - RHV version (must match the key)
-- `fqdn` - RHV Manager hostname or IP address
-- `api_url` - RHV API endpoint (format: `https://{fqdn}/ovirt-engine/api`)
-- `username` - RHV admin username
-- `password` - RHV password
-- `guest_vm_linux_user` - Username for SSH to Linux VMs (usually `root`)
-- `guest_vm_linux_password` - Password for Linux VMs
-
-**All fields are required.**
-
----
-
-**OVA Example:** ⚠️ **Technology Preview**
-
-> **Note**: OVA provider is in Technology Preview and not supported for production use.
-
-```json
-{
-  "ova-1.0": {
-    "type": "ova",
-    "version": "1.0",
-    "fqdn": "nfs-server.example.com",
-    "api_url": "nfs://nfs-server.example.com/path/to/ova-files",
-    "username": "nfs-user",
-    "password": "your-password",  # pragma: allowlist secret
-    "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "your-vm-password"  # pragma: allowlist secret
-  }
-}
-```
-
-**Field descriptions**:
-
-- **Key format**: `"ova-1.0"` - Must be `{type}-{version}`
-- `type` - Provider type (always `"ova"`)
-- `version` - Version placeholder (can be any value, e.g., "1.0")
-- `fqdn` - NFS server hostname or IP address
-- `api_url` - NFS share URL where OVA files are located (format: `nfs://{hostname}/path`)
-- `username` - NFS username (if authentication required)
-- `password` - NFS password (if authentication required)
-- `guest_vm_linux_user` - Username for SSH to Linux VMs (usually `root`)
-- `guest_vm_linux_password` - Password for Linux VMs
-
-**All fields are required.**
-
----
-
-**OpenStack Example:**
-
-```json
-{
-  "openstack-17.1": {
-    "type": "openstack",
-    "version": "17.1",
-    "fqdn": "openstack.example.com",
-    "api_url": "https://openstack.example.com:5000/v3",
-    "username": "admin",
-    "password": "your-password",  # pragma: allowlist secret
-    "user_domain_name": "Default",
-    "region_name": "RegionOne",
-    "project_name": "admin",
-    "user_domain_id": "default",
-    "project_domain_id": "default",
-    "guest_vm_linux_user": "cloud-user",
-    "guest_vm_linux_password": "your-vm-password"  # pragma: allowlist secret
-  }
-}
-```
-
-**Field descriptions**:
-
-- **Key format**: `"openstack-17.1"` - Must be `{type}-{version}`
-- `type` - Provider type (always `"openstack"`)
-- `version` - OpenStack version (must match the key)
-- `fqdn` - OpenStack hostname or IP address
-- `api_url` - Keystone authentication URL (typically port 5000)
-- `username` - OpenStack username
-- `password` - OpenStack password
-- `user_domain_name` - User domain name
-- `region_name` - Region name
-- `project_name` - Project/tenant name
-- `user_domain_id` - User domain ID
-- `project_domain_id` - Project domain ID
-- `guest_vm_linux_user` - Username for SSH to Linux VMs
-- `guest_vm_linux_password` - Password for Linux VMs
-
-**All fields are required.**
+See `.providers.json.example` for complete templates of all supported providers.
 
 ---
 
@@ -334,172 +227,11 @@ podman run ... uv run pytest -m "tier0 or warm" -v --tc=source_provider_type:vsp
 
 ---
 
-## Copy-Offload: Accelerated Migrations (Advanced)
+## Running as OpenShift Job
 
-**What is copy-offload?** Copy-offload uses the vsphere-xcopy-volume-populator to leverage
-array-based cloning for accelerated VM migrations from vSphere to OpenShift when both environments
-share compatible storage infrastructure.
+For long-running test suites or automated CI/CD pipelines, you can run tests as OpenShift Jobs:
 
-For technical details, see the [vsphere-xcopy-volume-populator documentation](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator).
-
----
-
-### Copy-Offload Prerequisites
-
-Before running copy-offload tests, ensure your environment meets these requirements:
-
-#### 1. **VMware Environment**
-
-- **ESXi + vCenter** (recommended) or standalone ESXi
-- **Clone method configured**: Choose either VIB or SSH method
-  - **VIB**: Requires pre-installing VMware Installation Bundle on ESXi hosts
-  - **SSH**: Requires SSH access to ESXi hosts (simpler setup)
-  - See setup guide: [Clone Methods (VIB vs SSH)](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator#clone-methods-vib-vs-ssh)
-
-#### 2. **Shared Storage Configuration**
-
-- **Tested storage vendors**: These tests currently support:
-  - ✅ **NetApp ONTAP** (fully implemented)
-  - ✅ **Hitachi Vantara** (fully implemented)
-- **Additional vendors supported by copy-offload feature** (not yet implemented in test suite):
-  - Pure Storage, Dell (PowerMax/PowerFlex/PowerStore), HPE Primera/3PAR, Infinidat, IBM FlashSystem
-  - Full vendor list: [Supported Storage Providers](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator#supported-storage-providers)
-- **Storage type**: Must be SAN/Block (iSCSI or FC) - **NFS is not supported** for xcopy
-- **Configuration**: Same physical storage accessible from both VMware and OpenShift
-  - Use matching configurations (e.g., same NetApp SVM for both environments)
-
-#### 3. **OpenShift Environment**
-
-- **CNV (OpenShift Virtualization)** installed
-- **Storage configured**:
-  - Block storage class with vendor CSI driver (iSCSI/FC) - same storage as VMware
-  - File-based storage class for CDI scratch space (if needed)
-  - VolumeSnapshot classes configured per vendor CSI guide
-- **MTV (Migration Toolkit for Virtualization)** installed:
-  - For versions before 2.11: Enable copy-offload by adding to ForkliftController spec:
-
-    ```yaml
-    spec:
-      feature_copy_offload: 'true'
-    ```
-
-  - Configure storage secret in `openshift-mtv` namespace (see Configuration section below)
-  - Configure StorageMap for copy-offload storage mapping
-
-#### 4. **Template VM with Cloud-Init**
-
-Create or use an existing VM in vSphere configured with cloud-init for testing. The VM must have:
-
-- SSH access enabled with root user
-- Serial console configured for post-migration verification
-- Network configuration for connectivity
-
-**Cloud-init script**: The cloud-init configuration for copy-offload testing is maintained separately.
-To request access to the recommended cloud-init script and VM preparation guide, please:
-
-- Open an issue in this repository with the label "cloud-init-access"
-- Contact the MTV QE team through your Red Hat support channels
-- Reach out to the development team in the project communication channels
-
-Once you have the cloud-init script configured, use this VM name as the `default_vm_name` in your
-copy-offload configuration.
-
----
-
-### Configuration
-
-Add the `copyoffload` section to your `.providers.json` file:
-
-```json
-{
-  "vsphere-8.0.3.00400": {
-    "type": "vsphere",
-    "version": "8.0.3.00400",
-    "fqdn": "vcenter.example.com",
-    "api_url": "https://vcenter.example.com/sdk",
-    "username": "administrator@vsphere.local",
-    "password": "your-password",  # pragma: allowlist secret
-    "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "your-vm-password",  # pragma: allowlist secret
-    "copyoffload": {
-      "storage_vendor_product": "ontap",
-      "datastore_id": "datastore-123",
-      "default_vm_name": "rhel9-cloud-init-template",
-      "storage_hostname": "storage.example.com",
-      "storage_username": "admin",
-      "storage_password": "your-storage-password",  # pragma: allowlist secret
-      "ontap_svm": "vserver-name",
-      "esxi_clone_method": "ssh",
-      "esxi_host": "esxi01.example.com",
-      "esxi_user": "root",
-      "esxi_password": "your-esxi-password"  # pragma: allowlist secret
-    }
-  }
-}
-```
-
-#### Copy-offload Required Fields
-
-- `storage_vendor_product` - Storage vendor product name (currently supported: `"ontap"` or `"vantara"`)
-- `datastore_id` - vSphere datastore ID (e.g., `"datastore-123"`)
-- `default_vm_name` - Template/VM name configured with cloud-init
-- `storage_hostname` - Storage array management hostname/IP
-- `storage_username` - Storage array admin username
-- `storage_password` - Storage array admin password
-
-#### Clone Method Configuration
-
-**For SSH method** (simpler, recommended):
-
-- `esxi_clone_method: "ssh"`
-- `esxi_host` - ESXi hostname/IP
-- `esxi_user` - ESXi SSH username (typically `root`)
-- `esxi_password` - ESXi SSH password
-
-**For VIB method** (requires VIB pre-installation):
-
-- `esxi_clone_method: "vib"` (or omit, as it's the default)
-
-#### Vendor-Specific Fields
-
-**Currently implemented in test suite:**
-
-- **NetApp ONTAP** (`storage_vendor_product: "ontap"`):
-  - `ontap_svm` - SVM/vServer name (required)
-- **Hitachi Vantara** (`storage_vendor_product: "vantara"`):
-  - No additional fields required
-
-> **Note**: While the copy-offload feature supports additional storage vendors (Pure Storage, Dell PowerMax/PowerFlex,
-> HPE, Infinidat, IBM FlashSystem), vendor-specific configuration for these is not yet implemented in this test suite.
-> Contributions welcome!
-
-#### Multi-Datastore Support (Advanced)
-
-For VMs with disks distributed across multiple datastores on the same storage array:
-
-- `datastore_id` - Primary/default datastore for VM base disks (required)
-- `secondary_datastore_id` - Secondary datastore on the same storage system for additional disks
-  (⚠️ **Future**: Not yet fully implemented in test suite)
-
-**example**: The `test_copyoffload_multi_disk_different_path_migration` test will use this feature to
-validate multi-datastore migrations.
-
-#### RDM (Raw Device Mapping) Support (Advanced)
-
-For testing RDM virtual disk migrations:
-
-- `rdm_lun_uuid` - UUID of the RDM LUN to use for RDM virtual disk tests (optional)
-
-**example**: The `test_copyoffload_rdm_virtual_disk_migration` test uses this feature to validate
-migration of VMs with RDM virtual disks.
-
----
-
-### Running Copy-Offload Tests
-
-Copy-offload tests are designed to run as **OpenShift Jobs** for long-running migrations. Follow these steps:
-
-#### Step 1: Create Secret with Configuration
+### Step 1: Create Secret with Configuration
 
 Store your `.providers.json` file as an OpenShift secret:
 
@@ -510,12 +242,12 @@ oc create secret generic mtv-test-config \
   -n mtv-tests
 ```
 
-#### Step 2: Create and Run Job
+### Step 2: Create and Run Job
 
-Use this template to run copy-offload tests. Customize the placeholders:
+Use this template to run tests. Customize the placeholders:
 
-- `[JOB_NAME]` - Unique job name (e.g., `mtv-copyoffload-tests`)
-- `[TEST_MARKERS]` - Pytest marker (`copyoffload`)
+- `[JOB_NAME]` - Unique job name (e.g., `mtv-tier0-tests`, `mtv-warm-tests`, `mtv-copyoffload-tests`)
+- `[TEST_MARKERS]` - Pytest marker(s) (e.g., `tier0`, `warm`, `copyoffload`)
 - `[TEST_FILTER]` - Optional: specific test name for `-k` flag (omit lines for all tests)
 
 **Template:**
@@ -533,7 +265,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: tests
-        image: ghcr.io/redhatqe/mtv-api-tests:latest  # Or use your custom image from Quick Start Step 1 Option B
+        image: ghcr.io/redhatqe/mtv-api-tests:latest  # Or use your custom image
         command:
           - uv
           - run
@@ -549,7 +281,7 @@ spec:
           - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
           - --tc=source_provider_type:vsphere
           - --tc=source_provider_version:8.0.3.00400
-          - --tc=storage_class:ontap-san-block
+          - --tc=storage_class:your-storage-class
         volumeMounts:
         - name: config
           mountPath: /app/.providers.json
@@ -561,45 +293,29 @@ spec:
 EOF
 ```
 
-##### Example 1: Run all copy-offload tests
+### Example: Run tier0 tests
 
 Replace placeholders:
 
-- `[JOB_NAME]` → `mtv-copyoffload-tests`
-- `[TEST_MARKERS]` → `copyoffload`
+- `[JOB_NAME]` → `mtv-tier0-tests`
+- `[TEST_MARKERS]` → `tier0`
 - Remove the commented `-k` and `[TEST_FILTER]` lines
-
-##### Example 2: Run a specific test
-
-Replace placeholders:
-
-- `[JOB_NAME]` → `mtv-copyoffload-thin-test`
-- `[TEST_MARKERS]` → `copyoffload`
-- Uncomment `-k` and `[TEST_FILTER]`, replace `[TEST_FILTER]` → `test_copyoffload_thin_migration`
 
 **Replace cluster configuration:**
 
 - `ghcr.io/redhatqe/mtv-api-tests:latest` - Use this public image, or substitute with your custom image
-  if you built one in Quick Start Step 1 Option B (e.g., `<YOUR-REGISTRY>/mtv-tests:latest`)
+  from Quick Start Step 1 (e.g., `<YOUR-REGISTRY>/mtv-tests:latest`)
 - `api.your-cluster.com` - Your OpenShift cluster API endpoint
 - `kubeadmin` / `your-cluster-password` - Your cluster credentials
-- `8.0.3.00400` - Your vSphere version (must match key in `.providers.json`)
-- `ontap-san-block` - Your OpenShift storage class name
+- `vsphere` / `8.0.3.00400` - Your source provider type and version (must match key in `.providers.json`)
+- `your-storage-class` - Your OpenShift storage class name
 
-**Available test names** (for use with `-k` filter):
-
-- `test_copyoffload_thin_migration` - Thin provisioned disk migration
-- `test_copyoffload_thick_lazy_migration` - Thick lazy zeroed disk migration
-- `test_copyoffload_multi_disk_migration` - Multi-disk VM migration
-- `test_copyoffload_multi_disk_different_path_migration` - Multi-disk with different paths
-- `test_copyoffload_rdm_virtual_disk_migration` - RDM virtual disk migration
-
-#### Step 3: Monitor Test Execution
+### Step 3: Monitor Test Execution
 
 **Follow test logs in real-time**:
 
 ```bash
-oc logs -n mtv-tests job/mtv-copyoffload-tests -f
+oc logs -n mtv-tests job/mtv-tier0-tests -f
 ```
 
 **Check Job status**:
@@ -613,15 +329,32 @@ oc get jobs -n mtv-tests
 
 ```bash
 # Copy JUnit XML report from completed pod
-POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-copyoffload-tests -o jsonpath='{.items[0].metadata.name}')
+POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-tier0-tests -o jsonpath='{.items[0].metadata.name}')
 oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 ```
 
 **Clean up after tests**:
 
 ```bash
-oc delete job mtv-copyoffload-tests -n mtv-tests
+oc delete job mtv-tier0-tests -n mtv-tests
 ```
+
+---
+
+## Copy-Offload: Accelerated Migrations (Advanced)
+
+Copy-offload is an MTV feature that uses the storage backend to directly copy VM disks from vSphere datastores
+to OpenShift PVCs using XCOPY operations, bypassing the traditional v2v transfer path. This requires shared storage
+infrastructure between vSphere and OpenShift, VAAI (vSphere APIs for Array Integration) enabled on ESXi hosts,
+and a configured StorageMap with offload plugin settings.
+
+**For detailed instructions on running copy-offload tests**, including prerequisites, configuration, and
+troubleshooting, see:
+
+📖 **[Copy-Offload Testing Guide](docs/how-to-run-copyoffload-tests.md)**
+
+For technical implementation details, see the
+[vsphere-xcopy-volume-populator documentation](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator).
 
 ---
 
@@ -733,8 +466,8 @@ podman run --rm \
 **From OpenShift Job**:
 
 ```bash
-# Copy report from completed pod
-POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-copyoffload-tests -o jsonpath='{.items[0].metadata.name}')
+# Copy report from completed pod (replace JOB_NAME with your job name, e.g., mtv-tier0-tests)
+POD_NAME=$(oc get pods -n mtv-tests -l job-name=JOB_NAME -o jsonpath='{.items[0].metadata.name}')
 oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 ```
 
@@ -825,13 +558,6 @@ scenarios, and copy-offload tests are optimized for speed with shared storage.
 **Q: Can I run on SNO (Single Node OpenShift)?**
 A: Yes. SNO has been validated with copy-offload tests. Other test types may work but have not
 been specifically validated on SNO.
-
-**Q: What's the difference between Podman/Docker run and OpenShift Job?**
-A: Podman/Docker run uses local `.providers.json`. Job uses OpenShift secret and runs inside the cluster.
-
-**Q: Where do I get cloud-init script for copy-offload?**
-A: Contact the copyoffload development or QE teams if you need the cloud-init configuration for copy-offload
-testing. You can also reach out through your Red Hat support channels or open an issue in the project repository.
 
 **Q: Do tests generate reports?**
 A: Yes. Tests automatically generate a JUnit XML report (`junit-report.xml`) with test results, execution times,
