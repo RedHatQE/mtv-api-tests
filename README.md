@@ -111,14 +111,15 @@ virtualization platform.
 - **Use secret management**: For OpenShift deployments, use Kubernetes secrets (see OpenShift Job section)
 - **Delete when done**: Remove the file from local systems when no longer needed
 
-> **Note**: The `# pragma: allowlist secret` comments in examples below are for documentation purposes only
-> and allow secret detection tools to pass. They are NOT a substitute for proper secret handling practices.
+**About `# pragma: allowlist secret` comments:**
+
+> ⚠️ The JSON examples below contain `# pragma: allowlist secret` comments - these are **REQUIRED for this
+> repository's pre-commit hooks** but are **NOT valid JSON**. Do NOT copy these comments to your actual
+> `.providers.json` file. They exist only for documentation tooling, not security.
 
 Create a `.providers.json` file in your current directory with your provider's details:
 
 **VMware vSphere Example:**
-
-> **Note**: The example contains placeholder passwords. Replace with your actual credentials.
 
 ```json
 {
@@ -152,8 +153,6 @@ Create a `.providers.json` file in your current directory with your provider's d
 ---
 
 **RHV Example:**
-
-> **Note**: The example contains placeholder passwords. Replace with your actual credentials.
 
 ```json
 {
@@ -189,7 +188,6 @@ Create a `.providers.json` file in your current directory with your provider's d
 **OVA Example:** ⚠️ **Technology Preview**
 
 > **Note**: OVA provider is in Technology Preview and not supported for production use.
-> The example contains placeholder passwords. Replace with your actual credentials.
 
 ```json
 {
@@ -223,8 +221,6 @@ Create a `.providers.json` file in your current directory with your provider's d
 ---
 
 **OpenStack Example:**
-
-> **Note**: The example contains placeholder passwords. Replace with your actual credentials.
 
 ```json
 {
@@ -362,9 +358,12 @@ Before running copy-offload tests, ensure your environment meets these requireme
 
 #### 2. **Shared Storage Configuration**
 
-- **Supported vendors**: NetApp ONTAP, Pure Storage, Dell (PowerMax/PowerFlex/PowerStore),
-  Hitachi Vantara, HPE Primera/3PAR, Infinidat, IBM FlashSystem
-  - Full list: [Supported Storage Providers](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator#supported-storage-providers)
+- **Tested storage vendors**: These tests currently support:
+  - ✅ **NetApp ONTAP** (fully implemented)
+  - ✅ **Hitachi Vantara** (fully implemented)
+- **Additional vendors supported by copy-offload feature** (not yet implemented in test suite):
+  - Pure Storage, Dell (PowerMax/PowerFlex/PowerStore), HPE Primera/3PAR, Infinidat, IBM FlashSystem
+  - Full vendor list: [Supported Storage Providers](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator#supported-storage-providers)
 - **Storage type**: Must be SAN/Block (iSCSI or FC) - **NFS is not supported** for xcopy
 - **Configuration**: Same physical storage accessible from both VMware and OpenShift
   - Use matching configurations (e.g., same NetApp SVM for both environments)
@@ -411,8 +410,6 @@ copy-offload configuration.
 
 Add the `copyoffload` section to your `.providers.json` file:
 
-> **Note**: The example contains placeholder passwords. Replace with your actual credentials.
-
 ```json
 {
   "vsphere-8.0.3.00400": {
@@ -443,7 +440,7 @@ Add the `copyoffload` section to your `.providers.json` file:
 
 #### Copy-offload Required Fields
 
-- `storage_vendor_product` - Storage vendor product name (see supported list above)
+- `storage_vendor_product` - Storage vendor product name (currently supported: `"ontap"` or `"vantara"`)
 - `datastore_id` - vSphere datastore ID (e.g., `"datastore-123"`)
 - `default_vm_name` - Template/VM name configured with cloud-init
 - `storage_hostname` - Storage array management hostname/IP
@@ -465,19 +462,26 @@ Add the `copyoffload` section to your `.providers.json` file:
 
 #### Vendor-Specific Fields
 
-- **NetApp ONTAP**: `ontap_svm` - SVM/vServer name (required)
-- **Pure Storage**: `pure_cluster_prefix` - Cluster prefix (optional)
-- **PowerMax**: `powermax_symmetrix_id` - Symmetrix ID (required)
-- **PowerFlex**: `powerflex_system_id` - System ID (required)
+**Currently implemented in test suite:**
+
+- **NetApp ONTAP** (`storage_vendor_product: "ontap"`):
+  - `ontap_svm` - SVM/vServer name (required)
+- **Hitachi Vantara** (`storage_vendor_product: "vantara"`):
+  - No additional fields required
+
+> **Note**: While the copy-offload feature supports additional storage vendors (Pure Storage, Dell PowerMax/PowerFlex,
+> HPE, Infinidat, IBM FlashSystem), vendor-specific configuration for these is not yet implemented in this test suite.
+> Contributions welcome!
 
 #### Multi-Datastore Support (Advanced)
 
 For VMs with disks distributed across multiple datastores on the same storage array:
 
 - `datastore_id` - Primary/default datastore for VM base disks (required)
-- `secondary_datastore_id` - Secondary datastore on the same storage system for additional disks (optional)
+- `secondary_datastore_id` - Secondary datastore on the same storage system for additional disks
+  (⚠️ **Future**: Not yet fully implemented in test suite)
 
-**example**: The `test_copyoffload_multi_disk_different_path_migration` test uses this feature to
+**example**: The `test_copyoffload_multi_disk_different_path_migration` test will use this feature to
 validate multi-datastore migrations.
 
 #### RDM (Raw Device Mapping) Support (Advanced)
