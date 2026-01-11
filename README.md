@@ -561,16 +561,18 @@ spec:
 EOF
 ```
 
-**Example 1: Run all copy-offload tests**
+##### Example 1: Run all copy-offload tests
 
 Replace placeholders:
+
 - `[JOB_NAME]` → `mtv-copyoffload-tests`
 - `[TEST_MARKERS]` → `copyoffload`
 - Remove the commented `-k` and `[TEST_FILTER]` lines
 
-**Example 2: Run a specific test**
+##### Example 2: Run a specific test
 
 Replace placeholders:
+
 - `[JOB_NAME]` → `mtv-copyoffload-thin-test`
 - `[TEST_MARKERS]` → `copyoffload`
 - Uncomment `-k` and `[TEST_FILTER]`, replace `[TEST_FILTER]` → `test_copyoffload_thin_migration`
@@ -851,7 +853,8 @@ Set `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` for API call logs. See the "Usefu
 
 **System packages**:
 
-> **Note**: uv automatically downloads and manages Python versions—no system Python installation needed. However, the packages below are system-level compilation dependencies required by Python extensions used by the test suite
+> **Note**: uv automatically downloads and manages Python versions—no system Python installation needed. However,
+> the packages below are system-level compilation dependencies required by Python extensions used by the test suite
 
 ```bash
 # RHEL/Fedora
