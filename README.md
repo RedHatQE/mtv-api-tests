@@ -108,7 +108,7 @@ virtualization platform.
 - **Set restrictive permissions**: `chmod 600 .providers.json` (owner read/write only)
 - **Never commit to Git**: Add `.providers.json` to your `.gitignore` file
 - **Rotate secrets regularly**: Update passwords and credentials on a regular schedule
-- **Use secret management**: For OpenShift deployments, use Kubernetes secrets (see OpenShift Job section)
+- **Use secret management**: For OpenShift deployments, use Kubernetes secrets
 - **Delete when done**: Remove the file from local systems when no longer needed
 
 **About `# pragma: allowlist secret` comments:**
@@ -510,16 +510,22 @@ oc create secret generic mtv-test-config \
   -n mtv-tests
 ```
 
-#### Step 2: Run All Copy-Offload Tests
+#### Step 2: Create and Run Job
 
-Create an OpenShift Job to run the full copy-offload test suite:
+Use this template to run copy-offload tests. Customize the placeholders:
+
+- `[JOB_NAME]` - Unique job name (e.g., `mtv-copyoffload-tests`)
+- `[TEST_MARKERS]` - Pytest marker (`copyoffload`)
+- `[TEST_FILTER]` - Optional: specific test name for `-k` flag (omit lines for all tests)
+
+**Template:**
 
 ```bash
 cat <<EOF | oc apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: mtv-copyoffload-tests
+  name: [JOB_NAME]
   namespace: mtv-tests
 spec:
   template:
@@ -527,13 +533,16 @@ spec:
       restartPolicy: Never
       containers:
       - name: tests
-        image: ghcr.io/redhatqe/mtv-api-tests:latest
+        image: ghcr.io/redhatqe/mtv-api-tests:latest  # Or use your custom image from Quick Start Step 1 Option B
         command:
           - uv
           - run
           - pytest
           - -m
-          - copyoffload
+          - [TEST_MARKERS]
+          # Optional: Add these two lines to run a specific test
+          # - -k
+          # - [TEST_FILTER]
           - -v
           - --tc=cluster_host:https://api.your-cluster.com:6443
           - --tc=cluster_username:kubeadmin
@@ -552,58 +561,30 @@ spec:
 EOF
 ```
 
-**Replace**:
+**Example 1: Run all copy-offload tests**
 
+Replace placeholders:
+- `[JOB_NAME]` → `mtv-copyoffload-tests`
+- `[TEST_MARKERS]` → `copyoffload`
+- Remove the commented `-k` and `[TEST_FILTER]` lines
+
+**Example 2: Run a specific test**
+
+Replace placeholders:
+- `[JOB_NAME]` → `mtv-copyoffload-thin-test`
+- `[TEST_MARKERS]` → `copyoffload`
+- Uncomment `-k` and `[TEST_FILTER]`, replace `[TEST_FILTER]` → `test_copyoffload_thin_migration`
+
+**Replace cluster configuration:**
+
+- `ghcr.io/redhatqe/mtv-api-tests:latest` - Use this public image, or substitute with your custom image
+  if you built one in Quick Start Step 1 Option B (e.g., `<YOUR-REGISTRY>/mtv-tests:latest`)
 - `api.your-cluster.com` - Your OpenShift cluster API endpoint
 - `kubeadmin` / `your-cluster-password` - Your cluster credentials
 - `8.0.3.00400` - Your vSphere version (must match key in `.providers.json`)
 - `ontap-san-block` - Your OpenShift storage class name
 
-#### Step 3: Run a Specific Copy-Offload Test
-
-To run only one test from the suite, use the `-k` flag to filter by test name:
-
-```bash
-cat <<EOF | oc apply -f -
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: mtv-copyoffload-thin-test
-  namespace: mtv-tests
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: tests
-        image: ghcr.io/redhatqe/mtv-api-tests:latest
-        command:
-          - uv
-          - run
-          - pytest
-          - -m
-          - copyoffload
-          - -k
-          - test_copyoffload_thin_migration
-          - -v
-          - --tc=cluster_host:https://api.your-cluster.com:6443
-          - --tc=cluster_username:kubeadmin
-          - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
-          - --tc=source_provider_type:vsphere
-          - --tc=source_provider_version:8.0.3.00400
-          - --tc=storage_class:ontap-san-block
-        volumeMounts:
-        - name: config
-          mountPath: /app/.providers.json
-          subPath: providers.json
-      volumes:
-      - name: config
-        secret:
-          secretName: mtv-test-config
-EOF
-```
-
-**Available test names** (use with `-k` flag):
+**Available test names** (for use with `-k` filter):
 
 - `test_copyoffload_thin_migration` - Thin provisioned disk migration
 - `test_copyoffload_thick_lazy_migration` - Thick lazy zeroed disk migration
@@ -611,7 +592,7 @@ EOF
 - `test_copyoffload_multi_disk_different_path_migration` - Multi-disk with different paths
 - `test_copyoffload_rdm_virtual_disk_migration` - RDM virtual disk migration
 
-#### Step 4: Monitor Test Execution
+#### Step 3: Monitor Test Execution
 
 **Follow test logs in real-time**:
 
@@ -718,149 +699,6 @@ podman run --rm ghcr.io/redhatqe/mtv-api-tests:latest uv run pytest --collect-on
 
 ---
 
-## Running as OpenShift Job
-
-The Quick Start runs tests from your local machine. For **long-running or automated tests**,
-run them as OpenShift Jobs instead.
-
-| | Local Podman/Docker (Quick Start) | OpenShift Job |
-|---|---|---|
-| **Best for** | Quick tier0 tests, development | Long-running tests, overnight runs, CI/CD |
-| **Runs where** | Your local machine | Inside OpenShift cluster |
-| **Config source** | Local `.providers.json` file | OpenShift secret |
-| **Can disconnect?** | ❌ No - must stay connected | ✅ Yes - tests continue |
-| **Setup** | Simple - just run container | Requires creating secret + Job |
-
-**How OpenShift Jobs work**:
-
-1. **Create secret**: Store your `.providers.json` in OpenShift (one-time setup)
-2. **Create Job**: Define what tests to run (tier0, warm, copyoffload, etc.)
-3. **Job executes**: OpenShift schedules and runs the test container
-4. **View logs**: Use `oc logs` to see results
-
-### 1. Store Configuration as Secret
-
-This stores your provider credentials securely in OpenShift:
-
-```bash
-oc create namespace mtv-tests
-oc create secret generic mtv-test-config \
-  --from-file=providers.json=.providers.json \
-  -n mtv-tests
-```
-
-### 2. Create and Run Job
-
-Choose which tests to run. Each example below creates a Job that:
-
-- Pulls the test container image
-- Loads your provider config from the secret
-- Executes the specified tests
-- Writes results to pod logs
-
-### Example 1: Run tier0 tests (smoke tests)
-
-```bash
-cat <<EOF | oc apply -f -
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: mtv-tier0-tests
-  namespace: mtv-tests
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: tests
-        image: ghcr.io/redhatqe/mtv-api-tests:latest
-        command:
-          - uv
-          - run
-          - pytest
-          - -m
-          - tier0
-          - -v
-          - --tc=cluster_host:https://api.your-cluster.com:6443
-          - --tc=cluster_username:kubeadmin
-          - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
-          - --tc=source_provider_type:vsphere
-          - --tc=source_provider_version:8.0.1
-          - --tc=storage_class:YOUR-STORAGE-CLASS
-        volumeMounts:
-        - name: config
-          mountPath: /app/.providers.json
-          subPath: providers.json
-      volumes:
-      - name: config
-        secret:
-          secretName: mtv-test-config
-EOF
-```
-
-### Example 2: Run copy-offload tests (fast migrations)
-
-```bash
-cat <<EOF | oc apply -f -
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: mtv-copyoffload-tests
-  namespace: mtv-tests
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: tests
-        image: ghcr.io/redhatqe/mtv-api-tests:latest
-        command:
-          - uv
-          - run
-          - pytest
-          - -m
-          - copyoffload
-          - -v
-          - --tc=cluster_host:https://api.your-cluster.com:6443
-          - --tc=cluster_username:kubeadmin
-          - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
-          - --tc=source_provider_type:vsphere
-          - --tc=source_provider_version:8.0.3.00400
-          - --tc=storage_class:ontap-san-block
-        volumeMounts:
-        - name: config
-          mountPath: /app/.providers.json
-          subPath: providers.json
-      volumes:
-      - name: config
-        secret:
-          secretName: mtv-test-config
-EOF
-```
-
-### 3. Monitor and Manage Jobs
-
-**View test execution logs** (follow in real-time):
-
-```bash
-oc logs -n mtv-tests job/mtv-tier0-tests -f
-```
-
-**Check if Job completed successfully**:
-
-```bash
-oc get jobs -n mtv-tests
-# Look for "COMPLETIONS" showing 1/1 = success
-```
-
-**Clean up after tests finish**:
-
-```bash
-oc delete job mtv-tier0-tests -n mtv-tests
-```
-
----
-
 ## Test Results and Reports
 
 Tests automatically generate a **JUnit XML report** (`junit-report.xml`) containing:
@@ -894,7 +732,7 @@ podman run --rm \
 
 ```bash
 # Copy report from completed pod
-POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-tier0-tests -o jsonpath='{.items[0].metadata.name}')
+POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-copyoffload-tests -o jsonpath='{.items[0].metadata.name}')
 oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 ```
 
@@ -1013,8 +851,7 @@ Set `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` for API call logs. See the "Usefu
 
 **System packages**:
 
-> **Note**: Python is not listed as a requirement because `uv` automatically manages Python versions. The packages
-> below are compilation dependencies for Python extensions.
+> **Note**: uv automatically downloads and manages Python versions—no system Python installation needed. However, the packages below are system-level compilation dependencies required by Python extensions used by the test suite
 
 ```bash
 # RHEL/Fedora
@@ -1043,7 +880,7 @@ brew install gcc libxml2 curl openssl
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Clone repository and install dependencies
-git clone https://github.com/your-org/mtv-api-tests.git  # Replace with actual repo URL
+git clone https://github.com/RedHatQE/mtv-api-tests.git
 cd mtv-api-tests
 uv sync  # uv will automatically handle Python version
 
