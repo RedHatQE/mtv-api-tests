@@ -99,6 +99,21 @@ virtualization platform.
 - Location information (datacenter, cluster)
 - Base VM/template name to use for testing
 
+### Security Considerations
+
+**Protect your credentials file:**
+
+⚠️ **IMPORTANT**: The `.providers.json` file contains sensitive credentials. Follow these security practices:
+
+- **Set restrictive permissions**: `chmod 600 .providers.json` (owner read/write only)
+- **Never commit to Git**: Add `.providers.json` to your `.gitignore` file
+- **Rotate secrets regularly**: Update passwords and credentials on a regular schedule
+- **Use secret management**: For OpenShift deployments, use Kubernetes secrets (see OpenShift Job section)
+- **Delete when done**: Remove the file from local systems when no longer needed
+
+> **Note**: The `# pragma: allowlist secret` comments in examples below are for documentation purposes only
+> and allow secret detection tools to pass. They are NOT a substitute for proper secret handling practices.
+
 Create a `.providers.json` file in your current directory with your provider's details:
 
 **VMware vSphere Example:**
@@ -380,9 +395,15 @@ Create or use an existing VM in vSphere configured with cloud-init for testing. 
 - Serial console configured for post-migration verification
 - Network configuration for connectivity
 
-**Cloud-init script**: TBD
+**Cloud-init script**: The cloud-init configuration for copy-offload testing is maintained separately.
+To request access to the recommended cloud-init script and VM preparation guide, please:
 
-Once configured, use this VM name as the `default_vm_name` in your copy-offload configuration.
+- Open an issue in this repository with the label "cloud-init-access"
+- Contact the MTV QE team through your Red Hat support channels
+- Reach out to the development team in the project communication channels
+
+Once you have the cloud-init script configured, use this VM name as the `default_vm_name` in your
+copy-offload configuration.
 
 ---
 
@@ -685,7 +706,11 @@ podman run ... uv run pytest -k "test_copyoffload_multi_disk" -v ...  # Matches 
 podman run ... uv run pytest -k "thin or thick" -v ...                 # Matches thin and thick tests
 ```
 
-Use `pytest --collect-only -q` to list all available test names in the suite.
+**List all available test names** (run inside the container):
+
+```bash
+podman run --rm ghcr.io/redhatqe/mtv-api-tests:latest uv run pytest --collect-only -q
+```
 
 ---
 
@@ -950,7 +975,7 @@ oc delete provider <provider-name> -n openshift-mtv
 A: No. Everything runs inside the container. You only need Podman or Docker.
 
 **Q: How long do tests take?**
-A: Test duration varies. Tier0 tests are fastest (smoke tests), warm migration tests include warm migration
+A: Test duration varies. tier0 tests are fastest (smoke tests), warm migration tests include warm migration
 scenarios, and copy-offload tests are optimized for speed with shared storage.
 
 **Q: Can I run on SNO (Single Node OpenShift)?**
