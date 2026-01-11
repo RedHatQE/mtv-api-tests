@@ -60,7 +60,7 @@ IMAGE=ghcr.io/redhatqe/mtv-api-tests:latest
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/RedHatQE/mtv-api-tests.git
 cd mtv-api-tests
 
 # Build the image (use 'docker' if you prefer Docker)
