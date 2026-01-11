@@ -25,7 +25,7 @@ ignore_missing_imports = true
 dev = ["ipdb>=0.13.13", "ipython>=8.12.3", "python-jenkins>=1.8.2"]
 
 [project]
-requires-python = ">=3.12, <3.14"
+requires-python = ">=3.14, <3.15"
 name = "mtv-api-tests"
 version = "2.8.3"
 description = "MTV API Tests"
