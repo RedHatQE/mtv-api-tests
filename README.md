@@ -31,6 +31,7 @@ docker --version  # or: podman --version
 ```
 
 **Optional** - If you have `oc` CLI installed, you can verify your cluster:
+
 ```bash
 oc whoami                                # Check cluster access
 oc get csv -n openshift-mtv | grep mtv  # Verify MTV operator
@@ -44,7 +45,8 @@ oc get csv -n openshift-mtv | grep mtv  # Verify MTV operator
 
 **Important**: The test image is not available in a public registry. You must build and push it to your own registry first.
 
-> **TBD**: A pre-built public image will be provided in the future. Once available, you can skip this step and use the public image directly.
+> **TBD**: A pre-built public image will be provided in the future. Once available, you can skip this step and use
+> the public image directly.
 
 ```bash
 # Clone the repository
@@ -219,7 +221,7 @@ docker run --rm \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \
+    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
     --tc=source_provider_type:vsphere \
     --tc=source_provider_version:8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
@@ -340,7 +342,7 @@ docker run --rm \
   uv run pytest -m copyoffload -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \
+    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
     --tc=source_provider_type:vsphere \
     --tc=source_provider_version:8.0.3.00400 \
     --tc=storage_class:ontap-san-block
@@ -389,7 +391,7 @@ docker run --rm \
   uv run pytest -s -vv -m tier0 --skip-teardown \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \
+    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
@@ -485,7 +487,7 @@ spec:
           - -v
           - --tc=cluster_host:https://api.your-cluster.com:6443
           - --tc=cluster_username:kubeadmin
-          - --tc=cluster_password:your-cluster-password
+          - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
           - --tc=source_provider_type:vsphere
           - --tc=source_provider_version:8.0.1
           - --tc=storage_class:YOUR-STORAGE-CLASS
@@ -525,7 +527,7 @@ spec:
           - -v
           - --tc=cluster_host:https://api.your-cluster.com:6443
           - --tc=cluster_username:kubeadmin
-          - --tc=cluster_password:your-cluster-password
+          - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
           - --tc=source_provider_type:vsphere
           - --tc=source_provider_version:8.0.3.00400
           - --tc=storage_class:ontap-san-block
@@ -585,7 +587,7 @@ docker run --rm \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \
+    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 
@@ -681,7 +683,8 @@ oc delete provider <provider-name> -n openshift-mtv
 A: No. Everything runs inside the container. You only need Docker or Podman.
 
 **Q: How long do tests take?**
-A: Test duration varies. Tier0 tests are fastest (smoke tests), warm migration tests include warm migration scenarios, and copy-offload tests are optimized for speed with shared storage.
+A: Test duration varies. Tier0 tests are fastest (smoke tests), warm migration tests include warm migration
+scenarios, and copy-offload tests are optimized for speed with shared storage.
 
 **Q: Can I run on SNO (Single Node OpenShift)?**
 A: Yes. Tests work on SNO clusters.
@@ -690,7 +693,8 @@ A: Yes. Tests work on SNO clusters.
 A: Docker run uses local `.providers.json`. Job uses OpenShift secret and runs inside the cluster.
 
 **Q: Where do I get cloud-init script for copy-offload?**
-A: Contact the copyoffload development or QE teams if you need the cloud-init configuration for copy-offload testing. You can also reach out through your Red Hat support channels or open an issue in the project repository.
+A: Contact the copyoffload development or QE teams if you need the cloud-init configuration for copy-offload
+testing. You can also reach out through your Red Hat support channels or open an issue in the project repository.
 
 **Q: Do tests generate reports?**
 A: Yes. Tests automatically generate a JUnit XML report (`junit-report.xml`) with test results, execution times,
@@ -712,7 +716,8 @@ Set `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` for API call logs. See the "Usefu
 
 **System packages**:
 
-> **Note**: Python is not listed as a requirement because `uv` automatically manages Python versions. The packages below are compilation dependencies for Python extensions.
+> **Note**: Python is not listed as a requirement because `uv` automatically manages Python versions. The packages
+> below are compilation dependencies for Python extensions.
 
 ```bash
 # RHEL/Fedora
@@ -731,7 +736,8 @@ brew install gcc libxml2 curl openssl
 - oc CLI
 - virtctl
 
-> **Note**: uv will automatically download and manage the appropriate Python version. However, if you encounter HTTPS-related issues with Python 3.13+, consider using Python 3.12 which has been tested and verified to work.
+> **Note**: uv will automatically download and manage the appropriate Python version. However, if you encounter
+> HTTPS-related issues with Python 3.13+, consider using Python 3.12 which has been tested and verified to work.
 
 ### Setup and Run
 
