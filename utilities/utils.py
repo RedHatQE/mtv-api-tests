@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from kubernetes.dynamic import DynamicClient
+from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.provider import Provider
@@ -20,7 +21,7 @@ from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.virtual_machine_cluster_instancetype import VirtualMachineClusterInstancetype
 from ocp_resources.virtual_machine_cluster_preference import VirtualMachineClusterPreference
-from packaging import version
+from packaging.version import InvalidVersion, parse as version_parse
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
@@ -107,59 +108,75 @@ def _fetch_and_store_cacert(
     return cert_file
 
 
-def get_mtv_version(ocp_admin_client: DynamicClient) -> str:
+def get_mtv_version(ocp_admin_client: "DynamicClient", namespace: str = "openshift-mtv") -> str:
     """
-    Get MTV operator version from the cluster.
+    Get the MTV operator version from the cluster.
+
+    Args:
+        ocp_admin_client: OpenShift admin client
+        namespace: Namespace where MTV operator is installed (default: openshift-mtv)
+
+    Returns:
+        str: MTV operator version string
 
     Raises:
-        RuntimeError: If MTV operator not found or version cannot be determined
+        RuntimeError: If MTV operator version cannot be determined
     """
     mtv_version: str | None = None
+    parsing_error = None
 
     try:
-        csv_resource = ocp_admin_client.resources.get(
-            api_version="operators.coreos.com/v1alpha1", kind="ClusterServiceVersion"
-        )
-        csvs = csv_resource.get()
+        for csv in ClusterServiceVersion.get(client=ocp_admin_client, namespace=namespace):
+            if csv.instance and csv.instance.spec:
+                display_name = csv.instance.spec.get("displayName", "")
+                version_str = csv.instance.spec.get("version", "")
 
-        # Access the items attribute (it's a list, not a method)
-        if hasattr(csvs, "items"):
-            csv_list = list(csvs.items)
-        else:
-            csv_list = [csvs] if csvs is not None else []
-
-        # Search for MTV operator by display name
-        for csv in csv_list:
-            if csv is None:
-                continue
-
-            if hasattr(csv, "spec") and csv.spec:
-                display_name = getattr(csv.spec, "displayName", None)
-                mtv_version_str = getattr(csv.spec, "version", None)
-
-                if display_name and display_name == "Migration Toolkit for Virtualization Operator":
-                    mtv_version = mtv_version_str
+                if display_name and "Migration Toolkit for Virtualization" in display_name:
+                    mtv_version = version_str
                     break
 
-    except Exception as e:
-        raise RuntimeError(f"Failed to determine MTV version: {e}") from e
+    except (AttributeError, TypeError) as e:
+        parsing_error = e
+        LOGGER.warning(f"Error parsing MTV ClusterServiceVersion: {e}")
 
     if not mtv_version:
+        if parsing_error:
+            raise RuntimeError(f"MTV operator version parsing failed: {parsing_error}") from parsing_error
         raise RuntimeError("MTV operator version not found")
 
     LOGGER.info(f"Found MTV operator version: {mtv_version}")
     return mtv_version
 
 
-def is_mtv_version_supported(ocp_admin_client: DynamicClient, min_version: str) -> bool:
+def is_mtv_version_supported(ocp_admin_client: "DynamicClient", min_version: str) -> bool:
     """
     Check if MTV version supports target features.
 
+    Args:
+        ocp_admin_client: OpenShift admin DynamicClient with cluster access.
+        min_version: Minimum MTV version required (semantic version string).
+
+    Returns:
+        True if installed MTV version >= min_version, False otherwise.
+
     Raises:
-        RuntimeError: If MTV version cannot be determined
+        RuntimeError: If MTV version cannot be determined or is invalid.
     """
     mtv_version = get_mtv_version(ocp_admin_client)
-    return version.parse(mtv_version) >= version.parse(min_version)
+
+    # Parse and validate min_version first
+    try:
+        parsed_min_version = version_parse(min_version)
+    except InvalidVersion as e:
+        raise RuntimeError(f"Invalid min_version format '{min_version}': {e}") from e
+
+    # Parse and validate mtv_version
+    try:
+        parsed_mtv_version = version_parse(mtv_version)
+    except InvalidVersion as e:
+        raise RuntimeError(f"Invalid MTV version format '{mtv_version}': {e}") from e
+
+    return parsed_mtv_version >= parsed_min_version
 
 
 def background(func):

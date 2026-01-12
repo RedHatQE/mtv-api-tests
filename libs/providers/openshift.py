@@ -6,10 +6,9 @@ from typing import Any, Self
 
 import humanfriendly
 from kubernetes.client.exceptions import ApiException
-from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.provider import Provider
-from ocp_resources.resource import Resource
+from ocp_resources.resource import NotFoundError, Resource
 from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
@@ -150,11 +149,14 @@ class OCPProvider(BaseProvider):
             "on" if cnv_vm.instance.status.printableStatus == cnv_vm.Status.RUNNING else "off"
         )
 
+        # Serial number (from firmware) - for serial preservation verification
         # Extract template once to avoid duplicate attribute access
         template = cnv_vm.instance.spec.template
 
         # Serial number (from firmware) - for serial preservation verification
-        firmware_spec: dict[str, Any] | None = template.spec.domain.get("firmware") if template else None
+        firmware_spec: dict[str, Any] | None = (
+            template.spec.domain.get("firmware") if template and template.spec else None
+        )
         result_vm_info["serial"] = firmware_spec.get("serial") if firmware_spec else None
 
         # VM labels - from template.metadata.labels (VMI template)
@@ -174,15 +176,9 @@ class OCPProvider(BaseProvider):
         # Node name - where the VM is scheduled (collected after VM start)
         node_name = None
         try:
-            if (
-                cnv_vm.vmi
-                and cnv_vm.vmi.instance
-                and cnv_vm.vmi.instance.status
-                and hasattr(cnv_vm.vmi.instance.status, "nodeName")
-            ):
-                node_name = cnv_vm.vmi.instance.status.nodeName
+            node_name = cnv_vm.vmi.instance.status.nodeName
         except (AttributeError, NotFoundError):
-            node_name = None
+            LOGGER.debug(f"Could not retrieve node name for VM {cnv_vm_name}")
         result_vm_info["node_name"] = node_name
 
         for interface in cnv_vm.vmi.interfaces:

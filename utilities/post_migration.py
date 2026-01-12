@@ -993,11 +993,12 @@ def check_vm_labels(
     vm_name = destination_vm.get("name")
     actual_labels = destination_vm.get("labels", {})
 
-    if not actual_labels:
-        pytest.fail(f"VM {vm_name} has no labels")
-
     # Convert to regular dict to ensure proper comparison
     actual_labels_dict = dict(actual_labels) if actual_labels else {}
+
+    # Fail if VM has no labels but we expect some
+    if not actual_labels_dict and expected_labels:
+        pytest.fail(f"VM {vm_name} has no labels but expected: {expected_labels}")
 
     missing_labels = []
     incorrect_labels = []
@@ -1014,7 +1015,7 @@ def check_vm_labels(
             error_msg += f"  Missing labels: {', '.join(missing_labels)}\n"
         if incorrect_labels:
             error_msg += f"  Incorrect labels: {', '.join(incorrect_labels)}\n"
-        error_msg += f"  Actual labels: {actual_labels}\n"
+        error_msg += f"  Actual labels: {actual_labels_dict}\n"
         error_msg += f"  Expected labels: {expected_labels}"
         pytest.fail(error_msg)
 
@@ -1115,8 +1116,8 @@ def check_vms(
     source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
-    labeled_worker_node: dict | None = None,
-    labeled_vm: dict | None = None,
+    labeled_worker_node: dict[str, Any] | None = None,
+    target_vm_labels: dict[str, Any] | None = None,
 ) -> None:
     res: dict[str, list[str]] = {}
     should_fail: bool = False
@@ -1136,6 +1137,17 @@ def check_vms(
         except (AssertionError, KeyError, AttributeError) as exp:
             LOGGER.error(f"SSL configuration check failed: {exp}")
             res.setdefault("_provider", []).append(f"check_ssl_configuration - {str(exp)}")
+
+    # Check target features if MTV version supports them (2.10.0+)
+    try:
+        mtv_version_supported = (
+            destination_provider.ocp_resource
+            and destination_provider.ocp_resource.client
+            and is_mtv_version_supported(destination_provider.ocp_resource.client, "2.10.0")
+        )
+    except RuntimeError as e:
+        res.setdefault("_provider", []).append(f"MTV version check failed: {e}")
+        mtv_version_supported = False
 
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
@@ -1220,46 +1232,37 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_serial_preservation - {str(exp)}")
 
-        # Check target features if MTV version supports them (2.10.0+)
-        try:
-            mtv_version_supported = (
-                destination_provider.ocp_resource
-                and destination_provider.ocp_resource.client
-                and is_mtv_version_supported(destination_provider.ocp_resource.client, "2.10.0")
-            )
-        except RuntimeError as e:
-            res.setdefault("_provider", []).append(f"MTV version check failed: {e}")
-            mtv_version_supported = False
-
         if mtv_version_supported:
             # Check node placement if target_node_selector was specified
             if plan.get("target_node_selector") and labeled_worker_node is not None:
-                node_name = destination_vm.get("node_name")
-                if node_name is None:
+                expected_node = labeled_worker_node.get("node_name")
+                if expected_node is None:
                     res[vm_name].append(
-                        "check_vm_node_placement - VM has no node assignment. This indicates a data collection failure."
+                        "check_vm_node_placement - labeled_worker_node fixture is missing 'node_name' key"
                     )
                 else:
                     try:
-                        check_vm_node_placement(
-                            destination_vm=destination_vm, expected_node=labeled_worker_node["node_name"]
-                        )
+                        check_vm_node_placement(destination_vm=destination_vm, expected_node=expected_node)
                     except Exception as exp:
-                        res[vm_name].append(f"check_vm_node_placement - {exp!s}")
+                        res[vm_name].append(f"check_vm_node_placement - {str(exp)}")
 
             # Check VM labels if target_labels was specified
-            if plan.get("target_labels") and labeled_vm is not None:
-                try:
-                    check_vm_labels(destination_vm=destination_vm, expected_labels=labeled_vm["vm_labels"])
-                except Exception as exp:
-                    res[vm_name].append(f"check_vm_labels - {exp!s}")
+            if plan.get("target_labels") and target_vm_labels is not None:
+                vm_labels = target_vm_labels.get("vm_labels")
+                if vm_labels is None:
+                    res[vm_name].append("check_vm_labels - target_vm_labels fixture is missing 'vm_labels' key")
+                else:
+                    try:
+                        check_vm_labels(destination_vm=destination_vm, expected_labels=vm_labels)
+                    except Exception as exp:
+                        res[vm_name].append(f"check_vm_labels - {str(exp)}")
 
             # Check VM affinity if target_affinity was specified
             if plan.get("target_affinity"):
                 try:
                     check_vm_affinity(destination_vm=destination_vm, expected_affinity=plan["target_affinity"])
                 except Exception as exp:
-                    res[vm_name].append(f"check_vm_affinity - {exp!s}")
+                    res[vm_name].append(f"check_vm_affinity - {str(exp)}")
 
         if vm_guest_agent:
             try:

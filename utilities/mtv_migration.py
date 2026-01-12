@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pytest
-from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
@@ -25,8 +26,7 @@ from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
-from utilities.utils import gen_network_map_list, get_value_from_py_config
-from utilities.utils import is_mtv_version_supported
+from utilities.utils import gen_network_map_list, get_value_from_py_config, is_mtv_version_supported
 
 LOGGER = get_logger(__name__)
 
@@ -50,8 +50,8 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
-    labeled_worker_node: dict | None = None,
-    labeled_vm: dict | None = None,
+    labeled_worker_node: dict[str, str] | None = None,
+    target_vm_labels: dict[str, str] | None = None,
 ) -> None:
     # Populate VM IDs from Forklift inventory for all VMs
     # This ensures we always use IDs in the Plan CR (works for all provider types)
@@ -62,12 +62,15 @@ def migrate_vms(
             vm["id"] = vm_data["id"]
             LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
 
-    # Get target_affinity from plan - skip test if MTV version doesn't support it
+    # Get target_affinity from plan
     target_affinity = plan.get("target_affinity")
     if target_affinity:
+        # Check MTV version support for targetAffinity
         if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
-            pytest.skip("targetAffinity requires MTV 2.10.0+")
-        LOGGER.info(f"Using target_affinity: {target_affinity}")
+            LOGGER.warning("targetAffinity requires MTV 2.10.0+, skipping feature")
+            target_affinity = None
+        else:
+            LOGGER.info(f"Using target_affinity: {target_affinity}")
 
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
@@ -86,7 +89,7 @@ def migrate_vms(
         after_hook_namespace=after_hook_namespace,
         source_vms_namespace=source_vms_namespace,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
         target_affinity=target_affinity,
     )
 
@@ -110,7 +113,7 @@ def migrate_vms(
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
             labeled_worker_node=labeled_worker_node,
-            labeled_vm=labeled_vm,
+            target_vm_labels=target_vm_labels,
         )
 
 
@@ -140,7 +143,7 @@ def run_migration(
     pvc_name_template_use_generate_name: bool | None = None,
     target_node_selector: dict[str, str] | None = None,
     target_labels: dict[str, str] | None = None,
-    target_affinity: dict | None = None,
+    target_affinity: dict[str, Any] | None = None,
 ) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -171,6 +174,12 @@ def run_migration(
 
     Returns:
         Plan and Migration Managed Resources.
+
+    Note on parameter naming:
+        The prepare_migration_for_tests function transforms fixture results into Plan CR format:
+        - labeled_worker_node (fixture result) -> target_node_selector (Plan CR dict)
+        - target_vm_labels (fixture result) -> target_labels (Plan CR dict)
+        This function receives the transformed values ready for the Plan CR.
     """
     # Build plan kwargs
     plan_kwargs = {

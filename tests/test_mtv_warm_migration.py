@@ -53,7 +53,7 @@ def test_sanity_warm_mtv_migration(
     source_vms_namespace,
     vm_ssh_connections,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -82,7 +82,7 @@ def test_sanity_warm_mtv_migration(
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )
 
 
@@ -114,7 +114,7 @@ def test_mtv_migration_warm_2disks2nics(
     source_vms_namespace,
     vm_ssh_connections,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -143,7 +143,7 @@ def test_mtv_migration_warm_2disks2nics(
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )
 
 
@@ -174,7 +174,7 @@ def test_warm_remote_ocp(
     source_vms_namespace,
     vm_ssh_connections,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
         fixture_store=fixture_store,
@@ -203,5 +203,5 @@ def test_warm_remote_ocp(
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )

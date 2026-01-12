@@ -53,7 +53,7 @@ def test_copyoffload_thin_migration(
     setup_copyoffload_ssh,
     vm_ssh_connections,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     """
     Test copy-offload migration of a thin-provisioned VM disk.
@@ -110,7 +110,7 @@ def test_copyoffload_thin_migration(
         copyoffload_config: Copy-offload configuration validation fixture
         copyoffload_storage_secret: Storage secret for copy-offload authentication
         labeled_worker_node: Fixture providing a worker node with specific labels for node selector testing.
-        labeled_vm: Fixture providing a VM with specific labels for label preservation testing.
+        target_vm_labels: Fixture providing a VM with specific labels for label preservation testing.
     """
 
     # Get copy-offload configuration
@@ -172,7 +172,7 @@ def test_copyoffload_thin_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )
 
 
@@ -205,7 +205,7 @@ def test_copyoffload_thick_lazy_migration(
     setup_copyoffload_ssh,
     vm_ssh_connections,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     """
     Test copy-offload migration of a thick (lazy) disk VM.
@@ -265,7 +265,7 @@ def test_copyoffload_thick_lazy_migration(
         copyoffload_config: Copy-offload configuration validation fixture
         copyoffload_storage_secret: Storage secret for copy-offload authentication
         labeled_worker_node: Fixture providing a worker node with specific labels for node selector testing.
-        labeled_vm: Fixture providing a VM with specific labels for label preservation testing.
+        target_vm_labels: Fixture providing a VM with specific labels for label preservation testing.
     """
 
     # Get copy-offload configuration
@@ -328,7 +328,7 @@ def test_copyoffload_thick_lazy_migration(
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )
 
 
@@ -361,7 +361,7 @@ def test_copyoffload_multi_disk_migration(
     setup_copyoffload_ssh,
     vm_ssh_connections,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     """
     Test copy-offload migration of a VM with multiple disks.
@@ -421,7 +421,7 @@ def test_copyoffload_multi_disk_migration(
         request: Pytest request object.
         fixture_store: Pytest fixture store for resource tracking.
         labeled_worker_node: Fixture providing a worker node with specific labels for node selector testing.
-        labeled_vm: Fixture providing a VM with specific labels for label preservation testing.
+        target_vm_labels: Fixture providing a VM with specific labels for label preservation testing.
     """
     # The 'plan' fixture handles cloning the VM with the additional disk.
     # This test function will execute after the VM is cloned.
@@ -486,7 +486,7 @@ def test_copyoffload_multi_disk_migration(
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )
 
     # Verify that the correct number of disks were migrated
@@ -521,7 +521,7 @@ def test_copyoffload_multi_disk_different_path_migration(
     copyoffload_storage_secret,
     setup_copyoffload_ssh,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     """
     Test copy-offload migration of a multi-disk VM where an additional disk
@@ -556,7 +556,7 @@ def test_copyoffload_multi_disk_different_path_migration(
         request: Pytest request object.
         fixture_store: Pytest fixture store for resource tracking.
         labeled_worker_node: Fixture providing a worker node with specific labels for node selector testing.
-        labeled_vm: Fixture providing a VM with specific labels for label preservation testing.
+        target_vm_labels: Fixture providing a VM with specific labels for label preservation testing.
     """
     # The 'plan' fixture handles cloning the VM with the additional disk in a different path.
     # This test function will execute after the VM is cloned.
@@ -620,7 +620,7 @@ def test_copyoffload_multi_disk_different_path_migration(
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )
 
     # Verify that the correct number of disks were migrated
@@ -655,7 +655,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
     copyoffload_storage_secret,
     vm_ssh_connections,
     labeled_worker_node,
-    labeled_vm,
+    target_vm_labels,
 ):
     """
     Test copy-offload migration of a VM with an RDM (Raw Device Mapping) disk.
@@ -687,7 +687,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
         copyoffload_storage_secret: Storage secret for copy-offload authentication
         vm_ssh_connections: SSH connections to VMs for validation
         labeled_worker_node: Fixture providing a worker node with specific labels for node selector testing.
-        labeled_vm: Fixture providing a VM with specific labels for label preservation testing.
+        target_vm_labels: Fixture providing a VM with specific labels for label preservation testing.
     """
     copyoffload_config_data = source_provider_data["copyoffload"]
     storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
@@ -747,7 +747,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
         source_provider_inventory=source_provider_inventory,
         vm_ssh_connections=vm_ssh_connections,
         labeled_worker_node=labeled_worker_node,
-        labeled_vm=labeled_vm,
+        target_vm_labels=target_vm_labels,
     )
 
     # Verify that the correct number of disks were migrated (1 base + 1 RDM = 2)

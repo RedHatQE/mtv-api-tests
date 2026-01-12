@@ -212,29 +212,33 @@ tests_params: dict = {
         # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
         "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,  # Boolean to control template usage
-        "target_node_selector": { # Set a node label which the VMs will be migrated to, random node will be labeled
-            "mtv-test-node": "auto"  # "auto" = generate with session UUID, or specify custom value
+        "target_node_selector": {  # Sets a Kubernetes nodeSelector for migrated VMs. When specified, the test
+                                   # framework's labeled_worker_node fixture automatically labels a worker node
+                                   # with this key-value pair, then creates a nodeSelector constraint on the target VMs.
+            "mtv-test-node": "auto"  # "auto" generates a unique value using pytest's session UUID (e.g., "auto-abc123ef")
+                                     # for test isolation. See labeled_worker_node fixture in conftest.py for details.
         },
-        # Note: The labeled_worker_node fixture attempts to select the worker node with the highest available memory.
-        # If cluster metrics are unavailable, it falls back to random node selection with a warning logged.
-        "target_labels": { # Set a list of VM labels for migrated VMs to be labeled
-            "mtv-test-label": "auto",  # "auto" = generate with session UUID, or specify custom value
-            "mtv-test-label2": "testing"
+        "target_labels": {  # Labels applied to migrated VMs. These labels can be referenced in target_affinity.matchLabels.
+                            # Values set to "auto" are automatically replaced with a unique value using session UUID.
+            "mtv-test-label": "auto",  # "auto" generates unique value (e.g., "auto-abc123")
+            "app": "my-app"  # This label is referenced by target_affinity.matchLabels below
         },
-        "target_affinity": {  # Set the Pod affinity with existing labels or use
-                              # preferredDuringSchedulingIgnoredDuringExecution type for testing purposes
+        "target_affinity": {  # Pod affinity rules for migrated VMs. Uses soft affinity for scheduling preferences.
+                              # IMPORTANT: All keys in matchLabels (e.g., "app") must be defined in target_labels above.
+                              # This ensures the labels exist on migrated VMs before affinity rules reference them.
             "podAffinity": {
                 "preferredDuringSchedulingIgnoredDuringExecution": [{
                     "weight": 100,
                     "podAffinityTerm": {
                         "labelSelector": {
-                            "matchLabels": {"app": "my-app"}
+                            "matchLabels": {"app": "my-app"}  # Must match a label key from target_labels
                         },
                         "topologyKey": "kubernetes.io/hostname"
                     }
                 }]
             }
         },
+    }
 }
 ```
 
