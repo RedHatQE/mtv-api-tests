@@ -1,7 +1,7 @@
 # MTV API Test Suite
 
 Test suite for validating VM migrations to OpenShift from VMware vSphere,
-RHV, and OpenStack using Migration Toolkit for Virtualization (MTV).
+RHV, OpenStack, and OVA using Migration Toolkit for Virtualization (MTV).
 
 ---
 
@@ -90,7 +90,7 @@ virtualization platform.
 
 **Why do you need it?** The tests need to:
 
-- Connect to your source provider (vSphere, RHV, or OpenStack)
+- Connect to your source provider (vSphere, RHV, OpenStack, or OVA)
 - Find the base VM to clone for testing
 - Create test VMs and perform migrations
 
@@ -172,13 +172,14 @@ You'll use this name in the next step.
 Execute tier0 tests (smoke tests) using the containerized test suite:
 
 ```bash
+# pragma: allowlist secret
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
+    --tc=cluster_password:'your-cluster-password' \
     --tc=source_provider_type:vsphere \
     --tc=source_provider_version:8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
@@ -197,7 +198,7 @@ podman run --rm \
 - `kubeadmin` → Your cluster username
 - `your-cluster-password` → Your cluster password
 - `YOUR-STORAGE-CLASS` → Your storage class from step 4
-- `vsphere` → Provider type from your `.providers.json` key: `vsphere`, `ovirt`, or `openstack`
+- `vsphere` → Provider type from your `.providers.json` key: `vsphere`, `ovirt`, `openstack`, or `ova`
 - `8.0.1` → Provider version from your `.providers.json` key (must match exactly)
 
 ---
@@ -420,36 +421,48 @@ For technical implementation details, see the
 
 ### Debug and Troubleshooting Flags
 
-Add these flags to any test run (Podman, Docker, or local) for debugging:
+Add these flags to your test runs for debugging:
+
+**For containerized runs (Podman/Docker)** - use `uv run pytest`:
 
 ```bash
 # Enable verbose output
-pytest -v                      # Verbose test names
+uv run pytest -v                      # Verbose test names
 
 # Enable debug logging
-pytest -s -vv                  # Very verbose with output capture disabled
+uv run pytest -s -vv                  # Very verbose with output capture disabled
 
-# Set MTV/OpenShift debug level
-export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+# Set MTV/OpenShift debug level (add as environment variable)
 podman run -e OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG ...
 
 # Keep resources after test for inspection
-pytest --skip-teardown         # Don't delete VMs, plans, etc. after tests
+uv run pytest --skip-teardown         # Don't delete VMs, plans, etc. after tests
 
 # Skip data collector (faster, but no resource tracking)
-pytest --skip-data-collector   # Don't track created resources
+uv run pytest --skip-data-collector   # Don't track created resources
 
 # Change data collector output location
-pytest --data-collector-path /tmp/my-logs
+uv run pytest --data-collector-path /tmp/my-logs
 
 # Run a specific test from a marker/suite
-pytest -k test_name  # Run only tests matching pattern
-pytest -m copyoffload -k test_copyoffload_thin_migration  # Run only thin test from copyoffload marker
+uv run pytest -k test_name            # Run only tests matching pattern
+uv run pytest -m copyoffload -k test_copyoffload_thin_migration  # Run only thin test
+```
+
+**For local developer mode** (after running `uv sync`) - use `uv run pytest` or just `pytest`:
+
+```bash
+# Same flags work in local mode
+pytest -v                             # Verbose test names
+pytest -s -vv                         # Very verbose with output capture disabled
+pytest --skip-teardown                # Don't delete VMs, plans, etc. after tests
+pytest -k test_name                   # Run only tests matching pattern
 ```
 
 **Example - Run tier0 with debug mode and keep resources**:
 
 ```bash
+# pragma: allowlist secret
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -e OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG \
@@ -457,7 +470,7 @@ podman run --rm \
   uv run pytest -s -vv -m tier0 --skip-teardown \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
+    --tc=cluster_password:'your-cluster-password' \
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
@@ -469,6 +482,9 @@ podman run --rm \
 - `-s -vv` - Test is failing and you need detailed output to diagnose
 - `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` - Need to see all API calls to OpenShift
 - `-k` - Run only specific tests by name pattern (useful for debugging or running individual tests)
+
+> **Note**: All examples in this section show the full command. When using containers, always prefix with
+> `podman run ... ghcr.io/redhatqe/mtv-api-tests:latest` before the `uv run pytest` command.
 
 ### Running Specific Tests with `-k`
 
@@ -484,10 +500,14 @@ podman run ... uv run pytest -k "test_copyoffload_multi_disk" -v ...  # Matches 
 podman run ... uv run pytest -k "thin or thick" -v ...                 # Matches thin and thick tests
 ```
 
-**List all available test names** (run inside the container):
+**List all available test names**:
 
 ```bash
+# In container
 podman run --rm ghcr.io/redhatqe/mtv-api-tests:latest uv run pytest --collect-only -q
+
+# In local developer mode
+uv run pytest --collect-only -q
 ```
 
 ---
@@ -507,14 +527,16 @@ Tests automatically generate a **JUnit XML report** (`junit-report.xml`) contain
 
 ```bash
 # Mount a volume to save the report
+# pragma: allowlist secret
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -v $(pwd)/results:/app/results \
   ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m tier0 -v \
+    --junit-xml=/app/results/junit-report.xml \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
+    --tc=cluster_password:'your-cluster-password' \
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 
@@ -561,8 +583,11 @@ oc auth can-i create virtualmachines
 # Test connectivity from cluster
 oc run test-curl --rm -it --image=curlimages/curl -- curl -k https://vcenter.example.com
 
-# Verify credentials
-cat .providers.json | jq '.vsphere'
+# List available provider keys
+cat .providers.json | jq 'keys'
+
+# Verify credentials for a specific provider (replace with your actual key)
+cat .providers.json | jq '."vsphere-8.0.1"'
 ```
 
 ### Storage Class Not Found
@@ -672,10 +697,11 @@ cd mtv-api-tests
 uv sync  # uv will automatically handle Python version
 
 # 3. Run tests
+# pragma: allowlist secret
 uv run pytest -v \
   --tc=cluster_host:https://api.cluster.com:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'PASSWORD' \  # pragma: allowlist secret
+  --tc=cluster_password:'PASSWORD' \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:standard-csi
