@@ -123,7 +123,7 @@ def get_mtv_version(ocp_admin_client: DynamicClient) -> str:
         csvs = csv_resource.get()
 
         # Access the items attribute (it's a list, not a method)
-        if hasattr(csvs, "items") and csvs.items:
+        if hasattr(csvs, "items"):
             csv_list = list(csvs.items)
         else:
             csv_list = [csvs] if csvs is not None else []

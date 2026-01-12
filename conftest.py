@@ -7,7 +7,6 @@ import os
 import pickle
 import random
 import shutil
-import socket
 import ssl
 import urllib.parse
 import urllib.request
@@ -674,6 +673,11 @@ def _get_prometheus_url(ocp_admin_client: DynamicClient) -> str | None:
 
 def _query_prometheus(url: str, query: str, token: str, insecure: bool = True) -> list[dict[str, Any]] | None:
     """Query Prometheus API and return results."""
+    parsed_url = urllib.parse.urlparse(url)
+    if parsed_url.scheme != "https":
+        LOGGER.warning(f"Invalid URL scheme '{parsed_url.scheme}' for Prometheus query, expected 'https'")
+        return None
+
     try:
         request_url = f"{url}/api/v1/query?query={urllib.parse.quote(query)}"
         req = urllib.request.Request(request_url)
@@ -688,7 +692,7 @@ def _query_prometheus(url: str, query: str, token: str, insecure: bool = True) -
             data = json.loads(response.read().decode())
             if data.get("status") == "success":
                 return data.get("data", {}).get("result", [])
-    except (URLError, TimeoutError, socket.timeout, json.JSONDecodeError) as e:
+    except (URLError, TimeoutError, json.JSONDecodeError) as e:
         LOGGER.warning(f"Prometheus query failed for '{query}': {e}")
     return None
 
@@ -710,15 +714,29 @@ def _parse_prometheus_memory_metrics(
     for item in allocatable_result:
         node = item.get("metric", {}).get("node")
         if node in worker_nodes:
-            value = float(item.get("value", [None, "0"])[1])
-            metrics.setdefault(node, {})["allocatable"] = int(value)
+            raw_value = item.get("value")
+            if isinstance(raw_value, (list, tuple)) and len(raw_value) >= 2 and raw_value[1]:
+                try:
+                    value = int(float(raw_value[1]))
+                except (ValueError, TypeError):
+                    value = 0
+            else:
+                value = 0
+            metrics.setdefault(node, {})["allocatable"] = value
 
     if requested_result:
         for item in requested_result:
             node = item.get("metric", {}).get("node")
             if node in worker_nodes and node in metrics:
-                value = float(item.get("value", [None, "0"])[1])
-                metrics[node]["requested"] = int(value)
+                raw_value = item.get("value")
+                if isinstance(raw_value, (list, tuple)) and len(raw_value) >= 2 and raw_value[1]:
+                    try:
+                        value = int(float(raw_value[1]))
+                    except (ValueError, TypeError):
+                        value = 0
+                else:
+                    value = 0
+                metrics[node]["requested"] = value
 
     for node in metrics:
         metrics[node].setdefault("requested", 0)
@@ -799,8 +817,7 @@ def labeled_worker_node(session_uuid, ocp_admin_client, plan):
 
     target_node = _select_node_by_available_memory(ocp_admin_client, worker_nodes)
 
-    label_key = list(target_node_selector.keys())[0]
-    config_value = list(target_node_selector.values())[0]
+    label_key, config_value = next(iter(target_node_selector.items()))
     label_value = session_uuid if config_value == "auto" else config_value
 
     _label_node(v1, target_node, label_key, label_value)

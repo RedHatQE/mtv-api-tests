@@ -150,16 +150,19 @@ class OCPProvider(BaseProvider):
             "on" if cnv_vm.instance.status.printableStatus == cnv_vm.Status.RUNNING else "off"
         )
 
+        # Extract template once to avoid duplicate attribute access
+        template = cnv_vm.instance.spec.template
+
         # Serial number (from firmware) - for serial preservation verification
-        firmware_spec: dict[str, Any] | None = cnv_vm.instance.spec.template.spec.domain.get("firmware")
+        firmware_spec: dict[str, Any] | None = template.spec.domain.get("firmware") if template else None
         result_vm_info["serial"] = firmware_spec.get("serial") if firmware_spec else None
 
         # VM labels - from template.metadata.labels (VMI template)
-        template_metadata = cnv_vm.instance.spec.template.metadata if cnv_vm.instance.spec.template else None
+        template_metadata = template.metadata if template else None
         result_vm_info["labels"] = template_metadata.labels if template_metadata and template_metadata.labels else {}
 
         # VM affinity - from template.spec.affinity (VMI template)
-        template_spec = cnv_vm.instance.spec.template.spec if cnv_vm.instance.spec.template else None
+        template_spec = template.spec if template else None
         result_vm_info["affinity"] = template_spec.affinity if template_spec and template_spec.affinity else None
 
         self.start_vm(cnv_vm)

@@ -1228,7 +1228,7 @@ def check_vms(
                 and is_mtv_version_supported(destination_provider.ocp_resource.client, "2.10.0")
             )
         except RuntimeError as e:
-            res.setdefault("_mtv_version", []).append(f"MTV version check failed: {e}")
+            res.setdefault("_provider", []).append(f"MTV version check failed: {e}")
             mtv_version_supported = False
 
         if mtv_version_supported:
@@ -1244,22 +1244,22 @@ def check_vms(
                         check_vm_node_placement(
                             destination_vm=destination_vm, expected_node=labeled_worker_node["node_name"]
                         )
-                    except Exception as exp:
-                        res[vm_name].append(f"check_vm_node_placement - {str(exp)}")
+                    except AssertionError as exp:
+                        res[vm_name].append(f"check_vm_node_placement - {exp!s}")
 
             # Check VM labels if target_labels was specified
             if plan.get("target_labels") and labeled_vm is not None:
                 try:
                     check_vm_labels(destination_vm=destination_vm, expected_labels=labeled_vm["vm_labels"])
-                except Exception as exp:
-                    res[vm_name].append(f"check_vm_labels - {str(exp)}")
+                except AssertionError as exp:
+                    res[vm_name].append(f"check_vm_labels - {exp!s}")
 
             # Check VM affinity if target_affinity was specified
             if plan.get("target_affinity"):
                 try:
                     check_vm_affinity(destination_vm=destination_vm, expected_affinity=plan["target_affinity"])
-                except Exception as exp:
-                    res[vm_name].append(f"check_vm_affinity - {str(exp)}")
+                except AssertionError as exp:
+                    res[vm_name].append(f"check_vm_affinity - {exp!s}")
 
         if vm_guest_agent:
             try:

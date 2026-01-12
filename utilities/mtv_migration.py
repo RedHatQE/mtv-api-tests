@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+import pytest
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
@@ -61,14 +62,12 @@ def migrate_vms(
             vm["id"] = vm_data["id"]
             LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
 
-    # Check MTV version support for target_affinity
-    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
-        LOGGER.warning("targetAffinity requires MTV 2.10.0+, skipping affinity configuration")
-        target_affinity = None
-    else:
-        target_affinity = plan.get("target_affinity")
-        if target_affinity:
-            LOGGER.info(f"Using target_affinity: {target_affinity}")
+    # Get target_affinity from plan - skip test if MTV version doesn't support it
+    target_affinity = plan.get("target_affinity")
+    if target_affinity:
+        if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
+            pytest.skip("targetAffinity requires MTV 2.10.0+")
+        LOGGER.info(f"Using target_affinity: {target_affinity}")
 
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
