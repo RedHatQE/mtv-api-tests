@@ -734,7 +734,7 @@ def plan(
                 namespace=target_namespace,
             )
             if vm_obj.exists:
-                LOGGER.info(f"Deleting VM {vm_obj.name} after test")
+                LOGGER.info("Deleting VM %s after test", vm_obj.name)
                 vm_obj.clean_up(wait=True)
         except Exception:
             LOGGER.exception("Failed to delete VM %s", vm["name"])
