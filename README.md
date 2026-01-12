@@ -172,14 +172,13 @@ You'll use this name in the next step.
 Execute tier0 tests (smoke tests) using the containerized test suite:
 
 ```bash
-# pragma: allowlist secret
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \
+    --tc=cluster_password:'your-cluster-password' `# pragma: allowlist secret` \
     --tc=source_provider_type:vsphere \
     --tc=source_provider_version:8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
@@ -462,7 +461,6 @@ pytest -k test_name                   # Run only tests matching pattern
 **Example - Run tier0 with debug mode and keep resources**:
 
 ```bash
-# pragma: allowlist secret
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -e OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG \
@@ -470,7 +468,7 @@ podman run --rm \
   uv run pytest -s -vv -m tier0 --skip-teardown \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \
+    --tc=cluster_password:'your-cluster-password' `# pragma: allowlist secret` \
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
@@ -527,7 +525,6 @@ Tests automatically generate a **JUnit XML report** (`junit-report.xml`) contain
 
 ```bash
 # Mount a volume to save the report
-# pragma: allowlist secret
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -v $(pwd)/results:/app/results \
@@ -536,7 +533,7 @@ podman run --rm \
     --junit-xml=/app/results/junit-report.xml \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' \
+    --tc=cluster_password:'your-cluster-password' `# pragma: allowlist secret` \
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 
@@ -697,11 +694,10 @@ cd mtv-api-tests
 uv sync  # uv will automatically handle Python version
 
 # 3. Run tests
-# pragma: allowlist secret
 uv run pytest -v \
   --tc=cluster_host:https://api.cluster.com:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'PASSWORD' \
+  --tc=cluster_password:'PASSWORD' `# pragma: allowlist secret` \
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:standard-csi

@@ -81,11 +81,16 @@ Add the `copyoffload` section to your `.providers.json` file:
 > **Note**: Replace `vsphere-8.0.3.00400` with your actual vSphere version (format: `vsphere-{version}`).
 > The key and `version` field must match.
 >
-> ⚠️ **IMPORTANT**: Replace all placeholder values (e.g., `your-password`, `your-vm-password`) with your
-> actual credentials before using this configuration. The example below uses placeholder strings that must be
-> updated with real values from your environment.
+> ⚠️ **WARNING**: The JSON example below contains `# pragma: allowlist secret` comments that are **NOT valid JSON**.
+> These comments are required for this repository's pre-commit hooks but will cause JSON parsing errors.
+>
+> **Before using this configuration, you MUST**:
+>
+> 1. Remove all `# pragma: allowlist secret` comments from the JSON
+> 2. Replace placeholder values (e.g., `your-vcenter-password`) with your actual credentials
+>
+> The example is intentionally invalid JSON to pass security checks in this repository.
 
-<!-- pragma: allowlist secret -->
 ```json
 {
   "vsphere-8.0.3.00400": {
@@ -94,21 +99,21 @@ Add the `copyoffload` section to your `.providers.json` file:
     "fqdn": "vcenter.example.com",
     "api_url": "https://vcenter.example.com/sdk",
     "username": "administrator@vsphere.local",
-    "password": "your-vcenter-password",
+    "password": "your-vcenter-password",  # pragma: allowlist secret
     "guest_vm_linux_user": "root",
-    "guest_vm_linux_password": "your-vm-password",
+    "guest_vm_linux_password": "your-vm-password",  # pragma: allowlist secret
     "copyoffload": {
       "storage_vendor_product": "ontap",
       "datastore_id": "datastore-123",
       "default_vm_name": "rhel9-cloud-init-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
-      "storage_password": "your-storage-password",
+      "storage_password": "your-storage-password",  # pragma: allowlist secret
       "ontap_svm": "vserver-name",
       "esxi_clone_method": "ssh",
       "esxi_host": "esxi01.example.com",
       "esxi_user": "root",
-      "esxi_password": "your-esxi-password"
+      "esxi_password": "your-esxi-password"  # pragma: allowlist secret
     }
   }
 }
