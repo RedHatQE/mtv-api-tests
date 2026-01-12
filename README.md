@@ -233,7 +233,9 @@ For long-running test suites or automated CI/CD pipelines, you can run tests as 
 
 ### Step 1: Create Secret with Configuration
 
-Store your `.providers.json` file as an OpenShift secret:
+Store your `.providers.json` file and optionally cluster credentials as an OpenShift secret:
+
+**Option A: Providers configuration only** (credentials passed as command args in Job):
 
 ```bash
 oc create namespace mtv-tests
@@ -242,6 +244,21 @@ oc create secret generic mtv-test-config \
   -n mtv-tests
 ```
 
+**Option B: Include cluster credentials in Secret** (recommended - avoids exposing secrets in Job YAML):
+
+```bash
+oc create namespace mtv-tests
+oc create secret generic mtv-test-config \
+  --from-file=providers.json=.providers.json \
+  --from-literal=cluster_host=https://api.your-cluster.com:6443 \
+  --from-literal=cluster_username=kubeadmin \
+  --from-literal=cluster_password=your-cluster-password \
+  -n mtv-tests
+```
+
+Replace the cluster values with your actual OpenShift API endpoint and credentials. This approach keeps sensitive
+data out of the Job definition and prevents credential exposure in `oc get job -o yaml` output.
+
 ### Step 2: Create and Run Job
 
 Use this template to run tests. Customize the placeholders:
@@ -249,6 +266,10 @@ Use this template to run tests. Customize the placeholders:
 - `[JOB_NAME]` - Unique job name (e.g., `mtv-tier0-tests`, `mtv-warm-tests`, `mtv-copyoffload-tests`)
 - `[TEST_MARKERS]` - Pytest marker(s) (e.g., `tier0`, `warm`, `copyoffload`)
 - `[TEST_FILTER]` - Optional: specific test name for `-k` flag (omit lines for all tests)
+
+> **Note**: This Job template is also used in `docs/how-to-run-copyoffload-tests.md`. If updating, ensure both
+> files remain in sync for the following fields: `apiVersion`, `kind`, `metadata.name`, `spec.template`,
+> container `image`, `command`, and `volumeMounts`/`volumes` configuration.
 
 **Template:**
 
@@ -266,22 +287,38 @@ spec:
       containers:
       - name: tests
         image: ghcr.io/redhatqe/mtv-api-tests:latest  # Or use your custom image
+        env:
+        - name: CLUSTER_HOST
+          valueFrom:
+            secretKeyRef:
+              name: mtv-test-config
+              key: cluster_host
+              optional: true
+        - name: CLUSTER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mtv-test-config
+              key: cluster_username
+              optional: true
+        - name: CLUSTER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mtv-test-config
+              key: cluster_password
+              optional: true
         command:
-          - uv
-          - run
-          - pytest
-          - -m
-          - [TEST_MARKERS]
-          # Optional: Add these two lines to run a specific test
-          # - -k
-          # - [TEST_FILTER]
-          - -v
-          - --tc=cluster_host:https://api.your-cluster.com:6443
-          - --tc=cluster_username:kubeadmin
-          - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
-          - --tc=source_provider_type:vsphere
-          - --tc=source_provider_version:8.0.3.00400
-          - --tc=storage_class:your-storage-class
+          - /bin/bash
+          - -c
+          - |
+            uv run pytest -m [TEST_MARKERS] \
+              -v \
+              ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \
+              ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \
+              ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \
+              --tc=source_provider_type:vsphere \
+              --tc=source_provider_version:8.0.3.00400 \
+              --tc=storage_class:your-storage-class
+            # Optional: To run a specific test, add: -k [TEST_FILTER]
         volumeMounts:
         - name: config
           mountPath: /app/.providers.json
@@ -305,10 +342,31 @@ Replace placeholders:
 
 - `ghcr.io/redhatqe/mtv-api-tests:latest` - Use this public image, or substitute with your custom image
   from Quick Start Step 1 (e.g., `<YOUR-REGISTRY>/mtv-tests:latest`)
-- `api.your-cluster.com` - Your OpenShift cluster API endpoint
-- `kubeadmin` / `your-cluster-password` - Your cluster credentials
+- If you used **Option A** (credentials in Job): Replace the command with explicit `--tc` flags as shown below
+- If you used **Option B** (credentials in Secret): The Job template above automatically reads from the Secret
 - `vsphere` / `8.0.3.00400` - Your source provider type and version (must match key in `.providers.json`)
 - `your-storage-class` - Your OpenShift storage class name
+
+**For Option A (credentials in Job YAML)**, replace the command section with:
+
+```yaml
+        command:
+          - uv
+          - run
+          - pytest
+          - -m
+          - [TEST_MARKERS]
+          - -v
+          - --tc=cluster_host:https://api.your-cluster.com:6443
+          - --tc=cluster_username:kubeadmin
+          - --tc=cluster_password:your-cluster-password
+          - --tc=source_provider_type:vsphere
+          - --tc=source_provider_version:8.0.3.00400
+          - --tc=storage_class:your-storage-class
+```
+
+⚠️ **Warning**: This exposes credentials in the Job spec visible via `oc get job -o yaml`.
+Use Option B with Secret for better security.
 
 ### Step 3: Monitor Test Execution
 
@@ -451,7 +509,7 @@ Tests automatically generate a **JUnit XML report** (`junit-report.xml`) contain
 # Mount a volume to save the report
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
-  -v $(pwd)/results:/app \
+  -v $(pwd)/results:/app/results \
   ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
