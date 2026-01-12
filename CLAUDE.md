@@ -76,10 +76,166 @@ If you modify code directly instead of using an agent:
 
 - **Type Annotations:** Always use built-in Python typing (dict, list, tuple, etc.)
 - **Package Management:** Use `uv` for all dependency and project management
-- **OpenShift Integration:** Always use `openshift-python-wrapper` for cluster interactions
+- **OpenShift Integration:** Use `openshift-python-wrapper` for all cluster interactions (see detailed section below)
 - **Pre-commit:** Must pass before any commit - never use `git commit --no-verify`
 - **Code Simplicity:** Keep code simple and readable, avoid over-engineering
 - Every openshift resource must be created using `create_and_store_resource` function only.
+
+#### CRITICAL: OpenShift/Kubernetes Resource Interactions
+
+**ALL OpenShift and Kubernetes resource interactions MUST use `openshift-python-wrapper` package.**
+
+This is a **MANDATORY** requirement with no exceptions for direct kubernetes package usage at runtime.
+
+**Correct imports:**
+
+```python
+# ✅ CORRECT - Use openshift-python-wrapper classes
+from ocp_resources.namespace import Namespace
+from ocp_resources.secret import Secret
+from ocp_resources.virtual_machine import VirtualMachine
+from ocp_resources.resource import Resource
+
+# ✅ CORRECT - Get DynamicClient instance via ocp_utilities
+from ocp_utilities.infra import get_client  # Returns a DynamicClient instance
+```
+
+**Forbidden imports (runtime usage):**
+
+```python
+# ❌ FORBIDDEN - Direct kubernetes package usage at runtime
+from kubernetes import client
+from kubernetes.client import CoreV1Api, CustomObjectsApi
+from kubernetes.config import load_kube_config
+import kubernetes
+
+# ❌ FORBIDDEN - Instantiating DynamicClient directly
+from kubernetes.dynamic import DynamicClient
+client = DynamicClient(...)  # Never do this - use get_client() instead
+```
+
+**Why this rule exists:**
+
+- `openshift-python-wrapper` provides consistent, tested abstractions for OpenShift resources
+- It handles OpenShift-specific resources (Routes, DeploymentConfigs, etc.) that kubernetes package does not
+- Resource lifecycle management (deploy, wait, delete) is standardized
+- Integration with `create_and_store_resource()` for automatic cleanup tracking
+
+**What to do:**
+
+- ✅ **ALWAYS** use `ocp_resources.*` for resource classes
+- ✅ **ALWAYS** use `ocp_utilities.*` for cluster utilities (including `get_client()`)
+- ✅ **ALWAYS** use `create_and_store_resource()` for resource creation
+- ❌ **NEVER** import directly from `kubernetes` package for runtime usage
+- ❌ **NEVER** use `kubernetes.client.*` APIs
+- ❌ **NEVER** instantiate `kubernetes.dynamic.DynamicClient` directly
+
+**Commonly re-exported symbols from openshift-python-wrapper:**
+
+The following resource classes are available from `ocp_resources` and should be used directly:
+
+| Symbol | Import Path |
+|--------|-------------|
+| `Resource` | `from ocp_resources.resource import Resource` |
+| `Namespace` | `from ocp_resources.namespace import Namespace` |
+| `Secret` | `from ocp_resources.secret import Secret` |
+| `Pod` | `from ocp_resources.pod import Pod` |
+| `VirtualMachine` | `from ocp_resources.virtual_machine import VirtualMachine` |
+| `StorageClass` | `from ocp_resources.storage_class import StorageClass` |
+| `ConfigMap` | `from ocp_resources.configmap import ConfigMap` |
+| `Service` | `from ocp_resources.service import Service` |
+
+**Verifying re-exports:**
+
+To check if a symbol is publicly available from `ocp_resources`, inspect the package structure:
+
+```python
+# Check available modules in ocp_resources
+import ocp_resources
+print(dir(ocp_resources))  # Lists available submodules
+
+# Check a specific module's exports
+from ocp_resources import namespace
+print(dir(namespace))  # Should show 'Namespace' class
+```
+
+Look for class names that match Kubernetes/OpenShift resource kinds (e.g., `Namespace`, `Pod`, `Secret`).
+Each resource module typically exports a single class with the resource name.
+
+**Important clarification about get_client() and DynamicClient:**
+
+- `ocp_utilities.infra.get_client()` returns a `kubernetes.dynamic.DynamicClient` instance
+- This does NOT mean `DynamicClient` is re-exported by `openshift-python-wrapper`
+- The fact that `get_client()` returns `DynamicClient` only permits importing `DynamicClient` for type annotations (see below)
+- You must NEVER instantiate `DynamicClient` directly - always use `get_client()`
+
+**Type annotations exception for DynamicClient:**
+
+Importing `kubernetes.dynamic.DynamicClient` is permitted ONLY for type annotations because:
+
+1. `ocp_utilities.infra.get_client()` returns a `DynamicClient` instance
+2. `Resource` classes from `ocp_resources` accept `DynamicClient` as their `client` parameter
+3. Type annotations require referencing the actual type
+
+**Preferred pattern - Use TYPE_CHECKING to avoid runtime import:**
+
+```python
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
+
+from ocp_utilities.infra import get_client
+from ocp_resources.namespace import Namespace
+
+def create_namespace(client: DynamicClient, name: str) -> Namespace:
+    """Type annotation using DynamicClient is allowed via TYPE_CHECKING."""
+    return Namespace(client=client, name=name)
+
+# Get the client instance via the approved method
+admin_client = get_client()  # Returns DynamicClient instance
+```
+
+**Alternative - String annotations (also acceptable):**
+
+Note: When using explicit string annotations like `"DynamicClient"`, the
+`from __future__ import annotations` import is optional since the type is already a string literal.
+
+```python
+from ocp_utilities.infra import get_client
+from ocp_resources.namespace import Namespace
+
+def create_namespace(client: "DynamicClient", name: str) -> Namespace:
+    """String annotation avoids runtime import."""
+    return Namespace(client=client, name=name)
+```
+
+**What is FORBIDDEN even with the type annotation exception:**
+
+```python
+# ❌ FORBIDDEN - Runtime import and instantiation
+from kubernetes.dynamic import DynamicClient
+from kubernetes import config
+
+config.load_kube_config()
+client = DynamicClient(...)  # Never instantiate directly
+
+# ❌ FORBIDDEN - Using DynamicClient for anything other than type hints
+from kubernetes.dynamic import DynamicClient
+isinstance(obj, DynamicClient)  # Runtime usage is forbidden
+```
+
+**Summary of DynamicClient rules:**
+
+| Usage | Allowed? |
+|-------|----------|
+| Import inside `TYPE_CHECKING` block | Yes |
+| String annotation `"DynamicClient"` | Yes |
+| Top-level import used only in annotations | Yes (but prefer TYPE_CHECKING) |
+| Instantiate `DynamicClient(...)` directly | No - use `get_client()` |
+| Use in `isinstance()` or runtime checks | No |
+| Import other `kubernetes.*` modules | No |
 
 #### Function Size - Keep Functions Small
 
@@ -639,6 +795,74 @@ for _dir in dir():
 ### Fixture Patterns
 
 **This project uses pytest fixtures extensively for resource management.**
+
+#### CRITICAL: conftest.py Structure
+
+**`conftest.py` files ONLY accept pytest fixtures and pytest hooks. No standalone functions allowed.**
+
+**What belongs in conftest.py:**
+
+- ✅ **Pytest fixtures** - Functions decorated with `@pytest.fixture`
+- ✅ **Pytest hooks** - Functions like `pytest_addoption`, `pytest_runtest_makereport`,
+  `pytest_sessionstart`, `pytest_configure`, `pytest_collection_modifyitems`, etc.
+
+**What does NOT belong in conftest.py:**
+
+- ❌ **Standalone helper functions** - Move to `utilities/` directory
+- ❌ **Utility functions** - Move to appropriate utility module
+- ❌ **Constants or configuration** - Move to `tests/tests_config/config.py`
+- ❌ **Classes** (unless pytest plugin classes) - Move to `libs/` or `utilities/`
+
+**Examples:**
+
+```python
+# ✅ CORRECT - conftest.py content
+import pytest
+
+@pytest.fixture(scope="session")
+def ocp_admin_client():
+    """Pytest fixture - belongs in conftest.py"""
+    return get_cluster_client()
+
+def pytest_addoption(parser):
+    """Pytest hook - belongs in conftest.py"""
+    parser.addoption("--provider", action="store", default="vsphere")
+
+def pytest_runtest_makereport(item, call):
+    """Pytest hook - belongs in conftest.py"""
+    if call.excinfo is not None:
+        collect_must_gather(item)
+```
+
+```python
+# ❌ WRONG - These do NOT belong in conftest.py
+def get_vm_details(provider, vm_name):
+    """Helper function - move to utilities/"""
+    ...
+
+def validate_migration_status(plan):
+    """Utility function - move to utilities/"""
+    ...
+
+MAX_RETRIES = 3  # Constant - move to config
+```
+
+**Where to put helper functions:**
+
+| Function Type | Location |
+|---------------|----------|
+| Migration utilities | `utilities/mtv_migration.py` |
+| Resource utilities | `utilities/resources.py` |
+| Provider utilities | `utilities/providers.py` |
+| General utilities | `utilities/utils.py` |
+| Provider classes | `libs/<provider>.py` |
+
+**Why this rule exists:**
+
+- `conftest.py` has special meaning in pytest - it's for fixtures and hooks only
+- Mixing helper functions makes the file harder to maintain
+- Helper functions in conftest.py cannot be easily imported by other modules
+- Utility modules provide better code organization and reusability
 
 #### Session-Scoped Fixtures
 
