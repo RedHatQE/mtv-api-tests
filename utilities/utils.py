@@ -20,6 +20,7 @@ from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.virtual_machine_cluster_instancetype import VirtualMachineClusterInstancetype
 from ocp_resources.virtual_machine_cluster_preference import VirtualMachineClusterPreference
+from packaging import version
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
@@ -31,7 +32,6 @@ from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.resources import create_and_store_resource
-from packaging import version
 
 LOGGER = get_logger(__name__)
 

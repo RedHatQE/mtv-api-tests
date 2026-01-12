@@ -1244,21 +1244,21 @@ def check_vms(
                         check_vm_node_placement(
                             destination_vm=destination_vm, expected_node=labeled_worker_node["node_name"]
                         )
-                    except AssertionError as exp:
+                    except Exception as exp:
                         res[vm_name].append(f"check_vm_node_placement - {exp!s}")
 
             # Check VM labels if target_labels was specified
             if plan.get("target_labels") and labeled_vm is not None:
                 try:
                     check_vm_labels(destination_vm=destination_vm, expected_labels=labeled_vm["vm_labels"])
-                except AssertionError as exp:
+                except Exception as exp:
                     res[vm_name].append(f"check_vm_labels - {exp!s}")
 
             # Check VM affinity if target_affinity was specified
             if plan.get("target_affinity"):
                 try:
                     check_vm_affinity(destination_vm=destination_vm, expected_affinity=plan["target_affinity"])
-                except AssertionError as exp:
+                except Exception as exp:
                     res[vm_name].append(f"check_vm_affinity - {exp!s}")
 
         if vm_guest_agent:

@@ -671,7 +671,7 @@ def _get_prometheus_url(ocp_admin_client: DynamicClient) -> str | None:
     return None
 
 
-def _query_prometheus(url: str, query: str, token: str, insecure: bool = True) -> list[dict[str, Any]] | None:
+def _query_prometheus(url: str, query: str, token: str, *, insecure: bool = True) -> list[dict[str, Any]] | None:
     """Query Prometheus API and return results."""
     parsed_url = urllib.parse.urlparse(url)
     if parsed_url.scheme != "https":
