@@ -127,8 +127,40 @@ import kubernetes
 - ❌ **NEVER** use `kubernetes.client.*` APIs
 - ❌ **NEVER** instantiate `kubernetes.dynamic.DynamicClient` directly
 
-**Only exception:** Imports that are re-exported through `openshift-python-wrapper` are acceptable
-(e.g., if `openshift-python-wrapper` re-exports a type from `kubernetes` for type hints).
+**Only exception:** If a symbol is publicly re-exported by `openshift-python-wrapper` (e.g., a type
+or helper function exposed via its top-level `__init__.py`), it may be imported through the wrapper package.
+
+**Using openshift-python-wrapper's public API:**
+
+```python
+# ✅ ALLOWED - Using openshift-python-wrapper's public API
+from ocp_resources.resource import Resource
+# ocp_utilities provides a helper that returns a DynamicClient instance:
+from ocp_utilities.infra import get_client  # Returns DynamicClient instance
+
+# ❌ FORBIDDEN - Direct kubernetes import for runtime usage
+from kubernetes.dynamic import DynamicClient
+```
+
+**Type annotations exception:**
+
+```python
+# ✅ ALLOWED - DynamicClient import for type annotations only
+# Since DynamicClient is used throughout openshift-python-wrapper's public API
+# (e.g., get_client() returns it, Resource classes accept it), importing the
+# type for annotations is acceptable.
+from kubernetes.dynamic import DynamicClient  # OK for type hints
+
+def my_function(client: DynamicClient) -> None:
+    """Type annotation using DynamicClient is allowed."""
+    ...
+
+# ❌ FORBIDDEN - Using DynamicClient directly to create instances
+client = DynamicClient(...)  # Never instantiate directly
+```
+
+**Before importing:** Verify the symbol appears in `openshift-python-wrapper`'s public API (check the
+package's `__init__.py` or documentation) before importing it via the wrapper.
 
 #### Function Size - Keep Functions Small
 
