@@ -25,20 +25,57 @@
     "guest_vm_win_user": "WINDOWS VMS USERNAME",
     "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
     "copyoffload": {
-      "storage_vendor_product": "ontap",  # or "vantara"
-      "datastore_id": "datastore-12345",  # Primary/default datastore ID
-      "secondary_datastore_id": "datastore-67890",  # optional, for VMs with multiple datastores
+      # Supported storage_vendor_product values:
+      # - "ontap"           (NetApp ONTAP)
+      # - "vantara"         (Hitachi Vantara)
+      # - "primera3par"     (HPE Primera/3PAR)
+      # - "pureFlashArray"  (Pure Storage FlashArray)
+      # - "powerflex"       (Dell PowerFlex)
+      # - "powermax"        (Dell PowerMax)
+      # - "powerstore"      (Dell PowerStore)
+      # - "infinibox"       (Infinidat InfiniBox)
+      # - "flashsystem"     (IBM FlashSystem)
+      "storage_vendor_product": "ontap",
+      "datastore_id": "datastore-12345",
       "template_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
       "storage_password": "your-password-here",  # pragma: allowlist secret
-      "ontap_svm": "vserver-name",  # optional, required for NetApp ONTAP
-      "esxi_clone_method": "ssh", # optional, can be "vib" (default) or "ssh"
-      "esxi_host": "your-esxi-host.example.com", # required for ssh method
-      "esxi_user": "root", # required for ssh method
+
+      # Vendor-specific fields (configure based on your storage_vendor_product):
+      # See forklift vsphere-xcopy-volume-populator code/README for details
+
+      # NetApp ONTAP (required for "ontap"):
+      "ontap_svm": "vserver-name",
+
+      # Hitachi Vantara (required for "vantara"):
+      "vantara_storage_id": "123456789",  # Storage array serial number
+      "vantara_storage_port": "443",  # Storage API port
+      "vantara_hostgroup_id_list": "CL1-A,1:CL2-B,2:CL4-A,1:CL6-A,1",  # IO ports and host group IDs
+
+      # Pure Storage FlashArray (required for "pureFlashArray"):
+      # Get with: printf "px_%.8s" $(oc get storagecluster -A -o=jsonpath='{.items[?(@.spec.cloudStorage.provider=="pure")].status.clusterUid}')
+      "pure_cluster_prefix": "px_a1b2c3d4",
+
+      # Dell PowerFlex (required for "powerflex"):
+      # Get from vxflexos-config ConfigMap in vxflexos or openshift-operators namespace
+      "powerflex_system_id": "system-id",
+
+      # Dell PowerMax (required for "powermax"):
+      # Get from ConfigMap in powermax namespace used by CSI driver
+      "powermax_symmetrix_id": "000123456789",
+
+      # HPE Primera/3PAR, Dell PowerStore, Infinidat InfiniBox, IBM FlashSystem:
+      # No additional vendor-specific fields required - use only the common fields above
+
+      # ESXi SSH configuration (optional, for SSH-based cloning):
+      "esxi_clone_method": "ssh",  # "vib" (default) or "ssh"
+      "esxi_host": "your-esxi-host.example.com",  # required for ssh method
+      "esxi_user": "root",  # required for ssh method
       "esxi_password": "your-esxi-password",  # pragma: allowlist secret # required for ssh method
-      "rdm_lun_uuid": "naa.XXXXXXXXXXXXXXX",  # optional, for RDM disk testing
-      "default_vm_name": "custom-vm-name"  # optional, override source VM name for cloning
+
+      # RDM testing (optional, for RDM disk tests):
+      "rdm_lun_uuid": "naa.600a098038313954492458313032306f"
     }
   },
 

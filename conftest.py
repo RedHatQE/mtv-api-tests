@@ -940,23 +940,60 @@ def copyoffload_storage_secret(
 
     # Validate storage vendor product
     storage_vendor = copyoffload_cfg.get("storage_vendor_product")
+    supported_vendors = [
+        "ontap", "vantara", "primera3par", "pureFlashArray",
+        "powerflex", "powermax", "powerstore", "infinibox", "flashsystem"
+    ]
     if not storage_vendor:
         raise ValueError(
-            "storage_vendor_product is required in copyoffload configuration. Valid values: 'ontap', 'vantara'"
+            f"storage_vendor_product is required in copyoffload configuration. "
+            f"Valid values: {', '.join(supported_vendors)}"
+        )
+    if storage_vendor not in supported_vendors:
+        LOGGER.warning(
+            f"storage_vendor_product '{storage_vendor}' is not in the list of known vendors: {supported_vendors}. "
+            f"Continuing anyway, but this may cause issues if the vendor is not supported by the populator."
         )
 
-    # Base secret data
+    # Base secret data (required for all vendors)
     secret_data = {
         "STORAGE_HOSTNAME": storage_hostname,
         "STORAGE_USERNAME": storage_username,
         "STORAGE_PASSWORD": storage_password,
     }
 
-    # Add vendor-specific configuration
-    if storage_vendor == "ontap":
-        ontap_svm = get_copyoffload_credential("ontap_svm", copyoffload_cfg)
-        if ontap_svm:
-            secret_data["ONTAP_SVM"] = ontap_svm
+    # Vendor-specific configuration mapping
+    # Maps vendor name to list of (config_key, secret_key, required) tuples
+    # Based on forklift vsphere-xcopy-volume-populator code and README
+    vendor_specific_fields = {
+        "ontap": [("ontap_svm", "ONTAP_SVM", True)],
+        "vantara": [
+            ("vantara_storage_id", "STORAGE_ID", True),
+            ("vantara_storage_port", "STORAGE_PORT", True),
+            ("vantara_hostgroup_id_list", "HOSTGROUP_ID_LIST", True),
+        ],
+        "primera3par": [],  # Only basic credentials required
+        "pureFlashArray": [("pure_cluster_prefix", "PURE_CLUSTER_PREFIX", True)],
+        "powerflex": [("powerflex_system_id", "POWERFLEX_SYSTEM_ID", True)],
+        "powermax": [("powermax_symmetrix_id", "POWERMAX_SYMMETRIX_ID", True)],
+        "powerstore": [],  # Only basic credentials required
+        "infinibox": [],  # Only basic credentials required
+        "flashsystem": [],  # Only basic credentials required
+    }
+
+    # Add vendor-specific fields if configured
+    if storage_vendor in vendor_specific_fields:
+        for config_key, secret_key, required in vendor_specific_fields[storage_vendor]:
+            value = get_copyoffload_credential(config_key, copyoffload_cfg)
+            if value:
+                secret_data[secret_key] = value
+                LOGGER.info(f"✓ Added vendor-specific field: {secret_key}")
+            elif required:
+                raise ValueError(
+                    f"Required vendor-specific field '{config_key}' not found for vendor '{storage_vendor}'. "
+                    f"Add it to .providers.json copyoffload section or set environment variable: "
+                    f"COPYOFFLOAD_{config_key.upper()}"
+                )
 
     LOGGER.info(f"Creating storage secret for copy-offload with vendor: {storage_vendor}")
 
