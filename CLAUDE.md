@@ -134,16 +134,16 @@ client = DynamicClient(...)  # Never do this - use get_client() instead
 
 The following resource classes are available from `ocp_resources` and should be used directly:
 
-| Symbol | Import Path |
-|--------|-------------|
-| `Resource` | `from ocp_resources.resource import Resource` |
-| `Namespace` | `from ocp_resources.namespace import Namespace` |
-| `Secret` | `from ocp_resources.secret import Secret` |
-| `Pod` | `from ocp_resources.pod import Pod` |
+| Symbol           | Import Path                                                |
+| ---------------- | ---------------------------------------------------------- |
+| `Resource`       | `from ocp_resources.resource import Resource`              |
+| `Namespace`      | `from ocp_resources.namespace import Namespace`            |
+| `Secret`         | `from ocp_resources.secret import Secret`                  |
+| `Pod`            | `from ocp_resources.pod import Pod`                        |
 | `VirtualMachine` | `from ocp_resources.virtual_machine import VirtualMachine` |
-| `StorageClass` | `from ocp_resources.storage_class import StorageClass` |
-| `ConfigMap` | `from ocp_resources.configmap import ConfigMap` |
-| `Service` | `from ocp_resources.service import Service` |
+| `StorageClass`   | `from ocp_resources.storage_class import StorageClass`     |
+| `ConfigMap`      | `from ocp_resources.configmap import ConfigMap`            |
+| `Service`        | `from ocp_resources.service import Service`                |
 
 **Verifying re-exports:**
 
@@ -166,7 +166,8 @@ Each resource module typically exports a single class with the resource name.
 
 - `ocp_utilities.infra.get_client()` returns a `kubernetes.dynamic.DynamicClient` instance
 - This does NOT mean `DynamicClient` is re-exported by `openshift-python-wrapper`
-- The fact that `get_client()` returns `DynamicClient` only permits importing `DynamicClient` for type annotations (see below)
+- The fact that `get_client()` returns `DynamicClient` only permits importing `DynamicClient`
+  for type annotations (see below)
 - You must NEVER instantiate `DynamicClient` directly - always use `get_client()`
 
 **Type annotations exception for DynamicClient:**
@@ -228,14 +229,14 @@ isinstance(obj, DynamicClient)  # Runtime usage is forbidden
 
 **Summary of DynamicClient rules:**
 
-| Usage | Allowed? |
-|-------|----------|
-| Import inside `TYPE_CHECKING` block | Yes |
-| String annotation `"DynamicClient"` | Yes |
-| Top-level import used only in annotations | Yes (but prefer TYPE_CHECKING) |
-| Instantiate `DynamicClient(...)` directly | No - use `get_client()` |
-| Use in `isinstance()` or runtime checks | No |
-| Import other `kubernetes.*` modules | No |
+| Usage                                        | Allowed?                         |
+| -------------------------------------------- | -------------------------------- |
+| Import inside `TYPE_CHECKING` block          | Yes                              |
+| String annotation `"DynamicClient"`          | Yes                              |
+| Top-level import used only in annotations    | Yes (but prefer TYPE_CHECKING)   |
+| Instantiate `DynamicClient(...)` directly    | No - use `get_client()`          |
+| Use in `isinstance()` or runtime checks      | No                               |
+| Import other `kubernetes.*` modules          | No                               |
 
 #### Function Size - Keep Functions Small
 
@@ -849,13 +850,13 @@ MAX_RETRIES = 3  # Constant - move to config
 
 **Where to put helper functions:**
 
-| Function Type | Location |
-|---------------|----------|
-| Migration utilities | `utilities/mtv_migration.py` |
-| Resource utilities | `utilities/resources.py` |
-| Provider utilities | `utilities/providers.py` |
-| General utilities | `utilities/utils.py` |
-| Provider classes | `libs/<provider>.py` |
+| Function Type       | Location                      |
+| ------------------- | ----------------------------- |
+| Migration utilities | `utilities/mtv_migration.py`  |
+| Resource utilities  | `utilities/resources.py`      |
+| Provider utilities  | `utilities/providers.py`      |
+| General utilities   | `utilities/utils.py`          |
+| Provider classes    | `libs/<provider>.py`          |
 
 **Why this rule exists:**
 
