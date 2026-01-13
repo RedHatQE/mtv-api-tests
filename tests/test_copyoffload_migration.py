@@ -710,7 +710,7 @@ def test_copyoffload_rdm_virtual_disk_migration(
 
 @pytest.mark.copyoffload
 @pytest.mark.parametrize(
-    ("plan", "multus_network_name"),
+    "plan,multus_network_name",
     [
         pytest.param(
             py_config["tests_params"]["test_copyoffload_multi_datastore_migration"],
