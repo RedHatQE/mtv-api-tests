@@ -19,7 +19,7 @@ RHV, OpenStack, and OVA using Migration Toolkit for Virtualization (MTV).
 You need a base VM/template in your source provider:
 
 | Provider | Resource Type | Requirements |
-|----------|--------------|--------------|
+| -------- | ------------- | ------------ |
 | **VMware vSphere** | VM | Powered off, QEMU guest agent installed |
 | **RHV/oVirt** | Template | Min 1536 MiB memory |
 | **OpenStack** | Instance | ACTIVE/SHUTOFF state, QEMU guest agent installed |
@@ -207,7 +207,7 @@ podman run --rm \
 The Quick Start runs **tier0** tests (smoke tests). You can run other test categories by changing the `-m` marker:
 
 | Marker | What It Tests | When to Use |
-|--------|---------------|-------------|
+| ------ | ------------- | ----------- |
 | `tier0` | Smoke tests - critical paths | First run, quick validation |
 | `copyoffload` | Fast migrations via shared storage | Testing storage arrays |
 | `warm` | Warm migrations (VMs stay running) | Specific scenario testing |
