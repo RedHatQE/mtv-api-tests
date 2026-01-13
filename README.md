@@ -52,10 +52,7 @@ or build and push your own custom image.
 
 **Option A: Use the public image** (recommended):
 
-```bash
-# Use the pre-built image directly
-IMAGE=ghcr.io/redhatqe/mtv-api-tests:latest
-```
+Use `ghcr.io/redhatqe/mtv-api-tests:latest` directly in the commands below.
 
 **Option B: Build your own custom image**:
 
