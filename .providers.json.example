@@ -27,7 +27,7 @@
     "copyoffload": {
       "storage_vendor_product": "ontap",  # or "vantara"
       "datastore_id": "datastore-12345",  # Primary/default datastore ID
-      "secondary_datastore_id": "datastore-67890",  # Secondary datastore ID (same storage system)
+      "secondary_datastore_id": "datastore-67890",  # optional, for VMs with multiple datastores
       "template_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
