@@ -941,8 +941,15 @@ def copyoffload_storage_secret(
     # Validate storage vendor product
     storage_vendor = copyoffload_cfg.get("storage_vendor_product")
     supported_vendors = [
-        "ontap", "vantara", "primera3par", "pureFlashArray",
-        "powerflex", "powermax", "powerstore", "infinibox", "flashsystem"
+        "ontap",
+        "vantara",
+        "primera3par",
+        "pureFlashArray",
+        "powerflex",
+        "powermax",
+        "powerstore",
+        "infinibox",
+        "flashsystem",
     ]
     if not storage_vendor:
         raise ValueError(
