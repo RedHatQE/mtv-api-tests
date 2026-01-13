@@ -312,9 +312,12 @@ spec:
               ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \
               ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \
               ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \
-              --tc=source_provider_type:vsphere \
-              --tc=source_provider_version:8.0.3.00400 \
-              --tc=storage_class:your-storage-class
+              --tc=source_provider_type:[PROVIDER_TYPE] \
+              --tc=source_provider_version:[PROVIDER_VERSION] \
+              --tc=storage_class:[STORAGE_CLASS]
+            # Replace [PROVIDER_TYPE] with: vsphere, ovirt, openstack, or ova
+            # Replace [PROVIDER_VERSION] with the exact version from your .providers.json key
+            # Replace [STORAGE_CLASS] with your OpenShift storage class name
             # Optional: To run a specific test, add: -k [TEST_FILTER]
         volumeMounts:
         - name: config
@@ -333,6 +336,9 @@ Replace placeholders:
 
 - `[JOB_NAME]` → `mtv-tier0-tests`
 - `[TEST_MARKERS]` → `tier0`
+- `[PROVIDER_TYPE]` → `vsphere` (or `ovirt`, `openstack`, `ova`)
+- `[PROVIDER_VERSION]` → `8.0.3.00400` (must match your `.providers.json` key exactly)
+- `[STORAGE_CLASS]` → `rhosqe-ontap-san-block` (your OpenShift storage class)
 - Remove the commented `-k` and `[TEST_FILTER]` lines
 
 **Replace cluster configuration:**
@@ -370,7 +376,8 @@ Use Option B with Secret for better security.
 **Follow test logs in real-time**:
 
 ```bash
-oc logs -n mtv-tests job/mtv-tier0-tests -f
+# Replace [JOB_NAME] with your actual job name (e.g., mtv-tier0-tests)
+oc logs -n mtv-tests job/[JOB_NAME] -f
 ```
 
 **Check Job status**:
@@ -383,15 +390,17 @@ oc get jobs -n mtv-tests
 **Retrieve test results**:
 
 ```bash
-# Copy JUnit XML report from completed pod
-POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-tier0-tests -o jsonpath='{.items[0].metadata.name}')
+# Copy JUnit XML report from completed pod (replace [JOB_NAME] with your actual job name)
+# Note: pytest writes to /app/junit-report.xml (WORKDIR /app, pytest.ini: --junit-xml=junit-report.xml)
+POD_NAME=$(oc get pods -n mtv-tests -l job-name=[JOB_NAME] -o jsonpath='{.items[0].metadata.name}')
 oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 ```
 
 **Clean up after tests**:
 
 ```bash
-oc delete job mtv-tier0-tests -n mtv-tests
+# Replace [JOB_NAME] with your actual job name
+oc delete job [JOB_NAME] -n mtv-tests
 ```
 
 ---
@@ -521,7 +530,8 @@ Tests automatically generate a **JUnit XML report** (`junit-report.xml`) contain
 **From local Podman/Docker run**:
 
 ```bash
-# Mount a volume to save the report
+# Default path: /app/junit-report.xml (WORKDIR /app, pytest.ini: --junit-xml=junit-report.xml)
+# Override with --junit-xml to write to a mounted volume for persistence:
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -v $(pwd)/results:/app/results \
@@ -540,7 +550,8 @@ podman run --rm \
 **From OpenShift Job**:
 
 ```bash
-# Copy report from completed pod (replace JOB_NAME with your job name, e.g., mtv-tier0-tests)
+# Copy report from completed pod (default path: /app/junit-report.xml from pytest.ini)
+# Replace JOB_NAME with your job name, e.g., mtv-tier0-tests
 POD_NAME=$(oc get pods -n mtv-tests -l job-name=JOB_NAME -o jsonpath='{.items[0].metadata.name}')
 oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 ```
@@ -609,7 +620,13 @@ oc adm must-gather --image=quay.io/konveyor/forklift-must-gather:latest --dest-d
 
 ### Manual Resource Cleanup
 
-If tests fail or you used `--skip-teardown`, clean up manually:
+If tests fail or you used `--skip-teardown`, clean up manually.
+
+**About the data collector**: The test suite includes a data collector feature that tracks all created
+resources in `.data-collector/resources.json`. This file is created automatically during test runs unless
+you pass `--skip-data-collector`. When available, use `tools/clean_cluster.py` with the `resources.json`
+file for automated cleanup. If the file doesn't exist (e.g., you used `--skip-data-collector`), fall back
+to manual `oc delete` commands.
 
 ```bash
 # Using resource tracker (if data collector was enabled)
