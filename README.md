@@ -175,7 +175,7 @@ podman run --rm \
   uv run pytest -m tier0 -v \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' `# pragma: allowlist secret` \
+    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
     --tc=source_provider_type:vsphere \
     --tc=source_provider_version:8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
@@ -210,6 +210,9 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | `warm` | Warm migrations (VMs stay running) | Specific scenario testing |
 
 **Examples** - Change `-m tier0` to run different tests:
+
+> **Note**: In the examples below, replace `podman run ...` with the full `podman run` command shown in the
+> Quick Start section (step 5), including the image name and volume mounts.
 
 ```bash
 # Warm migration tests
@@ -362,7 +365,7 @@ Replace placeholders:
           - -v
           - --tc=cluster_host:https://api.your-cluster.com:6443
           - --tc=cluster_username:kubeadmin
-          - --tc=cluster_password:your-cluster-password
+          - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
           - --tc=source_provider_type:vsphere
           - --tc=source_provider_version:8.0.3.00400
           - --tc=storage_class:your-storage-class
@@ -474,7 +477,7 @@ podman run --rm \
   uv run pytest -s -vv -m tier0 --skip-teardown \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' `# pragma: allowlist secret` \
+    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
@@ -540,7 +543,7 @@ podman run --rm \
     --junit-xml=/app/results/junit-report.xml \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
-    --tc=cluster_password:'your-cluster-password' `# pragma: allowlist secret` \
+    --tc=cluster_password:'your-cluster-password' \  # pragma: allowlist secret
     --tc=source_provider_type:vsphere \
     --tc=storage_class:YOUR-STORAGE-CLASS
 
@@ -551,8 +554,8 @@ podman run --rm \
 
 ```bash
 # Copy report from completed pod (default path: /app/junit-report.xml from pytest.ini)
-# Replace JOB_NAME with your job name, e.g., mtv-tier0-tests
-POD_NAME=$(oc get pods -n mtv-tests -l job-name=JOB_NAME -o jsonpath='{.items[0].metadata.name}')
+# Replace [JOB_NAME] with your job name, e.g., mtv-tier0-tests
+POD_NAME=$(oc get pods -n mtv-tests -l job-name=[JOB_NAME] -o jsonpath='{.items[0].metadata.name}')
 oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 ```
 
@@ -711,7 +714,7 @@ uv sync  # uv will automatically handle Python version
 uv run pytest -v \
   --tc=cluster_host:https://api.cluster.com:6443 \
   --tc=cluster_username:kubeadmin \
-  --tc=cluster_password:'PASSWORD' `# pragma: allowlist secret` \
+  --tc=cluster_password:'PASSWORD' \  # pragma: allowlist secret
   --tc=source_provider_type:vsphere \
   --tc=source_provider_version:8.0.1 \
   --tc=storage_class:standard-csi
