@@ -68,6 +68,19 @@ RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 
+# Supported storage vendors for copy-offload functionality
+SUPPORTED_VENDORS = [
+    "ontap",
+    "vantara",
+    "primera3par",
+    "pureFlashArray",
+    "powerflex",
+    "powermax",
+    "powerstore",
+    "infinibox",
+    "flashsystem",
+]
+
 
 # Pytest start
 
@@ -940,26 +953,17 @@ def copyoffload_storage_secret(
 
     # Validate storage vendor product
     storage_vendor = copyoffload_cfg.get("storage_vendor_product")
-    supported_vendors = [
-        "ontap",
-        "vantara",
-        "primera3par",
-        "pureFlashArray",
-        "powerflex",
-        "powermax",
-        "powerstore",
-        "infinibox",
-        "flashsystem",
-    ]
     if not storage_vendor:
         raise ValueError(
             f"storage_vendor_product is required in copyoffload configuration. "
-            f"Valid values: {', '.join(supported_vendors)}"
+            f"Valid values: {', '.join(SUPPORTED_VENDORS)}"
         )
-    if storage_vendor not in supported_vendors:
+    if storage_vendor not in SUPPORTED_VENDORS:
         LOGGER.warning(
-            f"storage_vendor_product '{storage_vendor}' is not in the list of known vendors: {supported_vendors}. "
-            f"Continuing anyway, but this may cause issues if the vendor is not supported by the populator."
+            "storage_vendor_product '%s' is not in the list of known vendors: %s. "
+            "Continuing anyway, but this may cause issues if the vendor is not supported by the populator.",
+            storage_vendor,
+            SUPPORTED_VENDORS,
         )
 
     # Base secret data (required for all vendors)
@@ -972,6 +976,7 @@ def copyoffload_storage_secret(
     # Vendor-specific configuration mapping
     # Maps vendor name to list of (config_key, secret_key, required) tuples
     # Based on forklift vsphere-xcopy-volume-populator code and README
+    # NOTE: Keys must match SUPPORTED_VENDORS constant defined at module level
     vendor_specific_fields = {
         "ontap": [("ontap_svm", "ONTAP_SVM", True)],
         "vantara": [
@@ -988,21 +993,28 @@ def copyoffload_storage_secret(
         "flashsystem": [],  # Only basic credentials required
     }
 
+    # Ensure vendor_specific_fields keys match SUPPORTED_VENDORS to prevent drift
+    assert set(vendor_specific_fields.keys()) == set(SUPPORTED_VENDORS), (
+        f"vendor_specific_fields keys must match SUPPORTED_VENDORS. "
+        f"Missing in vendor_specific_fields: {set(SUPPORTED_VENDORS) - set(vendor_specific_fields.keys())}. "
+        f"Extra in vendor_specific_fields: {set(vendor_specific_fields.keys()) - set(SUPPORTED_VENDORS)}"
+    )
+
     # Add vendor-specific fields if configured
     if storage_vendor in vendor_specific_fields:
         for config_key, secret_key, required in vendor_specific_fields[storage_vendor]:
             value = get_copyoffload_credential(config_key, copyoffload_cfg)
             if value:
                 secret_data[secret_key] = value
-                LOGGER.info(f"✓ Added vendor-specific field: {secret_key}")
+                LOGGER.info("✓ Added vendor-specific field: %s", secret_key)
             elif required:
+                env_var_name = f"COPYOFFLOAD_{config_key.upper()}"
                 raise ValueError(
                     f"Required vendor-specific field '{config_key}' not found for vendor '{storage_vendor}'. "
-                    f"Add it to .providers.json copyoffload section or set environment variable: "
-                    f"COPYOFFLOAD_{config_key.upper()}"
+                    f"Add it to .providers.json copyoffload section or set environment variable: {env_var_name}"
                 )
 
-    LOGGER.info(f"Creating storage secret for copy-offload with vendor: {storage_vendor}")
+    LOGGER.info("Creating storage secret for copy-offload with vendor: %s", storage_vendor)
 
     storage_secret = create_and_store_resource(
         client=ocp_admin_client,
@@ -1012,7 +1024,7 @@ def copyoffload_storage_secret(
         string_data=secret_data,
     )
 
-    LOGGER.info(f"✓ Copy-offload storage secret created: {storage_secret.name}")
+    LOGGER.info("✓ Copy-offload storage secret created: %s", storage_secret.name)
     return storage_secret
 
 
