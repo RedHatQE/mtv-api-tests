@@ -47,6 +47,11 @@
       # When specified, tests can validate copy-offload with disks on different datastores
       "secondary_datastore_id": "datastore-67890",
 
+      # Optional: Non-XCOPY datastore for mixed datastore tests
+      # This should be a datastore that does NOT support XCOPY/VAAI primitives
+      # Used for testing VMs with disks on both XCOPY and non-XCOPY datastores
+      "non_xcopy_datastore_id": "datastore-99999",
+
       "default_vm_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",

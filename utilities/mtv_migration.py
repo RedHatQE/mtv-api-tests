@@ -233,6 +233,7 @@ def get_storage_migration_map(
     # Copy-offload specific parameters
     datastore_id: str | None = None,
     secondary_datastore_id: str | None = None,
+    non_xcopy_datastore_id: str | None = None,
     offload_plugin_config: dict[str, Any] | None = None,
     access_mode: str | None = None,
     volume_mode: str | None = None,
@@ -246,6 +247,8 @@ def get_storage_migration_map(
         When datastore_id and offload_plugin_config are provided, creates a
         copy-offload storage map instead of querying the inventory.
         Optionally supports secondary_datastore_id for multi-datastore scenarios.
+        Also supports non_xcopy_datastore_id for mixed datastore scenarios where
+        some disks use copy-offload and others use standard migration.
 
     Args:
         fixture_store: Pytest fixture store for resource tracking
@@ -258,6 +261,7 @@ def get_storage_migration_map(
         storage_class: Storage class to use (optional, defaults to config value)
         datastore_id: Primary datastore ID for copy-offload (optional, triggers copy-offload mode)
         secondary_datastore_id: Secondary datastore ID for multi-datastore copy-offload (optional)
+        non_xcopy_datastore_id: Non-XCOPY datastore ID for mixed migrations (optional, mapped without offload plugin)
         offload_plugin_config: Copy-offload plugin configuration (optional, required if datastore_id is set)
         access_mode: Access mode for copy-offload (optional, used only in copy-offload mode)
         volume_mode: Volume mode for copy-offload (optional, used only in copy-offload mode)
@@ -284,6 +288,9 @@ def get_storage_migration_map(
     if secondary_datastore_id and not datastore_id:
         raise ValueError("secondary_datastore_id requires datastore_id to be set")
 
+    if non_xcopy_datastore_id and not datastore_id:
+        raise ValueError("non_xcopy_datastore_id requires datastore_id to be set")
+
     if datastore_id and not offload_plugin_config:
         raise ValueError("datastore_id requires offload_plugin_config to be set")
 
@@ -296,7 +303,7 @@ def get_storage_migration_map(
         else:
             LOGGER.info(f"Creating copy-offload storage map for primary datastore: {datastore_id}")
 
-        # Create a storage map entry for each datastore
+        # Create a storage map entry for each XCOPY-capable datastore
         for ds_id in datastores_to_map:
             destination_config = {
                 "storageClass": target_storage_class,
@@ -313,7 +320,23 @@ def get_storage_migration_map(
                 "source": {"id": ds_id},
                 "offloadPlugin": offload_plugin_config,
             })
-            LOGGER.info(f"Added storage map entry for datastore: {ds_id}")
+            LOGGER.info(f"Added storage map entry for datastore: {ds_id} with copy-offload")
+
+        # Add non-XCOPY datastore mapping (without offload plugin)
+        if non_xcopy_datastore_id:
+            destination_config = {"storageClass": target_storage_class}
+            if access_mode:
+                destination_config["accessMode"] = access_mode
+            if volume_mode:
+                destination_config["volumeMode"] = volume_mode
+            LOGGER.info(f"Adding non-XCOPY datastore mapping for: {non_xcopy_datastore_id}")
+            storage_map_list.append({
+                "destination": {"storageClass": target_storage_class},
+                "source": {"id": non_xcopy_datastore_id},
+            })
+            LOGGER.info(
+                f"Added storage map entry for non-XCOPY datastore: {non_xcopy_datastore_id} (standard migration)"
+            )
     else:
         LOGGER.info(f"Creating standard storage map for VMs: {vms}")
         storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)

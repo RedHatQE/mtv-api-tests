@@ -828,12 +828,24 @@ class VMWareProvider(BaseProvider):
         if available_unit_number is None:
             raise RuntimeError(f"No available unit number on SCSI controller for VM '{source_vm.name}'.")
 
-        # Get secondary datastore if configured
-        secondary_datastore_id = self.copyoffload_config.get("secondary_datastore_id")
+        # Get secondary and non-XCOPY datastores if configured
+        secondary_datastore_id = (
+            self.copyoffload_config.get("secondary_datastore_id") if self.copyoffload_config else None
+        )
+        non_xcopy_datastore_id = (
+            self.copyoffload_config.get("non_xcopy_datastore_id") if self.copyoffload_config else None
+        )
+
         secondary_datastore = None
+        non_xcopy_datastore = None
+
         if secondary_datastore_id:
             secondary_datastore = self.get_obj([vim.Datastore], secondary_datastore_id)
             LOGGER.info("Secondary datastore available: %s (%s)", secondary_datastore.name, secondary_datastore_id)
+
+        if non_xcopy_datastore_id:
+            non_xcopy_datastore = self.get_obj([vim.Datastore], non_xcopy_datastore_id)
+            LOGGER.info("Non-XCOPY datastore available: %s (%s)", non_xcopy_datastore.name, non_xcopy_datastore_id)
 
         # Validate datastore capacity per datastore (group disks by datastore)
         datastore_capacity_requirements: dict[str, float] = {}
@@ -846,6 +858,12 @@ class VMWareProvider(BaseProvider):
                 if not secondary_datastore:
                     raise VmCloneError(ERR_SECONDARY_DS_NOT_CONFIGURED)
                 disk_datastore_id = secondary_datastore._moId
+            elif disk_datastore_id == "non_xcopy_datastore_id":
+                if not non_xcopy_datastore:
+                    raise VmCloneError(
+                        "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
+                    )
+                disk_datastore_id = non_xcopy_datastore._moId
             elif not disk_datastore_id:
                 # Use default/primary datastore
                 disk_datastore_id = target_datastore._moId
@@ -862,6 +880,8 @@ class VMWareProvider(BaseProvider):
                 datastore = target_datastore
             elif secondary_datastore and ds_id == secondary_datastore._moId:
                 datastore = secondary_datastore
+            elif non_xcopy_datastore and ds_id == non_xcopy_datastore._moId:
+                datastore = non_xcopy_datastore
             else:
                 datastore = self.get_obj([vim.Datastore], ds_id)
             available_space_gb = datastore.summary.freeSpace / (1024**3)
@@ -877,14 +897,20 @@ class VMWareProvider(BaseProvider):
             disk_datastore_id = disk.get("datastore_id")
             LOGGER.info("Processing disk %s: datastore_id from config = '%s'", available_unit_number, disk_datastore_id)
 
-            # Check if this disk should use secondary datastore
+            # Check if this disk should use secondary datastore, non-XCOPY datastore, or custom datastore
             if disk_datastore_id == "secondary_datastore_id" and secondary_datastore:
                 disk_datastore = secondary_datastore
                 LOGGER.info(
                     f"Disk {available_unit_number}: Using secondary datastore '{disk_datastore.name}' "
                     f"(ID: {disk_datastore._moId})",
                 )
-            elif disk_datastore_id and disk_datastore_id != "secondary_datastore_id":
+            elif disk_datastore_id == "non_xcopy_datastore_id" and non_xcopy_datastore:
+                disk_datastore = non_xcopy_datastore
+                LOGGER.info(
+                    f"Disk {available_unit_number}: Using non-XCOPY datastore '{disk_datastore.name}' "
+                    f"(ID: {disk_datastore._moId})"
+                )
+            elif disk_datastore_id and disk_datastore_id not in ("secondary_datastore_id", "non_xcopy_datastore_id"):
                 # Custom datastore ID specified
                 disk_datastore = self.get_obj([vim.Datastore], disk_datastore_id)
                 LOGGER.info(
@@ -898,7 +924,6 @@ class VMWareProvider(BaseProvider):
                     f"Disk {available_unit_number}: Using default datastore '{disk_datastore.name}' "
                     f"(ID: {disk_datastore._moId})",
                 )
-
             new_disk_spec = vim.vm.device.VirtualDeviceSpec()
             new_disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
             new_disk_spec.fileOperation = vim.vm.device.VirtualDeviceSpec.FileOperation.create
@@ -910,6 +935,7 @@ class VMWareProvider(BaseProvider):
 
             backing_info = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
             backing_info.diskMode = disk.get("disk_mode", "persistent")
+            backing_info.datastore = disk_datastore  # Set the datastore for this disk
 
             # Set datastore and fileName for backing info
             # IMPORTANT: Both datastore object and fileName must be set to force disk creation on correct datastore
