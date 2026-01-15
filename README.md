@@ -215,16 +215,20 @@ tests_params: dict = {
         "target_node_selector": {  # Sets a Kubernetes nodeSelector for migrated VMs. When specified, the test
                                    # framework's labeled_worker_node fixture automatically labels a worker node
                                    # with this key-value pair, then creates a nodeSelector constraint on the target VMs.
-            "mtv-test-node": "auto"  # "auto" generates a unique value using pytest's session UUID (e.g., "auto-abc123ef")
-                                     # for test isolation. See labeled_worker_node fixture in conftest.py for details.
+            "mtv-test-node": None  # None triggers auto-generation with session UUID (e.g., "auto-abc123ef")
+                                   # for test isolation. Custom string values are used as-is.
+                                   # See labeled_worker_node fixture in conftest.py for details.
         },
         "target_labels": {  # Labels applied to migrated VMs. These labels can be referenced in target_affinity.matchLabels.
-                            # Values set to "auto" are automatically replaced with a unique value using session UUID.
-            "mtv-test-label": "auto",  # "auto" generates unique value (e.g., "auto-abc123")
-            "app": "my-app"  # This label is referenced by target_affinity.matchLabels below
+                            # - None: Auto-generates unique value with session UUID (e.g., "auto-abc123")
+                            # - String value: Uses the exact custom value provided (no auto-generation)
+            "mtv-test-label": None,  # Auto-generated unique value
+            "app": "my-app"  # Custom value used literally - referenced by target_affinity.matchLabels below
         },
         "target_affinity": {  # Pod affinity rules for migrated VMs. Uses soft affinity for scheduling preferences.
-                              # IMPORTANT: All keys in matchLabels (e.g., "app") must be defined in target_labels above.
+                              # IMPORTANT: Requires exact structure - no auto-generation support.
+                              # All keys in matchLabels (e.g., "app") must be defined in target_labels above.
+                              # Only reference labels with explicit values (not None/auto-generated) in matchLabels.
                               # This ensures the labels exist on migrated VMs before affinity rules reference them.
             "podAffinity": {
                 "preferredDuringSchedulingIgnoredDuringExecution": [{

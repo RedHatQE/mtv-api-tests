@@ -150,14 +150,11 @@ class OCPProvider(BaseProvider):
         )
 
         # Serial number (from firmware) - for serial preservation verification
+        firmware_spec: dict[str, Any] | None = cnv_vm.instance.spec.template.spec.domain.get("firmware")
+        result_vm_info["serial"] = firmware_spec.get("serial") if firmware_spec else None
+
         # Extract template once to avoid duplicate attribute access
         template = cnv_vm.instance.spec.template
-
-        # Serial number (from firmware) - for serial preservation verification
-        firmware_spec: dict[str, Any] | None = (
-            template.spec.domain.get("firmware") if template and template.spec else None
-        )
-        result_vm_info["serial"] = firmware_spec.get("serial") if firmware_spec else None
 
         # VM labels - from template.metadata.labels (VMI template)
         template_metadata = template.metadata if template else None
@@ -165,7 +162,7 @@ class OCPProvider(BaseProvider):
 
         # VM affinity - from template.spec.affinity (VMI template)
         template_spec = template.spec if template else None
-        result_vm_info["affinity"] = template_spec.affinity if template_spec and template_spec.affinity else None
+        result_vm_info["affinity"] = template_spec.affinity if template_spec and template_spec.affinity else {}
 
         self.start_vm(cnv_vm)
         # True guest agent is reporting all ok
@@ -178,7 +175,7 @@ class OCPProvider(BaseProvider):
         try:
             node_name = cnv_vm.vmi.instance.status.nodeName
         except (AttributeError, NotFoundError):
-            LOGGER.debug(f"Could not retrieve node name for VM {cnv_vm_name}")
+            LOGGER.debug("Could not retrieve node name for VM %s", cnv_vm_name)
         result_vm_info["node_name"] = node_name
 
         for interface in cnv_vm.vmi.interfaces:

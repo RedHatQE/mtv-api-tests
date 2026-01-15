@@ -26,7 +26,7 @@ from utilities.migration_utils import prepare_migration_for_tests
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
-from utilities.utils import gen_network_map_list, get_value_from_py_config, is_mtv_version_supported
+from utilities.utils import gen_network_map_list, get_value_from_py_config
 
 LOGGER = get_logger(__name__)
 
@@ -62,15 +62,8 @@ def migrate_vms(
             vm["id"] = vm_data["id"]
             LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
 
-    # Get target_affinity from plan
+    # Get target_affinity from plan (if configured)
     target_affinity = plan.get("target_affinity")
-    if target_affinity:
-        # Check MTV version support for targetAffinity
-        if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
-            LOGGER.warning("targetAffinity requires MTV 2.10.0+, skipping feature")
-            target_affinity = None
-        else:
-            LOGGER.info(f"Using target_affinity: {target_affinity}")
 
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
@@ -90,8 +83,10 @@ def migrate_vms(
         source_vms_namespace=source_vms_namespace,
         labeled_worker_node=labeled_worker_node,
         target_vm_labels=target_vm_labels,
-        target_affinity=target_affinity,
     )
+
+    # Add target_affinity to run_migration kwargs
+    run_migration_kwargs["target_affinity"] = target_affinity
 
     migration_plan = run_migration(**run_migration_kwargs)
 
@@ -170,7 +165,7 @@ def run_migration(
          copyoffload (bool): Enable copy-offload specific settings for the Plan
          target_node_selector (dict[str, str] | None): Node selector to apply to migrated VMs. When None, no node selector is applied.
          target_labels (dict[str, str] | None): Additional labels to set on migrated VM resources. When None, no additional labels are applied.
-         target_affinity (dict | None): Pod affinity/anti-affinity rules to apply to migrated VMs. When None, no affinity rules are applied.
+         target_affinity (dict[str, Any] | None): Pod affinity/anti-affinity rules to apply to migrated VMs. When None, no affinity rules are applied.
 
     Returns:
         Plan and Migration Managed Resources.

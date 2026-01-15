@@ -15,7 +15,6 @@ from kubernetes.dynamic import DynamicClient
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
-
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.resource import NotFoundError, ResourceEditor
@@ -66,7 +65,6 @@ from utilities.utils import (
     create_source_provider,
     get_cluster_client,
     get_value_from_py_config,
-    is_mtv_version_supported,
 )
 from utilities.virtctl import download_virtctl_from_cluster
 
@@ -411,6 +409,24 @@ def virtctl_binary(ocp_admin_client):
     return download_virtctl_from_cluster(client=ocp_admin_client)
 
 
+@pytest.fixture(autouse=True)
+def check_min_mtv_version(request, ocp_admin_client):
+    """Automatically skip tests that require minimum MTV version if version check fails.
+
+    Usage:
+        @pytest.mark.min_mtv_version("2.10.0")
+        def test_something(...):
+            # Test runs only if MTV >= 2.10.0
+    """
+    marker = request.node.get_closest_marker("min_mtv_version")
+    if marker:
+        min_version = marker.args[0]
+        from utilities.utils import has_mtv_minimum_version  # noqa: PLC0415
+
+        if not has_mtv_minimum_version(min_version, client=ocp_admin_client):
+            pytest.skip(f"Test requires MTV {min_version}+")
+
+
 @pytest.fixture(scope="session")
 def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
     """
@@ -648,66 +664,98 @@ def destination_ocp_provider(fixture_store, destination_ocp_secret, ocp_admin_cl
 
 @pytest.fixture(scope="function")
 def labeled_worker_node(session_uuid, ocp_admin_client, plan):
-    """Label a worker node with test label for targetNodeSelector testing."""
-    target_node_selector = plan.get("target_node_selector", {})
-    if not target_node_selector:
-        yield None
-        return
+    """Label worker node for targetNodeSelector testing.
 
-    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
-        LOGGER.warning("targetNodeSelector requires MTV 2.10.0+, skipping feature")
-        yield None
-        return
+    This fixture labels a worker node and returns the label information for migration.
+    The test must be skipped if MTV < 2.10.0 using @pytest.mark.skipif decorator.
+
+    Args:
+        session_uuid: Unique session identifier
+        ocp_admin_client: OpenShift admin client
+        plan: Test plan configuration
+
+    Returns:
+        Dict with 'node_name', 'label_key', 'label_value' keys
+
+    Raises:
+        ValueError: If target_node_selector not configured in plan or is empty
+    """
+    # Fail fast if feature not configured
+    if "target_node_selector" not in plan:
+        raise ValueError(
+            "target_node_selector not configured in plan. "
+            "Add 'target_node_selector': {'label-key': None} to test config."
+        )
+
+    target_node_selector = plan["target_node_selector"]
+
+    if not target_node_selector:
+        raise ValueError(
+            "target_node_selector is empty. Add 'target_node_selector': {'label-key': None} to test config."
+        )
 
     worker_nodes = get_worker_nodes(ocp_admin_client)
-
     if not worker_nodes:
-        pytest.skip("No worker nodes found")
+        pytest.fail("No nodes with worker role found in cluster - test environment misconfigured")
 
     target_node = select_node_by_available_memory(ocp_admin_client, worker_nodes)
 
     label_key, config_value = next(iter(target_node_selector.items()))
-    label_value = session_uuid if config_value == "auto" else config_value
+    # None means auto-generate using session_uuid, otherwise use provided value
+    label_value = session_uuid if config_value is None else config_value
 
+    LOGGER.info(f"Labeling node '{target_node}' with {label_key}={label_value}")
     label_node(ocp_admin_client, target_node, label_key, label_value)
-    LOGGER.info(f"Labeled worker node {target_node} with {label_key}={label_value}")
 
-    result = {"node_name": target_node, "label_key": label_key, "label_value": label_value}
-    yield result
+    yield {
+        "node_name": target_node,
+        "label_key": label_key,
+        "label_value": label_value,
+    }
 
+    # Cleanup: Remove the label
     cleanup_node_label(ocp_admin_client, target_node, label_key)
 
 
 @pytest.fixture(scope="function")
-def target_vm_labels(session_uuid, ocp_admin_client, plan):
-    """Generate VM labels for targetLabels testing."""
+def target_vm_labels(session_uuid, plan):
+    """Generate VM labels for targetLabels testing.
 
-    # Only create fixture if target_labels is configured
-    target_labels = plan.get("target_labels", {})
+    This fixture generates labels based on plan configuration.
+    The test must be skipped if MTV < 2.10.0 using @pytest.mark.skipif decorator.
+
+    Args:
+        session_uuid: Unique session identifier
+        plan: Test plan configuration
+
+    Returns:
+        Dict with 'vm_labels' key containing label dict
+
+    Raises:
+        ValueError: If target_labels not configured in plan or is empty
+    """
+    # Fail fast if feature not configured
+    if "target_labels" not in plan:
+        raise ValueError(
+            "target_labels not configured in plan. Add 'target_labels': {'label-key': None} to test config."
+        )
+
+    target_labels = plan["target_labels"]
+
     if not target_labels:
-        yield None
-        return
+        raise ValueError(
+            "target_labels is empty. Add at least one label to test, e.g., 'target_labels': {'label-key': None}"
+        )
 
-    # Feature IS configured - check MTV version support
-    if not is_mtv_version_supported(ocp_admin_client, "2.10.0"):
-        LOGGER.warning("targetLabels requires MTV 2.10.0+, skipping feature")
-        yield None
-        return
-
-    # Generate label values
     vm_labels = {}
     for label_key, config_value in target_labels.items():
-        if config_value == "auto":
-            label_value = session_uuid
-        else:
-            label_value = config_value  # Use specified value
+        # None means auto-generate using session_uuid, otherwise use provided value
+        label_value = session_uuid if config_value is None else config_value
         vm_labels[label_key] = label_value
-        LOGGER.info(f"Generated VM label: {label_key}={label_value}")
 
-    result = {"vm_labels": vm_labels}
-    LOGGER.info(f"target_vm_labels fixture returning: {result}")
+    LOGGER.info(f"Generated VM labels: {vm_labels}")
 
-    yield result
+    return {"vm_labels": vm_labels}
 
 
 @pytest.fixture(scope="function")

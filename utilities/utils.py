@@ -123,58 +123,57 @@ def get_mtv_version(ocp_admin_client: "DynamicClient", namespace: str = "openshi
         RuntimeError: If MTV operator version cannot be determined
     """
     mtv_version: str | None = None
-    parsing_error = None
 
-    try:
-        for csv in ClusterServiceVersion.get(client=ocp_admin_client, namespace=namespace):
-            if csv.instance and csv.instance.spec:
-                display_name = csv.instance.spec.get("displayName", "")
-                version_str = csv.instance.spec.get("version", "")
+    for csv in ClusterServiceVersion.get(client=ocp_admin_client, namespace=namespace):
+        if csv.instance and csv.instance.spec:
+            display_name = csv.instance.spec.displayName
+            version_str = csv.instance.spec.version
 
-                if display_name and "Migration Toolkit for Virtualization" in display_name:
-                    mtv_version = version_str
-                    break
-
-    except (AttributeError, TypeError) as e:
-        parsing_error = e
-        LOGGER.warning(f"Error parsing MTV ClusterServiceVersion: {e}")
+            if display_name and "Migration Toolkit for Virtualization" in display_name:
+                mtv_version = version_str
+                break
 
     if not mtv_version:
-        if parsing_error:
-            raise RuntimeError(f"MTV operator version parsing failed: {parsing_error}") from parsing_error
         raise RuntimeError("MTV operator version not found")
 
-    LOGGER.info(f"Found MTV operator version: {mtv_version}")
+    LOGGER.info("Found MTV operator version: %s", mtv_version)
     return mtv_version
 
 
-def is_mtv_version_supported(ocp_admin_client: "DynamicClient", min_version: str) -> bool:
-    """
-    Check if MTV version supports target features.
+def has_mtv_minimum_version(min_version: str, client: "DynamicClient | None" = None) -> bool:
+    """Check if MTV version is greater than or equal to the minimum version.
 
     Args:
-        ocp_admin_client: OpenShift admin DynamicClient with cluster access.
-        min_version: Minimum MTV version required (semantic version string).
+        min_version (str): Minimum MTV version required (e.g., "2.10.0")
+        client (DynamicClient | None): Optional OpenShift DynamicClient. If None, creates client internally.
 
     Returns:
-        True if installed MTV version >= min_version, False otherwise.
+        bool: True if MTV version >= min_version, False otherwise
 
     Raises:
-        RuntimeError: If MTV version cannot be determined or is invalid.
+        ValueError: If min_version or MTV version format is invalid
+        RuntimeError: If MTV operator not found or cluster client creation fails
     """
-    mtv_version = get_mtv_version(ocp_admin_client)
+    if client is None:
+        try:
+            client = get_cluster_client()
+        except Exception:
+            LOGGER.exception("Failed to create cluster client for MTV version check")
+            raise RuntimeError("Could not create cluster client") from None
+
+    mtv_version = get_mtv_version(client)
 
     # Parse and validate min_version first
     try:
         parsed_min_version = version_parse(min_version)
     except InvalidVersion as e:
-        raise RuntimeError(f"Invalid min_version format '{min_version}': {e}") from e
+        raise ValueError(f"Invalid min_version format '{min_version}': {e}") from e
 
     # Parse and validate mtv_version
     try:
         parsed_mtv_version = version_parse(mtv_version)
     except InvalidVersion as e:
-        raise RuntimeError(f"Invalid MTV version format '{mtv_version}': {e}") from e
+        raise ValueError(f"Invalid MTV version format '{mtv_version}': {e}") from e
 
     return parsed_mtv_version >= parsed_min_version
 

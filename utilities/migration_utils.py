@@ -237,26 +237,20 @@ def prepare_migration_for_tests(
     # Prepare target_node_selector
     target_node_selector = None
     if plan.get("target_node_selector") and labeled_worker_node is not None:
-        if "label_key" not in labeled_worker_node:
-            raise ValueError("labeled_worker_node missing required key 'label_key'")
-        if "label_value" not in labeled_worker_node:
-            raise ValueError("labeled_worker_node missing required key 'label_value'")
+        if "label_key" not in labeled_worker_node or "label_value" not in labeled_worker_node:
+            raise ValueError("labeled_worker_node missing required keys 'label_key' or 'label_value'")
+
         target_node_selector = {labeled_worker_node["label_key"]: labeled_worker_node["label_value"]}
         LOGGER.info(f"Using target_node_selector: {target_node_selector}")
-    elif plan.get("target_node_selector") and labeled_worker_node is None:
-        LOGGER.warning(
-            "target_node_selector requested in plan but labeled_worker_node fixture is None - feature will be skipped"
-        )
 
     # Prepare target_labels
     target_labels = None
     if plan.get("target_labels") and target_vm_labels is not None:
         if "vm_labels" not in target_vm_labels:
             raise ValueError("target_vm_labels missing required key 'vm_labels'")
+
         target_labels = target_vm_labels["vm_labels"]
         LOGGER.info(f"Using target_labels: {target_labels}")
-    elif plan.get("target_labels") and target_vm_labels is None:
-        LOGGER.warning("target_labels requested in plan but target_vm_labels fixture is None - feature will be skipped")
 
     return {
         "ocp_admin_client": ocp_admin_client,

@@ -19,10 +19,10 @@ def get_worker_nodes(ocp_client: DynamicClient) -> list[str]:
     """Get list of worker node names from the cluster.
 
     Args:
-        ocp_client: OpenShift DynamicClient instance.
+        ocp_client (DynamicClient): OpenShift DynamicClient instance.
 
     Returns:
-        List of worker node names.
+        list[str]: List of worker node names.
     """
     return [
         node.name
@@ -32,7 +32,16 @@ def get_worker_nodes(ocp_client: DynamicClient) -> list[str]:
 
 
 def _query_prometheus_safe(prometheus: Prometheus, query: str, metric_name: str) -> list[dict[str, Any]]:
-    """Query Prometheus and return result list, or [] on failure."""
+    """Query Prometheus and return result list, or [] on failure.
+
+    Args:
+        prometheus (Prometheus): Prometheus client instance.
+        query (str): Prometheus query string.
+        metric_name (str): Metric name for logging purposes.
+
+    Returns:
+        list[dict[str, Any]]: Query results or empty list on failure.
+    """
     try:
         response = prometheus.query(query=query)
         return response.get("data", {}).get("result", []) if response else []
@@ -45,10 +54,10 @@ def parse_prometheus_value(raw_value: Any) -> int:
     """Parse Prometheus metric value to integer.
 
     Args:
-        raw_value: Raw value from Prometheus response, typically [timestamp, value].
+        raw_value (Any): Raw value from Prometheus response, typically [timestamp, value].
 
     Returns:
-        Parsed integer value, or 0 if parsing fails.
+        int: Parsed integer value, or 0 if parsing fails.
     """
     if isinstance(raw_value, (list, tuple)) and len(raw_value) >= 2 and raw_value[1]:
         try:
@@ -64,12 +73,12 @@ def parse_prometheus_memory_metrics(
     """Query Prometheus for memory metrics and return structured data.
 
     Args:
-        worker_nodes: List of worker node names to query metrics for.
-        prometheus: Prometheus client instance for querying metrics.
+        worker_nodes (list[str]): List of worker node names to query metrics for.
+        prometheus (Prometheus): Prometheus client instance for querying metrics.
 
     Returns:
-        Dictionary mapping node names to memory metrics (allocatable, requested, available),
-        or None if query fails or no metrics available. Catches all exceptions and logs warnings.
+        dict[str, dict[str, int]] | None: Dictionary mapping node names to memory metrics (allocatable, requested, available),
+            or None if query fails or no metrics available. Catches all exceptions and logs warnings.
     """
     worker_nodes_set = set(worker_nodes)
     allocatable_query = 'kube_node_status_allocatable{resource="memory"}'
@@ -117,11 +126,11 @@ def select_node_by_available_memory(
     """Select worker node with highest available memory using Prometheus metrics.
 
     Args:
-        ocp_admin_client: OpenShift admin DynamicClient with cluster access.
-        worker_nodes: List of worker node names to select from.
+        ocp_admin_client (DynamicClient): OpenShift admin DynamicClient with cluster access.
+        worker_nodes (list[str]): List of worker node names to select from.
 
     Returns:
-        Name of the selected worker node.
+        str: Name of the selected worker node.
 
     Raises:
         ValueError: If worker_nodes list is empty.
@@ -172,10 +181,10 @@ def label_node(ocp_client: DynamicClient, node_name: str, label_key: str, label_
     """Apply label to a node.
 
     Args:
-        ocp_client: OpenShift DynamicClient instance.
-        node_name: Name of the node to label.
-        label_key: Label key to apply.
-        label_value: Label value to set.
+        ocp_client (DynamicClient): OpenShift DynamicClient instance.
+        node_name (str): Name of the node to label.
+        label_key (str): Label key to apply.
+        label_value (str): Label value to set.
 
     Raises:
         RuntimeError: If labeling operation fails.
@@ -191,9 +200,9 @@ def cleanup_node_label(ocp_client: DynamicClient, node_name: str, label_key: str
     """Remove label from node using strategic merge patch.
 
     Args:
-        ocp_client: OpenShift DynamicClient instance.
-        node_name: Name of the node to remove label from.
-        label_key: Label key to remove.
+        ocp_client (DynamicClient): OpenShift DynamicClient instance.
+        node_name (str): Name of the node to remove label from.
+        label_key (str): Label key to remove.
 
     Note:
         Logs warning instead of raising exception if cleanup fails.
