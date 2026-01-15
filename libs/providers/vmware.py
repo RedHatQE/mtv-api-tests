@@ -1044,11 +1044,18 @@ class VMWareProvider(BaseProvider):
         cbt_option = vim.option.OptionValue()
         cbt_option.key = "ctkEnabled"
         cbt_option.value = "true"
+
+        # Enable CTK on the first disk (required for warm migration with copyoffload)
+        disk_cbt_option = vim.option.OptionValue()
+        disk_cbt_option.key = "scsi0:0.ctkEnabled"
+        disk_cbt_option.value = "true"
+
         if config_spec.extraConfig:
             config_spec.extraConfig.append(cbt_option)
+            config_spec.extraConfig.append(disk_cbt_option)
         else:
-            config_spec.extraConfig = [cbt_option]
-        LOGGER.info("Enabling Change Block Tracking (CBT) on cloned VM '%s'", clone_vm_name)
+            config_spec.extraConfig = [cbt_option, disk_cbt_option]
+        LOGGER.info("Enabling Change Block Tracking (CBT) on cloned VM '%s' and its disk", clone_vm_name)
 
         clone_spec = vim.vm.CloneSpec(
             location=relocate_spec,

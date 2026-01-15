@@ -175,6 +175,19 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_warm_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "on",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+            },
+        ],
+        "warm_migration": True,
+        "copyoffload": True,
+    },
 }
 
 for _dir in dir():

@@ -13,6 +13,7 @@ import time
 
 from urllib.parse import urlparse
 
+from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
@@ -987,4 +988,184 @@ def test_copyoffload_independent_persistent_disk_migration(
     )
 
     # Verify that the correct number of disks were migrated
+    verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
+
+
+@pytest.mark.copyoffload
+@pytest.mark.warm
+@pytest.mark.parametrize(
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_warm_migration"],
+            py_config["tests_params"]["test_copyoffload_warm_migration"],
+        )
+    ],
+    indirect=True,
+    ids=["copyoffload-warm"],
+)
+def test_copyoffload_warm_migration(
+    request,
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    destination_provider,
+    plan,
+    source_provider,
+    source_provider_data,
+    multus_network_name,
+    source_provider_inventory,
+    source_vms_namespace,
+    copyoffload_config,  # noqa: ARG001 - used for validation in fixture
+    copyoffload_storage_secret,
+    precopy_interval_forkliftcontroller,  # noqa: ARG001 - configures ForkliftController for warm migration
+    vm_ssh_connections,
+):
+    """
+    Test copy-offload warm migration of a VM with a single thin disk.
+
+    This test validates copy-offload functionality with warm migration, which allows
+    for minimal downtime by:
+    1. Performing an initial copy while the VM is still running (precopy phase)
+    2. Multiple incremental sync passes to reduce data that needs final transfer
+    3. Final cutover with VM powered off to complete the migration
+
+    The test uses a VM with a single thin provisioned disk to demonstrate that
+    copy-offload acceleration works with warm migration.
+
+    Test Workflow:
+    1. Validates copy-offload configuration (via copyoffload_config fixture)
+    2. Creates storage secret for storage array authentication (via copyoffload_storage_secret fixture)
+    3. Clones VM from template with thin provisioning
+    4. Enables Changed Block Tracking (CBT) on the VM:
+       - Sets ctkEnabled=true for the VM
+       - Sets scsi0:0.ctkEnabled=true for disk-level tracking
+    5. Powers on the VM (required for warm migration)
+    6. Creates network migration map
+    7. Builds copy-offload plugin configuration
+    8. Creates storage map with copy-offload plugin
+    9. Executes warm migration with copy-offload:
+       - Precopy phase (VM running, incremental syncs)
+       - Cutover phase (VM powered off, final sync)
+    10. Verifies successful migration and VM operation in OpenShift
+
+    Requirements:
+    - vSphere provider with VMs on XCOPY-capable storage (e.g., NetApp iSCSI)
+    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara)
+    - Storage class in OpenShift that supports the same storage type as the source
+    - Storage credentials via environment variables or .providers.json config
+    - ForkliftController with feature_copy_offload: "true" (must be pre-configured)
+    - ForkliftController with precopy_interval configured (for warm migration)
+    - QEMU guest agent installed on the source VM
+    - VM must be powered on for warm migration
+
+    Configuration in .providers.json:
+    "copyoffload": {
+        "storage_vendor_product": "ontap",  # or "vantara"
+        "datastore_id": "datastore-123",
+        "template_name": "<copyoffload-template-name>",
+        "storage_hostname": "storage.example.com",
+        "storage_username": "admin",
+        "storage_password": "password",  # pragma: allowlist secret
+        "ontap_svm": "vserver-name"  # For NetApp ONTAP only
+    }
+
+    Optional Environment Variables (override .providers.json values):
+    - COPYOFFLOAD_STORAGE_HOSTNAME
+    - COPYOFFLOAD_STORAGE_USERNAME
+    - COPYOFFLOAD_STORAGE_PASSWORD
+    - COPYOFFLOAD_ONTAP_SVM
+
+    Args:
+        request: Pytest request object
+        fixture_store: Pytest fixture store for resource tracking
+        ocp_admin_client: OpenShift admin client
+        target_namespace: Target namespace for migration
+        destination_provider: Destination provider (OpenShift)
+        plan: Migration plan configuration from test parameters
+        source_provider: Source provider (vSphere)
+        source_provider_data: Source provider configuration data
+        multus_network_name: Multus network configuration name
+        source_provider_inventory: Source provider inventory
+        source_vms_namespace: Source VMs namespace
+        copyoffload_config: Copy-offload configuration validation fixture
+        copyoffload_storage_secret: Storage secret for copy-offload authentication
+        precopy_interval_forkliftcontroller: Configures precopy interval for warm migration
+        vm_ssh_connections: SSH connections to VMs for verification
+    """
+    # Get copy-offload configuration
+    copyoffload_config_data = source_provider_data["copyoffload"]
+    storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
+    datastore_id = copyoffload_config_data.get("datastore_id")
+    storage_class = py_config["storage_class"]
+
+    # Validate required copy-offload parameters
+    missing_params = []
+    if not storage_vendor_product:
+        missing_params.append("storage_vendor_product")
+    if not datastore_id:
+        missing_params.append("datastore_id")
+    if missing_params:
+        pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
+
+    LOGGER.info("Starting copy-offload warm migration test")
+    LOGGER.info(f"Datastore: {datastore_id}, Storage vendor: {storage_vendor_product}")
+
+    # Create network migration map
+    vms_names = [vm["name"] for vm in plan["virtual_machines"]]
+    network_migration_map = get_network_migration_map(
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        vms=vms_names,
+    )
+
+    # Build offload plugin configuration
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": copyoffload_storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    # Create storage migration map with copy-offload plugin
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,
+        vms=vms_names,
+        storage_class=storage_class,
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
+    # Execute warm migration with copy-offload
+    LOGGER.info("Executing warm migration with copy-offload acceleration")
+    migrate_vms(
+        ocp_admin_client=ocp_admin_client,
+        request=request,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plan=plan,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        cut_over=get_cutover_value(),  # Enable warm migration cutover
+        target_namespace=target_namespace,
+        source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
+    )
+
+    # Verify that the VM disk was migrated (1 disk from template)
     verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
