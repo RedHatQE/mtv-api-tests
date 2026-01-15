@@ -1039,7 +1039,7 @@ def test_copyoffload_warm_migration(
     3. Clones VM from template with thin provisioning
     4. Enables Changed Block Tracking (CBT) on the VM:
        - Sets ctkEnabled=true for the VM
-       - Sets scsi0:0.ctkEnabled=true for disk-level tracking
+       - Sets scsiX:Y.ctkEnabled=true for all disks (X=bus number, Y=unit number)
     5. Powers on the VM (required for warm migration)
     6. Creates network migration map
     7. Builds copy-offload plugin configuration

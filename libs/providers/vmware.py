@@ -1045,17 +1045,44 @@ class VMWareProvider(BaseProvider):
         cbt_option.key = "ctkEnabled"
         cbt_option.value = "true"
 
-        # Enable CTK on the first disk (required for warm migration with copyoffload)
-        disk_cbt_option = vim.option.OptionValue()
-        disk_cbt_option.key = "scsi0:0.ctkEnabled"
-        disk_cbt_option.value = "true"
+        # Enable CTK on all disks (required for warm migration with copyoffload)
+        extra_config_options = [cbt_option]
+        source_config = source_vm.config
+        if source_config and source_config.hardware and source_config.hardware.device:
+            for device in source_config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualDisk):
+                    controller_key = device.controllerKey
+                    unit_number = device.unitNumber
+                    # Find the controller to get the bus number
+                    for controller in source_config.hardware.device:
+                        if hasattr(controller, "key") and controller.key == controller_key:
+                            if isinstance(controller, vim.vm.device.VirtualSCSIController):
+                                bus_number = controller.busNumber
+                                disk_cbt_option = vim.option.OptionValue()
+                                disk_cbt_option.key = f"scsi{bus_number}:{unit_number}.ctkEnabled"
+                                disk_cbt_option.value = "true"
+                                extra_config_options.append(disk_cbt_option)
+                                LOGGER.info(f"Enabling CTK for disk scsi{bus_number}:{unit_number}")
+                            break
+
+        # Add new disks CTK configuration (for disks being added during clone)
+        num_existing_disks = len([d for d in source_config.hardware.device if isinstance(d, vim.vm.device.VirtualDisk)])
+        for idx, _ in enumerate(regular_disks):
+            # New disks will be added sequentially after existing disks
+            disk_unit = num_existing_disks + idx
+            disk_cbt_option = vim.option.OptionValue()
+            disk_cbt_option.key = f"scsi0:{disk_unit}.ctkEnabled"
+            disk_cbt_option.value = "true"
+            extra_config_options.append(disk_cbt_option)
+            LOGGER.info(f"Enabling CTK for new disk scsi0:{disk_unit}")
 
         if config_spec.extraConfig:
-            config_spec.extraConfig.append(cbt_option)
-            config_spec.extraConfig.append(disk_cbt_option)
+            config_spec.extraConfig.extend(extra_config_options)
         else:
-            config_spec.extraConfig = [cbt_option, disk_cbt_option]
-        LOGGER.info("Enabling Change Block Tracking (CBT) on cloned VM '%s' and its disk", clone_vm_name)
+            config_spec.extraConfig = extra_config_options
+        LOGGER.info(
+            f"Enabling Change Block Tracking (CBT) on cloned VM '{clone_vm_name}' and {len(extra_config_options) - 1} disk(s)"
+        )
 
         clone_spec = vim.vm.CloneSpec(
             location=relocate_spec,
