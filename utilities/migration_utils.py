@@ -236,7 +236,13 @@ def prepare_migration_for_tests(
 
     # Prepare target_node_selector
     target_node_selector = None
-    if plan.get("target_node_selector") and labeled_worker_node is not None:
+    if plan.get("target_node_selector"):
+        if labeled_worker_node is None:
+            raise ValueError(
+                "Plan requests 'target_node_selector' but 'labeled_worker_node' fixture is None. "
+                "Ensure the fixture is provided when using target_node_selector."
+            )
+
         if "label_key" not in labeled_worker_node or "label_value" not in labeled_worker_node:
             raise ValueError("labeled_worker_node missing required keys 'label_key' or 'label_value'")
 
@@ -245,7 +251,13 @@ def prepare_migration_for_tests(
 
     # Prepare target_labels
     target_labels = None
-    if plan.get("target_labels") and target_vm_labels is not None:
+    if plan.get("target_labels"):
+        if target_vm_labels is None:
+            raise ValueError(
+                "Plan requests 'target_labels' but 'target_vm_labels' fixture is None. "
+                "Ensure the fixture is provided when using target_labels."
+            )
+
         if "vm_labels" not in target_vm_labels:
             raise ValueError("target_vm_labels missing required key 'vm_labels'")
 

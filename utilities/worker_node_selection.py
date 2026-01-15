@@ -46,7 +46,7 @@ def _query_prometheus_safe(prometheus: Prometheus, query: str, metric_name: str)
         response = prometheus.query(query=query)
         return response.get("data", {}).get("result", []) if response else []
     except Exception as e:
-        LOGGER.warning(f"Prometheus {metric_name} query failed: {e}")
+        LOGGER.warning("Prometheus %s query failed: %s", metric_name, e)
         return []
 
 
@@ -160,7 +160,7 @@ def select_node_by_available_memory(
             verify_ssl=verify_ssl,
         )
     except Exception as e:
-        LOGGER.warning(f"Failed to initialize Prometheus client: {e}, selecting random worker node")
+        LOGGER.warning("Failed to initialize Prometheus client: %s, selecting random worker node", e)
         return random.choice(worker_nodes)
 
     metrics = parse_prometheus_memory_metrics(worker_nodes, prometheus)
@@ -172,7 +172,7 @@ def select_node_by_available_memory(
     nodes_with_max = [node for node, node_metrics in metrics.items() if node_metrics["available"] == max_available]
     selected_node = random.choice(nodes_with_max)
 
-    LOGGER.info(f"Selected node {selected_node} with highest available memory for scheduling")
+    LOGGER.info("Selected node %s with highest available memory for scheduling", selected_node)
 
     return selected_node
 
@@ -210,6 +210,6 @@ def cleanup_node_label(ocp_client: DynamicClient, node_name: str, label_key: str
     try:
         node = Node(client=ocp_client, name=node_name)
         ResourceEditor(patches={node: {"metadata": {"labels": {label_key: None}}}}).update()
-        LOGGER.info(f"Removed label {label_key} from node {node_name}")
+        LOGGER.info("Removed label %s from node %s", label_key, node_name)
     except Exception as e:
-        LOGGER.warning(f"Failed to cleanup label {label_key} from node {node_name}: {e}")
+        LOGGER.warning("Failed to cleanup label %s from node %s: %s", label_key, node_name, e)

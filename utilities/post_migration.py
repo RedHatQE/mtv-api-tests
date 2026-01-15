@@ -4,12 +4,11 @@ import base64
 import ipaddress
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import go_template
 import jc
 import pytest
-from kubernetes.dynamic.resource import ResourceField
 from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.network_map import NetworkMap
@@ -22,6 +21,9 @@ from pyhelper_utils.exceptions import CommandExecFailed
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic.resource import ResourceField
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
