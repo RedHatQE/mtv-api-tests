@@ -320,6 +320,41 @@ class VMWareProvider(BaseProvider):
                 root_snapshot_list = snapshot.childSnapshotList
         return snapshots
 
+    def create_snapshot(
+        self,
+        vm: vim.VirtualMachine,
+        name: str,
+        description: str = "",
+        memory: bool = False,
+        quiesce: bool = False,
+        wait_timeout: int = 60 * 10,
+    ) -> None:
+        """
+        Create a VMware snapshot for a VM and wait until it completes.
+
+        Args:
+            vm: VMware VM object.
+            name: Snapshot name.
+            description: Snapshot description.
+            memory: If True, snapshot the VM memory (requires VM powered on).
+            quiesce: If True, quiesce the file system (requires VMware Tools / guest support).
+            wait_timeout: Max time to wait for snapshot task completion.
+        """
+        self.reconnect_if_not_connected
+        LOGGER.info("Creating snapshot '%s' for VM '%s' (memory=%s, quiesce=%s)", name, vm.name, memory, quiesce)
+        task = vm.CreateSnapshot_Task(
+            name=name,
+            description=description,
+            memory=memory,
+            quiesce=quiesce,
+        )
+        self.wait_task(
+            task=task,
+            action_name=f"Creating snapshot '{name}' for VM {vm.name}",
+            wait_timeout=wait_timeout,
+            sleep=5,
+        )
+
     def _get_network_name_from_device(self, device: vim.vm.device.VirtualEthernetCard) -> str:
         """Extract network name from a virtual ethernet device.
 

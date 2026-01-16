@@ -13,6 +13,8 @@ import time
 
 from urllib.parse import urlparse
 
+from ocp_resources.provider import Provider
+
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     get_network_migration_map,
@@ -168,6 +170,145 @@ def test_copyoffload_thin_migration(
         target_namespace=target_namespace,
         source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
+    )
+
+
+@pytest.mark.copyoffload
+@pytest.mark.parametrize(
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"],
+            py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"],
+        )
+    ],
+    indirect=True,
+    ids=["copyoffload-thin-snapshots"],
+)
+def test_copyoffload_thin_snapshots_migration(
+    request,
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    destination_provider,
+    plan,
+    source_provider,
+    source_provider_data,
+    multus_network_name,
+    source_provider_inventory,
+    source_vms_namespace,
+    copyoffload_config,
+    copyoffload_storage_secret,
+    setup_copyoffload_ssh,
+    vm_ssh_connections,
+):
+    """
+    Test copy-offload migration of a thin-provisioned VM that has snapshots.
+
+    This test validates that a VM with snapshots can be migrated using storage array
+    XCOPY capabilities (copy-offload). Snapshots introduce extra disk chain metadata,
+    so this ensures the migration succeeds when snapshots exist on the source VM.
+
+    Snapshot count is controlled by the test config (`tests/tests_config/config.py`) via `snapshots`.
+
+    Test Workflow:
+    1. Powers on the source VM (if needed)
+    2. Creates N snapshots on the source VM
+    3. Powers off the source VM (cold migration)
+    4. Executes a copy-offload migration to OpenShift
+    """
+    if source_provider.type != Provider.ProviderType.VSPHERE:
+        pytest.skip("Thin disk + snapshots copy-offload test is only applicable to vSphere source providers")
+
+    vm_cfg = plan["virtual_machines"][0]
+    provider_vm_api = vm_cfg["source_vm_data"]["provider_vm_api"]
+
+    # Ensure VM is powered on for snapshot creation
+    source_provider.start_vm(provider_vm_api)
+    source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=60)
+
+    snapshots_to_create = int(vm_cfg["snapshots"])
+    snapshot_prefix = f"{vm_cfg['name']}-{fixture_store['session_uuid']}-snapshot"
+
+    for idx in range(1, snapshots_to_create + 1):
+        source_provider.create_snapshot(
+            vm=provider_vm_api,
+            name=f"{snapshot_prefix}-{idx}",
+            description="mtv-api-tests copy-offload thin snapshots migration test",
+            memory=False,
+            quiesce=False,
+            wait_timeout=60 * 10,
+        )
+
+    # Refresh and store snapshots list for post-migration snapshot checks (if enabled)
+    vm_cfg["snapshots_before_migration"] = source_provider.vm_dict(provider_vm_api=provider_vm_api)["snapshots_data"]
+    assert len(vm_cfg["snapshots_before_migration"]) >= snapshots_to_create, (
+        f"Expected at least {snapshots_to_create} snapshots, got {len(vm_cfg['snapshots_before_migration'])}"
+    )
+
+    # Cold migration expects VM powered off
+    source_provider.stop_vm(provider_vm_api)
+
+    # Get copy-offload configuration
+    copyoffload_config_data = source_provider_data["copyoffload"]
+    storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+    datastore_id = copyoffload_config_data["datastore_id"]
+    storage_class = py_config["storage_class"]
+
+    # Create network migration map
+    vms_names = [vm["name"] for vm in plan["virtual_machines"]]
+    network_migration_map = get_network_migration_map(
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        vms=vms_names,
+    )
+
+    # Build offload plugin configuration
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": copyoffload_storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    # Create storage migration map with copy-offload configuration
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,
+        vms=vms_names,
+        storage_class=storage_class,
+        # Copy-offload specific parameters
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
+    # Execute copy-offload migration
+    migrate_vms(
+        ocp_admin_client=ocp_admin_client,
+        request=request,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plan=plan,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+        source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
     )
 
 

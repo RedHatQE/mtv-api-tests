@@ -134,6 +134,20 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_thin_snapshots_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "snapshots": 2,  # Number of snapshots to create on the source VM before migration
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
     "test_copyoffload_multi_datastore_migration": {
         "virtual_machines": [
             {
