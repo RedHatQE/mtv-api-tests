@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from kubernetes.dynamic import DynamicClient
+from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.provider import Provider
@@ -20,6 +21,7 @@ from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.virtual_machine_cluster_instancetype import VirtualMachineClusterInstancetype
 from ocp_resources.virtual_machine_cluster_preference import VirtualMachineClusterPreference
+from packaging.version import InvalidVersion, parse as version_parse
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
@@ -104,6 +106,78 @@ def _fetch_and_store_cacert(
     )
     secret_string_data["cacert"] = cert_file.read_text()
     return cert_file
+
+
+def get_mtv_version(ocp_admin_client: "DynamicClient", namespace: str = "openshift-mtv") -> str:
+    """
+    Get the MTV operator version from the cluster.
+
+    Args:
+        ocp_admin_client: OpenShift admin client
+        namespace: Namespace where MTV operator is installed (default: openshift-mtv)
+
+    Returns:
+        str: MTV operator version string
+
+    Raises:
+        RuntimeError: If MTV operator version cannot be determined
+    """
+    mtv_version: str | None = None
+
+    for csv in ClusterServiceVersion.get(client=ocp_admin_client, namespace=namespace):
+        if csv.instance and csv.instance.spec:
+            display_name = csv.instance.spec.displayName
+            version_str = csv.instance.spec.version
+
+            if display_name and "Migration Toolkit for Virtualization" in display_name:
+                mtv_version = version_str
+                break
+
+    if not mtv_version:
+        raise RuntimeError("MTV operator version not found")
+
+    LOGGER.info("Found MTV operator version: %s", mtv_version)
+    return mtv_version
+
+
+def has_mtv_minimum_version(min_version: str, client: "DynamicClient | None" = None) -> bool:
+    """Check if MTV version is greater than or equal to the minimum version.
+
+    Args:
+        min_version (str): Minimum MTV version required (e.g., "2.10.0")
+        client (DynamicClient | None): Optional OpenShift DynamicClient. If None, creates client internally.
+
+    Returns:
+        bool: True if MTV version >= min_version, False otherwise
+
+    Raises:
+        ValueError: If min_version or MTV version format is invalid
+        RuntimeError: If MTV operator not found or cluster client creation fails
+    """
+    if client is None:
+        try:
+            client = get_cluster_client()
+        except Exception as e:
+            LOGGER.exception("Failed to create cluster client for MTV version check")
+            raise RuntimeError("Could not create cluster client") from e
+
+    # Get configured MTV namespace (defaults to "openshift-mtv")
+    configured_namespace = py_config.get("mtv_namespace", "openshift-mtv")
+    mtv_version = get_mtv_version(client, namespace=configured_namespace)
+
+    # Parse and validate min_version first
+    try:
+        parsed_min_version = version_parse(min_version)
+    except InvalidVersion as e:
+        raise ValueError(f"Invalid min_version format '{min_version}': {e}") from e
+
+    # Parse and validate mtv_version
+    try:
+        parsed_mtv_version = version_parse(mtv_version)
+    except InvalidVersion as e:
+        raise ValueError(f"Invalid MTV version format '{mtv_version}': {e}") from e
+
+    return parsed_mtv_version >= parsed_min_version
 
 
 def background(func):

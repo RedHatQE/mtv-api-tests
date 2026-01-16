@@ -4,7 +4,7 @@ import base64
 import ipaddress
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import go_template
 import jc
@@ -22,8 +22,12 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+if TYPE_CHECKING:
+    from kubernetes.dynamic.resource import ResourceField
+
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
+from libs.providers.openshift import OCPProvider
 from libs.providers.rhv import OvirtProvider
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import rhv_provider, get_value_from_py_config
@@ -80,12 +84,12 @@ def get_ssh_credentials_from_provider_config(
     return username, password
 
 
-def get_ocp_version(destination_provider: BaseProvider) -> Version:
+def get_ocp_version(destination_provider: OCPProvider) -> Version:
     """
     Get OpenShift cluster version.
 
     Args:
-        destination_provider: The OpenShift destination provider
+        destination_provider: The OpenShift destination provider (must be OCPProvider)
 
     Returns:
         Version object (e.g., Version("4.20.1"))
@@ -889,7 +893,7 @@ def _format_uuid_to_vmware_serial(uuid: str) -> str:
 
 
 def check_serial_preservation(
-    source_vm: dict[str, Any], destination_vm: dict[str, Any], destination_provider: BaseProvider
+    source_vm: dict[str, Any], destination_vm: dict[str, Any], destination_provider: OCPProvider
 ) -> None:
     """
     Verify that the VM serial number is preserved during migration from VMware to OpenShift.
@@ -901,7 +905,7 @@ def check_serial_preservation(
     Args:
         source_vm: Source VM information including uuid
         destination_vm: Destination VM information including serial
-        destination_provider: OpenShift destination provider for version detection
+        destination_provider: OpenShift destination provider for version detection (must be OCPProvider)
 
     Raises:
         AssertionError: If serial number validation fails
@@ -956,6 +960,107 @@ def check_serial_preservation(
         LOGGER.info(f"Serial preserved correctly (OCP {ocp_version} < 4.20, plain UUID): {dest_serial}")
 
 
+def check_vm_node_placement(
+    destination_vm: dict[str, Any],
+    expected_node: str,
+) -> None:
+    """
+    Verify VM is scheduled on the expected labeled node.
+
+    Args:
+        destination_vm: Destination VM information including node_name
+        expected_node: Expected node name where VM should be scheduled
+    """
+    vm_name = destination_vm.get("name")
+    actual_node = destination_vm.get("node_name")
+
+    if not actual_node:
+        pytest.fail(f"VM {vm_name} has no node assignment")
+
+    if actual_node != expected_node:
+        pytest.fail(f"VM {vm_name} not scheduled on expected node. Expected: {expected_node}, Got: {actual_node}")
+
+    LOGGER.info(f"VM {vm_name} correctly scheduled on node {actual_node}")
+
+
+def check_vm_labels(
+    destination_vm: dict[str, Any],
+    expected_labels: dict[str, str],
+) -> None:
+    """
+    Verify VM has the expected labels set on its metadata.
+
+    Args:
+        destination_vm: Destination VM information including labels
+        expected_labels: Expected labels that should be set on the VM
+    """
+    vm_name = destination_vm.get("name")
+    actual_labels_raw: ResourceField | None = destination_vm.get("labels")
+
+    # Convert ResourceField to dict
+    # Kubernetes API returns ResourceField objects. Use .to_dict() for recursive conversion
+    # (handles nested ResourceField objects). The 'in' operator doesn't work on ResourceField.
+    actual_labels: dict[str, str] = actual_labels_raw.to_dict() if actual_labels_raw else {}
+
+    # Fail if VM has no labels but we expect some
+    if not actual_labels:
+        pytest.fail(f"VM {vm_name} has no labels but expected: {expected_labels}")
+
+    missing_labels = []
+    incorrect_labels = []
+
+    for label_key, expected_value in expected_labels.items():
+        if label_key not in actual_labels:
+            missing_labels.append(f"{label_key}=<missing>")
+        elif actual_labels[label_key] != expected_value:
+            incorrect_labels.append(f"{label_key}={actual_labels[label_key]} (expected: {expected_value})")
+
+    if missing_labels or incorrect_labels:
+        error_msg = f"VM {vm_name} label verification failed:\n"
+        if missing_labels:
+            error_msg += f"  Missing labels: {', '.join(missing_labels)}\n"
+        if incorrect_labels:
+            error_msg += f"  Incorrect labels: {', '.join(incorrect_labels)}\n"
+        error_msg += f"  Actual labels: {actual_labels}\n"
+        error_msg += f"  Expected labels: {expected_labels}"
+        pytest.fail(error_msg)
+
+    LOGGER.info(f"VM {vm_name} labels verified successfully: {actual_labels}")
+
+
+def check_vm_affinity(
+    destination_vm: dict[str, Any],
+    expected_affinity: dict[str, Any],
+    vm_name: str,
+) -> None:
+    """Check VM affinity matches expected configuration.
+
+    Args:
+        destination_vm: VM info dict from provider
+        expected_affinity: Expected affinity configuration dict
+        vm_name: VM name for error messages
+    """
+    actual_affinity_raw: ResourceField | None = destination_vm.get("affinity")
+
+    # Convert ResourceField to dict
+    # Kubernetes API returns nested ResourceField objects. Must use .to_dict() for recursive conversion.
+    # Using dict() only converts top level, leaving nested ResourceField objects that break comparison.
+    actual_affinity: dict[str, Any] = actual_affinity_raw.to_dict() if actual_affinity_raw else {}
+
+    if not actual_affinity:
+        pytest.fail(f"VM {vm_name} has no affinity configuration")
+
+    # Deep comparison of affinity configurations
+    if actual_affinity != expected_affinity:
+        pytest.fail(
+            f"VM {vm_name} affinity verification failed:\n"
+            f"  Expected affinity: {expected_affinity}\n"
+            f"  Actual affinity: {actual_affinity}"
+        )
+
+    LOGGER.info(f"VM {vm_name} affinity verified successfully: {actual_affinity}")
+
+
 def check_ssl_configuration(source_provider: BaseProvider) -> None:
     """
     Verify that Provider secret's insecureSkipVerify matches the global configuration.
@@ -1008,7 +1113,7 @@ def check_ssl_configuration(source_provider: BaseProvider) -> None:
 def check_vms(
     plan: dict[str, Any],
     source_provider: BaseProvider,
-    destination_provider: BaseProvider,
+    destination_provider: OCPProvider,
     destination_namespace: str,
     network_map_resource: NetworkMap,
     storage_map_resource: StorageMap,
@@ -1016,6 +1121,8 @@ def check_vms(
     source_vms_namespace: str,
     source_provider_inventory: ForkliftInventory | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
+    labeled_worker_node: dict[str, Any] | None = None,
+    target_vm_labels: dict[str, Any] | None = None,
 ) -> None:
     res: dict[str, list[str]] = {}
     should_fail: bool = False
@@ -1118,6 +1225,44 @@ def check_vms(
                 )
             except Exception as exp:
                 res[vm_name].append(f"check_serial_preservation - {str(exp)}")
+
+        # Target feature validation (MTV 2.10.0+)
+        # Check node placement if configured
+        if plan.get("target_node_selector"):
+            if labeled_worker_node is None:
+                res[vm_name].append("check_vm_node_placement - labeled_worker_node fixture not provided")
+            else:
+                expected_node = labeled_worker_node.get("node_name")
+                if expected_node is None:
+                    res[vm_name].append("check_vm_node_placement - labeled_worker_node missing 'node_name' key")
+                else:
+                    try:
+                        check_vm_node_placement(destination_vm=destination_vm, expected_node=expected_node)
+                    except Exception as exp:
+                        res[vm_name].append(f"check_vm_node_placement - {str(exp)}")
+
+        # Check VM labels if configured
+        if plan.get("target_labels"):
+            if target_vm_labels is None:
+                res[vm_name].append("check_vm_labels - target_vm_labels fixture not provided")
+            else:
+                vm_labels = target_vm_labels.get("vm_labels")
+                if vm_labels is None:
+                    res[vm_name].append("check_vm_labels - target_vm_labels missing 'vm_labels' key")
+                else:
+                    try:
+                        check_vm_labels(destination_vm=destination_vm, expected_labels=vm_labels)
+                    except Exception as exp:
+                        res[vm_name].append(f"check_vm_labels - {str(exp)}")
+
+        # Check VM affinity if configured
+        if plan.get("target_affinity"):
+            try:
+                check_vm_affinity(
+                    destination_vm=destination_vm, expected_affinity=plan["target_affinity"], vm_name=vm_name
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_vm_affinity - {str(exp)}")
 
         if vm_guest_agent:
             try:

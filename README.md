@@ -212,7 +212,37 @@ tests_params: dict = {
         # {{.DiskIndex}}, {{.VmName}} and  Sprig functions, i.e.:
         "pvc_name_template": '{{ .FileName | trimSuffix \".vmdk\" | replace \"_\" \"-\" }}-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,  # Boolean to control template usage
-    },
+        "target_node_selector": {  # Sets a Kubernetes nodeSelector for migrated VMs. When specified, the test
+                                   # framework's labeled_worker_node fixture automatically labels a worker node
+                                   # with this key-value pair, then creates a nodeSelector constraint on the target VMs.
+            "mtv-test-node": None  # None triggers auto-generation with session UUID (e.g., "auto-abc123ef")
+                                   # for test isolation. Custom string values are used as-is.
+                                   # See labeled_worker_node fixture in conftest.py for details.
+        },
+        "target_labels": {  # Labels applied to migrated VMs. These labels can be referenced in target_affinity.matchLabels.
+                            # - None: Auto-generates unique value with session UUID (e.g., "auto-abc123")
+                            # - String value: Uses the exact custom value provided (no auto-generation)
+            "mtv-test-label": None,  # Auto-generated unique value
+            "app": "my-app"  # Custom value used literally - referenced by target_affinity.matchLabels below
+        },
+        "target_affinity": {  # Pod affinity rules for migrated VMs. Uses soft affinity for scheduling preferences.
+                              # IMPORTANT: Requires exact structure - no auto-generation support.
+                              # All keys in matchLabels (e.g., "app") must be defined in target_labels above.
+                              # Only reference labels with explicit values (not None/auto-generated) in matchLabels.
+                              # This ensures the labels exist on migrated VMs before affinity rules reference them.
+            "podAffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [{
+                    "weight": 100,
+                    "podAffinityTerm": {
+                        "labelSelector": {
+                            "matchLabels": {"app": "my-app"}  # Must match a label key from target_labels
+                        },
+                        "topologyKey": "kubernetes.io/hostname"
+                    }
+                }]
+            }
+        },
+    }
 }
 ```
 

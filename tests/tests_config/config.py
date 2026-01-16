@@ -189,6 +189,37 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_target_scheduling_all_features": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": False,
+        # MTV 2.10.0 target scheduling features
+        "target_node_selector": {
+            "mtv-test-node": None,  # None = auto-generate with session_uuid
+        },
+        "target_labels": {
+            "mtv-test-label": None,  # None = auto-generate with session_uuid
+            "custom-label": "custom-value",
+        },
+        "target_affinity": {
+            "podAffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [
+                    {
+                        "podAffinityTerm": {
+                            "labelSelector": {"matchLabels": {"app": "test"}},
+                            "topologyKey": "kubernetes.io/hostname",
+                        },
+                        "weight": 50,
+                    }
+                ]
+            }
+        },
+    },
 }
 
 for _dir in dir():

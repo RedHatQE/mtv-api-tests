@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
@@ -48,6 +50,8 @@ def migrate_vms(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
     vm_ssh_connections: SSHConnectionManager | None = None,
+    labeled_worker_node: dict[str, str] | None = None,
+    target_vm_labels: dict[str, str] | None = None,
 ) -> None:
     # Populate VM IDs from Forklift inventory for all VMs
     # This ensures we always use IDs in the Plan CR (works for all provider types)
@@ -57,6 +61,9 @@ def migrate_vms(
             vm_data = source_provider_inventory.get_vm(vm_name)
             vm["id"] = vm_data["id"]
             LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
+
+    # Get target_affinity from plan (if configured)
+    target_affinity = plan.get("target_affinity")
 
     run_migration_kwargs = prepare_migration_for_tests(
         ocp_admin_client=ocp_admin_client,
@@ -74,7 +81,12 @@ def migrate_vms(
         after_hook_name=after_hook_name,
         after_hook_namespace=after_hook_namespace,
         source_vms_namespace=source_vms_namespace,
+        labeled_worker_node=labeled_worker_node,
+        target_vm_labels=target_vm_labels,
     )
+
+    # Add target_affinity to run_migration kwargs
+    run_migration_kwargs["target_affinity"] = target_affinity
 
     migration_plan = run_migration(**run_migration_kwargs)
 
@@ -95,6 +107,8 @@ def migrate_vms(
             source_vms_namespace=source_vms_namespace,
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
+            labeled_worker_node=labeled_worker_node,
+            target_vm_labels=target_vm_labels,
         )
 
 
@@ -122,6 +136,9 @@ def run_migration(
     preserve_static_ips: bool = False,
     pvc_name_template: str | None = None,
     pvc_name_template_use_generate_name: bool | None = None,
+    target_node_selector: dict[str, str] | None = None,
+    target_labels: dict[str, str] | None = None,
+    target_affinity: dict[str, Any] | None = None,
 ) -> Plan:
     """
     Creates and Runs a Migration ToolKit for Virtualization (MTV) Migration Plan.
@@ -146,9 +163,18 @@ def run_migration(
          condition_status (str): Plan's condition status to wait for
          condition_type (str): Plan's condition type to wait for
          copyoffload (bool): Enable copy-offload specific settings for the Plan
+         target_node_selector (dict[str, str] | None): Node selector to apply to migrated VMs. When None, no node selector is applied.
+         target_labels (dict[str, str] | None): Additional labels to set on migrated VM resources. When None, no additional labels are applied.
+         target_affinity (dict[str, Any] | None): Pod affinity/anti-affinity rules to apply to migrated VMs. When None, no affinity rules are applied.
 
     Returns:
         Plan and Migration Managed Resources.
+
+    Note on parameter naming:
+        The prepare_migration_for_tests function transforms fixture results into Plan CR format:
+        - labeled_worker_node (fixture result) -> target_node_selector (Plan CR dict)
+        - target_vm_labels (fixture result) -> target_labels (Plan CR dict)
+        This function receives the transformed values ready for the Plan CR.
     """
     # Build plan kwargs
     plan_kwargs = {
@@ -175,6 +201,9 @@ def run_migration(
         "preserve_static_ips": preserve_static_ips,
         "pvc_name_template": pvc_name_template,
         "pvc_name_template_use_generate_name": pvc_name_template_use_generate_name,
+        "target_node_selector": target_node_selector,
+        "target_labels": target_labels,
+        "target_affinity": target_affinity,
     }
 
     # Add copy-offload specific parameters if enabled

@@ -1129,7 +1129,7 @@ requires-dist = [
     { name = "openshift-python-wrapper", specifier = ">=11.0.53" },
     { name = "openstacksdk", specifier = ">=4.0.0" },
     { name = "ovirt-python-sdk", specifier = ">=1.2.0" },
-    { name = "packaging" },
+    { name = "packaging", specifier = ">=24.0" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "py-go-template", specifier = ">=0.2.0" },
     { name = "pyhelper-utils", specifier = ">=1.0.9" },
