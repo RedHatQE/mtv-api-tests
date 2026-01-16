@@ -916,6 +916,9 @@ class VMWareProvider(BaseProvider):
             new_disk_spec.device.backing = backing_info
             device_changes.append(new_disk_spec)
             available_unit_number += 1
+            # Skip unit 7 (reserved for SCSI controller)
+            if available_unit_number == 7:
+                available_unit_number += 1
             new_disk_key_counter -= 1
         LOGGER.info(f"Configured {len(disks_to_add)} new disks for cloning")
         return device_changes
@@ -1066,14 +1069,16 @@ class VMWareProvider(BaseProvider):
                             break
 
         # Mirror the unit allocation logic from _get_add_disk_device_specs
-        scsi_controller = next(
-            (
-                device
-                for device in source_config.hardware.device
-                if isinstance(device, vim.vm.device.VirtualSCSIController)
-            ),
-            None,
-        )
+        scsi_controller = None
+        if source_config and source_config.hardware and source_config.hardware.device:
+            scsi_controller = next(
+                (
+                    device
+                    for device in source_config.hardware.device
+                    if isinstance(device, vim.vm.device.VirtualSCSIController)
+                ),
+                None,
+            )
         if scsi_controller and regular_disks:
             used_unit_numbers = {
                 device.unitNumber
@@ -1082,17 +1087,18 @@ class VMWareProvider(BaseProvider):
             }
             available_unit = next((i for i in range(16) if i != 7 and i not in used_unit_numbers), None)
             bus_number = scsi_controller.busNumber
-        for idx, _ in enumerate(regular_disks):
-            if scsi_controller and available_unit is not None:
-                disk_unit = available_unit + idx
-                # Skip unit 7 if we land on it
-                if disk_unit == 7:
-                    disk_unit += 1
-            disk_cbt_option = vim.option.OptionValue()
-            disk_cbt_option.key = f"scsi{bus_number}:{disk_unit}.ctkEnabled"
-            disk_cbt_option.value = "true"
-            extra_config_options.append(disk_cbt_option)
-            LOGGER.info(f"Enabling CTK for new disk scsi{bus_number}:{disk_unit}")
+        current_unit = available_unit
+        for _ in regular_disks:
+            if scsi_controller and current_unit is not None:
+                disk_cbt_option = vim.option.OptionValue()
+                disk_cbt_option.key = f"scsi{bus_number}:{current_unit}.ctkEnabled"
+                disk_cbt_option.value = "true"
+                extra_config_options.append(disk_cbt_option)
+                LOGGER.info(f"Enabling CTK for new disk scsi{bus_number}:{current_unit}")
+                current_unit += 1
+                # Skip unit 7 (reserved for SCSI controller)
+                if current_unit == 7:
+                    current_unit += 1
 
         if config_spec.extraConfig:
             config_spec.extraConfig.extend(extra_config_options)
