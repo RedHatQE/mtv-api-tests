@@ -1250,7 +1250,7 @@ def test_copyoffload_warm_migration(
         pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
 
     LOGGER.info("Starting copy-offload warm migration test")
-    LOGGER.info(f"Datastore: {datastore_id}, Storage vendor: {storage_vendor_product}")
+    LOGGER.info("Datastore: %s, Storage vendor: %s", datastore_id, storage_vendor_product)
 
     # Create network migration map
     vms_names = [vm["name"] for vm in plan["virtual_machines"]]
