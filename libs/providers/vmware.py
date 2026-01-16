@@ -1068,7 +1068,7 @@ class VMWareProvider(BaseProvider):
                                     disk_cbt_option.key = f"scsi{bus_number}:{unit_number}.ctkEnabled"
                                     disk_cbt_option.value = "true"
                                     extra_config_options.append(disk_cbt_option)
-                                    LOGGER.info(f"Enabling CTK for disk scsi{bus_number}:{unit_number}")
+                                    LOGGER.info("Enabling CTK for disk scsi%s:%s", bus_number, unit_number)
                                 break
 
             # Mirror the unit allocation logic from _get_add_disk_device_specs
@@ -1097,7 +1097,7 @@ class VMWareProvider(BaseProvider):
                         disk_cbt_option.key = f"scsi{bus_number}:{current_unit}.ctkEnabled"
                         disk_cbt_option.value = "true"
                         extra_config_options.append(disk_cbt_option)
-                        LOGGER.info(f"Enabling CTK for new disk scsi{bus_number}:{current_unit}")
+                        LOGGER.info("Enabling CTK for new disk scsi%s:%s", bus_number, current_unit)
                         current_unit += 1
                         # Skip unit 7 (reserved for SCSI controller)
                         if current_unit == 7:
@@ -1108,7 +1108,9 @@ class VMWareProvider(BaseProvider):
             else:
                 config_spec.extraConfig = extra_config_options
             LOGGER.info(
-                f"Enabled Change Block Tracking (CBT) on cloned VM '{clone_vm_name}' and {len(extra_config_options) - 1} disk(s)"
+                "Enabled Change Block Tracking (CBT) on cloned VM '%s' and %s disk(s)",
+                clone_vm_name,
+                len(extra_config_options) - 1,
             )
         else:
             LOGGER.debug("Skipping CTK configuration (not needed for cold migration)")
