@@ -680,12 +680,14 @@ def plan(
             )
         for vm in virtual_machines:
             # Get VM object first (without full vm_dict analysis)
+            # Add enable_ctk flag for warm migrations
+            clone_options = {**vm, "enable_ctk": warm_migration}
             provider_vm_api = source_provider.get_vm_by_name(
                 query=vm["name"],
                 vm_name_suffix=vm_name_suffix,
                 clone_vm=True,
                 session_uuid=fixture_store["session_uuid"],
-                clone_options=vm,
+                clone_options=clone_options,
             )
 
             # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
