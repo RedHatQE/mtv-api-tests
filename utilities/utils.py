@@ -157,9 +157,9 @@ def has_mtv_minimum_version(min_version: str, client: "DynamicClient | None" = N
     if client is None:
         try:
             client = get_cluster_client()
-        except Exception:
+        except Exception as e:
             LOGGER.exception("Failed to create cluster client for MTV version check")
-            raise RuntimeError("Could not create cluster client") from None
+            raise RuntimeError("Could not create cluster client") from e
 
     # Get configured MTV namespace (defaults to "openshift-mtv")
     configured_namespace = py_config.get("mtv_namespace", "openshift-mtv")

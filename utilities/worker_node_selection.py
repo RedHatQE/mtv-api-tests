@@ -50,16 +50,20 @@ def _query_prometheus_safe(prometheus: Prometheus, query: str, metric_name: str)
         return []
 
 
-def parse_prometheus_value(raw_value: Any) -> int:
+def parse_prometheus_value(raw_value: object) -> int:
     """Parse Prometheus metric value to integer.
 
     Args:
-        raw_value (Any): Raw value from Prometheus response, typically [timestamp, value].
+        raw_value (object): Raw value from Prometheus response, typically [timestamp, value].
 
     Returns:
         int: Parsed integer value, or 0 if parsing fails.
     """
-    if isinstance(raw_value, (list, tuple)) and len(raw_value) >= 2 and raw_value[1]:
+    if (
+        isinstance(raw_value, (list, tuple))
+        and len(raw_value) >= 2
+        and isinstance(raw_value[1], (str, bytes, int, float))
+    ):
         try:
             return int(float(raw_value[1]))
         except (ValueError, TypeError):
