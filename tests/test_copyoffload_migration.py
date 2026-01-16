@@ -74,21 +74,31 @@ def test_copyoffload_thin_migration(
 
     Requirements:
     - vSphere provider with VMs on XCOPY-capable storage
-    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara)
+    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara, etc.)
     - Storage credentials via environment variables or .providers.json config
     - ForkliftController with feature_copy_offload: "true" (must be pre-configured)
     - Proper datastore_id configuration matching the VM's datastore
 
     Configuration in .providers.json:
     "copyoffload": {
-        "storage_vendor_product": "ontap",  # or "vantara"
+        "storage_vendor_product": "ontap",  # or other supported vendor
         "datastore_id": "datastore-123",    # vSphere datastore ID
         "template_name": "<copyoffload-template-name>",
         "storage_hostname": "storage.example.com",
         "storage_username": "admin",
         "storage_password": "password",  # pragma: allowlist secret
-        "ontap_svm": "vserver-name"  # For NetApp ONTAP only
+        "ontap_svm": "vserver-name"  # Required for NetApp ONTAP
     }
+
+    Vendor-specific required fields:
+    - ontap: ontap_svm (SVM name)
+    - vantara: vantara_storage_id, vantara_storage_port, vantara_hostgroup_id_list
+    - pureFlashArray: pure_cluster_prefix (cluster prefix)
+    - powerflex: powerflex_system_id (system ID)
+    - powermax: powermax_symmetrix_id (symmetrix ID)
+    - primera3par, powerstore, infinibox, flashsystem: only basic credentials
+
+    See .providers.json.example for detailed configuration and how to get these values.
 
     Optional Environment Variables (override .providers.json values):
     - COPYOFFLOAD_STORAGE_HOSTNAME
@@ -360,29 +370,14 @@ def test_copyoffload_thick_lazy_migration(
 
     Requirements:
     - vSphere provider with VMs on XCOPY-capable storage (e.g., NetApp iSCSI)
-    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara)
+    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara, etc.)
     - Storage class in OpenShift that supports the same storage type as source
     - Storage credentials via environment variables or .providers.json config
     - ForkliftController with feature_copy_offload: "true" (must be pre-configured)
     - Proper datastore_id configuration matching the VM's datastore
     - VM must be on a datastore that supports xcopyoff functionality
 
-    Configuration in .providers.json:
-    "copyoffload": {
-        "storage_vendor_product": "ontap",  # or "vantara"
-        "datastore_id": "datastore-123",    # vSphere datastore ID (must support xcopyoff)
-        "template_name": "<copyoffload-template-name>",
-        "storage_hostname": "storage.example.com",
-        "storage_username": "admin",
-        "storage_password": "password",  # pragma: allowlist secret
-        "ontap_svm": "vserver-name"  # For NetApp ONTAP only
-    }
-
-    Optional Environment Variables (override .providers.json values):
-    - COPYOFFLOAD_STORAGE_HOSTNAME
-    - COPYOFFLOAD_STORAGE_USERNAME
-    - COPYOFFLOAD_STORAGE_PASSWORD
-    - COPYOFFLOAD_ONTAP_SVM
+    See .providers.json.example for supported vendors and configuration.
 
     Args:
         request: Pytest request object
@@ -510,28 +505,13 @@ def test_copyoffload_multi_disk_migration(
 
     Requirements:
     -   vSphere provider with VMs on XCOPY-capable storage (e.g., NetApp iSCSI).
-    -   Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara).
+    -   Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara, etc.).
     -   Storage class in OpenShift that supports the same storage type as the source.
     -   Storage credentials via environment variables or .providers.json config.
     -   ForkliftController with feature_copy_offload: "true" (must be pre-configured).
     -   Proper datastore_id configuration matching the VM's datastore.
 
-    Configuration in .providers.json:
-    "copyoffload": {
-        "storage_vendor_product": "ontap",  # or "vantara"
-        "datastore_id": "datastore-123",    # vSphere datastore ID (must support xcopyoff)
-        "template_name": "<copyoffload-template-name>",
-        "storage_hostname": "storage.example.com",
-        "storage_username": "admin",
-        "storage_password": "password",  # pragma: allowlist secret
-        "ontap_svm": "vserver-name"  # For NetApp ONTAP only
-    }
-
-    Optional Environment Variables (override .providers.json values):
-    -   COPYOFFLOAD_STORAGE_HOSTNAME
-    -   COPYOFFLOAD_STORAGE_USERNAME
-    -   COPYOFFLOAD_STORAGE_PASSWORD
-    -   COPYOFFLOAD_ONTAP_SVM
+    See .providers.json.example for supported vendors and configuration.
 
     Args:
         plan: Migration plan configuration from test parameters.
