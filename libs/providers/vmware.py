@@ -1065,16 +1065,34 @@ class VMWareProvider(BaseProvider):
                                 LOGGER.info(f"Enabling CTK for disk scsi{bus_number}:{unit_number}")
                             break
 
-        # Add new disks CTK configuration (for disks being added during clone)
-        num_existing_disks = len([d for d in source_config.hardware.device if isinstance(d, vim.vm.device.VirtualDisk)])
+        # Mirror the unit allocation logic from _get_add_disk_device_specs
+        scsi_controller = next(
+            (
+                device
+                for device in source_config.hardware.device
+                if isinstance(device, vim.vm.device.VirtualSCSIController)
+            ),
+            None,
+        )
+        if scsi_controller and regular_disks:
+            used_unit_numbers = {
+                device.unitNumber
+                for device in source_config.hardware.device
+                if device.controllerKey == scsi_controller.key
+            }
+            available_unit = next((i for i in range(16) if i != 7 and i not in used_unit_numbers), None)
+            bus_number = scsi_controller.busNumber
         for idx, _ in enumerate(regular_disks):
-            # New disks will be added sequentially after existing disks
-            disk_unit = num_existing_disks + idx
+            if scsi_controller and available_unit is not None:
+                disk_unit = available_unit + idx
+                # Skip unit 7 if we land on it
+                if disk_unit == 7:
+                    disk_unit += 1
             disk_cbt_option = vim.option.OptionValue()
-            disk_cbt_option.key = f"scsi0:{disk_unit}.ctkEnabled"
+            disk_cbt_option.key = f"scsi{bus_number}:{disk_unit}.ctkEnabled"
             disk_cbt_option.value = "true"
             extra_config_options.append(disk_cbt_option)
-            LOGGER.info(f"Enabling CTK for new disk scsi0:{disk_unit}")
+            LOGGER.info(f"Enabling CTK for new disk scsi{bus_number}:{disk_unit}")
 
         if config_spec.extraConfig:
             config_spec.extraConfig.extend(extra_config_options)
