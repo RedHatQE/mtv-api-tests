@@ -606,9 +606,11 @@ def _find_migration_for_plan(plan: Plan) -> Migration:
     except ApiException as e:
         if e.status == 404:
             raise MigrationNotFoundError(plan_name=plan.name) from e
-        LOGGER.error(
-            f"Kubernetes API error getting Migrations for Plan {plan.name} in namespace {plan.namespace}: {e}",
-            exc_info=True,
+        LOGGER.exception(
+            "Kubernetes API error getting Migrations for Plan %s in namespace %s: %s",
+            plan.name,
+            plan.namespace,
+            e,
         )
         raise
 
