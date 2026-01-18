@@ -36,13 +36,28 @@
       # - "infinibox"       (Infinidat InfiniBox)
       # - "flashsystem"     (IBM FlashSystem)
       "storage_vendor_product": "ontap",
+
+      # Primary datastore for copy-offload operations (required)
+      # This is the vSphere datastore ID (e.g., "datastore-12345") where VMs reside
+      # Get via vSphere: Datacenter → Storage → Datastore → Summary → More Objects ID
       "datastore_id": "datastore-12345",
+
+      # Optional: Secondary datastore for multi-datastore copy-offload tests
+      # Only needed when testing VMs with disks spanning multiple datastores
+      # When specified, tests can validate copy-offload with disks on different datastores
+      "secondary_datastore_id": "datastore-67890",
+
       "template_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
       "storage_password": "your-password-here",  # pragma: allowlist secret
 
       # Vendor-specific fields (configure based on your storage_vendor_product):
+      # IMPORTANT: Only configure the fields for your selected storage_vendor_product.
+      # For example, if storage_vendor_product == "ontap", only configure ontap_svm.
+      # You may leave other vendor-specific fields blank or remove them from your config.
+      # Note: Both datastore_id and secondary_datastore_id (if used) must be on the
+      # same storage array and support XCOPY/VAAI primitives for copy-offload to work.
       # See forklift vsphere-xcopy-volume-populator code/README for details
 
       # NetApp ONTAP (required for "ontap"):
@@ -69,12 +84,14 @@
       # No additional vendor-specific fields required - use only the common fields above
 
       # ESXi SSH configuration (optional, for SSH-based cloning):
+      # Can be overridden via environment variables: COPYOFFLOAD_ESXI_HOST, COPYOFFLOAD_ESXI_USER, COPYOFFLOAD_ESXI_PASSWORD
       "esxi_clone_method": "ssh",  # "vib" (default) or "ssh"
       "esxi_host": "your-esxi-host.example.com",  # required for ssh method
       "esxi_user": "root",  # required for ssh method
       "esxi_password": "your-esxi-password",  # pragma: allowlist secret # required for ssh method
 
       # RDM testing (optional, for RDM disk tests):
+      # Note: datastore_id must be a VMFS datastore for RDM disk support
       "rdm_lun_uuid": "naa.600a098038313954492458313032306f"
     }
   },

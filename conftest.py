@@ -42,6 +42,7 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.openshift import OCPProvider
+from utilities.copyoffload_constants import SUPPORTED_VENDORS
 from utilities.copyoffload_migration import get_copyoffload_credential
 from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
 from utilities.logger import separator, setup_logging
@@ -67,19 +68,6 @@ RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
-
-# Supported storage vendors for copy-offload functionality
-SUPPORTED_VENDORS = [
-    "ontap",
-    "vantara",
-    "primera3par",
-    "pureFlashArray",
-    "powerflex",
-    "powermax",
-    "powerstore",
-    "infinibox",
-    "flashsystem",
-]
 
 
 # Pytest start
@@ -1055,9 +1043,10 @@ def setup_copyoffload_ssh(source_provider, source_provider_data, copyoffload_con
     datastore_name = source_provider.get_datastore_name_by_id(datastore_id)
 
     # Get ESXi credentials from the 'copyoffload' config section
-    esxi_host = copyoffload_cfg.get("esxi_host")
-    esxi_user = copyoffload_cfg.get("esxi_user")
-    esxi_password = copyoffload_cfg.get("esxi_password")
+    # These support environment variable overrides (COPYOFFLOAD_ESXI_HOST, etc.)
+    esxi_host = get_copyoffload_credential("esxi_host", copyoffload_cfg)
+    esxi_user = get_copyoffload_credential("esxi_user", copyoffload_cfg)
+    esxi_password = get_copyoffload_credential("esxi_password", copyoffload_cfg)
 
     if not all([esxi_host, esxi_user, esxi_password]):
         pytest.fail(
