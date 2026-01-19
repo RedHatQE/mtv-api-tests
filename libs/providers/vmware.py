@@ -5,6 +5,7 @@ import copy
 import ipaddress
 from typing import TYPE_CHECKING, Any, Literal, Self
 
+import shortuuid
 from kubernetes.client.exceptions import ApiException
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
@@ -1052,8 +1053,16 @@ class VMWareProvider(BaseProvider):
             vim.VirtualMachine: The cloned VM object.
 
         """
-        clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
-        LOGGER.info("Starting clone process for '%s' from '%s'", clone_vm_name, source_vm_name)
+        # Check if we should preserve the original name format (for non-conforming name tests)
+        preserve_name_format = kwargs.get("preserve_name_format", False)
+        if preserve_name_format:
+            # Keep the original name format with capitals and underscores, just add UUID suffix
+            random_suffix = shortuuid.ShortUUID().random(length=4).lower()
+            clone_vm_name = f"{session_uuid}-{clone_vm_name}-{random_suffix}"
+            LOGGER.info(f"Preserving original name format: '{clone_vm_name}'")
+        else:
+            clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
+        LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
 
