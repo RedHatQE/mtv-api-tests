@@ -1967,6 +1967,7 @@ class TestCopyoffloadNonconformingNameMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
+    @pytest.mark.dependency(name="TestCopyoffloadNonconformingNameMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -2025,6 +2026,7 @@ class TestCopyoffloadNonconformingNameMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
+    @pytest.mark.dependency(name="TestCopyoffloadNonconformingNameMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -2050,6 +2052,13 @@ class TestCopyoffloadNonconformingNameMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
+    @pytest.mark.dependency(
+        name="TestCopyoffloadNonconformingNameMigration::plan",
+        depends=[
+            "TestCopyoffloadNonconformingNameMigration::storagemap",
+            "TestCopyoffloadNonconformingNameMigration::networkmap",
+        ],
+    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -2080,6 +2089,10 @@ class TestCopyoffloadNonconformingNameMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
+    @pytest.mark.dependency(
+        name="TestCopyoffloadNonconformingNameMigration::migrate",
+        depends=["TestCopyoffloadNonconformingNameMigration::plan"],
+    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         LOGGER.info("Executing copy-offload migration with non-conforming name")
@@ -2090,6 +2103,7 @@ class TestCopyoffloadNonconformingNameMigration:
             target_namespace=target_namespace,
         )
 
+    @pytest.mark.dependency(depends=["TestCopyoffloadNonconformingNameMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
