@@ -230,7 +230,13 @@ class VMWareProvider(BaseProvider):
         session_uuid: str = "",
         clone_options: dict | None = None,
     ) -> vim.VirtualMachine:
-        target_vm_name = f"{query}{vm_name_suffix}"
+        # Use custom clone_name if provided, otherwise use default naming
+        clone_options = clone_options or {}
+        if "clone_name" in clone_options:
+            target_vm_name = clone_options["clone_name"]
+        else:
+            target_vm_name = f"{query}{vm_name_suffix}"
+
         target_vm = None
         try:
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
@@ -239,13 +245,17 @@ class VMWareProvider(BaseProvider):
                 # Use copyoffload datastore and host if configured
                 target_datastore_id = self.copyoffload_config.get("datastore_id")
                 target_esxi_host = self.copyoffload_config.get("esxi_host")
+
+                # Remove clone_name from options before passing to clone_vm
+                clone_vm_options = {k: v for k, v in clone_options.items() if k != "clone_name"}
+
                 target_vm = self.clone_vm(
                     source_vm_name=query,
                     clone_vm_name=target_vm_name,
                     session_uuid=session_uuid,
                     target_datastore_id=target_datastore_id,
                     target_esxi_host=target_esxi_host,
-                    **(clone_options or {}),
+                    **clone_vm_options,
                 )
                 if not target_vm:
                     raise VmNotFoundError(
