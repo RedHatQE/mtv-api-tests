@@ -2,6 +2,18 @@ import re
 import shortuuid
 
 
+class InvalidVMNameError(Exception):
+    """
+    Exception raised when a VM name cannot be sanitized to a valid Kubernetes DNS-1123 name.
+
+    This error occurs when the sanitization process results in an empty string,
+    typically because the input name contains only invalid characters that get
+    stripped during sanitization.
+    """
+
+    pass
+
+
 def generate_name_with_uuid(name: str) -> str:
     _name = f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
     _name = _name.replace("_", "-").replace(".", "-").lower()
@@ -26,6 +38,10 @@ def sanitize_kubernetes_name(name: str) -> str:
     Returns:
         A Kubernetes-compliant name (lowercase, underscores and periods replaced with hyphens)
 
+    Raises:
+        InvalidVMNameError: If the name cannot be sanitized to a valid DNS-1123 name
+                           (e.g., contains only invalid characters)
+
     Example:
         >>> sanitize_kubernetes_name("auto-8ysl-XCopy_Test_VM_CAPS-wnpn")
         'auto-8ysl-xcopy-test-vm-caps-wnpn'
@@ -41,5 +57,8 @@ def sanitize_kubernetes_name(name: str) -> str:
     # Enforce max length (DNS-1123 subdomain)
     sanitized = sanitized[:253].rstrip("-")
     if not sanitized:
-        raise ValueError("VM name cannot be sanitized to a valid DNS-1123 name")
+        raise InvalidVMNameError(
+            f"VM name '{name}' cannot be sanitized to a valid DNS-1123 name. "
+            "The name must contain at least one alphanumeric character."
+        )
     return sanitized
