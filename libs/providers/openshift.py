@@ -14,6 +14,7 @@ from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from libs.base_provider import BaseProvider
+from utilities.naming import sanitize_kubernetes_name
 from utilities.ssh_utils import VMSSHConnection, create_vm_ssh_connection
 
 if TYPE_CHECKING:
@@ -113,6 +114,16 @@ class OCPProvider(BaseProvider):
         _source = kwargs.get("source", False)
 
         cnv_vm_name = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
+
+        # For destination VMs, sanitize the name to match Kubernetes naming conventions
+        # The MTV operator converts source VM names (which may have capitals and underscores)
+        # to valid Kubernetes resource names (lowercase, hyphens instead of underscores)
+        if not _source:
+            original_name = cnv_vm_name
+            cnv_vm_name = sanitize_kubernetes_name(cnv_vm_name)
+            if original_name != cnv_vm_name:
+                LOGGER.info(f"Sanitized VM name for Kubernetes lookup: '{original_name}' -> '{cnv_vm_name}'")
+
         cnv_vm_namespace = kwargs["namespace"]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
