@@ -1,3 +1,4 @@
+import re
 import shortuuid
 
 
@@ -12,22 +13,33 @@ def sanitize_kubernetes_name(name: str) -> str:
     Sanitize a VM name to comply with Kubernetes DNS-1123 subdomain naming conventions.
 
     Rules:
-    - lowercase alphanumeric characters, '-' or '.'
+    - lowercase alphanumeric characters and '-'
     - must start and end with an alphanumeric character
     - max 253 characters
 
-    This matches how the MTV operator converts source VM names to valid Kubernetes resource names.
+    This matches how the MTV operator converts source VM names to valid Kubernetes resource names,
+    and is consistent with generate_name_with_uuid() behavior.
 
     Args:
-        name: The original VM name (may contain capitals, underscores, etc.)
+        name: The original VM name (may contain capitals, underscores, periods, etc.)
 
     Returns:
-        A Kubernetes-compliant name (lowercase, underscores replaced with hyphens)
+        A Kubernetes-compliant name (lowercase, underscores and periods replaced with hyphens)
 
     Example:
         >>> sanitize_kubernetes_name("auto-8ysl-XCopy_Test_VM_CAPS-wnpn")
         'auto-8ysl-xcopy-test-vm-caps-wnpn'
+        >>> sanitize_kubernetes_name("vm.with.periods")
+        'vm-with-periods'
     """
-    # Convert to lowercase and replace underscores with hyphens
-    sanitized = name.replace("_", "-").lower()
+    # Lowercase and replace underscores and periods with hyphens (consistent with generate_name_with_uuid)
+    sanitized = name.replace("_", "-").replace(".", "-").lower()
+    # Collapse any other invalid characters to hyphens
+    sanitized = re.sub(r"[^a-z0-9-]+", "-", sanitized)
+    # Must start/end with alphanumeric
+    sanitized = re.sub(r"^[^a-z0-9]+|[^a-z0-9]+$", "", sanitized)
+    # Enforce max length (DNS-1123 subdomain)
+    sanitized = sanitized[:253].rstrip("-")
+    if not sanitized:
+        raise ValueError("VM name cannot be sanitized to a valid DNS-1123 name")
     return sanitized

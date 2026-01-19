@@ -122,8 +122,11 @@ class OCPProvider(BaseProvider):
             original_name = cnv_vm_name
             cnv_vm_name = sanitize_kubernetes_name(cnv_vm_name)
             if original_name != cnv_vm_name:
-                LOGGER.info(f"Sanitized VM name for Kubernetes lookup: '{original_name}' -> '{cnv_vm_name}'")
-
+                LOGGER.info(
+                    "Sanitized VM name for Kubernetes lookup: '%s' -> '%s'",
+                    original_name,
+                    cnv_vm_name,
+                )
         cnv_vm_namespace = kwargs["namespace"]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
