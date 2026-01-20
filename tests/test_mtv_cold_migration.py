@@ -11,7 +11,7 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
 )
 from utilities.post_migration import check_vms
-from utilities.utils import get_value_from_py_config
+from utilities.utils import get_value_from_py_config, populate_vm_ids
 
 
 @pytest.mark.tier0
@@ -25,7 +25,7 @@ from utilities.utils import get_value_from_py_config
     indirect=True,
     ids=["rhel8"],
 )
-@pytest.mark.usefixtures("multus_network_name", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestSanityColdMtvMigration:
     """Cold migration test - sanity check."""
 
@@ -98,11 +98,7 @@ class TestSanityColdMtvMigration:
         source_provider_inventory,
     ):
         """Create MTV Plan CR resource."""
-        # Populate VM IDs from Forklift inventory for all VMs
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = vm["name"]
-            vm_data = source_provider_inventory.get_vm(vm_name)
-            vm["id"] = vm_data["id"]
+        populate_vm_ids(prepared_plan, source_provider_inventory)
 
         self.__class__.plan_resource = create_plan_resource(
             ocp_admin_client=ocp_admin_client,
@@ -174,7 +170,7 @@ class TestSanityColdMtvMigration:
     indirect=True,
     ids=["MTV-79"],
 )
-@pytest.mark.usefixtures("multus_network_name", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestColdRemoteOcp:
     """Cold migration test to remote OCP cluster."""
 
@@ -247,11 +243,7 @@ class TestColdRemoteOcp:
         source_provider_inventory,
     ):
         """Create MTV Plan CR resource."""
-        # Populate VM IDs from Forklift inventory for all VMs
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = vm["name"]
-            vm_data = source_provider_inventory.get_vm(vm_name)
-            vm["id"] = vm_data["id"]
+        populate_vm_ids(prepared_plan, source_provider_inventory)
 
         self.__class__.plan_resource = create_plan_resource(
             ocp_admin_client=ocp_admin_client,

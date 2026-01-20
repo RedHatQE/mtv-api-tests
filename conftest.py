@@ -9,7 +9,8 @@ import shutil
 from copy import deepcopy
 from pathlib import Path
 from shutil import rmtree
-from typing import TYPE_CHECKING, Any, Generator
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from kubernetes.dynamic.exceptions import NotFoundError
@@ -697,7 +698,6 @@ def prepared_plan(
     source_provider: Any,
     source_vms_namespace: str,
     ocp_admin_client: DynamicClient,
-    target_namespace: str,
     multus_cni_config: str,
     source_provider_inventory: ForkliftInventory,
 ) -> Generator[dict[str, Any], None, None]:
@@ -714,7 +714,6 @@ def prepared_plan(
         source_provider: Source provider instance (VMWareProvider, OvirtProvider, etc.)
         source_vms_namespace (str): Source VMs namespace
         ocp_admin_client (DynamicClient): OpenShift client
-        target_namespace (str): Target namespace for migrated VMs
         multus_cni_config (str): Multus CNI configuration
         source_provider_inventory (ForkliftInventory): Source provider inventory
 
