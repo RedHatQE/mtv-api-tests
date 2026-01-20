@@ -13,7 +13,7 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
 )
 from utilities.post_migration import check_vms
-from utilities.utils import get_value_from_py_config
+from utilities.utils import get_value_from_py_config, populate_vm_ids
 
 SOURCE_PROVIDER_TYPE = py_config.get("source_provider_type")
 
@@ -43,7 +43,7 @@ if SOURCE_PROVIDER_TYPE == Provider.ProviderType.RHV:
     indirect=True,
     ids=["rhel8"],
 )
-@pytest.mark.usefixtures("multus_network_name", "precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestSanityWarmMtvMigration:
     """Warm migration sanity test."""
 
@@ -62,7 +62,23 @@ class TestSanityWarmMtvMigration:
         source_provider_inventory,
         target_namespace,
     ):
-        """Create StorageMap resource for migration."""
+        """Create StorageMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (Namespace): Target namespace for migration.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If StorageMap creation fails.
+        """
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.storage_map = get_storage_migration_map(
             fixture_store=fixture_store,
@@ -87,7 +103,24 @@ class TestSanityWarmMtvMigration:
         target_namespace,
         multus_network_name,
     ):
-        """Create NetworkMap resource for migration."""
+        """Create NetworkMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (Namespace): Target namespace for migration.
+            multus_network_name (str): Name of the multus network.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If NetworkMap creation fails.
+        """
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
             fixture_store=fixture_store,
@@ -115,12 +148,24 @@ class TestSanityWarmMtvMigration:
         target_namespace,
         source_provider_inventory,
     ):
-        """Create MTV Plan CR resource."""
-        # Populate VM IDs from Forklift inventory
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = vm["name"]
-            vm_data = source_provider_inventory.get_vm(vm_name)
-            vm["id"] = vm_data["id"]
+        """Create MTV Plan CR resource.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            target_namespace (Namespace): Target namespace for migration.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If Plan creation fails.
+        """
+        populate_vm_ids(plan=prepared_plan, inventory=source_provider_inventory)
 
         self.__class__.plan_resource = create_plan_resource(
             ocp_admin_client=ocp_admin_client,
@@ -145,7 +190,16 @@ class TestSanityWarmMtvMigration:
         ocp_admin_client,
         target_namespace,
     ):
-        """Execute warm migration with cutover."""
+        """Execute warm migration with cutover.
+
+        Args:
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (Namespace): Target namespace for migration.
+
+        Returns:
+            None
+        """
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
@@ -166,7 +220,21 @@ class TestSanityWarmMtvMigration:
         source_provider_inventory,
         vm_ssh_connections,
     ):
-        """Validate migrated VMs."""
+        """Validate migrated VMs.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            target_namespace (Namespace): Target namespace for migration.
+            source_vms_namespace (str): Namespace of source VMs.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (dict[str, Any]): SSH connections to migrated VMs.
+
+        Returns:
+            None
+        """
         check_vms(
             plan=prepared_plan,
             source_provider=source_provider,
@@ -193,7 +261,7 @@ class TestSanityWarmMtvMigration:
     indirect=True,
     ids=["MTV-200 rhel"],
 )
-@pytest.mark.usefixtures("multus_network_name", "precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestMtvMigrationWarm2disks2nics:
     """Warm migration test with 2 disks and 2 NICs."""
 
@@ -212,7 +280,23 @@ class TestMtvMigrationWarm2disks2nics:
         source_provider_inventory,
         target_namespace,
     ):
-        """Create StorageMap resource for migration."""
+        """Create StorageMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (Namespace): Target namespace for migration.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If StorageMap creation fails.
+        """
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.storage_map = get_storage_migration_map(
             fixture_store=fixture_store,
@@ -237,7 +321,24 @@ class TestMtvMigrationWarm2disks2nics:
         target_namespace,
         multus_network_name,
     ):
-        """Create NetworkMap resource for migration."""
+        """Create NetworkMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (Namespace): Target namespace for migration.
+            multus_network_name (str): Name of the multus network.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If NetworkMap creation fails.
+        """
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
             fixture_store=fixture_store,
@@ -265,12 +366,24 @@ class TestMtvMigrationWarm2disks2nics:
         target_namespace,
         source_provider_inventory,
     ):
-        """Create MTV Plan CR resource."""
-        # Populate VM IDs from Forklift inventory
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = vm["name"]
-            vm_data = source_provider_inventory.get_vm(vm_name)
-            vm["id"] = vm_data["id"]
+        """Create MTV Plan CR resource.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            target_namespace (Namespace): Target namespace for migration.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If Plan creation fails.
+        """
+        populate_vm_ids(plan=prepared_plan, inventory=source_provider_inventory)
 
         self.__class__.plan_resource = create_plan_resource(
             ocp_admin_client=ocp_admin_client,
@@ -295,7 +408,16 @@ class TestMtvMigrationWarm2disks2nics:
         ocp_admin_client,
         target_namespace,
     ):
-        """Execute warm migration with cutover."""
+        """Execute warm migration with cutover.
+
+        Args:
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (Namespace): Target namespace for migration.
+
+        Returns:
+            None
+        """
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
@@ -316,7 +438,21 @@ class TestMtvMigrationWarm2disks2nics:
         source_provider_inventory,
         vm_ssh_connections,
     ):
-        """Validate migrated VMs."""
+        """Validate migrated VMs.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            target_namespace (Namespace): Target namespace for migration.
+            source_vms_namespace (str): Namespace of source VMs.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (dict[str, Any]): SSH connections to migrated VMs.
+
+        Returns:
+            None
+        """
         check_vms(
             plan=prepared_plan,
             source_provider=source_provider,
@@ -343,7 +479,7 @@ class TestMtvMigrationWarm2disks2nics:
     ids=["MTV-394"],
 )
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
-@pytest.mark.usefixtures("multus_network_name", "precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestWarmRemoteOcp:
     """Warm remote OCP migration test."""
 
@@ -362,7 +498,23 @@ class TestWarmRemoteOcp:
         source_provider_inventory,
         target_namespace,
     ):
-        """Create StorageMap resource for migration."""
+        """Create StorageMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_ocp_provider (BaseProvider): Destination OCP provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (Namespace): Target namespace for migration.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If StorageMap creation fails.
+        """
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.storage_map = get_storage_migration_map(
             fixture_store=fixture_store,
@@ -387,7 +539,24 @@ class TestWarmRemoteOcp:
         target_namespace,
         multus_network_name,
     ):
-        """Create NetworkMap resource for migration."""
+        """Create NetworkMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_ocp_provider (BaseProvider): Destination OCP provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (Namespace): Target namespace for migration.
+            multus_network_name (str): Name of the multus network.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If NetworkMap creation fails.
+        """
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
             fixture_store=fixture_store,
@@ -415,12 +584,24 @@ class TestWarmRemoteOcp:
         target_namespace,
         source_provider_inventory,
     ):
-        """Create MTV Plan CR resource."""
-        # Populate VM IDs from Forklift inventory
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = vm["name"]
-            vm_data = source_provider_inventory.get_vm(vm_name)
-            vm["id"] = vm_data["id"]
+        """Create MTV Plan CR resource.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_ocp_provider (BaseProvider): Destination OCP provider instance.
+            target_namespace (Namespace): Target namespace for migration.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If Plan creation fails.
+        """
+        populate_vm_ids(plan=prepared_plan, inventory=source_provider_inventory)
 
         self.__class__.plan_resource = create_plan_resource(
             ocp_admin_client=ocp_admin_client,
@@ -445,7 +626,16 @@ class TestWarmRemoteOcp:
         ocp_admin_client,
         target_namespace,
     ):
-        """Execute warm migration with cutover."""
+        """Execute warm migration with cutover.
+
+        Args:
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (Namespace): Target namespace for migration.
+
+        Returns:
+            None
+        """
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
@@ -466,7 +656,21 @@ class TestWarmRemoteOcp:
         source_provider_inventory,
         vm_ssh_connections,
     ):
-        """Validate migrated VMs."""
+        """Validate migrated VMs.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            source_provider (BaseProvider): Source provider instance.
+            destination_ocp_provider (BaseProvider): Destination OCP provider instance.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            target_namespace (Namespace): Target namespace for migration.
+            source_vms_namespace (str): Namespace of source VMs.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (dict[str, Any]): SSH connections to migrated VMs.
+
+        Returns:
+            None
+        """
         check_vms(
             plan=prepared_plan,
             source_provider=source_provider,

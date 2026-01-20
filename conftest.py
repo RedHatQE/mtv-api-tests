@@ -9,11 +9,13 @@ import shutil
 from copy import deepcopy
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, Generator
+from typing import TYPE_CHECKING, Any, Generator
 
 import pytest
-from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -69,6 +71,18 @@ RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
+
+
+def _generate_class_hash_prefix(request: pytest.FixtureRequest) -> str:
+    """Generate a FIPS-compliant hash prefix for class-based resource naming.
+
+    Args:
+        request (pytest.FixtureRequest): Pytest fixture request.
+
+    Returns:
+        str: A 6-character hex prefix (e.g., "a1b2c3").
+    """
+    return hashlib.sha256(request.node.nodeid.encode()).hexdigest()[:6]
 
 
 # Pytest start
@@ -533,8 +547,9 @@ def multus_network_name(
     """Create NADs based on network requirements with unique names per test class.
 
     Automatically detects number of networks and creates NADs with class-unique naming:
-    - cb-{4-char-hash}-1, cb-{4-char-hash}-2, etc. (e.g., "cb-a1b2-1" = 9 chars)
+    - cb-{6-char-hash}-1, cb-{6-char-hash}-2, etc. (e.g., "cb-a1b2c3-1" = 11 chars)
 
+    Uses SHA-256 (FIPS-compliant) instead of MD5 for hash generation.
     The unique class hash prevents conflicts when running tests in parallel.
     Names are kept under 15 characters to comply with Linux bridge interface name limits.
 
@@ -548,14 +563,13 @@ def multus_network_name(
         request (pytest.FixtureRequest): Pytest fixture request
 
     Yields:
-        str: Base name for NAD generation (e.g., "cb-a1b2")
+        str: Base name for NAD generation (e.g., "cb-a1b2c3")
     """
-    # Use class name for hash instead of test name
-    test_class_name = request.node.cls.__name__ if request.node.cls else request.node.name
-    short_hash = hashlib.md5(test_class_name.encode()).hexdigest()[:4]
-    base_name = f"cb-{short_hash}"
+    hash_prefix = _generate_class_hash_prefix(request)
+    base_name = f"cb-{hash_prefix}"
 
-    LOGGER.info(f"Creating class-scoped NADs with base name: {base_name} (class: {test_class_name})")
+    class_name = request.node.cls.__name__ if request.node.cls else request.node.name
+    LOGGER.info(f"Creating class-scoped NADs with base name: {base_name} (class: {class_name})")
 
     # Get VM names from the class plan config
     vms = [vm["name"] for vm in class_plan_config["virtual_machines"]]
@@ -725,6 +739,10 @@ def prepared_plan(
                     LOGGER.info(f"Overriding VM name '{vm['name']}' with '{default_vm_override}' from provider config")
                     vm["name"] = default_vm_override
 
+    # OVA provider uses a fixed VM from the OVA file
+    if source_provider.type == Provider.ProviderType.OVA:
+        plan["virtual_machines"] = [{"name": "1nisim-rhel9-efi"}]
+
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
@@ -732,9 +750,8 @@ def prepared_plan(
 
         if openshift_source_provider:
             # Generate unique network name for class-based tests
-            test_class_name = request.node.cls.__name__ if request.node.cls else request.node.name
-            short_hash = hashlib.md5(test_class_name.encode()).hexdigest()[:4]
-            multus_network_name = f"cb-{short_hash}"
+            hash_prefix = _generate_class_hash_prefix(request)
+            multus_network_name = f"cb-{hash_prefix}"
 
             # Create NAD for OpenShift source provider
             create_and_store_resource(
@@ -803,26 +820,10 @@ def prepared_plan(
 
     yield plan
 
-    # Register VMs for teardown
-    for vm in plan["virtual_machines"]:
-        vm_obj = VirtualMachine(
-            client=ocp_admin_client,
-            name=vm["name"],
-            namespace=target_namespace,
-        )
-        fixture_store["teardown"].setdefault(vm_obj.kind, []).append({
-            "name": vm_obj.name,
-            "namespace": vm_obj.namespace,
-            "module": vm_obj.__module__,
-        })
-
-    # Register pods for teardown
-    for pod in Pod.get(client=ocp_admin_client, namespace=target_namespace):
-        fixture_store["teardown"].setdefault(pod.kind, []).append({
-            "name": pod.name,
-            "namespace": pod.namespace,
-            "module": pod.__module__,
-        })
+    # Note: VMs are cleaned up by cleanup_migrated_vms at class scope.
+    # Session-level registration is intentionally omitted to prevent double cleanup.
+    # The cleanup_migrated_vms fixture handles VM deletion, and any leftover resources
+    # (e.g., if cleanup_migrated_vms is not used) will be caught by namespace deletion.
 
 
 @pytest.fixture(scope="class")
@@ -856,13 +857,17 @@ def cleanup_migrated_vms(
         return
 
     for vm in prepared_plan["virtual_machines"]:
+        vm_name = vm["name"]
         vm_obj = VirtualMachine(
             client=ocp_admin_client,
-            name=vm["name"],
+            name=vm_name,
             namespace=target_namespace,
         )
-        LOGGER.info(f"Cleaning up migrated VM: {vm['name']}")
-        vm_obj.clean_up()
+        if vm_obj.exists:
+            LOGGER.info(f"Cleaning up migrated VM: {vm_name}")
+            vm_obj.clean_up()
+        else:
+            LOGGER.info(f"VM {vm_name} already deleted, skipping cleanup")
 
 
 @pytest.fixture(scope="session")

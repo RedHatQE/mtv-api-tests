@@ -1139,6 +1139,15 @@ def check_vms(
 
             # Static IP preservation check - only for Windows VMs with static IPs migrated from VSPHERE
             source_vm_data = plan.get("source_vms_data", {}).get(vm["name"], {})
+
+            # Fail fast: if preserve_static_ips is requested for vSphere, source_vms_data must exist
+            if plan.get("preserve_static_ips") and source_provider.type == Provider.ProviderType.VSPHERE:
+                if not source_vm_data:
+                    raise ValueError(
+                        f"preserve_static_ips is enabled but source_vms_data is missing for VM '{vm['name']}'. "
+                        "Ensure the prepared_plan fixture populates source_vms_data for static IP verification."
+                    )
+
             if (
                 source_vm_data
                 and source_vm_data.get("win_os")

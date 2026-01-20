@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from kubernetes.dynamic import DynamicClient
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -19,6 +18,9 @@ from libs.providers.openshift import OCPProvider
 from utilities.copyoffload_migration import wait_for_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(__name__)
 

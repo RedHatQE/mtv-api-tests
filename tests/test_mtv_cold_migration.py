@@ -1,7 +1,6 @@
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
-from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 
@@ -46,12 +45,6 @@ class TestSanityColdMtvMigration:
         target_namespace,
     ):
         """Create StorageMap resource for migration."""
-        # Handle OVA provider special case
-        if source_provider.type == Provider.ProviderType.OVA:
-            prepared_plan["virtual_machines"] = [
-                {"name": "1nisim-rhel9-efi"},
-            ]
-
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.storage_map = get_storage_migration_map(
             fixture_store=fixture_store,

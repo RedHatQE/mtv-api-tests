@@ -519,6 +519,14 @@ class VirtualMachineFromInstanceType(VirtualMachine):
 
 
 def get_cluster_client() -> DynamicClient:
+    """Get a DynamicClient for the cluster.
+
+    Returns:
+        DynamicClient: The cluster client.
+
+    Raises:
+        ValueError: If the client cannot be created.
+    """
     host = get_value_from_py_config("cluster_host")
     username = get_value_from_py_config("cluster_username")
     password = get_value_from_py_config("cluster_password")
@@ -528,3 +536,19 @@ def get_cluster_client() -> DynamicClient:
     if isinstance(_client, DynamicClient):
         return _client
     raise ValueError("Failed to get client for cluster")
+
+
+def populate_vm_ids(plan: dict[str, Any], inventory: ForkliftInventory) -> None:
+    """Populate VM IDs from Forklift inventory into the plan's virtual machines.
+
+    Args:
+        plan (dict[str, Any]): The migration plan containing virtual_machines list.
+        inventory (ForkliftInventory): The Forklift inventory to query for VM IDs.
+
+    Returns:
+        None
+    """
+    for vm in plan["virtual_machines"]:
+        vm_name = vm["name"]
+        vm_data = inventory.get_vm(vm_name)
+        vm["id"] = vm_data["id"]

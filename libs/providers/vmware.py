@@ -116,13 +116,15 @@ class VMWareProvider(BaseProvider):
                     timeout=180,
                 )
             except TimeoutExpiredError:
-                LOGGER.error(f"Timed out waiting for provider {self.ocp_resource.name} to be validated after update")
+                LOGGER.exception(
+                    f"Timed out waiting for provider {self.ocp_resource.name} to be validated after update"
+                )
                 raise
             except ApiException as e:
-                LOGGER.error(f"Kubernetes API error updating provider with esxiCloneMethod: {e.reason}")
+                LOGGER.exception(f"Kubernetes API error updating provider with esxiCloneMethod: {e.reason}")
                 raise
-            except (ValueError, RuntimeError) as e:
-                LOGGER.error("Failed to update provider with esxiCloneMethod: %s", e)
+            except (ValueError, RuntimeError):
+                LOGGER.exception("Failed to update provider with esxiCloneMethod")
                 raise
 
     def get_ssh_public_key(self, wait_timeout: int = 120) -> str:
@@ -155,9 +157,9 @@ class VMWareProvider(BaseProvider):
                     public_key_b64 = secret.instance.data["public-key"]
                     return base64.b64decode(public_key_b64).decode("utf-8")
 
-        except TimeoutExpiredError:
-            LOGGER.error("Timed out waiting for secret '%s' to be created.", secret_name)
-            raise VmCloneError(f"SSH public key secret '{secret_name}' not found.")
+        except TimeoutExpiredError as exc:
+            LOGGER.exception("Timed out waiting for secret '%s' to be created.", secret_name)
+            raise VmCloneError(f"SSH public key secret '{secret_name}' not found.") from exc
 
         # This part should not be reached if TimeoutSampler works as expected
         raise VmCloneError(f"Could not retrieve SSH public key from secret '{secret_name}'.")
