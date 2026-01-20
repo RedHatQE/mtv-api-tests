@@ -16,7 +16,6 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
 from libs.base_provider import BaseProvider
-from utilities.naming import generate_name_with_uuid
 
 LOGGER = get_logger(__name__)
 
@@ -33,8 +32,7 @@ ERR_SECONDARY_DS_NOT_CONFIGURED = (
 
 
 def format_insufficient_capacity_message(datastore_name: str, required_gb: float, available_gb: float) -> str:
-    """
-    Format error/log message for insufficient datastore capacity.
+    """Format error/log message for insufficient datastore capacity.
 
     Args:
         datastore_name: Name of the datastore
@@ -43,6 +41,7 @@ def format_insufficient_capacity_message(datastore_name: str, required_gb: float
 
     Returns:
         Formatted message string
+
     """
     return (
         f"Insufficient datastore capacity for thick-provisioned disks on '{datastore_name}'. "
@@ -51,8 +50,7 @@ def format_insufficient_capacity_message(datastore_name: str, required_gb: float
 
 
 def format_capacity_validation_log(datastore_name: str, required_gb: float, available_gb: float) -> str:
-    """
-    Format log message for datastore capacity validation.
+    """Format log message for datastore capacity validation.
 
     Args:
         datastore_name: Name of the datastore
@@ -61,6 +59,7 @@ def format_capacity_validation_log(datastore_name: str, required_gb: float, avai
 
     Returns:
         Formatted log message string
+
     """
     return (
         f"Validating datastore capacity for thick disks. "
@@ -101,9 +100,7 @@ class VMWareProvider(BaseProvider):
         self.password = password
 
     def update_provider_clone_method(self) -> None:
-        """
-        Update the provider's esxiCloneMethod setting if specified in the config.
-        """
+        """Update the provider's esxiCloneMethod setting if specified in the config."""
         clone_method = self.copyoffload_config.get("esxi_clone_method")
         # Only patch the provider if the method is explicitly set to 'ssh'.
         # The default is 'vib', so no action is needed if it's 'vib' or not present.
@@ -125,18 +122,18 @@ class VMWareProvider(BaseProvider):
                 LOGGER.error(f"Kubernetes API error updating provider with esxiCloneMethod: {e.reason}")
                 raise
             except (ValueError, RuntimeError) as e:
-                LOGGER.error(f"Failed to update provider with esxiCloneMethod: {e}")
+                LOGGER.error("Failed to update provider with esxiCloneMethod: %s", e)
                 raise
 
     def get_ssh_public_key(self, wait_timeout: int = 120) -> str:
-        """
-        Retrieves the SSH public key from the secret created by the provider.
+        """Retrieves the SSH public key from the secret created by the provider.
 
         Args:
             wait_timeout (int): Time in seconds to wait for the secret to be created.
 
         Returns:
             str: The decoded SSH public key.
+
         """
         if not self.ocp_resource:
             raise ValueError("OCP resource for provider not available.")
@@ -154,26 +151,26 @@ class VMWareProvider(BaseProvider):
                 func=lambda: secret.exists,
             ):
                 if sample:
-                    LOGGER.info(f"Found secret '{secret_name}'")
+                    LOGGER.info("Found secret '%s'", secret_name)
                     public_key_b64 = secret.instance.data["public-key"]
                     return base64.b64decode(public_key_b64).decode("utf-8")
 
         except TimeoutExpiredError:
-            LOGGER.error(f"Timed out waiting for secret '{secret_name}' to be created.")
+            LOGGER.error("Timed out waiting for secret '%s' to be created.", secret_name)
             raise VmCloneError(f"SSH public key secret '{secret_name}' not found.")
 
         # This part should not be reached if TimeoutSampler works as expected
         raise VmCloneError(f"Could not retrieve SSH public key from secret '{secret_name}'.")
 
     def get_datastore_name_by_id(self, datastore_id: str) -> str:
-        """
-        Gets the datastore name by its MoRef ID.
+        """Gets the datastore name by its MoRef ID.
 
         Args:
             datastore_id (str): The MoRef ID of the datastore (e.g., 'datastore-123').
 
         Returns:
             str: The name of the datastore.
+
         """
         datastore = self.get_obj([vim.Datastore], datastore_id)
         if not datastore:
@@ -295,7 +292,8 @@ class VMWareProvider(BaseProvider):
                 except TypeError:
                     progress = "N/A"
 
-                LOGGER.info("%s progress: %s", action_name, progress)
+                # Use f-string format - parameterized format ("%s", arg) not properly handled by simple_logger
+                LOGGER.info(f"{action_name} progress: {progress}")
         except TimeoutExpiredError:
             self.log.error(msg=f"{action_name} did not complete successfully: {task.info.error}")
             raise
@@ -329,8 +327,7 @@ class VMWareProvider(BaseProvider):
         quiesce: bool = False,
         wait_timeout: int = 60 * 10,
     ) -> None:
-        """
-        Create a VMware snapshot for a VM and wait until it completes.
+        """Create a VMware snapshot for a VM and wait until it completes.
 
         Args:
             vm: VMware VM object.
@@ -339,6 +336,7 @@ class VMWareProvider(BaseProvider):
             memory: If True, snapshot the VM memory (requires VM powered on).
             quiesce: If True, quiesce the file system (requires VMware Tools / guest support).
             wait_timeout: Max time to wait for snapshot task completion.
+
         """
         self.reconnect_if_not_connected
         LOGGER.info("Creating snapshot '%s' for VM '%s' (memory=%s, quiesce=%s)", name, vm.name, memory, quiesce)
@@ -724,12 +722,12 @@ class VMWareProvider(BaseProvider):
             container.Destroy()
 
     def add_rdm_disk_to_vm(self, vm: vim.VirtualMachine, rdm_type: Literal["virtual", "physical"]) -> None:
-        """
-        Add an RDM disk to an existing VM. Must be called post-clone since RDM requires VMFS datastore.
+        """Add an RDM disk to an existing VM. Must be called post-clone since RDM requires VMFS datastore.
 
         Args:
             vm: The target VM object.
             rdm_type: "virtual" or "physical" compatibility mode.
+
         """
         lun_uuid = self.copyoffload_config["rdm_lun_uuid"]
         datastore_id = self.copyoffload_config["datastore_id"]
@@ -742,7 +740,8 @@ class VMWareProvider(BaseProvider):
 
         # Find SCSI controller and available unit
         scsi_controller = next(
-            (dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualSCSIController)), None
+            (dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualSCSIController)),
+            None,
         )
         if not scsi_controller:
             raise RuntimeError(f"No SCSI controller found on VM '{vm.name}'")
@@ -863,7 +862,7 @@ class VMWareProvider(BaseProvider):
             available_space_gb = datastore.summary.freeSpace / (1024**3)
             if required_gb > available_space_gb:
                 raise VmCloneError(
-                    format_insufficient_capacity_message(datastore.name, required_gb, available_space_gb)
+                    format_insufficient_capacity_message(datastore.name, required_gb, available_space_gb),
                 )
             LOGGER.info(format_capacity_validation_log(datastore.name, required_gb, available_space_gb))
 
@@ -871,28 +870,28 @@ class VMWareProvider(BaseProvider):
         for disk in disks_to_add:
             # Determine which datastore to use for this disk
             disk_datastore_id = disk.get("datastore_id")
-            LOGGER.info(f"Processing disk {available_unit_number}: datastore_id from config = '{disk_datastore_id}'")
+            LOGGER.info("Processing disk %s: datastore_id from config = '%s'", available_unit_number, disk_datastore_id)
 
             # Check if this disk should use secondary datastore
             if disk_datastore_id == "secondary_datastore_id" and secondary_datastore:
                 disk_datastore = secondary_datastore
                 LOGGER.info(
                     f"Disk {available_unit_number}: Using secondary datastore '{disk_datastore.name}' "
-                    f"(ID: {disk_datastore._moId})"
+                    f"(ID: {disk_datastore._moId})",
                 )
             elif disk_datastore_id and disk_datastore_id != "secondary_datastore_id":
                 # Custom datastore ID specified
                 disk_datastore = self.get_obj([vim.Datastore], disk_datastore_id)
                 LOGGER.info(
                     f"Disk {available_unit_number}: Using custom datastore '{disk_datastore.name}' "
-                    f"(ID: {disk_datastore._moId})"
+                    f"(ID: {disk_datastore._moId})",
                 )
             else:
                 # Use default/primary datastore
                 disk_datastore = target_datastore
                 LOGGER.info(
                     f"Disk {available_unit_number}: Using default datastore '{disk_datastore.name}' "
-                    f"(ID: {disk_datastore._moId})"
+                    f"(ID: {disk_datastore._moId})",
                 )
 
             new_disk_spec = vim.vm.device.VirtualDeviceSpec()
@@ -931,13 +930,13 @@ class VMWareProvider(BaseProvider):
                 except Exception as e:
                     LOGGER.warning("Could not automatically create directory '%s': %s", datastore_path, e)
                 backing_info.fileName = full_path
-                LOGGER.info(f"Disk {available_unit_number}: fileName set to custom path: {full_path}")
+                LOGGER.info("Disk %s: fileName set to custom path: %s", available_unit_number, full_path)
             else:
                 # Set fileName to force vSphere to create disk on specified datastore
                 backing_info.fileName = f"[{disk_datastore.name}]"
                 LOGGER.info(
                     f"Disk {available_unit_number}: fileName set to [{disk_datastore.name}] "
-                    f"to force creation on this datastore"
+                    f"to force creation on this datastore",
                 )
 
             provision_type_config = self.DISK_PROVISION_TYPE_MAP.get(
@@ -996,7 +995,7 @@ class VMWareProvider(BaseProvider):
 
         """
         clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
-        LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
+        LOGGER.info("Starting clone process for '%s' from '%s'", clone_vm_name, source_vm_name)
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
 

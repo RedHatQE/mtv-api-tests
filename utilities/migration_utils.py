@@ -201,6 +201,32 @@ def prepare_migration_for_tests(
     after_hook_name: str | None = None,
     after_hook_namespace: str | None = None,
 ) -> dict[str, Any]:
+    """Prepare migration parameters for run_migration function.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        plan (dict[str, Any]): Plan configuration dictionary.
+        request (FixtureRequest): Pytest request fixture.
+        source_provider (BaseProvider): Source provider instance.
+        destination_provider (OCPProvider): Destination provider instance.
+        network_migration_map (NetworkMap): NetworkMap resource.
+        storage_migration_map (StorageMap): StorageMap resource.
+        target_namespace (str): Target namespace for migrated VMs.
+        fixture_store (Any): Fixture store for resource tracking and cleanup.
+        source_vms_namespace (str): Namespace of source VMs (for OpenShift provider).
+        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+        pre_hook_name (str | None): Pre-migration hook name. Defaults to None.
+        pre_hook_namespace (str | None): Pre-migration hook namespace. Defaults to None.
+        after_hook_name (str | None): Post-migration hook name. Defaults to None.
+        after_hook_namespace (str | None): Post-migration hook namespace. Defaults to None.
+
+    Returns:
+        dict[str, Any]: Dictionary of parameters for run_migration function.
+
+    Raises:
+        ValueError: If source_provider or destination_provider ocp_resource is not set,
+            or if target_power_state has an invalid value.
+    """
     if not source_provider.ocp_resource:
         raise ValueError("source_provider.ocp_resource is not set")
 
@@ -233,22 +259,18 @@ def prepare_migration_for_tests(
 
     return {
         "ocp_admin_client": ocp_admin_client,
-        "source_provider_name": source_provider.ocp_resource.name,
-        "source_provider_namespace": source_provider.ocp_resource.namespace,
+        "source_provider": source_provider,
+        "destination_provider": destination_provider,
+        "storage_map": storage_migration_map,
+        "network_map": network_migration_map,
         "virtual_machines_list": virtual_machines_list,
         "warm_migration": plan.get("warm_migration", False),
-        "network_map_name": network_migration_map.name,
-        "network_map_namespace": network_migration_map.namespace,
-        "storage_map_name": storage_migration_map.name,
-        "storage_map_namespace": storage_migration_map.namespace,
         "target_namespace": target_namespace,
         "pre_hook_name": pre_hook_name,
         "pre_hook_namespace": pre_hook_namespace,
         "after_hook_name": after_hook_name,
         "after_hook_namespace": after_hook_namespace,
         "cut_over": cut_over,
-        "destination_provider_name": destination_provider.ocp_resource.name,
-        "destination_provider_namespace": destination_provider.ocp_resource.namespace,
         "fixture_store": fixture_store,
         "test_name": test_name,
         "copyoffload": plan.get("copyoffload", False),

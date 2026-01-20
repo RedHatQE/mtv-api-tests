@@ -1,35 +1,39 @@
 # MTV API Tests - Claude Instructions
 
+This document provides project-specific instructions for the MTV API Tests codebase.
+
 ## AI Workflow
 
 1. **User Prompt** - User requests fix/new test/feature/enhancement
-2. **Agent Selection** - Route to appropriate specialist agent
-3. **Code Changes** - Specialist implements the changes
-4. **Code Review** - Trigger `code-reviewer` after ANY code change
-5. **Review Cycle** - Repeat steps 4-5 until no more changes needed
-6. **Completion** - All changes reviewed and approved
+2. **Create Branch** - Create a feature branch (e.g., `feat/description` or `fix/description`)
+3. **Agent Selection** - Route to appropriate specialist agent
+4. **Code Changes** - Specialist implements the changes
+5. **Code Review** - Delegate to `code-reviewer` agent after ANY code change
+6. **Review Cycle** - Repeat steps 4-5 until no more changes needed
+7. **Pre-commit** - Run `pre-commit run --all-files` and fix any failures (formatting, linting - no re-review needed)
+8. **Completion** - All changes reviewed, tests pass, ready to commit
 
-### Agent Routing
+### Rules
 
-| Operation                 | Agent                            | Allowed Direct        |
-| ------------------------- | -------------------------------- | --------------------- |
-| Python code (.py files)   | `python-expert`                  | Read, Grep, Glob only |
-| Git operations            | `git-expert`                     | -                     |
-| Documentation (.md files) | `technical-documentation-writer` | -                     |
-| After ANY code change     | `code-reviewer`                  | -                     |
-
-**Rules:**
-
-- Never work on main branch - always create a feature branch first
 - Run agents in PARALLEL when possible
 - Never skip code-reviewer after code changes
-- Update README.md when code changes affect usage/requirements/installation/configuration
+- (MUST) Update README.md when code changes affect usage/requirements/installation/configuration
+- (MUST) Update CLAUDE.md when methodology or coding patterns change. Show proposed changes to user and get approval before committing
+  (These updates happen during the work, not as separate workflow steps)
+- (MUST) CLAUDE.md must have NO duplications - define information once, reference elsewhere. AI context is limited.
+- (MUST) CLAUDE.md must have clear, unambiguous instructions - avoid vague terms without definitions
 
-## Code Quality Requirements
+### Commands Reference
 
-- **Type Annotations:** Use built-in Python typing (dict, list, tuple)
+- **Package Installation**: `uv sync`
+- **Pre-commit**: `pre-commit run --all-files`
+- **Container Build**: `podman build -f Dockerfile -t mtv-api-tests`
+
+## Code Standards
+
+- **Type Annotations (MUST):** All new functions and functions with signature changes must have complete type annotations. Use built-in Python typing (dict, list, tuple)
 - **Package Management:** Use `uv` for all dependency management
-- **Pre-commit:** Must pass before any commit - never use `--no-verify`
+- **Pre-commit (MUST):** Must pass before any commit - never use `--no-verify`
 - **No Auto-Skip:** Never use `pytest.skip()` inside fixtures - use `@pytest.mark.skipif` at test level
 - **Every OpenShift resource:** Must use `create_and_store_resource()` function
 
@@ -59,15 +63,16 @@ from kubernetes.dynamic import DynamicClient  # Never instantiate directly
 | Use in `isinstance()` or runtime checks    | No                       |
 | Import other `kubernetes.*` modules        | No                       |
 
-### Function Size
+### Function Size (SHOULD)
 
-- Maximum ~50 lines per function
+- **Primary:** Single responsibility - if you would write "and" in the docstring, split the function
+- **Secondary:** Keep functions under 50 lines when possible. Longer functions need clear section comments
 - Extract helpers with `_` prefix for sub-tasks
 - Function names must clearly describe WHAT they do (e.g., `is_warm_migration_supported` not `is_supported`)
 
 ## Code Quality Rules
 
-### Fail Fast - No Invalid States
+### Fail Fast - Validate Content Not Just Existence (MUST)
 
 Code must never result in `None` when `None` is not valid. Fail early with clear errors.
 
@@ -84,7 +89,48 @@ def get_vm_firmware(template):
     return firmware
 ```
 
-### Variables Must Have Consistent Types
+**Note:** Validate content when applicable. Use `if value is None:` for None checks. Use `if not value:` only when empty containers and False are also invalid.
+
+### Pass Objects Over Values (SHOULD)
+
+Functions should receive objects and extract needed values internally. This improves API simplicity and maintainability.
+
+```python
+# Wrong - extracting values before passing
+def create_plan(
+    source_provider_name: str,
+    source_provider_namespace: str,
+    storage_map_name: str,
+    storage_map_namespace: str,
+):
+    ...
+
+create_plan(
+    source_provider_name=provider.ocp_resource.name,
+    source_provider_namespace=provider.ocp_resource.namespace,
+    storage_map_name=storage_map.name,
+    storage_map_namespace=storage_map.namespace,
+)
+
+# Correct - passing objects
+def create_plan(
+    source_provider: BaseProvider,
+    storage_map: StorageMap,
+):
+    # Extract values inside the function
+    name = source_provider.ocp_resource.name
+    namespace = source_provider.ocp_resource.namespace
+    ...
+
+create_plan(
+    source_provider=provider,
+    storage_map=storage_map,
+)
+```
+
+**When to apply:** When you control both the function signature and caller. Existing APIs that require extracted values may accept values.
+
+### Variables Must Have Consistent Types (MUST)
 
 ```python
 # Wrong
@@ -94,7 +140,7 @@ actual_affinity = vm.get("affinity")  # Could be dict, list, or None
 actual_affinity: dict[str, Any] = vm.get("affinity") or {}
 ```
 
-### Trust Required Arguments
+### Trust Required Arguments (MUST)
 
 Don't check if required function arguments exist.
 
@@ -110,11 +156,16 @@ def compare_labels(expected_labels: dict, actual_labels: dict) -> bool:
     return expected_labels == actual_labels
 ```
 
-### No Duplicate Code
+**Clarification:** "Trust" means don't check if required arguments were passed (they always are). "Validate at Source" means fixtures validate the VALUE they produce is valid.
 
-Extract common logic into shared functions.
+### No Duplicate Code (MUST)
 
-### No Unnecessary Variables
+Extract common logic into shared functions. Create a helper when identical code appears 2+ times (copy-paste is the indicator).
+Don't create abstractions for single-use or merely "similar" code.
+
+### No Unnecessary Variables (MUST)
+
+Avoid intermediate variables that add no clarity.
 
 ```python
 # Wrong
@@ -129,18 +180,39 @@ def my_fixture():
     yield create_resource()
 ```
 
-### Exception Types - RuntimeError is Forbidden
+### Exception Types (MUST)
 
-| Instead of RuntimeError | Use                        |
-| ----------------------- | -------------------------- |
-| Invalid input/config    | `ValueError`               |
-| Missing resource        | `ValueError`               |
-| Type issues             | `TypeError`                |
-| Key not found           | `KeyError` (let propagate) |
-| Connection failures     | `ConnectionError`          |
-| Domain-specific         | Custom exception class     |
+Use specific exception types instead of generic `RuntimeError`. Create custom exceptions for domain-specific errors.
 
-### Use Empty Container Defaults
+| Instead of RuntimeError | Use                                    |
+| ----------------------- | -------------------------------------- |
+| Invalid input/config    | `ValueError`                           |
+| Missing resource        | `ValueError`                           |
+| Type issues             | `TypeError`                            |
+| Key not found           | `KeyError` (let propagate)             |
+| Connection failures     | `ConnectionError`                      |
+| Domain-specific errors  | **Custom exception class (preferred)** |
+
+**Custom exceptions are encouraged** for domain-specific errors. They provide clearer error handling and better debugging:
+
+```python
+# Custom exceptions are encouraged for domain-specific errors
+from exceptions.exceptions import MigrationTimeoutError, ProviderConnectionError
+
+# Example custom exception usage
+if not provider.is_connected():
+    raise ProviderConnectionError(f"Failed to connect to provider '{provider.name}'")
+
+if not migration.wait_for_completion(timeout=3600):
+    raise MigrationTimeoutError(f"Migration '{migration.name}' timed out after 1 hour")
+```
+
+**Exception:** `RuntimeError` is allowed ONLY in pytest hooks for infrastructure failures (e.g., cluster unreachable, API timeout).
+Use `ValueError` for configuration errors (e.g., missing config key, invalid credentials file).
+
+### Use Empty Container Defaults (SHOULD)
+
+Use empty containers as defaults to avoid None checks.
 
 ```python
 # Wrong
@@ -153,9 +225,9 @@ firmware_spec: dict[str, Any] = template.spec.domain.get("firmware", {})
 boot_order: list = firmware_spec.get("bootOrder", [])
 ```
 
-### Type Annotations in Docstrings
+### Docstring Format (MUST)
 
-All functions must have complete type annotations with Args, Returns, and Raises sections.
+All new functions must have docstrings with Args, Returns, and Raises sections.
 
 ```python
 def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
@@ -173,7 +245,7 @@ def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
     """
 ```
 
-### Validate at Source
+### Validate at Source (MUST)
 
 Validation must happen in fixtures (where values originate), not in utility functions.
 
@@ -192,13 +264,23 @@ def labeled_worker_node(worker_nodes, target_node_selector):
     return node
 ```
 
-### Fixture Rules
+**Distinction:** Fixtures validate their own construction (is the fixture value valid?). Utility functions may validate external/provider data that varies at runtime.
 
-- **No autouse:** Only `autouse_fixtures` in conftest.py is allowed
+### Fixture Rules (MUST)
+
+- **Autouse sparingly:** Only the `autouse_fixtures` fixture in conftest.py uses `autouse=True`. All other fixtures must be requested explicitly via parameters or `@pytest.mark.usefixtures()`
 - **Noun names:** Fixtures represent resources (`source_provider` not `setup_provider`)
 - **No magic skip:** Use `@pytest.mark.skipif` at test level, not `pytest.skip()` in fixtures
 
-### No Unnecessary Randomness
+### Fixture Request Patterns (MUST)
+
+- **Method parameters:** Use when you need the fixture value in the test
+- **`@pytest.mark.usefixtures()`:** Use for side-effect fixtures (e.g., `cleanup_migrated_vms`) that perform setup/teardown but whose return value isn't needed by the test
+- **Never list both:** Don't request via both parameter AND usefixtures - choose one
+
+### No Unnecessary Randomness (MUST)
+
+Tests must be deterministic. Avoid random selection when order does not matter.
 
 ```python
 # Wrong
@@ -208,7 +290,9 @@ selected_node = random.choice(available_nodes)
 selected_node = available_nodes[0]
 ```
 
-### Use Context Managers for Cleanup
+### Use Context Managers for Cleanup (SHOULD)
+
+Use context managers to ensure proper resource cleanup.
 
 ```python
 # Wrong
@@ -229,20 +313,6 @@ with ResourceEditor(node) as editor:
 - Base class: `BaseProvider` in `libs/base_provider.py`
 - Implementations: VMware, RHV, OpenStack, OVA, OpenShift providers
 - Context manager support for provider connections
-
-### Test Structure
-
-- Session-scoped fixtures for resource management
-- Provider-specific test parametrization
-- Markers: tier0, warm, remote, copyoffload
-- Automatic log/must-gather collection on failures
-
-### Development Workflow
-
-- Package Installation: `uv sync`
-- Linting: `ruff check` and `ruff format`
-- Type Checking: `mypy`
-- Container Build: `podman build -f Dockerfile -t mtv-api-tests`
 
 ## Critical Constraints
 
@@ -280,6 +350,11 @@ if plan.get("warm_migration", False):  # OK
     setup_warm_migration()
 ```
 
+**Required fields** (access directly via `[]`, let KeyError propagate if missing): Core config like `storage_class`, `virtual_machines`, `provider_type`
+**Optional flags** (use `.get()` with defaults): Feature toggles and enhancements like `warm_migration`, `create_scale_report`, `check_vms_signals`
+
+**How to classify:** If the test cannot run without the field, it's required. If the test can run but behaves differently, it's optional.
+
 ### Resource Creation - create_and_store_resource()
 
 Every OpenShift resource must use `utilities/resources.py:create_and_store_resource()`.
@@ -312,46 +387,97 @@ namespace.deploy()
 
 ## Test Structure Pattern
 
-All tests follow this structure:
+All tests follow a class-based structure with 5 test methods:
 
 ```python
 from pytest_testconfig import config as py_config
-from utilities.mtv_migration import create_storagemap_and_networkmap, migrate_vms
+from ocp_resources.network_map import NetworkMap
+from ocp_resources.storage_map import StorageMap
+from ocp_resources.migration_toolkit_virtualization import Plan
+
+from utilities.mtv_migration import (
+    create_plan_resource,
+    execute_migration,
+    get_network_migration_map,
+    get_storage_migration_map,
+)
+from utilities.post_migration import check_vms
+
 
 @pytest.mark.parametrize(
-    "plan",
+    "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_name_here"])],
     indirect=True,
     ids=["descriptive-test-id"],
 )
-@pytest.mark.tier0  # optional
-@pytest.mark.warm   # optional: warm/remote/copyoffload
-def test_name_here(
-    request, fixture_store, ocp_admin_client, target_namespace,
-    destination_provider, plan, source_provider, source_provider_data,
-    multus_network_name, source_provider_inventory, source_vms_namespace,
-):
-    # 1. Create migration maps
-    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
-        fixture_store=fixture_store, source_provider=source_provider,
-        destination_provider=destination_provider,
-        source_provider_inventory=source_provider_inventory,
-        ocp_admin_client=ocp_admin_client, multus_network_name=multus_network_name,
-        target_namespace=target_namespace, plan=plan,
-    )
+@pytest.mark.usefixtures("cleanup_migrated_vms")
+@pytest.mark.tier0  # optional: tier0/warm/remote/copyoffload
+class TestNameHere:
+    """Test description."""
 
-    # 2. Execute migration
-    migrate_vms(
-        ocp_admin_client=ocp_admin_client, request=request,
-        fixture_store=fixture_store, source_provider=source_provider,
-        destination_provider=destination_provider, plan=plan,
-        network_migration_map=network_migration_map,
-        storage_migration_map=storage_migration_map,
-        source_provider_data=source_provider_data,
-        target_namespace=target_namespace, source_vms_namespace=source_vms_namespace,
-        source_provider_inventory=source_provider_inventory,
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    @pytest.mark.dependency(name="TestNameHere::storagemap")
+    def test_create_storagemap(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace, source_provider_inventory):
+        """Create StorageMap resource."""
+        self.__class__.storage_map = get_storage_migration_map(...)
+        assert self.storage_map
+
+    @pytest.mark.dependency(name="TestNameHere::networkmap")
+    def test_create_networkmap(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace, source_provider_inventory, multus_network_name):
+        """Create NetworkMap resource."""
+        self.__class__.network_map = get_network_migration_map(
+            multus_network_name=multus_network_name, ...
+        )
+        assert self.network_map
+
+    @pytest.mark.dependency(
+        name="TestNameHere::plan",
+        depends=["TestNameHere::storagemap", "TestNameHere::networkmap"],
     )
+    def test_create_plan(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace):
+        """Create MTV Plan CR resource."""
+        self.__class__.plan_resource = create_plan_resource(
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            ...
+        )
+        assert self.plan_resource
+
+    @pytest.mark.dependency(
+        name="TestNameHere::migrate",
+        depends=["TestNameHere::plan"],
+    )
+    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+        """Execute migration."""
+        execute_migration(
+            plan=self.plan_resource,
+            ...
+        )
+
+    @pytest.mark.dependency(depends=["TestNameHere::migrate"])
+    def test_check_vms(self, prepared_plan, source_provider, destination_provider, target_namespace, source_provider_data, source_vms_namespace, source_provider_inventory):
+        """Validate migrated VMs."""
+        check_vms(
+            plan=prepared_plan,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            ...
+        )
 ```
+
+### Key Patterns
+
+- **Class-level parametrization**: Use `class_plan_config` with `indirect=True`
+- **Shared state**: Store resources on class with `self.__class__.attribute`
+- **Test ordering**: Use `@pytest.mark.dependency()` for step dependencies
+- **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
+
+**Test method naming:** Test methods do one step each: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`, `test_migrate_vms`, `test_check_vms`
+
+**Fixture parameters:** Each test method requests only the fixtures it needs. The example shows typical patterns.
 
 ### Adding New Tests
 
@@ -367,9 +493,9 @@ tests_params: dict = {
 ```
 
 1. Create test file `tests/test_<feature>_migration.py`
-2. Add parametrize decorator with `indirect=True`
-3. Add pytest markers (tier0, warm, remote, copyoffload)
-4. Follow the two-step pattern: create maps, execute migration
+2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
+3. Add pytest markers at class level (tier0, warm, remote, copyoffload)
+4. Implement the 5 test methods following the pattern in the example above
 
 **VM Configuration Options:**
 
@@ -399,16 +525,41 @@ def ocp_admin_client():
 
 Common: `ocp_admin_client`, `session_uuid`, `target_namespace`, `source_provider`, `destination_provider`, `fixture_store`
 
-**Function-scoped** - per test:
+**Class-scoped** - per test class:
+
+Two class-scoped fixtures work together (used with `indirect=True` parametrization):
+
+- `class_plan_config`: Raw test configuration from `@pytest.mark.parametrize`
+- `prepared_plan`: Processed config with cloned VMs, updated names, and `source_vms_data`
+
+Test methods receive `prepared_plan` which is ready to use:
 
 ```python
-@pytest.fixture(scope="function")
-def plan(request, fixture_store, source_provider):
-    plan: dict[str, Any] = request.param
+@pytest.fixture(scope="class")
+def prepared_plan(class_plan_config, fixture_store, source_provider, ...):
+    plan: dict[str, Any] = deepcopy(class_plan_config)
     # Clone VMs, update names
+    plan["source_vms_data"] = {}  # Separate storage for source VM data
     yield plan
     # Track for cleanup
 ```
+
+**Function-scoped** (default) - per test method:
+
+Function-scoped fixtures are rarely needed in this codebase. Most fixtures are session or class scoped. If you need per-test isolation, use function scope but this is uncommon.
+
+### cleanup_migrated_vms Fixture
+
+Class-scoped teardown fixture that cleans up migrated VMs after each test class completes.
+
+**Usage:** Add via `@pytest.mark.usefixtures("cleanup_migrated_vms")` at class level.
+
+**Behavior:**
+
+- Runs after all tests in the class complete (teardown-only fixture)
+- Uses `vm_obj.clean_up()` from ocp_resources for proper VM cleanup
+- Honors `--skip-teardown` flag (skips cleanup when flag is set)
+- Session-level teardown catches any leftover VMs not cleaned by class fixtures
 
 ### fixture_store Structure
 
@@ -436,8 +587,8 @@ def plan(request, fixture_store, source_provider):
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote cluster")
-def test_remote_warm_migration(...):
-    pass
+class TestRemoteWarmMigration:
+    ...
 ```
 
 ## Parallel Execution (pytest-xdist)
@@ -451,5 +602,4 @@ Tests are parallel-safe because:
 Rules:
 
 - Always use fixtures for namespaces (never hardcode)
-- Always use `create_and_store_resource()` for unique names
 - Never share mutable state between tests

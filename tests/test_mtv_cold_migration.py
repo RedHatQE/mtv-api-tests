@@ -1,122 +1,318 @@
 import pytest
+from ocp_resources.network_map import NetworkMap
+from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
+from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 
 from utilities.mtv_migration import (
-    create_storagemap_and_networkmap,
-    migrate_vms,
+    create_plan_resource,
+    execute_migration,
+    get_network_migration_map,
+    get_storage_migration_map,
 )
+from utilities.post_migration import check_vms
 from utilities.utils import get_value_from_py_config
 
 
+@pytest.mark.tier0
 @pytest.mark.parametrize(
-    "plan,multus_network_name",
+    "class_plan_config",
     [
         pytest.param(
-            py_config["tests_params"]["test_sanity_cold_mtv_migration"],
             py_config["tests_params"]["test_sanity_cold_mtv_migration"],
         )
     ],
     indirect=True,
     ids=["rhel8"],
 )
-@pytest.mark.tier0
-def test_sanity_cold_mtv_migration(
-    request,
-    fixture_store,
-    ocp_admin_client,
-    target_namespace,
-    destination_provider,
-    plan,
-    source_provider,
-    source_provider_data,
-    multus_network_name,
-    source_provider_inventory,
-    source_vms_namespace,
-    vm_ssh_connections,
-):
-    if source_provider.type == Provider.ProviderType.OVA:
-        plan["virtual_machines"] = [
-            {"name": "1nisim-rhel9-efi"},
-        ]
+@pytest.mark.usefixtures("multus_network_name", "cleanup_migrated_vms")
+class TestSanityColdMtvMigration:
+    """Cold migration test - sanity check."""
 
-    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        source_provider_inventory=source_provider_inventory,
-        ocp_admin_client=ocp_admin_client,
-        multus_network_name=multus_network_name,
-        target_namespace=target_namespace,
-        plan=plan,
-    )
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
 
-    migrate_vms(
-        ocp_admin_client=ocp_admin_client,
-        request=request,
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        plan=plan,
-        network_migration_map=network_migration_map,
-        storage_migration_map=storage_migration_map,
-        source_provider_data=source_provider_data,
-        target_namespace=target_namespace,
-        source_vms_namespace=source_vms_namespace,
-        source_provider_inventory=source_provider_inventory,
-        vm_ssh_connections=vm_ssh_connections,
+    @pytest.mark.dependency(name="TestSanityColdMtvMigration::storagemap")
+    def test_create_storagemap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+    ):
+        """Create StorageMap resource for migration."""
+        # Handle OVA provider special case
+        if source_provider.type == Provider.ProviderType.OVA:
+            prepared_plan["virtual_machines"] = [
+                {"name": "1nisim-rhel9-efi"},
+            ]
+
+        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            vms=vms,
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    @pytest.mark.dependency(name="TestSanityColdMtvMigration::networkmap")
+    def test_create_networkmap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+        multus_network_name,
+    ):
+        """Create NetworkMap resource for migration."""
+        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            multus_network_name=multus_network_name,
+            vms=vms,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    @pytest.mark.dependency(
+        name="TestSanityColdMtvMigration::plan",
+        depends=["TestSanityColdMtvMigration::storagemap", "TestSanityColdMtvMigration::networkmap"],
     )
+    def test_create_plan(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        target_namespace,
+        source_provider_inventory,
+    ):
+        """Create MTV Plan CR resource."""
+        # Populate VM IDs from Forklift inventory for all VMs
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    @pytest.mark.dependency(
+        name="TestSanityColdMtvMigration::migrate",
+        depends=["TestSanityColdMtvMigration::plan"],
+    )
+    def test_migrate_vms(
+        self,
+        fixture_store,
+        ocp_admin_client,
+        target_namespace,
+    ):
+        """Execute migration."""
+        execute_migration(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+        )
+
+    @pytest.mark.dependency(depends=["TestSanityColdMtvMigration::migrate"])
+    def test_check_vms(
+        self,
+        prepared_plan,
+        source_provider,
+        destination_provider,
+        source_provider_data,
+        target_namespace,
+        source_vms_namespace,
+        source_provider_inventory,
+        vm_ssh_connections,
+    ):
+        """Validate migrated VMs."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
 
 
 @pytest.mark.remote
+@pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
 @pytest.mark.parametrize(
-    "plan,multus_network_name",
+    "class_plan_config",
     [
         pytest.param(
-            py_config["tests_params"]["test_cold_remote_ocp"], py_config["tests_params"]["test_cold_remote_ocp"]
+            py_config["tests_params"]["test_cold_remote_ocp"],
         )
     ],
     indirect=True,
     ids=["MTV-79"],
 )
-@pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
-def test_cold_remote_ocp(
-    request,
-    fixture_store,
-    ocp_admin_client,
-    target_namespace,
-    source_provider_inventory,
-    destination_ocp_provider,
-    plan,
-    source_provider,
-    source_provider_data,
-    multus_network_name,
-    source_vms_namespace,
-    vm_ssh_connections,
-):
-    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_ocp_provider,
-        source_provider_inventory=source_provider_inventory,
-        ocp_admin_client=ocp_admin_client,
-        multus_network_name=multus_network_name,
-        target_namespace=target_namespace,
-        plan=plan,
-    )
+@pytest.mark.usefixtures("multus_network_name", "cleanup_migrated_vms")
+class TestColdRemoteOcp:
+    """Cold migration test to remote OCP cluster."""
 
-    migrate_vms(
-        ocp_admin_client=ocp_admin_client,
-        request=request,
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_ocp_provider,
-        plan=plan,
-        network_migration_map=network_migration_map,
-        storage_migration_map=storage_migration_map,
-        source_provider_data=source_provider_data,
-        target_namespace=target_namespace,
-        source_vms_namespace=source_vms_namespace,
-        source_provider_inventory=source_provider_inventory,
-        vm_ssh_connections=vm_ssh_connections,
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    @pytest.mark.dependency(name="TestColdRemoteOcp::storagemap")
+    def test_create_storagemap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_ocp_provider,
+        source_provider_inventory,
+        target_namespace,
+    ):
+        """Create StorageMap resource for migration."""
+        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_ocp_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            vms=vms,
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    @pytest.mark.dependency(name="TestColdRemoteOcp::networkmap")
+    def test_create_networkmap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_ocp_provider,
+        source_provider_inventory,
+        target_namespace,
+        multus_network_name,
+    ):
+        """Create NetworkMap resource for migration."""
+        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_ocp_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            multus_network_name=multus_network_name,
+            vms=vms,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    @pytest.mark.dependency(
+        name="TestColdRemoteOcp::plan",
+        depends=["TestColdRemoteOcp::storagemap", "TestColdRemoteOcp::networkmap"],
     )
+    def test_create_plan(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_ocp_provider,
+        target_namespace,
+        source_provider_inventory,
+    ):
+        """Create MTV Plan CR resource."""
+        # Populate VM IDs from Forklift inventory for all VMs
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_ocp_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    @pytest.mark.dependency(
+        name="TestColdRemoteOcp::migrate",
+        depends=["TestColdRemoteOcp::plan"],
+    )
+    def test_migrate_vms(
+        self,
+        fixture_store,
+        ocp_admin_client,
+        target_namespace,
+    ):
+        """Execute migration."""
+        execute_migration(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+        )
+
+    @pytest.mark.dependency(depends=["TestColdRemoteOcp::migrate"])
+    def test_check_vms(
+        self,
+        prepared_plan,
+        source_provider,
+        destination_ocp_provider,
+        source_provider_data,
+        target_namespace,
+        source_vms_namespace,
+        source_provider_inventory,
+        vm_ssh_connections,
+    ):
+        """Validate migrated VMs."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_ocp_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )

@@ -1091,7 +1091,7 @@ def check_vms(
         if plan.get("pvc_name_template"):
             try:
                 check_pvc_names(
-                    source_vm=vm.get("source_vm_data", source_vm),  # Use stored source_vm_data if available
+                    source_vm=plan.get("source_vms_data", {}).get(vm["name"], source_vm),
                     destination_vm=destination_vm,
                     pvc_name_template=plan["pvc_name_template"],
                     use_generate_name=plan.get("pvc_name_template_use_generate_name", False),
@@ -1138,16 +1138,17 @@ def check_vms(
                 res[vm_name].append(f"check_ssh_connectivity - {str(exp)}")
 
             # Static IP preservation check - only for Windows VMs with static IPs migrated from VSPHERE
+            source_vm_data = plan.get("source_vms_data", {}).get(vm["name"], {})
             if (
-                vm.get("source_vm_data")
-                and vm["source_vm_data"].get("win_os")
+                source_vm_data
+                and source_vm_data.get("win_os")
                 and source_provider.type == Provider.ProviderType.VSPHERE
             ):
                 try:
                     check_static_ip_preservation(
                         vm_name=vm_name,
                         vm_ssh_connections=vm_ssh_connections,
-                        source_vm_data=vm["source_vm_data"],
+                        source_vm_data=source_vm_data,
                         source_provider_data=source_provider_data,
                     )
                 except Exception as exp:
