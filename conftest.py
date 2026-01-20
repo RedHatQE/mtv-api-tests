@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -63,6 +62,7 @@ from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
+    generate_class_hash_prefix,
     get_cluster_client,
     get_value_from_py_config,
 )
@@ -72,18 +72,6 @@ RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
-
-
-def _generate_class_hash_prefix(request: pytest.FixtureRequest) -> str:
-    """Generate a FIPS-compliant hash prefix for class-based resource naming.
-
-    Args:
-        request (pytest.FixtureRequest): Pytest fixture request.
-
-    Returns:
-        str: A 6-character hex prefix (e.g., "a1b2c3").
-    """
-    return hashlib.sha256(request.node.nodeid.encode()).hexdigest()[:6]
 
 
 # Pytest start
@@ -544,7 +532,7 @@ def multus_network_name(
     source_provider_inventory: ForkliftInventory,
     class_plan_config: dict[str, Any],
     request: pytest.FixtureRequest,
-) -> Generator[str, None, None]:
+) -> str:
     """Create NADs based on network requirements with unique names per test class.
 
     Automatically detects number of networks and creates NADs with class-unique naming:
@@ -563,10 +551,10 @@ def multus_network_name(
         class_plan_config (dict[str, Any]): Plan configuration from class parametrization
         request (pytest.FixtureRequest): Pytest fixture request
 
-    Yields:
+    Returns:
         str: Base name for NAD generation (e.g., "cb-a1b2c3")
     """
-    hash_prefix = _generate_class_hash_prefix(request)
+    hash_prefix = generate_class_hash_prefix(request.node.nodeid)
     base_name = f"cb-{hash_prefix}"
 
     class_name = request.node.cls.__name__ if request.node.cls else request.node.name
@@ -613,7 +601,7 @@ def multus_network_name(
 
     # Return the base name - consuming code will generate the same indexed names
     # This maintains the contract: fixture creates NADs, returns base name for generation
-    yield base_name
+    return base_name
 
 
 @pytest.fixture(scope="class")
@@ -749,7 +737,7 @@ def prepared_plan(
 
         if openshift_source_provider:
             # Generate unique network name for class-based tests
-            hash_prefix = _generate_class_hash_prefix(request)
+            hash_prefix = generate_class_hash_prefix(request.node.nodeid)
             multus_network_name = f"cb-{hash_prefix}"
 
             # Create NAD for OpenShift source provider

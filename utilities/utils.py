@@ -1,5 +1,6 @@
 import copy
 import functools
+import hashlib
 import multiprocessing
 import os
 from collections.abc import Generator
@@ -33,6 +34,19 @@ from libs.providers.vmware import VMWareProvider
 from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
+
+
+def generate_class_hash_prefix(nodeid: str, length: int = 6) -> str:
+    """Generate a FIPS-compliant hash prefix for class-based resource naming.
+
+    Args:
+        nodeid (str): The pytest node ID (e.g., request.node.nodeid).
+        length (int): Length of the hash prefix (default: 6).
+
+    Returns:
+        str: A hex prefix of the specified length (e.g., "a1b2c3").
+    """
+    return hashlib.sha256(nodeid.encode()).hexdigest()[:length]
 
 
 def vmware_provider(provider_data: dict[str, Any]) -> bool:
