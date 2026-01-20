@@ -936,37 +936,6 @@ def source_vms_namespace(source_provider, fixture_store, ocp_admin_client, sessi
 
 
 @pytest.fixture(scope="session")
-def source_vms_network(source_provider, source_vms_namespace, ocp_admin_client, fixture_store, multus_cni_config):
-    if source_provider.type == Provider.ProviderType.OPENSHIFT:
-        ceph_virtualization_sc = StorageClass(
-            client=ocp_admin_client, name="ocs-storagecluster-ceph-rbd-virtualization", ensure_exists=True
-        )
-        ResourceEditor(
-            patches={
-                ceph_virtualization_sc: {
-                    "metadata": {
-                        "annotations": {StorageClass.Annotations.IS_DEFAULT_VIRT_CLASS: "true"},
-                        "name": ceph_virtualization_sc.name,
-                    }
-                }
-            }
-        ).update()
-
-        bridge_type_and_name = "cnv-bridge"
-
-        create_and_store_resource(
-            fixture_store=fixture_store,
-            resource=NetworkAttachmentDefinition,
-            client=ocp_admin_client,
-            cni_type=bridge_type_and_name,
-            namespace=source_vms_namespace,
-            config=multus_cni_config,
-        )
-
-        return bridge_type_and_name
-
-
-@pytest.fixture(scope="session")
 def multus_cni_config() -> str:
     bridge_type_and_name = "cnv-bridge"
     config = {"cniVersion": "0.3.1", "type": f"{bridge_type_and_name}", "bridge": f"{bridge_type_and_name}"}

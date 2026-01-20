@@ -8,7 +8,6 @@ from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
-from pytest import FixtureRequest
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
@@ -17,84 +16,11 @@ from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from report import create_migration_scale_report
 from utilities.copyoffload_migration import wait_for_plan_secret
-from utilities.migration_utils import prepare_migration_for_tests
-from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
-from utilities.ssh_utils import SSHConnectionManager
-from utilities.utils import gen_network_map_list, get_value_from_py_config
+from utilities.utils import gen_network_map_list
 
 LOGGER = get_logger(__name__)
-
-
-def migrate_vms(
-    ocp_admin_client: DynamicClient,
-    request: FixtureRequest,
-    source_provider: BaseProvider,
-    destination_provider: OCPProvider,
-    plan: dict[str, Any],
-    network_migration_map: NetworkMap,
-    storage_migration_map: StorageMap,
-    source_provider_data: dict[str, Any],
-    target_namespace: str,
-    fixture_store: Any,
-    source_vms_namespace: str,
-    source_provider_inventory: ForkliftInventory | None = None,
-    cut_over: datetime | None = None,
-    pre_hook_name: str | None = None,
-    pre_hook_namespace: str | None = None,
-    after_hook_name: str | None = None,
-    after_hook_namespace: str | None = None,
-    vm_ssh_connections: SSHConnectionManager | None = None,
-) -> None:
-    # Populate VM IDs from Forklift inventory for all VMs
-    # This ensures we always use IDs in the Plan CR (works for all provider types)
-    if source_provider_inventory:
-        for vm in plan["virtual_machines"]:
-            vm_name = vm["name"]
-            vm_data = source_provider_inventory.get_vm(vm_name)
-            vm["id"] = vm_data["id"]
-            LOGGER.info(f"VM '{vm_name}' -> ID '{vm['id']}'")
-
-    run_migration_kwargs = prepare_migration_for_tests(
-        ocp_admin_client=ocp_admin_client,
-        plan=plan,
-        request=request,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        network_migration_map=network_migration_map,
-        storage_migration_map=storage_migration_map,
-        target_namespace=target_namespace,
-        fixture_store=fixture_store,
-        cut_over=cut_over,
-        pre_hook_name=pre_hook_name,
-        pre_hook_namespace=pre_hook_namespace,
-        after_hook_name=after_hook_name,
-        after_hook_namespace=after_hook_namespace,
-        source_vms_namespace=source_vms_namespace,
-    )
-
-    migration_plan = run_migration(**run_migration_kwargs)
-
-    wait_for_migration_complate(plan=migration_plan)
-
-    if py_config.get("create_scale_report"):
-        create_migration_scale_report(plan_resource=plan)
-
-    if get_value_from_py_config("check_vms_signals") and plan.get("check_vms_signals", True):
-        check_vms(
-            plan=plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-            destination_provider=destination_provider,
-            destination_namespace=target_namespace,
-            network_map_resource=network_migration_map,
-            storage_map_resource=storage_migration_map,
-            source_vms_namespace=source_vms_namespace,
-            source_provider_inventory=source_provider_inventory,
-            vm_ssh_connections=vm_ssh_connections,
-        )
 
 
 def create_plan_resource(
@@ -241,95 +167,6 @@ def execute_migration(
     )
 
     wait_for_migration_complate(plan=plan)
-
-
-def run_migration(
-    ocp_admin_client: DynamicClient,
-    source_provider: BaseProvider,
-    destination_provider: OCPProvider,
-    storage_map: StorageMap,
-    network_map: NetworkMap,
-    virtual_machines_list: list[dict[str, Any]],
-    target_namespace: str,
-    warm_migration: bool,
-    pre_hook_name: str | None,
-    pre_hook_namespace: str | None,
-    after_hook_name: str | None,
-    after_hook_namespace: str | None,
-    cut_over: datetime | None,
-    fixture_store: Any,
-    test_name: str,
-    copyoffload: bool = False,
-    preserve_static_ips: bool = False,
-    pvc_name_template: str | None = None,
-    pvc_name_template_use_generate_name: bool | None = None,
-) -> Plan:
-    """Create and run a Migration Toolkit for Virtualization (MTV) Migration Plan.
-
-    This function creates a Plan CR and a Migration CR to execute VM migration.
-    It is a convenience wrapper that combines create_plan_resource() and
-    Migration CR creation for backward compatibility.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
-        source_provider (BaseProvider): Source provider instance with ocp_resource.
-        destination_provider (OCPProvider): Destination provider instance with ocp_resource.
-        storage_map (StorageMap): StorageMap resource for storage mappings.
-        network_map (NetworkMap): NetworkMap resource for network mappings.
-        virtual_machines_list (list[dict[str, Any]]): List of VM configurations to migrate.
-        target_namespace (str): Target namespace for migrated VMs.
-        warm_migration (bool): Whether this is a warm migration.
-        pre_hook_name (str | None): Pre-migration hook name.
-        pre_hook_namespace (str | None): Pre-migration hook namespace.
-        after_hook_name (str | None): Post-migration hook name.
-        after_hook_namespace (str | None): Post-migration hook namespace.
-        cut_over (datetime | None): Cut-over datetime for warm migration.
-        fixture_store (Any): Fixture store for resource tracking and cleanup.
-        test_name (str): Test name for resource naming.
-        copyoffload (bool): Enable copy-offload specific settings. Defaults to False.
-        preserve_static_ips (bool): Preserve static IP addresses. Defaults to False.
-        pvc_name_template (str | None): PVC naming template. Defaults to None.
-        pvc_name_template_use_generate_name (bool | None): Use generateName for PVCs. Defaults to None.
-
-    Returns:
-        Plan: The created Plan CR resource.
-
-    Raises:
-        ValueError: If source_provider or destination_provider ocp_resource is not set.
-        TimeoutExpiredError: If Plan fails to reach Ready status within timeout.
-    """
-    plan = create_plan_resource(
-        ocp_admin_client=ocp_admin_client,
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        storage_map=storage_map,
-        network_map=network_map,
-        virtual_machines_list=virtual_machines_list,
-        target_namespace=target_namespace,
-        warm_migration=warm_migration,
-        pre_hook_name=pre_hook_name,
-        pre_hook_namespace=pre_hook_namespace,
-        after_hook_name=after_hook_name,
-        after_hook_namespace=after_hook_namespace,
-        test_name=test_name,
-        copyoffload=copyoffload,
-        preserve_static_ips=preserve_static_ips,
-        pvc_name_template=pvc_name_template,
-        pvc_name_template_use_generate_name=pvc_name_template_use_generate_name,
-    )
-
-    create_and_store_resource(
-        client=ocp_admin_client,
-        fixture_store=fixture_store,
-        resource=Migration,
-        namespace=target_namespace,
-        plan_name=plan.name,
-        plan_namespace=plan.namespace,
-        cut_over=cut_over,
-    )
-
-    return plan
 
 
 def get_vm_suffix(warm_migration: bool) -> str:
@@ -532,40 +369,6 @@ def get_network_migration_map(
         destination_provider_namespace=destination_provider.ocp_resource.namespace,
     )
     return network_map
-
-
-def create_storagemap_and_networkmap(
-    plan: dict,
-    fixture_store: dict[str, Any],
-    source_provider: BaseProvider,
-    destination_provider: BaseProvider,
-    source_provider_inventory: ForkliftInventory,
-    ocp_admin_client: DynamicClient,
-    multus_network_name: str,
-    target_namespace: str,
-) -> tuple[StorageMap, NetworkMap]:
-    vms = [vm["name"] for vm in plan["virtual_machines"]]
-    storage_migration_map = get_storage_migration_map(
-        fixture_store=fixture_store,
-        target_namespace=target_namespace,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        source_provider_inventory=source_provider_inventory,
-        ocp_admin_client=ocp_admin_client,
-        vms=vms,
-    )
-
-    network_migration_map = get_network_migration_map(
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        source_provider_inventory=source_provider_inventory,
-        ocp_admin_client=ocp_admin_client,
-        multus_network_name=multus_network_name,
-        target_namespace=target_namespace,
-        vms=vms,
-    )
-    return storage_migration_map, network_migration_map
 
 
 def verify_vm_disk_count(destination_provider, plan, target_namespace):

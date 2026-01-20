@@ -8,21 +8,14 @@ from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.migration import Migration
-from ocp_resources.network_map import NetworkMap
 from ocp_resources.persistent_volume import PersistentVolume
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
-from ocp_resources.provider import Provider
 from ocp_resources.resource import NamespacedResource, Resource, ResourceEditor
-from ocp_resources.storage_map import StorageMap
-from pytest import FixtureRequest
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError
-
-from libs.base_provider import BaseProvider
-from libs.providers.openshift import OCPProvider
 
 LOGGER = get_logger(__name__)
 
@@ -182,102 +175,6 @@ def append_leftovers(
     })
 
     return leftovers
-
-
-def prepare_migration_for_tests(
-    ocp_admin_client: DynamicClient,
-    plan: dict[str, Any],
-    request: FixtureRequest,
-    source_provider: BaseProvider,
-    destination_provider: OCPProvider,
-    network_migration_map: NetworkMap,
-    storage_migration_map: StorageMap,
-    target_namespace: str,
-    fixture_store: Any,
-    source_vms_namespace: str,
-    cut_over: datetime | None = None,
-    pre_hook_name: str | None = None,
-    pre_hook_namespace: str | None = None,
-    after_hook_name: str | None = None,
-    after_hook_namespace: str | None = None,
-) -> dict[str, Any]:
-    """Prepare migration parameters for run_migration function.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
-        plan (dict[str, Any]): Plan configuration dictionary.
-        request (FixtureRequest): Pytest request fixture.
-        source_provider (BaseProvider): Source provider instance.
-        destination_provider (OCPProvider): Destination provider instance.
-        network_migration_map (NetworkMap): NetworkMap resource.
-        storage_migration_map (StorageMap): StorageMap resource.
-        target_namespace (str): Target namespace for migrated VMs.
-        fixture_store (Any): Fixture store for resource tracking and cleanup.
-        source_vms_namespace (str): Namespace of source VMs (for OpenShift provider).
-        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
-        pre_hook_name (str | None): Pre-migration hook name. Defaults to None.
-        pre_hook_namespace (str | None): Pre-migration hook namespace. Defaults to None.
-        after_hook_name (str | None): Post-migration hook name. Defaults to None.
-        after_hook_namespace (str | None): Post-migration hook namespace. Defaults to None.
-
-    Returns:
-        dict[str, Any]: Dictionary of parameters for run_migration function.
-
-    Raises:
-        ValueError: If source_provider or destination_provider ocp_resource is not set,
-            or if target_power_state has an invalid value.
-    """
-    if not source_provider.ocp_resource:
-        raise ValueError("source_provider.ocp_resource is not set")
-
-    if not destination_provider.ocp_resource:
-        raise ValueError("destination_provider.ocp_resource is not set")
-
-    test_name = request._pyfuncitem.name
-    _source_provider_type = py_config["source_provider_type"]
-
-    # Plan CR accepts VM name/id and optional targetPowerState
-    virtual_machines_list: list[dict[str, Any]] = []
-    for vm in plan["virtual_machines"]:
-        vm_config = {"id": vm.get("id", vm["name"])}
-
-        # Add targetPowerState if specified
-        if "target_power_state" in vm:
-            state = vm["target_power_state"]
-            if state not in ("on", "off"):
-                raise ValueError(
-                    f"Invalid target_power_state '{state}' for VM {vm_config['id']}. Must be 'on' or 'off'"
-                )
-            vm_config["targetPowerState"] = state
-            LOGGER.info(f"VM {vm_config['id']}: setting targetPowerState={state}")
-
-        virtual_machines_list.append(vm_config)
-
-    if _source_provider_type == Provider.ProviderType.OPENSHIFT:
-        for idx in range(len(virtual_machines_list)):
-            virtual_machines_list[idx].update({"namespace": source_vms_namespace})
-
-    return {
-        "ocp_admin_client": ocp_admin_client,
-        "source_provider": source_provider,
-        "destination_provider": destination_provider,
-        "storage_map": storage_migration_map,
-        "network_map": network_migration_map,
-        "virtual_machines_list": virtual_machines_list,
-        "warm_migration": plan.get("warm_migration", False),
-        "target_namespace": target_namespace,
-        "pre_hook_name": pre_hook_name,
-        "pre_hook_namespace": pre_hook_namespace,
-        "after_hook_name": after_hook_name,
-        "after_hook_namespace": after_hook_namespace,
-        "cut_over": cut_over,
-        "fixture_store": fixture_store,
-        "test_name": test_name,
-        "copyoffload": plan.get("copyoffload", False),
-        "preserve_static_ips": plan.get("preserve_static_ips", False),
-        "pvc_name_template": plan.get("pvc_name_template"),
-        "pvc_name_template_use_generate_name": plan.get("pvc_name_template_use_generate_name"),
-    }
 
 
 def get_cutover_value(current_cutover: bool = False) -> datetime:
