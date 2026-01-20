@@ -561,7 +561,14 @@ def populate_vm_ids(plan: dict[str, Any], inventory: ForkliftInventory) -> None:
 
     Returns:
         None
+
+    Raises:
+        ValueError: If the plan is malformed (not a dict or missing 'virtual_machines' list),
+            or if inventory.get_vm raises ValueError when a VM is not found.
     """
+    if not isinstance(plan, dict) or not isinstance(plan.get("virtual_machines"), list):
+        raise ValueError("plan must contain 'virtual_machines' list")
+
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
         vm_data = inventory.get_vm(vm_name)

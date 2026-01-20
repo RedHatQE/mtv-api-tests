@@ -934,7 +934,7 @@ def multus_cni_config() -> str:
     return json.dumps(config)
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def copyoffload_config(source_provider, source_provider_data):
     """
     Validate copy-offload configuration before running copy-offload tests.
@@ -981,7 +981,7 @@ def copyoffload_config(source_provider, source_provider_data):
     LOGGER.info("✓ Copy-offload configuration validated successfully")
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def copyoffload_storage_secret(
     fixture_store,
     ocp_admin_client,
@@ -1097,7 +1097,7 @@ def copyoffload_storage_secret(
     return storage_secret
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def setup_copyoffload_ssh(source_provider, source_provider_data, copyoffload_config):
     """
     Sets up SSH key on ESXi host for copy-offload if SSH method is enabled.
