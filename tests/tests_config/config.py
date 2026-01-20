@@ -194,7 +194,6 @@ tests_params: dict = {
             {
                 "name": "xcopy-template-test",
                 "source_vm_power": "off",
-                "target_power_state": "on",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
