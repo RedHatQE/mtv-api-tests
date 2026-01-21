@@ -120,13 +120,20 @@ class OCPProvider(BaseProvider):
         # to valid Kubernetes resource names (lowercase, hyphens instead of underscores)
         if not _source:
             original_name = cnv_vm_name
+        try:
             cnv_vm_name = sanitize_kubernetes_name(cnv_vm_name)
-            if original_name != cnv_vm_name:
-                LOGGER.info(
-                    "Sanitized VM name for Kubernetes lookup: '%s' -> '%s'",
-                    original_name,
-                    cnv_vm_name,
-                )
+        except Exception as exc:
+            raise ValueError(
+                "Failed to sanitize VM name for Kubernetes lookup. original_name='%s', namespace='%s'"
+                % (original_name, kwargs.get("namespace"))
+            ) from exc
+
+        if original_name != cnv_vm_name:
+            LOGGER.info(
+                "Sanitized VM name for Kubernetes lookup: '%s' -> '%s'",
+                original_name,
+                cnv_vm_name,
+            )
         cnv_vm_namespace = kwargs["namespace"]
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)

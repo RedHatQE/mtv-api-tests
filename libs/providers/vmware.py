@@ -233,8 +233,9 @@ class VMWareProvider(BaseProvider):
     ) -> vim.VirtualMachine:
         # Use custom clone_name if provided, otherwise use default naming
         clone_options = clone_options or {}
-        if "clone_name" in clone_options:
-            target_vm_name = clone_options["clone_name"]
+        clone_name = clone_options.get("clone_name")
+        if isinstance(clone_name, str) and clone_name.strip():
+            target_vm_name = clone_name
         else:
             target_vm_name = f"{query}{vm_name_suffix}"
 
