@@ -1,0 +1,51 @@
+# .pr_agent.toml - Qodo Merge configuration
+# Matching CodeRabbit config with direct/assertive tone
+
+[config]
+response_language = "en-US"
+add_repo_metadata = true
+add_repo_metadata_file_list = ["CLAUDE.md"]
+ignore_pr_title = ["^\\[WIP\\]", "^WIP:", "^Draft:"]
+ignore_pr_labels = ["wip", "work-in-progress"]
+
+[github_app]
+handle_pr_actions = ["opened", "reopened", "ready_for_review"]
+pr_commands = ["/describe", "/review", "/improve"]
+feedback_on_draft_pr = false
+handle_push_trigger = true
+push_commands = ["/review", "/improve"]
+
+[pr_reviewer]
+extra_instructions = """
+Review Style:
+- Be direct and specific. Explain WHY rules exist.
+- Classify each finding by severity:
+  * CRITICAL: Security vulnerabilities, blocking issues - must fix before merge
+  * HIGH: Type errors, defensive programming issues - should fix
+  * MEDIUM: Style/code quality issues - nice to fix
+  * LOW: Suggestions/optional enhancements
+
+Focus Areas:
+- Python code quality (type annotations, exception handling)
+- Security vulnerabilities (injection, credential exposure)
+- YAML syntax validation
+- Follow CLAUDE.md guidelines for project-specific standards
+"""
+require_security_review = true
+require_tests_review = true
+require_estimate_effort_to_review = true
+require_score_review = false
+enable_review_labels_security = true
+enable_review_labels_effort = true
+num_max_findings = 50
+persistent_comment = false
+enable_help_text = true
+
+[pr_code_suggestions]
+extra_instructions = "Focus on Python best practices, security, and maintainability. Follow CLAUDE.md standards."
+focus_only_on_problems = false
+suggestions_score_threshold = 5
+
+[ignore]
+glob = []
+regex = []
