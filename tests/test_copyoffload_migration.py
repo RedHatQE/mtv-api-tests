@@ -2130,8 +2130,6 @@ class TestCopyoffloadNonconformingNameMigration:
         )
 
         # Verify that the destination VM was created with the sanitized Kubernetes-compliant name
-        # Note: prepared_plan["virtual_machines"][0]["name"] contains the actual cloned VM name
-        # with UUID prefix and suffix (e.g., "auto-ifqq-XCopy_Test_VM_CAPS-xxxx")
         source_vm_name = prepared_plan["virtual_machines"][0]["name"]
         expected_destination_name = sanitize_kubernetes_name(source_vm_name)
         LOGGER.info(
