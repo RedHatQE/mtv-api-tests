@@ -1554,6 +1554,171 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_10_mixed_disks_migration"])],
+    indirect=True,
+    ids=["copyoffload-10-mixed-disks"],
+)
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+class TestCopyoffload10MixedDisksMigration:
+    """Copy-offload migration test - 10 mixed disks (thin/thick)."""
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    @pytest.mark.dependency(name="TestCopyoffload10MixedDisksMigration::storagemap")
+    def test_create_storagemap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+        source_provider_data,
+        copyoffload_storage_secret,
+    ):
+        """Create StorageMap with copy-offload configuration."""
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            access_mode="ReadWriteOnce",
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    @pytest.mark.dependency(name="TestCopyoffload10MixedDisksMigration::networkmap")
+    def test_create_networkmap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+        multus_network_name,
+    ):
+        """Create NetworkMap resource."""
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    @pytest.mark.dependency(
+        name="TestCopyoffload10MixedDisksMigration::plan",
+        depends=[
+            "TestCopyoffload10MixedDisksMigration::storagemap",
+            "TestCopyoffload10MixedDisksMigration::networkmap",
+        ],
+    )
+    def test_create_plan(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        target_namespace,
+        source_provider_inventory,
+    ):
+        """Create MTV Plan CR resource."""
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan.get("copyoffload", False),
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    @pytest.mark.dependency(
+        name="TestCopyoffload10MixedDisksMigration::migrate",
+        depends=["TestCopyoffload10MixedDisksMigration::plan"],
+    )
+    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+        """Execute migration."""
+        execute_migration(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+        )
+
+    @pytest.mark.dependency(depends=["TestCopyoffload10MixedDisksMigration::migrate"])
+    def test_check_vms(
+        self,
+        prepared_plan,
+        source_provider,
+        destination_provider,
+        source_provider_data,
+        target_namespace,
+        source_vms_namespace,
+        source_provider_inventory,
+        vm_ssh_connections,
+    ):
+        """Validate migrated VMs and verify disk count."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.copyoffload
 @pytest.mark.warm
 @pytest.mark.parametrize(
     "class_plan_config",

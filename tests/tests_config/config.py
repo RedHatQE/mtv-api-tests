@@ -209,6 +209,31 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_10_mixed_disks_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "add_disks": [
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thick-lazy"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thick-lazy"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thick-lazy"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thick-lazy"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thick-lazy"},
+                ],
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
     "test_copyoffload_warm_migration": {
         "virtual_machines": [
             {
