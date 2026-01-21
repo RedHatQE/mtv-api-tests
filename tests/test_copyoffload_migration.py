@@ -2130,7 +2130,8 @@ class TestCopyoffloadNonconformingNameMigration:
         )
 
         # Verify that the destination VM was created with the sanitized Kubernetes-compliant name
-        source_vm_name = prepared_plan["virtual_machines"][0]["name"]
+        vm_cfg = prepared_plan["virtual_machines"][0]
+        source_vm_name = vm_cfg.get("clone_name") or vm_cfg["name"]
         expected_destination_name = sanitize_kubernetes_name(source_vm_name)
         LOGGER.info(
             "Verifying destination VM name sanitization: '%s' -> '%s'",
