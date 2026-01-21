@@ -29,6 +29,7 @@ LOGGER = get_logger(__name__)
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_thin_migration"])],
@@ -43,7 +44,6 @@ class TestCopyoffloadThinMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadThinMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -87,7 +87,6 @@ class TestCopyoffloadThinMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadThinMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -113,10 +112,6 @@ class TestCopyoffloadThinMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadThinMigration::plan",
-        depends=["TestCopyoffloadThinMigration::storagemap", "TestCopyoffloadThinMigration::networkmap"],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -147,10 +142,6 @@ class TestCopyoffloadThinMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadThinMigration::migrate",
-        depends=["TestCopyoffloadThinMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -160,7 +151,6 @@ class TestCopyoffloadThinMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadThinMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -188,6 +178,7 @@ class TestCopyoffloadThinMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"])],
@@ -202,7 +193,6 @@ class TestCopyoffloadThinSnapshotsMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadThinSnapshotsMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -280,7 +270,6 @@ class TestCopyoffloadThinSnapshotsMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadThinSnapshotsMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -306,13 +295,6 @@ class TestCopyoffloadThinSnapshotsMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadThinSnapshotsMigration::plan",
-        depends=[
-            "TestCopyoffloadThinSnapshotsMigration::storagemap",
-            "TestCopyoffloadThinSnapshotsMigration::networkmap",
-        ],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -343,10 +325,6 @@ class TestCopyoffloadThinSnapshotsMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadThinSnapshotsMigration::migrate",
-        depends=["TestCopyoffloadThinSnapshotsMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -356,7 +334,6 @@ class TestCopyoffloadThinSnapshotsMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadThinSnapshotsMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -384,6 +361,7 @@ class TestCopyoffloadThinSnapshotsMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_thick_lazy_migration"])],
@@ -398,7 +376,6 @@ class TestCopyoffloadThickLazyMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadThickLazyMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -442,7 +419,6 @@ class TestCopyoffloadThickLazyMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadThickLazyMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -468,10 +444,6 @@ class TestCopyoffloadThickLazyMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadThickLazyMigration::plan",
-        depends=["TestCopyoffloadThickLazyMigration::storagemap", "TestCopyoffloadThickLazyMigration::networkmap"],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -502,10 +474,6 @@ class TestCopyoffloadThickLazyMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadThickLazyMigration::migrate",
-        depends=["TestCopyoffloadThickLazyMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -515,7 +483,6 @@ class TestCopyoffloadThickLazyMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadThickLazyMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -543,6 +510,7 @@ class TestCopyoffloadThickLazyMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_multi_disk_migration"])],
@@ -557,7 +525,6 @@ class TestCopyoffloadMultiDiskMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadMultiDiskMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -601,7 +568,6 @@ class TestCopyoffloadMultiDiskMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadMultiDiskMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -627,10 +593,6 @@ class TestCopyoffloadMultiDiskMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadMultiDiskMigration::plan",
-        depends=["TestCopyoffloadMultiDiskMigration::storagemap", "TestCopyoffloadMultiDiskMigration::networkmap"],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -661,10 +623,6 @@ class TestCopyoffloadMultiDiskMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadMultiDiskMigration::migrate",
-        depends=["TestCopyoffloadMultiDiskMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -674,7 +632,6 @@ class TestCopyoffloadMultiDiskMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadMultiDiskMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -705,6 +662,7 @@ class TestCopyoffloadMultiDiskMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_multi_disk_different_path_migration"])],
@@ -719,7 +677,6 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadMultiDiskDifferentPathMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -763,7 +720,6 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadMultiDiskDifferentPathMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -789,13 +745,6 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadMultiDiskDifferentPathMigration::plan",
-        depends=[
-            "TestCopyoffloadMultiDiskDifferentPathMigration::storagemap",
-            "TestCopyoffloadMultiDiskDifferentPathMigration::networkmap",
-        ],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -826,10 +775,6 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadMultiDiskDifferentPathMigration::migrate",
-        depends=["TestCopyoffloadMultiDiskDifferentPathMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -839,7 +784,6 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadMultiDiskDifferentPathMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -870,6 +814,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_rdm_virtual_disk_migration"])],
@@ -884,7 +829,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadRdmVirtualDiskMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -932,7 +876,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadRdmVirtualDiskMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -958,13 +901,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadRdmVirtualDiskMigration::plan",
-        depends=[
-            "TestCopyoffloadRdmVirtualDiskMigration::storagemap",
-            "TestCopyoffloadRdmVirtualDiskMigration::networkmap",
-        ],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -995,10 +931,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadRdmVirtualDiskMigration::migrate",
-        depends=["TestCopyoffloadRdmVirtualDiskMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -1008,7 +940,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadRdmVirtualDiskMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -1039,6 +970,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_multi_datastore_migration"])],
@@ -1053,7 +985,6 @@ class TestCopyoffloadMultiDatastoreMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadMultiDatastoreMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -1117,7 +1048,6 @@ class TestCopyoffloadMultiDatastoreMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadMultiDatastoreMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -1143,13 +1073,6 @@ class TestCopyoffloadMultiDatastoreMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadMultiDatastoreMigration::plan",
-        depends=[
-            "TestCopyoffloadMultiDatastoreMigration::storagemap",
-            "TestCopyoffloadMultiDatastoreMigration::networkmap",
-        ],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -1180,10 +1103,6 @@ class TestCopyoffloadMultiDatastoreMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadMultiDatastoreMigration::migrate",
-        depends=["TestCopyoffloadMultiDatastoreMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -1193,7 +1112,6 @@ class TestCopyoffloadMultiDatastoreMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadMultiDatastoreMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -1224,6 +1142,7 @@ class TestCopyoffloadMultiDatastoreMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_independent_persistent_disk_migration"])],
@@ -1238,7 +1157,6 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadIndependentPersistentDiskMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -1282,7 +1200,6 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadIndependentPersistentDiskMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -1308,13 +1225,6 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadIndependentPersistentDiskMigration::plan",
-        depends=[
-            "TestCopyoffloadIndependentPersistentDiskMigration::storagemap",
-            "TestCopyoffloadIndependentPersistentDiskMigration::networkmap",
-        ],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -1345,10 +1255,6 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadIndependentPersistentDiskMigration::migrate",
-        depends=["TestCopyoffloadIndependentPersistentDiskMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -1358,7 +1264,6 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadIndependentPersistentDiskMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -1389,6 +1294,7 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_independent_nonpersistent_disk_migration"])],
@@ -1403,7 +1309,6 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadIndependentNonpersistentDiskMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -1447,7 +1352,6 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadIndependentNonpersistentDiskMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -1473,13 +1377,6 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadIndependentNonpersistentDiskMigration::plan",
-        depends=[
-            "TestCopyoffloadIndependentNonpersistentDiskMigration::storagemap",
-            "TestCopyoffloadIndependentNonpersistentDiskMigration::networkmap",
-        ],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -1510,10 +1407,6 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadIndependentNonpersistentDiskMigration::migrate",
-        depends=["TestCopyoffloadIndependentNonpersistentDiskMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -1523,7 +1416,6 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadIndependentNonpersistentDiskMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -1554,6 +1446,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_10_mixed_disks_migration"])],
@@ -1568,7 +1461,6 @@ class TestCopyoffload10MixedDisksMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffload10MixedDisksMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -1612,7 +1504,6 @@ class TestCopyoffload10MixedDisksMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffload10MixedDisksMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -1638,13 +1529,6 @@ class TestCopyoffload10MixedDisksMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffload10MixedDisksMigration::plan",
-        depends=[
-            "TestCopyoffload10MixedDisksMigration::storagemap",
-            "TestCopyoffload10MixedDisksMigration::networkmap",
-        ],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -1675,10 +1559,6 @@ class TestCopyoffload10MixedDisksMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffload10MixedDisksMigration::migrate",
-        depends=["TestCopyoffload10MixedDisksMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -1688,7 +1568,6 @@ class TestCopyoffload10MixedDisksMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffload10MixedDisksMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -1720,6 +1599,7 @@ class TestCopyoffload10MixedDisksMigration:
 
 @pytest.mark.copyoffload
 @pytest.mark.warm
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_warm_migration"])],
@@ -1736,7 +1616,6 @@ class TestCopyoffloadWarmMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestCopyoffloadWarmMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -1792,7 +1671,6 @@ class TestCopyoffloadWarmMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestCopyoffloadWarmMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -1818,10 +1696,6 @@ class TestCopyoffloadWarmMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadWarmMigration::plan",
-        depends=["TestCopyoffloadWarmMigration::storagemap", "TestCopyoffloadWarmMigration::networkmap"],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -1852,10 +1726,6 @@ class TestCopyoffloadWarmMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestCopyoffloadWarmMigration::migrate",
-        depends=["TestCopyoffloadWarmMigration::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute warm migration with cutover."""
         LOGGER.info("Executing warm migration with copy-offload acceleration")
@@ -1867,7 +1737,6 @@ class TestCopyoffloadWarmMigration:
             cut_over=get_cutover_value(),
         )
 
-    @pytest.mark.dependency(depends=["TestCopyoffloadWarmMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,

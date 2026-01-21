@@ -15,6 +15,7 @@ from utilities.utils import get_value_from_py_config, populate_vm_ids
 
 
 @pytest.mark.tier0
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [
@@ -33,7 +34,6 @@ class TestSanityColdMtvMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestSanityColdMtvMigration::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -57,7 +57,6 @@ class TestSanityColdMtvMigration:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestSanityColdMtvMigration::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -83,10 +82,6 @@ class TestSanityColdMtvMigration:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestSanityColdMtvMigration::plan",
-        depends=["TestSanityColdMtvMigration::storagemap", "TestSanityColdMtvMigration::networkmap"],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -113,10 +108,6 @@ class TestSanityColdMtvMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestSanityColdMtvMigration::migrate",
-        depends=["TestSanityColdMtvMigration::plan"],
-    )
     def test_migrate_vms(
         self,
         fixture_store,
@@ -131,7 +122,6 @@ class TestSanityColdMtvMigration:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestSanityColdMtvMigration::migrate"])
     def test_check_vms(
         self,
         prepared_plan,
@@ -159,6 +149,7 @@ class TestSanityColdMtvMigration:
 
 
 @pytest.mark.remote
+@pytest.mark.incremental
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
 @pytest.mark.parametrize(
     "class_plan_config",
@@ -178,7 +169,6 @@ class TestColdRemoteOcp:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestColdRemoteOcp::storagemap")
     def test_create_storagemap(
         self,
         prepared_plan,
@@ -202,7 +192,6 @@ class TestColdRemoteOcp:
         )
         assert self.storage_map, "StorageMap creation failed"
 
-    @pytest.mark.dependency(name="TestColdRemoteOcp::networkmap")
     def test_create_networkmap(
         self,
         prepared_plan,
@@ -228,10 +217,6 @@ class TestColdRemoteOcp:
         )
         assert self.network_map, "NetworkMap creation failed"
 
-    @pytest.mark.dependency(
-        name="TestColdRemoteOcp::plan",
-        depends=["TestColdRemoteOcp::storagemap", "TestColdRemoteOcp::networkmap"],
-    )
     def test_create_plan(
         self,
         prepared_plan,
@@ -258,10 +243,6 @@ class TestColdRemoteOcp:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    @pytest.mark.dependency(
-        name="TestColdRemoteOcp::migrate",
-        depends=["TestColdRemoteOcp::plan"],
-    )
     def test_migrate_vms(
         self,
         fixture_store,
@@ -276,7 +257,6 @@ class TestColdRemoteOcp:
             target_namespace=target_namespace,
         )
 
-    @pytest.mark.dependency(depends=["TestColdRemoteOcp::migrate"])
     def test_check_vms(
         self,
         prepared_plan,

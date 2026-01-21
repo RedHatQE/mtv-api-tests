@@ -1080,7 +1080,6 @@ dependencies = [
     { name = "py-go-template" },
     { name = "pyhelper-utils" },
     { name = "pytest" },
-    { name = "pytest-dependency" },
     { name = "pytest-harvest" },
     { name = "pytest-jira" },
     { name = "pytest-profiling" },
@@ -1121,7 +1120,6 @@ requires-dist = [
     { name = "py-go-template", specifier = ">=0.2.0" },
     { name = "pyhelper-utils", specifier = ">=1.0.9" },
     { name = "pytest", specifier = ">=8.3.3" },
-    { name = "pytest-dependency", specifier = ">=0.6.0" },
     { name = "pytest-harvest", specifier = ">=1.10.5" },
     { name = "pytest-jira", specifier = ">=0.3.22" },
     { name = "pytest-profiling", specifier = ">=1.8.1" },
@@ -1938,16 +1936,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/d1/db/7ef3487e0fb0049dd
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b", size = 374801, upload-time = "2025-12-06T21:30:49.154Z" },
 ]
-
-[[package]]
-name = "pytest-dependency"
-version = "0.6.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pytest" },
-    { name = "setuptools" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/3b/317cc04e77d707d338540ca67b619df8f247f3f4c9f40e67bf5ea503ad94/pytest-dependency-0.6.0.tar.gz", hash = "sha256:934b0e6a39d95995062c193f7eaeed8a8ffa06ff1bcef4b62b0dc74a708bacc1", size = 19499, upload-time = "2023-12-31T20:38:54.991Z" }
 
 [[package]]
 name = "pytest-harvest"

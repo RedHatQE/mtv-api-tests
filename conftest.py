@@ -104,8 +104,11 @@ def pytest_runtest_makereport(item, call):
 
     # set a report attribute for each phase of a call, which can
     # be "setup", "call", "teardown"
-
     setattr(item, "rep_" + rep.when, rep)
+
+    # Incremental test support - track failures for class-based tests
+    if "incremental" in item.keywords and rep.when == "call" and rep.failed:
+        item.parent._previousfailed = item
 
 
 def pytest_sessionstart(session):
@@ -151,6 +154,12 @@ def pytest_fixture_setup(fixturedef, request):
 
 
 def pytest_runtest_setup(item):
+    # Incremental test support - xfail if previous test in class failed
+    if "incremental" in item.keywords:
+        previousfailed = getattr(item.parent, "_previousfailed", None)
+        if previousfailed is not None:
+            pytest.xfail(f"previous test failed ({previousfailed.name})")
+
     BASIC_LOGGER.info(f"\n{separator(symbol_='-', val=item.name)}")
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='SETUP')}")
 

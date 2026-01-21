@@ -411,6 +411,7 @@ from utilities.post_migration import check_vms
     ids=["descriptive-test-id"],
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
+@pytest.mark.incremental
 @pytest.mark.tier0  # optional: tier0/warm/remote/copyoffload
 class TestNameHere:
     """Test description."""
@@ -419,13 +420,11 @@ class TestNameHere:
     network_map: NetworkMap
     plan_resource: Plan
 
-    @pytest.mark.dependency(name="TestNameHere::storagemap")
     def test_create_storagemap(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace, source_provider_inventory):
         """Create StorageMap resource."""
         self.__class__.storage_map = get_storage_migration_map(...)
         assert self.storage_map
 
-    @pytest.mark.dependency(name="TestNameHere::networkmap")
     def test_create_networkmap(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace, source_provider_inventory, multus_network_name):
         """Create NetworkMap resource."""
         self.__class__.network_map = get_network_migration_map(
@@ -433,10 +432,6 @@ class TestNameHere:
         )
         assert self.network_map
 
-    @pytest.mark.dependency(
-        name="TestNameHere::plan",
-        depends=["TestNameHere::storagemap", "TestNameHere::networkmap"],
-    )
     def test_create_plan(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace):
         """Create MTV Plan CR resource."""
         self.__class__.plan_resource = create_plan_resource(
@@ -446,10 +441,6 @@ class TestNameHere:
         )
         assert self.plan_resource
 
-    @pytest.mark.dependency(
-        name="TestNameHere::migrate",
-        depends=["TestNameHere::plan"],
-    )
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         execute_migration(
@@ -457,7 +448,6 @@ class TestNameHere:
             ...
         )
 
-    @pytest.mark.dependency(depends=["TestNameHere::migrate"])
     def test_check_vms(self, prepared_plan, source_provider, destination_provider, target_namespace, source_provider_data, source_vms_namespace, source_provider_inventory):
         """Validate migrated VMs."""
         check_vms(
@@ -472,7 +462,7 @@ class TestNameHere:
 
 - **Class-level parametrization**: Use `class_plan_config` with `indirect=True`
 - **Shared state**: Store resources on class with `self.__class__.attribute`
-- **Test ordering**: Use `@pytest.mark.dependency()` for step dependencies
+- **Test ordering**: Use `@pytest.mark.incremental` at class level for sequential test dependencies
 - **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
 
 **Test method naming:** Test methods do one step each: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`, `test_migrate_vms`, `test_check_vms`
