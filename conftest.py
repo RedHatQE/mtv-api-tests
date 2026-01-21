@@ -415,14 +415,18 @@ def ocp_admin_client():
 
 
 @pytest.fixture(scope="session")
-def virtctl_binary(ocp_admin_client):
+def virtctl_binary(ocp_admin_client: "DynamicClient", tmp_path_factory: pytest.TempPathFactory) -> Path:
     """
     Download and configure virtctl binary from the cluster.
 
     This fixture ensures virtctl is available in PATH for all tests
     that need to interact with VMs via virtctl commands.
+
+    The binary is downloaded to a pytest temporary directory that is
+    automatically cleaned up after the test session.
     """
-    return download_virtctl_from_cluster(client=ocp_admin_client)
+    virtctl_dir = tmp_path_factory.mktemp("virtctl")
+    return download_virtctl_from_cluster(client=ocp_admin_client, download_dir=virtctl_dir)
 
 
 @pytest.fixture(scope="session")

@@ -14,17 +14,6 @@ from simple_logger.logger import get_logger
 LOGGER = get_logger(__name__)
 
 
-def _get_virtctl_download_dir() -> Path:
-    """Get the directory for virtctl downloads.
-
-    Returns:
-        Path to /tmp/virtctl (created if needed)
-    """
-    download_dir = Path("/tmp/virtctl")
-    download_dir.mkdir(parents=True, exist_ok=True)
-    return download_dir
-
-
 def _check_existing_virtctl(download_dir: Path) -> Path | None:
     """Check if virtctl is already available.
 
@@ -219,7 +208,7 @@ def _add_to_path(virtctl_dir: str) -> None:
         LOGGER.info(f"Added {virtctl_dir} to PATH")
 
 
-def download_virtctl_from_cluster(client: DynamicClient) -> Path:
+def download_virtctl_from_cluster(client: DynamicClient, download_dir: Path) -> Path:
     """Download virtctl binary from the OpenShift cluster.
 
     This function retrieves the ConsoleCLIDownload resource from the cluster,
@@ -233,6 +222,7 @@ def download_virtctl_from_cluster(client: DynamicClient) -> Path:
 
     Args:
         client: OpenShift DynamicClient instance
+        download_dir: Directory to download virtctl to.
 
     Returns:
         Path to the downloaded virtctl binary
@@ -245,8 +235,8 @@ def download_virtctl_from_cluster(client: DynamicClient) -> Path:
     """
     LOGGER.info("Checking for virtctl availability...")
 
-    # Get download directory
-    download_dir = _get_virtctl_download_dir()
+    # Ensure download directory exists
+    download_dir.mkdir(parents=True, exist_ok=True)
 
     # Check if already available
     existing = _check_existing_virtctl(download_dir)
@@ -257,24 +247,17 @@ def download_virtctl_from_cluster(client: DynamicClient) -> Path:
     LOGGER.info("virtctl not found, downloading from cluster...")
 
     # Get ConsoleCLIDownload resource
-    try:
-        console_cli_download = ConsoleCLIDownload(
-            client=client,
-            name="virtctl-clidownloads-kubevirt-hyperconverged",
-        )
-        if not console_cli_download.exists:
-            raise ValueError(
-                "ConsoleCLIDownload resource 'virtctl-clidownloads-kubevirt-hyperconverged' not found in cluster. "
-                "Ensure KubeVirt/OpenShift Virtualization is installed."
-            )
-    except Exception as e:
-        raise ValueError(f"Failed to retrieve ConsoleCLIDownload resource: {e}") from e
+    console_cli_download = ConsoleCLIDownload(
+        client=client,
+        name="virtctl-clidownloads-kubevirt-hyperconverged",
+        ensure_exists=True,
+    )
 
     # Detect platform
     os_patterns, arch_patterns = _detect_platform()
 
     # Find download URL
-    links = console_cli_download.instance.spec.get("links")
+    links = console_cli_download.instance.spec.links
     if not links:
         raise ValueError("No links found in ConsoleCLIDownload resource spec")
     download_url = _find_virtctl_download_url(links, os_patterns, arch_patterns)
