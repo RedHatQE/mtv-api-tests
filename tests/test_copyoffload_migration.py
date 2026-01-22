@@ -1995,9 +1995,9 @@ class TestCopyoffloadNonconformingNameMigration:
             pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
 
         LOGGER.info("Starting copy-offload migration test with non-conforming VM name")
-        LOGGER.info(
-            "Source VM name: %s (contains capitals and underscores)", prepared_plan["virtual_machines"][0]["name"]
-        )
+        vm_cfg = prepared_plan["virtual_machines"][0]
+        source_vm_name = vm_cfg.get("clone_name") or vm_cfg["name"]
+        LOGGER.info("Source VM name: %s (contains capitals and underscores)", source_vm_name)
         LOGGER.info("Datastore: %s, Storage vendor: %s", datastore_id, storage_vendor_product)
 
         vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
