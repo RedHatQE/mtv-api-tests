@@ -14,7 +14,7 @@ from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from libs.base_provider import BaseProvider
-from utilities.naming import sanitize_kubernetes_name
+from utilities.naming import InvalidVMNameError, sanitize_kubernetes_name
 from utilities.ssh_utils import VMSSHConnection, create_vm_ssh_connection
 
 if TYPE_CHECKING:
@@ -122,7 +122,7 @@ class OCPProvider(BaseProvider):
         if not _source:
             try:
                 cnv_vm_name = sanitize_kubernetes_name(cnv_vm_name)
-            except Exception as exc:
+            except InvalidVMNameError as exc:
                 raise ValueError(
                     f"Failed to sanitize VM name for Kubernetes lookup. original_name='{original_name}', namespace='{kwargs.get('namespace')}'"
                 ) from exc
