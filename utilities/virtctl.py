@@ -196,7 +196,7 @@ def _download_and_extract_virtctl(download_url: str, download_dir: Path) -> Path
     return virtctl_binary
 
 
-def _add_to_path(virtctl_dir: str) -> None:
+def add_to_path(virtctl_dir: str) -> None:
     """Add directory to PATH environment variable.
 
     Args:
@@ -241,7 +241,7 @@ def download_virtctl_from_cluster(client: DynamicClient, download_dir: Path) -> 
     # Check if already available
     existing = _check_existing_virtctl(download_dir)
     if existing:
-        _add_to_path(str(existing.parent))
+        add_to_path(str(existing.parent))
         return existing
 
     LOGGER.info("virtctl not found, downloading from cluster...")
@@ -266,7 +266,7 @@ def download_virtctl_from_cluster(client: DynamicClient, download_dir: Path) -> 
     virtctl_binary = _download_and_extract_virtctl(download_url, download_dir)
 
     # Add to PATH
-    _add_to_path(str(virtctl_binary.parent))
+    add_to_path(str(virtctl_binary.parent))
 
     LOGGER.info(f"Successfully downloaded and configured virtctl at {virtctl_binary}")
     return virtctl_binary

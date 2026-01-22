@@ -66,9 +66,10 @@ from utilities.utils import (
     create_source_provider,
     generate_class_hash_prefix,
     get_cluster_client,
+    get_cluster_version,
     get_value_from_py_config,
 )
-from utilities.virtctl import _add_to_path, download_virtctl_from_cluster
+from utilities.virtctl import add_to_path, download_virtctl_from_cluster
 
 RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
@@ -427,18 +428,50 @@ def ocp_admin_client():
 
 @pytest.fixture(scope="session")
 def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
-    """
-    Download and configure virtctl binary from the cluster.
+    """Download and configure virtctl binary from the cluster.
 
     This fixture ensures virtctl is available in PATH for all tests
     that need to interact with VMs via virtctl commands.
 
     Uses file locking to handle pytest-xdist parallel execution safely.
     The binary is downloaded to a shared directory that all workers can access.
+    The directory includes the cluster version for automatic cache invalidation
+    when switching between clusters with different versions.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift cluster client for accessing
+            the cluster to download the virtctl binary.
+
+    Returns:
+        Path: Path to the downloaded virtctl binary.
+
+    Raises:
+        ValueError: If virtctl download fails or binary is not executable.
+        RuntimeError: If timeout waiting for file lock.
     """
-    # Use cross-platform temp directory with restricted permissions
-    shared_dir = Path(tempfile.gettempdir()) / "pytest-shared-virtctl"
+    # Get cluster version for versioned caching
+    cluster_version = get_cluster_version(ocp_admin_client)
+
+    # Persistent shared directory for virtctl binary caching:
+    # - Path is intentionally persistent across test runs (not session-scoped tmp)
+    # - Visible to all pytest-xdist workers for cross-worker caching
+    # - Avoids re-downloading virtctl on every test session
+    # - Includes cluster version for automatic cache invalidation
+    # - Do NOT change to pytest's tmp_path or similar session-scoped directories
+    shared_dir = (
+        Path(tempfile.gettempdir()) / "pytest-shared-virtctl" / f"{cluster_version.major}.{cluster_version.minor}"
+    )
     shared_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+    # Security: verify ownership and enforce permissions
+    current_uid = os.getuid()
+    dir_stat = shared_dir.stat()
+    if dir_stat.st_uid != current_uid:
+        raise ValueError(
+            f"Security error: shared directory {shared_dir} is owned by uid {dir_stat.st_uid}, "
+            f"expected current user uid {current_uid}. This may indicate a hijack attempt."
+        )
+    os.chmod(shared_dir, 0o700)
 
     lock_file = shared_dir / "virtctl.lock"
     virtctl_path = shared_dir / "virtctl"
@@ -455,7 +488,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
         raise RuntimeError(f"Timeout (600s) waiting for virtctl lock at {lock_file}. Another process may be stuck.")
 
     # Add to PATH for all workers
-    _add_to_path(str(shared_dir))
+    add_to_path(str(shared_dir))
     return virtctl_path
 
 

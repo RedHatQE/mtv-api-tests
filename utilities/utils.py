@@ -11,10 +11,12 @@ from typing import Any
 
 import pytest
 from kubernetes.dynamic import DynamicClient
+from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
 from ocp_resources.provider import Provider
 from ocp_resources.resource import get_client
+from packaging.version import Version
 
 # Optional import if available
 from ocp_resources.secret import Secret
@@ -550,6 +552,27 @@ def get_cluster_client() -> DynamicClient:
     if isinstance(_client, DynamicClient):
         return _client
     raise ValueError("Failed to get client for cluster")
+
+
+def get_cluster_version(client: DynamicClient) -> Version:
+    """Get the OpenShift cluster version.
+
+    Args:
+        client (DynamicClient): OpenShift client
+
+    Returns:
+        Version: Cluster version object (e.g., Version("4.20.1"))
+
+    Raises:
+        ValueError: If version cannot be determined
+    """
+    cluster_version = ClusterVersion(client=client, name="version", ensure_exists=True)
+
+    try:
+        version_str = cluster_version.instance.status.desired.version
+        return Version(version_str)
+    except (AttributeError, KeyError) as e:
+        raise ValueError(f"Failed to get OCP version: {e}") from e
 
 
 def populate_vm_ids(plan: dict[str, Any], inventory: ForkliftInventory) -> None:

@@ -9,7 +9,6 @@ from typing import Any
 import go_template
 import jc
 import pytest
-from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.provider import Provider
@@ -26,7 +25,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
 from utilities.ssh_utils import SSHConnectionManager
-from utilities.utils import rhv_provider, get_value_from_py_config
+from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
 
 LOGGER = get_logger(name=__name__)
 
@@ -78,42 +77,6 @@ def get_ssh_credentials_from_provider_config(
         ) from e
     LOGGER.info(f"Using Linux credentials for VM: {username}")
     return username, password
-
-
-def get_ocp_version(destination_provider: BaseProvider) -> Version:
-    """
-    Get OpenShift cluster version.
-
-    Args:
-        destination_provider: The OpenShift destination provider
-
-    Returns:
-        Version object (e.g., Version("4.20.1"))
-
-    Raises:
-        ValueError: If ClusterVersion resource does not exist or version cannot be determined
-        InvalidVersion: If version string cannot be parsed
-    """
-    if not hasattr(destination_provider, "ocp_resource") or not destination_provider.ocp_resource:
-        raise ValueError("Destination provider has no ocp_resource, cannot determine OCP version")
-
-    client = destination_provider.ocp_resource.client
-    cluster_version = ClusterVersion(client=client, name="version")
-
-    if not cluster_version.exists:
-        raise ValueError(
-            "ClusterVersion resource 'version' not found. This resource must exist on an OpenShift cluster."
-        )
-
-    # Get version from status
-    try:
-        version_str = cluster_version.instance.status.desired.version
-        LOGGER.info(f"Detected OpenShift version: {version_str}")
-        return Version(version_str)
-    except (AttributeError, KeyError) as e:
-        raise ValueError(f"Failed to get OCP version (missing attribute): {e}") from e
-    except InvalidVersion as e:
-        raise InvalidVersion(f"Failed to parse OCP version string '{version_str}': {e}") from e
 
 
 def check_ssh_connectivity(
@@ -917,8 +880,13 @@ def check_serial_preservation(
         f"Destination VM {vm_name} has no valid serial number in firmware spec (got: {dest_serial})"
     )
 
+    # Validate destination provider has ocp_resource
+    ocp_resource = destination_provider.ocp_resource
+    if not ocp_resource:
+        raise ValueError("Destination provider has no ocp_resource, cannot determine OCP version")
+
     # Get OCP version to determine expected behavior
-    ocp_version = get_ocp_version(destination_provider)
+    ocp_version = get_cluster_version(ocp_resource.client)
 
     # Extract major and minor version (ignore patch and pre-release)
     major = ocp_version.major
