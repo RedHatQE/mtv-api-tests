@@ -69,10 +69,13 @@ def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> Qu
     root_logger.propagate = False
     basic_logger.propagate = False
 
-    # Suppress noisy paramiko SSH banner errors by setting level to WARNING
-    # This prevents ERROR level messages (connection resets, SSHException tracebacks)
-    # from cluttering the logs with transient, non-actionable errors
-    logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
+    # Suppress noisy paramiko transport errors during tests
+    # Setting to CRITICAL suppresses ERROR messages (connection resets, SSHException tracebacks)
+    # while NullHandler prevents any output and propagate=False stops parent loggers from seeing it
+    paramiko_transport_logger = logging.getLogger("paramiko.transport")
+    paramiko_transport_logger.setLevel(logging.CRITICAL)
+    paramiko_transport_logger.propagate = False
+    paramiko_transport_logger.addHandler(logging.NullHandler())
 
     log_listener.start()
     return log_listener
