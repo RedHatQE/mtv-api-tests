@@ -11,8 +11,6 @@ class InvalidVMNameError(Exception):
     stripped during sanitization.
     """
 
-    pass
-
 
 def generate_name_with_uuid(name: str) -> str:
     _name = f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
