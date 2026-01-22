@@ -3,4 +3,11 @@ default: true
 
 # MD013/line-length - Line length
 MD013:
-  line_length: 180
+  line_length: 120
+
+# MD033/no-inline-html - Allow inline HTML for collapsible sections
+MD033:
+  allowed_elements:
+    - details
+    - summary
+    - strong
