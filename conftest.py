@@ -5,6 +5,7 @@ import logging
 import os
 import pickle
 import shutil
+import tempfile
 from collections.abc import Generator
 from copy import deepcopy
 from pathlib import Path
@@ -435,17 +436,23 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     Uses file locking to handle pytest-xdist parallel execution safely.
     The binary is downloaded to a shared directory that all workers can access.
     """
-    # Use a fixed shared directory visible to all xdist workers
-    shared_dir = Path("/tmp/pytest-shared-virtctl")
-    shared_dir.mkdir(parents=True, exist_ok=True)
+    # Use cross-platform temp directory with restricted permissions
+    shared_dir = Path(tempfile.gettempdir()) / "pytest-shared-virtctl"
+    shared_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
     lock_file = shared_dir / "virtctl.lock"
     virtctl_path = shared_dir / "virtctl"
 
-    # File lock ensures only one process downloads
-    with filelock.FileLock(lock_file, timeout=600):
-        if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
-            download_virtctl_from_cluster(client=ocp_admin_client, download_dir=shared_dir)
+    try:
+        # File lock ensures only one process downloads
+        with filelock.FileLock(lock_file, timeout=600):
+            if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
+                download_virtctl_from_cluster(client=ocp_admin_client, download_dir=shared_dir)
+                # Validate binary was downloaded successfully
+                if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
+                    raise ValueError(f"Failed to download or make executable virtctl at {virtctl_path}")
+    except filelock.Timeout:
+        raise RuntimeError(f"Timeout (600s) waiting for virtctl lock at {lock_file}. Another process may be stuck.")
 
     # Add to PATH for all workers
     _add_to_path(str(shared_dir))
