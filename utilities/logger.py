@@ -9,29 +9,6 @@ from simple_logger.logger import DuplicateFilter, WrapperLogFormatter
 LOGGER = logging.getLogger(__name__)
 
 
-class ParamikoSSHBannerFilter(logging.Filter):
-    """Filter to suppress paramiko SSH protocol banner errors.
-
-    This filter removes noisy error messages from paramiko.transport that occur
-    when reading SSH protocol banners fails, which is often transient and not
-    actionable.
-
-    Returns:
-        bool: False if the message contains SSH banner error, True otherwise.
-    """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Filter out SSH protocol banner error messages.
-
-        Args:
-            record (logging.LogRecord): The log record to evaluate.
-
-        Returns:
-            bool: False to suppress the record, True to allow it.
-        """
-        return "Error reading SSH protocol banner" not in record.getMessage()
-
-
 def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> QueueListener:
     """
     Setup basic/root logging using QueueHandler/QueueListener
@@ -92,9 +69,13 @@ def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> Qu
     root_logger.propagate = False
     basic_logger.propagate = False
 
-    # Suppress noisy paramiko SSH banner errors
+    # Suppress noisy paramiko transport errors during tests
+    # Setting to CRITICAL suppresses ERROR messages (connection resets, SSHException tracebacks)
+    # while NullHandler prevents any output and propagate=False stops parent loggers from seeing it
     paramiko_transport_logger = logging.getLogger("paramiko.transport")
-    paramiko_transport_logger.addFilter(ParamikoSSHBannerFilter())
+    paramiko_transport_logger.setLevel(logging.CRITICAL)
+    paramiko_transport_logger.propagate = False
+    paramiko_transport_logger.addHandler(logging.NullHandler())
 
     log_listener.start()
     return log_listener
