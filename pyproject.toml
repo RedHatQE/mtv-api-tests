@@ -62,4 +62,5 @@ dependencies = [
   "python-rrmngmnt>=0.2.0",
   "jc>=1.25.0",
   "py-go-template>=0.2.0",
+  "filelock>=3.16.0",
 ]

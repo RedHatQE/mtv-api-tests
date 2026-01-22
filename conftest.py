@@ -11,6 +11,7 @@ from pathlib import Path
 from shutil import rmtree
 from typing import TYPE_CHECKING, Any
 
+import filelock
 import pytest
 from kubernetes.dynamic.exceptions import NotFoundError
 
@@ -66,7 +67,7 @@ from utilities.utils import (
     get_cluster_client,
     get_value_from_py_config,
 )
-from utilities.virtctl import download_virtctl_from_cluster
+from utilities.virtctl import _add_to_path, download_virtctl_from_cluster
 
 RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
@@ -424,18 +425,31 @@ def ocp_admin_client():
 
 
 @pytest.fixture(scope="session")
-def virtctl_binary(ocp_admin_client: "DynamicClient", tmp_path_factory: pytest.TempPathFactory) -> Path:
+def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     """
     Download and configure virtctl binary from the cluster.
 
     This fixture ensures virtctl is available in PATH for all tests
     that need to interact with VMs via virtctl commands.
 
-    The binary is downloaded to a pytest temporary directory that is
-    automatically cleaned up after the test session.
+    Uses file locking to handle pytest-xdist parallel execution safely.
+    The binary is downloaded to a shared directory that all workers can access.
     """
-    virtctl_dir = tmp_path_factory.mktemp("virtctl")
-    return download_virtctl_from_cluster(client=ocp_admin_client, download_dir=virtctl_dir)
+    # Use a fixed shared directory visible to all xdist workers
+    shared_dir = Path("/tmp/pytest-shared-virtctl")
+    shared_dir.mkdir(parents=True, exist_ok=True)
+
+    lock_file = shared_dir / "virtctl.lock"
+    virtctl_path = shared_dir / "virtctl"
+
+    # File lock ensures only one process downloads
+    with filelock.FileLock(lock_file, timeout=600):
+        if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
+            download_virtctl_from_cluster(client=ocp_admin_client, download_dir=shared_dir)
+
+    # Add to PATH for all workers
+    _add_to_path(str(shared_dir))
+    return virtctl_path
 
 
 @pytest.fixture(scope="session")
