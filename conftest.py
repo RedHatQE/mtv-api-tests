@@ -484,8 +484,10 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
                 # Validate binary was downloaded successfully
                 if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
                     raise ValueError(f"Failed to download or make executable virtctl at {virtctl_path}")
-    except filelock.Timeout:
-        raise RuntimeError(f"Timeout (600s) waiting for virtctl lock at {lock_file}. Another process may be stuck.")
+    except filelock.Timeout as err:
+        raise RuntimeError(
+            f"Timeout (600s) waiting for virtctl lock at {lock_file}. Another process may be stuck."
+        ) from err
 
     # Add to PATH for all workers
     add_to_path(str(shared_dir))
