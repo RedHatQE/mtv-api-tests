@@ -31,10 +31,10 @@ def sanitize_kubernetes_name(name: str) -> str:
     and is consistent with generate_name_with_uuid() behavior.
 
     Args:
-        name: The original VM name (may contain capitals, underscores, periods, etc.)
+        name (str): The original VM name (may contain capitals, underscores, periods, etc.)
 
     Returns:
-        A Kubernetes-compliant name (lowercase, underscores and periods replaced with hyphens)
+        str: A Kubernetes-compliant name (lowercase, underscores and periods replaced with hyphens)
 
     Raises:
         InvalidVMNameError: If the name cannot be sanitized to a valid DNS-1123 name
