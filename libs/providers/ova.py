@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from ocp_resources.provider import Provider
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
+
+if TYPE_CHECKING:
+    from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
 
@@ -39,3 +42,19 @@ class OVAProvider(BaseProvider):
 
     def delete_vm(self, vm_name: str) -> Any:
         return
+
+    def get_vm_or_template_networks(
+        self,
+        names: list[str],
+        inventory: ForkliftInventory,
+    ) -> list[dict[str, str]]:
+        """Delegate to Forklift inventory for OVA VMs.
+
+        Args:
+            names: List of VM names to query
+            inventory: Forklift inventory instance
+
+        Returns:
+            List of network mappings
+        """
+        return inventory.vms_networks_mappings(vms=names)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import ipaddress
-from typing import Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 from kubernetes.client.exceptions import ApiException
 from ocp_resources.provider import Provider
@@ -16,6 +16,9 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
 from libs.base_provider import BaseProvider
+
+if TYPE_CHECKING:
+    from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
 
@@ -1206,6 +1209,22 @@ class VMWareProvider(BaseProvider):
         self.stop_vm(vm=vm)
         task = vm.Destroy_Task()
         self.wait_task(task=task, action_name=f"Deleting VM {vm_name}")
+
+    def get_vm_or_template_networks(
+        self,
+        names: list[str],
+        inventory: ForkliftInventory,
+    ) -> list[dict[str, str]]:
+        """Delegate to Forklift inventory for VMware VMs.
+
+        Args:
+            names: List of VM names to query
+            inventory: Forklift inventory instance
+
+        Returns:
+            List of network mappings
+        """
+        return inventory.vms_networks_mappings(vms=names)
 
     def wait_for_vmware_guest_info(self, vm: vim.VirtualMachine, timeout: int = 60) -> bool:
         """Wait for VMware guest information to become available after VM power-on.

@@ -542,6 +542,7 @@ def multus_network_name(
     target_namespace: str,
     ocp_admin_client: DynamicClient,
     multus_cni_config: str,
+    source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
     class_plan_config: dict[str, Any],
     request: pytest.FixtureRequest,
@@ -560,6 +561,7 @@ def multus_network_name(
         target_namespace (str): Target namespace for NADs
         ocp_admin_client (DynamicClient): OpenShift client
         multus_cni_config (str): Multus CNI configuration
+        source_provider (BaseProvider): Source provider instance
         source_provider_inventory (ForkliftInventory): Source provider inventory
         class_plan_config (dict[str, Any]): Plan configuration from class parametrization
         request (pytest.FixtureRequest): Pytest fixture request
@@ -573,12 +575,12 @@ def multus_network_name(
     class_name = request.node.cls.__name__ if request.node.cls else request.node.name
     LOGGER.info(f"Creating class-scoped NADs with base name: {base_name} (class: {class_name})")
 
-    # Get VM names from the class plan config
+    # Get VM/template names from the class plan config
     vms = [vm["name"] for vm in class_plan_config["virtual_machines"]]
     LOGGER.info(f"Found VMs from class config: {vms}")
 
-    # Get network count directly from source provider inventory
-    networks = source_provider_inventory.vms_networks_mappings(vms=vms)
+    # Query networks using provider abstraction (handles templates vs VMs internally)
+    networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)
 
     if not networks:
         raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")

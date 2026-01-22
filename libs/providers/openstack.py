@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from ocp_resources.provider import Provider
 from openstack.compute.v2.server import Server as OSP_Server
@@ -12,6 +12,9 @@ from simple_logger.logger import get_logger
 from exceptions.exceptions import VmNotFoundError
 from libs.base_provider import BaseProvider
 from utilities.naming import generate_name_with_uuid
+
+if TYPE_CHECKING:
+    from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
 
@@ -392,3 +395,19 @@ class OpenStackProvider(BaseProvider):
         except Exception as e:
             LOGGER.error(f"An error occurred while starting VM '{vm.name}': {e}")
             raise
+
+    def get_vm_or_template_networks(
+        self,
+        names: list[str],
+        inventory: ForkliftInventory,
+    ) -> list[dict[str, str]]:
+        """Delegate to Forklift inventory for OpenStack VMs.
+
+        Args:
+            names: List of VM names to query
+            inventory: Forklift inventory instance
+
+        Returns:
+            List of network mappings
+        """
+        return inventory.vms_networks_mappings(vms=names)

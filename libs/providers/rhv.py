@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import copy
 import os
-from typing import Any, Callable, Self
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Self
 
 import ovirtsdk4
 from ocp_resources.provider import Provider
@@ -12,9 +13,12 @@ from ovirtsdk4.types import VmStatus
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import OvirtMTVDatacenterNotFoundError, OvirtMTVDatacenterStatusError
+from exceptions.exceptions import OvirtMTVDatacenterNotFoundError, OvirtMTVDatacenterStatusError, VmNotFoundError
 from libs.base_provider import BaseProvider
 from utilities.naming import generate_name_with_uuid
+
+if TYPE_CHECKING:
+    from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
 
@@ -103,12 +107,30 @@ class OvirtProvider(BaseProvider):
     def events_list_by_vm(self, vm: types.Vm) -> Any:
         return self.events_service().list(search=f"Vms.id = {vm.id}")
 
-    def get_vm_by_name(self, name: str, cluster: str | None = None) -> Any:
-        query = f"name={name}"
-        if cluster:
-            query = f"{query} cluster={cluster}"
+    def get_vm_by_name(
+        self,
+        query: str,
+        vm_name_suffix: str = "",
+        clone_vm: bool = False,
+        session_uuid: str = "",
+        clone_options: dict | None = None,
+    ) -> types.Vm:
 
-        return self.vms_services.list(search=query)[0]
+        target_vm_name = f"{query}{vm_name_suffix}"
+        search_query = f"name={target_vm_name}"
+
+        try:
+            return self.vms_services.list(search=search_query)[0]
+        except IndexError:
+            if clone_vm:
+                return self.clone_vm(
+                    source_vm_name=query,
+                    clone_vm_name=target_vm_name,
+                    session_uuid=session_uuid,
+                    **(clone_options or {}),
+                )
+            else:
+                raise VmNotFoundError(f"VM '{target_vm_name}' not found on RHV host [{self.host}]") from None
 
     def vm_nics(self, vm: types.Vm) -> list[Any]:
         return [self.api.follow_link(nic) for nic in self.vms_services.vm_service(id=vm.id).nics_service().list()]
@@ -154,17 +176,17 @@ class OvirtProvider(BaseProvider):
             )
 
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
-        target_vm_name = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
-        try:
-            source_vm = self.get_vm_by_name(name=target_vm_name)
-        except IndexError:
-            # VM not found - clone it if clone flag is set
-            if kwargs.get("clone"):
-                source_vm = self.clone_vm(
-                    source_vm_name=kwargs["name"], clone_vm_name=target_vm_name, session_uuid=kwargs["session_uuid"]
-                )
-            else:
-                raise
+        # If VM object already provided, use it directly (avoids re-searching for cloned VMs)
+        source_vm = kwargs.get("provider_vm_api")
+
+        if not source_vm:
+            source_vm = self.get_vm_by_name(
+                query=kwargs["name"],
+                vm_name_suffix=kwargs.get("vm_name_suffix", ""),
+                clone_vm=kwargs.get("clone", False),
+                session_uuid=kwargs.get("session_uuid", ""),
+                clone_options=kwargs.get("clone_options"),
+            )
 
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = Resource.ProviderType.RHV
@@ -205,8 +227,8 @@ class OvirtProvider(BaseProvider):
                 dict({
                     "description": snapshot.description,
                     "id": snapshot.id,
-                    "snapshot_status": snapshot.snapshot_status,
-                    "snapshot_type": snapshot.snapshot_type,
+                    "snapshot_status": snapshot.snapshot_status.value,
+                    "snapshot_type": snapshot.snapshot_type.value,
                 })
             )
 
@@ -276,8 +298,8 @@ class OvirtProvider(BaseProvider):
         """
         LOGGER.info(f"Attempting to delete VM '{vm_name}'")
         try:
-            vm = self.get_vm_by_name(name=vm_name)
-        except IndexError:
+            vm = self.get_vm_by_name(query=vm_name)
+        except VmNotFoundError:
             LOGGER.warning(f"VM '{vm_name}' not found. Nothing to delete.")
             return
 
@@ -308,6 +330,65 @@ class OvirtProvider(BaseProvider):
         if not templates:
             raise NotFoundError(f"Template '{name}' not found in oVirt")
         return templates[0]
+
+    def get_template_networks(self, template_names: list[str]) -> list[dict[str, str]]:
+        """Get unique network mappings for RHV templates.
+
+        Args:
+            template_names: List of template names to query
+
+        Returns:
+            List of network mappings in format [{"name": "network1"}, {"name": "network2"}]
+
+        Raises:
+            ValueError: If no networks found for any of the templates
+        """
+        networks_seen = set()
+        mappings = []
+
+        for template_name in template_names:
+            template = self.get_template_by_name(name=template_name)
+            template_service = self.templates_service.template_service(id=template.id)
+
+            for nic in template_service.nics_service().list():
+                nic_detail = self.api.follow_link(nic)
+                network = self.api.follow_link(self.api.follow_link(nic_detail.vnic_profile).network)
+
+                if network.name not in networks_seen:
+                    networks_seen.add(network.name)
+                    mappings.append({"name": network.name})
+
+        if not mappings:
+            raise ValueError(
+                f"No networks found for templates {template_names}. "
+                f"Ensure templates have network interfaces configured with valid vNIC profiles."
+            )
+
+        return mappings
+
+    def get_vm_or_template_networks(
+        self,
+        names: list[str],
+        inventory: ForkliftInventory,
+    ) -> list[dict[str, str]]:
+        """Use existing get_template_networks() for RHV templates.
+
+        Args:
+            names: List of template names to query
+            inventory: Forklift inventory instance (ignored for RHV, uses direct template API)
+
+        Returns:
+            List of network mappings
+
+        Raises:
+            ValueError: If no networks found for any of the templates
+
+        Note:
+            The inventory parameter is required for API compatibility but is ignored for RHV.
+            RHV uses direct template API instead of Forklift inventory.
+        """
+        # Inventory is ignored for RHV - we use direct template API
+        return self.get_template_networks(template_names=names)
 
     def clone_vm(
         self,

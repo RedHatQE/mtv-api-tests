@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import abc
 from logging import Logger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ocp_resources.provider import Provider
 from simple_logger.logger import get_logger
 
 from utilities.naming import generate_name_with_uuid
+
+if TYPE_CHECKING:
+    from libs.forklift_inventory import ForkliftInventory
 
 
 class BaseProvider(abc.ABC):
@@ -96,4 +99,25 @@ class BaseProvider(abc.ABC):
 
     @abc.abstractmethod
     def delete_vm(self, vm_name: str) -> Any:
+        pass
+
+    @abc.abstractmethod
+    def get_vm_or_template_networks(
+        self,
+        names: list[str],
+        inventory: ForkliftInventory,
+    ) -> list[dict[str, str]]:
+        """Get network mappings for VMs or templates (before cloning).
+
+        This method handles provider-specific differences:
+        - RHV: Queries template networks directly (templates don't exist in inventory yet)
+        - VMware/OpenStack/OVA/OpenShift: Queries VM networks from Forklift inventory
+
+        Args:
+            names: List of VM or template names to query
+            inventory: Forklift inventory instance (required for all providers)
+
+        Returns:
+            List of network mappings in format [{"name": "network1"}, ...]
+        """
         pass

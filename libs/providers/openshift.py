@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from time import sleep
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import humanfriendly
 from kubernetes.client.exceptions import ApiException
@@ -15,6 +15,9 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from libs.base_provider import BaseProvider
 from utilities.ssh_utils import VMSSHConnection, create_vm_ssh_connection
+
+if TYPE_CHECKING:
+    from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
 
@@ -233,6 +236,22 @@ class OCPProvider(BaseProvider):
 
     def delete_vm(self, vm_name: str) -> Any:
         return
+
+    def get_vm_or_template_networks(
+        self,
+        names: list[str],
+        inventory: ForkliftInventory,
+    ) -> list[dict[str, str]]:
+        """Delegate to Forklift inventory for OpenShift VMs.
+
+        Args:
+            names: List of VM names to query
+            inventory: Forklift inventory instance
+
+        Returns:
+            List of network mappings
+        """
+        return inventory.vms_networks_mappings(vms=names)
 
     def create_ssh_connection_to_vm(
         self,
