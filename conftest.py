@@ -447,6 +447,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
 
     Raises:
         ValueError: If virtctl download fails or binary is not executable.
+        PermissionError: If shared directory ownership doesn't match current user.
         TimeoutError: If timeout waiting for file lock.
     """
     # Get cluster version for versioned caching
@@ -465,7 +466,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     current_uid = os.getuid()
     dir_stat = shared_dir.stat()
     if dir_stat.st_uid != current_uid:
-        raise ValueError(
+        raise PermissionError(
             f"Security error: shared directory {shared_dir} is owned by uid {dir_stat.st_uid}, "
             f"expected current user uid {current_uid}. This may indicate a hijack attempt."
         )
@@ -477,10 +478,10 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     try:
         # File lock ensures only one process downloads
         with filelock.FileLock(lock_file, timeout=600):
-            if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
+            if not virtctl_path.is_file() or not os.access(virtctl_path, os.X_OK):
                 download_virtctl_from_cluster(client=ocp_admin_client, download_dir=shared_dir)
                 # Validate binary was downloaded successfully
-                if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
+                if not virtctl_path.is_file() or not os.access(virtctl_path, os.X_OK):
                     raise ValueError(f"Failed to download or make executable virtctl at {virtctl_path}")
     except filelock.Timeout as err:
         raise TimeoutError(
