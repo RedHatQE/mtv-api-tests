@@ -1981,18 +1981,9 @@ class TestCopyoffloadNonconformingNameMigration:
     ):
         """Create StorageMap with copy-offload configuration."""
         copyoffload_config_data = source_provider_data["copyoffload"]
-        storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-        datastore_id = copyoffload_config_data.get("datastore_id")
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # Validate required copy-offload parameters
-        missing_params = []
-        if not storage_vendor_product:
-            missing_params.append("storage_vendor_product")
-        if not datastore_id:
-            missing_params.append("datastore_id")
-        if missing_params:
-            pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
 
         LOGGER.info("Starting copy-offload migration test with non-conforming VM name")
         vm_cfg = prepared_plan["virtual_machines"][0]

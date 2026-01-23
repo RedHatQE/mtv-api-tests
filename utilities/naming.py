@@ -1,15 +1,7 @@
 import re
 import shortuuid
 
-
-class InvalidVMNameError(Exception):
-    """
-    Exception raised when a VM name cannot be sanitized to a valid Kubernetes DNS-1123 name.
-
-    This error occurs when the sanitization process results in an empty string,
-    typically because the input name contains only invalid characters that get
-    stripped during sanitization.
-    """
+from exceptions.exceptions import InvalidVMNameError
 
 
 def generate_name_with_uuid(name: str) -> str:
