@@ -1060,7 +1060,7 @@ def copyoffload_config(source_provider, source_provider_data):
     missing_params = [param for param in required_params if not config.get(param)]
 
     if missing_params:
-        pytest.fail(
+        raise ValueError(
             f"Missing required copy-offload parameters in config: {', '.join(missing_params)}. "
             "Add them to .providers.json copyoffload section"
         )
