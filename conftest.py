@@ -447,7 +447,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
 
     Raises:
         ValueError: If virtctl download fails or binary is not executable.
-        RuntimeError: If timeout waiting for file lock.
+        TimeoutError: If timeout waiting for file lock.
     """
     # Get cluster version for versioned caching
     cluster_version = get_cluster_version(ocp_admin_client)
@@ -458,9 +458,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     # - Avoids re-downloading virtctl on every test session
     # - Includes cluster version for automatic cache invalidation
     # - Do NOT change to pytest's tmp_path or similar session-scoped directories
-    shared_dir = (
-        Path(tempfile.gettempdir()) / "pytest-shared-virtctl" / f"{cluster_version.major}.{cluster_version.minor}"
-    )
+    shared_dir = Path(tempfile.gettempdir()) / "pytest-shared-virtctl" / str(cluster_version)
     shared_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
     # Security: verify ownership and enforce permissions
@@ -485,7 +483,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
                 if not virtctl_path.exists() or not os.access(virtctl_path, os.X_OK):
                     raise ValueError(f"Failed to download or make executable virtctl at {virtctl_path}")
     except filelock.Timeout as err:
-        raise RuntimeError(
+        raise TimeoutError(
             f"Timeout (600s) waiting for virtctl lock at {lock_file}. Another process may be stuck."
         ) from err
 
