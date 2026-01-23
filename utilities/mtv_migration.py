@@ -331,7 +331,7 @@ def get_storage_migration_map(
                 destination_config["volumeMode"] = volume_mode
             LOGGER.info(f"Adding non-XCOPY datastore mapping for: {non_xcopy_datastore_id}")
             storage_map_list.append({
-                "destination": {"storageClass": target_storage_class},
+                "destination": destination_config,
                 "source": {"id": non_xcopy_datastore_id},
             })
             LOGGER.info(

@@ -935,7 +935,6 @@ class VMWareProvider(BaseProvider):
 
             backing_info = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
             backing_info.diskMode = disk.get("disk_mode", "persistent")
-            backing_info.datastore = disk_datastore  # Set the datastore for this disk
 
             # Set datastore and fileName for backing info
             # IMPORTANT: Both datastore object and fileName must be set to force disk creation on correct datastore
