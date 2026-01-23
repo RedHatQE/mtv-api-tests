@@ -34,7 +34,10 @@ This document provides project-specific instructions for the MTV API Tests codeb
 - **Type Annotations (MUST):** All new functions and functions with signature changes must have complete type annotations. Use built-in Python typing (dict, list, tuple)
 - **Package Management:** Use `uv` for all dependency management
 - **Pre-commit (MUST):** Must pass before any commit - never use `--no-verify`
-- **No Auto-Skip:** Never use `pytest.skip()` or `pytest.fail()` for validation inside fixtures or test methods - use `@pytest.mark.skipif` at class/test level, or validate in fixtures
+- **No Auto-Skip:** Never use `pytest.skip()` or `pytest.fail()` for validation inside fixtures or test methods.
+  Validation = checking required inputs/config exist before test execution (belongs in fixtures).
+  Assertions = verifying test outcomes (belongs in test methods).
+  Use `@pytest.mark.skipif` at class/test level for conditional skipping.
 - **Every OpenShift resource:** Must use `create_and_store_resource()` function
 
 ### OpenShift/Kubernetes Resource Interactions
@@ -249,6 +252,9 @@ def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
 
 ### Validate at Source (MUST)
 
+**Definition:** Validation = verifying required inputs, configuration values, or fixture dependencies are present
+and valid before test execution. This is distinct from assertions, which verify test outcomes during execution.
+
 Validation must happen in fixtures (where values originate), not in utility functions or test methods.
 
 ```python
@@ -257,7 +263,7 @@ def apply_node_label(labeled_worker_node, ...):
     if not labeled_worker_node:
         raise ValueError("No worker node provided")
 
-# Wrong - validating in test method
+# Wrong - validating in test method (see also: "Deterministic Tests - No Defaults for Our Config")
 def test_create_storagemap(self, source_provider, ...):
     if not source_provider_data.get("storage_vendor_product"):
         pytest.fail("Missing storage_vendor_product")  # Should be in fixture
