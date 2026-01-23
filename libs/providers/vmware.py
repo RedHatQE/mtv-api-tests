@@ -806,6 +806,9 @@ class VMWareProvider(BaseProvider):
         Returns:
             A list of VirtualDeviceSpec objects for the new disks.
 
+        Raises:
+            VmCloneError: If no SCSI controller/unit is available or required datastore config is missing.
+
         """
         device_changes = []
         scsi_controller = next(
