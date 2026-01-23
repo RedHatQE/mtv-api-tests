@@ -13,8 +13,9 @@ from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from exceptions.exceptions import InvalidVMNameError
 from libs.base_provider import BaseProvider
-from utilities.naming import InvalidVMNameError, sanitize_kubernetes_name
+from utilities.naming import sanitize_kubernetes_name
 from utilities.ssh_utils import VMSSHConnection, create_vm_ssh_connection
 
 if TYPE_CHECKING:
