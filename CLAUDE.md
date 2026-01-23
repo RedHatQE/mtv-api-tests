@@ -34,7 +34,7 @@ This document provides project-specific instructions for the MTV API Tests codeb
 - **Type Annotations (MUST):** All new functions and functions with signature changes must have complete type annotations. Use built-in Python typing (dict, list, tuple)
 - **Package Management:** Use `uv` for all dependency management
 - **Pre-commit (MUST):** Must pass before any commit - never use `--no-verify`
-- **No Auto-Skip:** Never use `pytest.skip()` inside fixtures - use `@pytest.mark.skipif` at test level
+- **No Auto-Skip:** Never use `pytest.skip()` or `pytest.fail()` for validation inside fixtures or test methods - use `@pytest.mark.skipif` at class/test level, or validate in fixtures
 - **Every OpenShift resource:** Must use `create_and_store_resource()` function
 
 ### OpenShift/Kubernetes Resource Interactions
@@ -207,6 +207,8 @@ if not migration.wait_for_completion(timeout=3600):
     raise MigrationTimeoutError(f"Migration '{migration.name}' timed out after 1 hour")
 ```
 
+**Location:** All custom exceptions must be defined in `exceptions/exceptions.py`, not scattered in other modules. This centralizes exception definitions for better discoverability.
+
 **Exception:** `RuntimeError` is allowed ONLY in pytest hooks for infrastructure failures (e.g., cluster unreachable, API timeout).
 Use `ValueError` for configuration errors (e.g., missing config key, invalid credentials file).
 
@@ -247,13 +249,18 @@ def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
 
 ### Validate at Source (MUST)
 
-Validation must happen in fixtures (where values originate), not in utility functions.
+Validation must happen in fixtures (where values originate), not in utility functions or test methods.
 
 ```python
 # Wrong - validating in utility (too late)
 def apply_node_label(labeled_worker_node, ...):
     if not labeled_worker_node:
         raise ValueError("No worker node provided")
+
+# Wrong - validating in test method
+def test_create_storagemap(self, source_provider, ...):
+    if not source_provider_data.get("storage_vendor_product"):
+        pytest.fail("Missing storage_vendor_product")  # Should be in fixture
 
 # Correct - validate in fixture
 @pytest.fixture
@@ -265,6 +272,8 @@ def labeled_worker_node(worker_nodes, target_node_selector):
 ```
 
 **Distinction:** Fixtures validate their own construction (is the fixture value valid?). Utility functions may validate external/provider data that varies at runtime.
+
+Test methods should never contain validation logic - if a config value is required, create a fixture that validates it.
 
 ### Fixture Rules (MUST)
 
