@@ -448,6 +448,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     Raises:
         ValueError: If virtctl download fails or binary is not executable.
         PermissionError: If shared directory ownership doesn't match current user.
+        PermissionError: If shared directory is a symlink (hijack attempt).
         TimeoutError: If timeout waiting for file lock.
     """
     # Get cluster version for versioned caching
@@ -462,9 +463,15 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     shared_dir = Path(tempfile.gettempdir()) / "pytest-shared-virtctl" / str(cluster_version)
     shared_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
+    # Security: check for symlink hijack attack
+    if shared_dir.is_symlink():
+        raise PermissionError(
+            f"Security error: shared directory {shared_dir} is a symlink. This may indicate a hijack attempt."
+        )
+
     # Security: verify ownership and enforce permissions
     current_uid = os.getuid()
-    dir_stat = shared_dir.stat()
+    dir_stat = shared_dir.lstat()
     if dir_stat.st_uid != current_uid:
         raise PermissionError(
             f"Security error: shared directory {shared_dir} is owned by uid {dir_stat.st_uid}, "
