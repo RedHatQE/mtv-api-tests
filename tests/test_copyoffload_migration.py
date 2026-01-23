@@ -2108,17 +2108,20 @@ class TestCopyoffloadNonconformingNameMigration:
 
         # Verify that the destination VM was created with the sanitized Kubernetes-compliant name
         vm_cfg = prepared_plan["virtual_machines"][0]
-        source_vm_name = vm_cfg.get("clone_name") or vm_cfg["name"]
-        expected_destination_name = sanitize_kubernetes_name(source_vm_name)
+        # Get the actual cloned VM name from source (with session UUID prefix and random suffix)
+        provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
+        actual_source_vm_name = provider_vm_api.name
+        # MTV should sanitize the source VM name to create the destination VM name
+        expected_destination_name = sanitize_kubernetes_name(actual_source_vm_name)
         LOGGER.info(
             "Verifying destination VM name sanitization: '%s' -> '%s'",
-            source_vm_name,
+            actual_source_vm_name,
             expected_destination_name,
         )
 
         # Use destination_provider to verify the VM exists with the sanitized name
         destination_vm = destination_provider.vm_dict(
-            name=source_vm_name,  # Pass original name; vm_dict will sanitize internally
+            name=expected_destination_name,  # Use sanitized name to look up the VM
             namespace=target_namespace,
         )
 
@@ -2126,7 +2129,7 @@ class TestCopyoffloadNonconformingNameMigration:
         actual_destination_name = destination_vm["name"]
         assert actual_destination_name == expected_destination_name, (
             f"Destination VM name mismatch!\n"
-            f"  Source VM name: '{source_vm_name}'\n"
+            f"  Source VM name: '{actual_source_vm_name}'\n"
             f"  Expected sanitized name: '{expected_destination_name}'\n"
             f"  Actual destination name: '{actual_destination_name}'\n"
             f"  This indicates the MTV operator did not properly sanitize the VM name."
