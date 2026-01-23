@@ -1059,14 +1059,20 @@ class VMWareProvider(BaseProvider):
         if preserve_name_format:
             # Keep the original name format with capitals and underscores, just add UUID suffix
             random_suffix = shortuuid.ShortUUID().random(length=4).lower()
-            clone_vm_name = f"{session_uuid}-{clone_vm_name}-{random_suffix}"
-            if len(clone_vm_name) > 63:
+            prefix = f"{session_uuid}-"
+            suffix = f"-{random_suffix}"
+            base = clone_vm_name
+            max_base_len = 63 - len(prefix) - len(suffix)
+            if max_base_len < 1:
+                raise ValueError(f"Cannot build clone VM name within 63 characters. session_uuid='{session_uuid}'")
+            if len(prefix + base + suffix) > 63:
                 LOGGER.warning(
-                    "VM name '%s' is too long (%s > 63). Truncating.",
-                    clone_vm_name,
-                    len(clone_vm_name),
+                    "VM name '%s' is too long (%s > 63). Truncating base name.",
+                    prefix + base + suffix,
+                    len(prefix + base + suffix),
                 )
-                clone_vm_name = clone_vm_name[-63:]
+                base = base[:max_base_len].rstrip("-")
+            clone_vm_name = f"{prefix}{base}{suffix}"
             LOGGER.info("Preserving original name format: '%s'", clone_vm_name)
         else:
             clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
