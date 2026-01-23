@@ -817,7 +817,7 @@ class VMWareProvider(BaseProvider):
             None,
         )
         if not scsi_controller:
-            raise RuntimeError(f"Could not find a SCSI controller on VM '{source_vm.name}' to add new disks.")
+            raise VmCloneError(f"Could not find a SCSI controller on VM '{source_vm.name}' to add new disks.")
 
         used_unit_numbers = {
             device.unitNumber
@@ -826,7 +826,7 @@ class VMWareProvider(BaseProvider):
         }
         available_unit_number = next((i for i in range(16) if i != 7 and i not in used_unit_numbers), None)
         if available_unit_number is None:
-            raise RuntimeError(f"No available unit number on SCSI controller for VM '{source_vm.name}'.")
+            raise VmCloneError(f"No available unit number on SCSI controller for VM '{source_vm.name}'.")
 
         # Get secondary and non-XCOPY datastores if configured
         secondary_datastore_id = (
