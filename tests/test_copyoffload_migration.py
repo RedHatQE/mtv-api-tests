@@ -1024,19 +1024,10 @@ class TestCopyoffloadMultiDatastoreMigration:
     ):
         """Create StorageMap with copy-offload configuration for multiple datastores."""
         copyoffload_config_data = source_provider_data["copyoffload"]
-        storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-        datastore_id = copyoffload_config_data.get("datastore_id")
-        secondary_datastore_id = copyoffload_config_data.get("secondary_datastore_id")
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        secondary_datastore_id = copyoffload_config_data["secondary_datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # Validate required copy-offload parameters
-        missing_params = []
-        if not storage_vendor_product:
-            missing_params.append("storage_vendor_product")
-        if not datastore_id:
-            missing_params.append("datastore_id")
-        if missing_params:
-            pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
 
         # For multi-datastore test, ensure secondary datastore is configured
         if not secondary_datastore_id:
@@ -1204,19 +1195,10 @@ class TestCopyoffloadMixedDatastoreMigration:
     ):
         """Create StorageMap with copy-offload configuration for mixed datastores."""
         copyoffload_config_data = source_provider_data["copyoffload"]
-        storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-        datastore_id = copyoffload_config_data.get("datastore_id")
-        non_xcopy_datastore_id = copyoffload_config_data.get("non_xcopy_datastore_id")
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        non_xcopy_datastore_id = copyoffload_config_data["non_xcopy_datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # Validate required copy-offload parameters
-        missing_params = []
-        if not storage_vendor_product:
-            missing_params.append("storage_vendor_product")
-        if not datastore_id:
-            missing_params.append("datastore_id")
-        if missing_params:
-            pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
 
         # Validate non-XCOPY datastore is configured
         if not non_xcopy_datastore_id:
@@ -1988,18 +1970,9 @@ class TestCopyoffloadWarmMigration:
     ):
         """Create StorageMap with copy-offload configuration."""
         copyoffload_config_data = source_provider_data["copyoffload"]
-        storage_vendor_product = copyoffload_config_data.get("storage_vendor_product")
-        datastore_id = copyoffload_config_data.get("datastore_id")
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # Validate required copy-offload parameters
-        missing_params = []
-        if not storage_vendor_product:
-            missing_params.append("storage_vendor_product")
-        if not datastore_id:
-            missing_params.append("datastore_id")
-        if missing_params:
-            pytest.fail(f"Missing required copy-offload parameters in config: {', '.join(missing_params)}")
 
         LOGGER.info("Starting copy-offload warm migration test")
         LOGGER.info("Datastore: %s, Storage vendor: %s", datastore_id, storage_vendor_product)
