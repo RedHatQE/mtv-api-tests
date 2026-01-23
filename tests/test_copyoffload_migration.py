@@ -177,17 +177,8 @@ class TestCopyoffloadThinMigration:
         )
 
 
-@pytest.mark.copyoffload
-@pytest.mark.incremental
-@pytest.mark.parametrize(
-    "class_plan_config",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"])],
-    indirect=True,
-    ids=["copyoffload-thin-snapshots"],
-)
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
-class TestCopyoffloadThinSnapshotsMigration:
-    """Copy-offload migration test - thin disk with snapshots."""
+class CopyoffloadSnapshotBase:
+    """Base class for copy-offload migration tests with snapshots."""
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -206,9 +197,6 @@ class TestCopyoffloadThinSnapshotsMigration:
         copyoffload_storage_secret,
     ):
         """Create StorageMap with copy-offload configuration after creating snapshots."""
-        if source_provider.type != Provider.ProviderType.VSPHERE:
-            pytest.skip("Thin disk + snapshots copy-offload test is only applicable to vSphere source providers")
-
         vm_cfg = prepared_plan["virtual_machines"][0]
         provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
 
@@ -223,7 +211,7 @@ class TestCopyoffloadThinSnapshotsMigration:
             source_provider.create_snapshot(
                 vm=provider_vm_api,
                 name=f"{snapshot_prefix}-{idx}",
-                description="mtv-api-tests copy-offload thin snapshots migration test",
+                description="mtv-api-tests copy-offload snapshots migration test",
                 memory=False,
                 quiesce=False,
                 wait_timeout=60 * 10,
@@ -345,7 +333,7 @@ class TestCopyoffloadThinSnapshotsMigration:
         source_provider_inventory,
         vm_ssh_connections,
     ):
-        """Validate migrated VMs."""
+        """Validate migrated VMs and verify disk count."""
         check_vms(
             plan=prepared_plan,
             source_provider=source_provider,
@@ -358,6 +346,43 @@ class TestCopyoffloadThinSnapshotsMigration:
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
         )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"])],
+    indirect=True,
+    ids=["copyoffload-thin-snapshots"],
+)
+@pytest.mark.skipif(
+    py_config.get("source_provider_type") != Provider.ProviderType.VSPHERE,
+    reason="Snapshots copy-offload test is only applicable to vSphere source providers",
+)
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
+    """Copy-offload migration test - thin disk with snapshots."""
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_2tb_vm_snapshots_migration"])],
+    indirect=True,
+    ids=["copyoffload-2tb-vm-snapshots"],
+)
+@pytest.mark.skipif(
+    py_config.get("source_provider_type") != Provider.ProviderType.VSPHERE,
+    reason="Snapshots copy-offload test is only applicable to vSphere source providers",
+)
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
+    """Copy-offload migration test - 2TB VM with snapshots."""
 
 
 @pytest.mark.copyoffload
