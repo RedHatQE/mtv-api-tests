@@ -303,7 +303,7 @@ Use this template to run tests. Customize the placeholders:
 - `[TEST_MARKERS]` - Pytest marker(s) (e.g., `tier0`, `warm`, `copyoffload`)
 - `[TEST_FILTER]` - Optional: specific test name for `-k` flag (omit lines for all tests)
 
-> **Note**: This Job template is also used in `docs/how-to-run-copyoffload-tests.md`. If updating, ensure both
+> **Note**: This Job template is also used in `docs/copyoffload/how-to-run-copyoffload-tests.md`. If updating, ensure both
 > files remain in sync for the following fields: `apiVersion`, `kind`, `metadata.name`, `spec.template`,
 > container `image`, `command`, and `volumeMounts`/`volumes` configuration.
 
@@ -460,7 +460,7 @@ and a configured StorageMap with offload plugin settings.
 **For detailed instructions on running copy-offload tests**, including prerequisites, configuration, and
 troubleshooting, see:
 
-📖 **[Copy-Offload Testing Guide](docs/how-to-run-copyoffload-tests.md)**
+📖 **[Copy-Offload Testing Guide](docs/copyoffload/how-to-run-copyoffload-tests.md)**
 
 For technical implementation details, see the
 [vsphere-xcopy-volume-populator documentation](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator).
