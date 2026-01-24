@@ -583,6 +583,7 @@ Tests automatically generate a **JUnit XML report** (`junit-report.xml`) contain
 ```bash
 # Default path: /app/junit-report.xml (WORKDIR /app, pytest.ini: --junit-xml=junit-report.xml)
 # Override with --junit-xml to write to a mounted volume for persistence:
+# Note: source_provider_type and source_provider_version must match your .providers.json key (e.g., vsphere-8.0.1)
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -v $(pwd)/results:/app/results \
@@ -594,6 +595,7 @@ podman run --rm \
     --tc=cluster_username:kubeadmin \
     --tc=cluster_password:${CLUSTER_PASSWORD} \
     --tc=source_provider_type:vsphere \
+    --tc=source_provider_version:8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
 
 # Report will be saved to ./results/junit-report.xml
