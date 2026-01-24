@@ -213,8 +213,9 @@ podman run --rm \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
 
-> **Security Note**: Always use environment variables for passwords. Never pass passwords directly on the
-> command line, as they will be visible in shell history and process listings.
+> **Security Note**: Use environment variables to avoid shell-history exposure. Note the expanded value can
+> still appear in process listings inside the container; prefer OpenShift Secrets or other secret injection where
+> possible.
 >
 > **Note**: On RHEL/Fedora with SELinux, add `,z` to volume mounts:
 > `-v $(pwd)/.providers.json:/app/.providers.json:ro,z`.
@@ -525,8 +526,9 @@ podman run --rm \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
 
-> **Security Note**: Set `export CLUSTER_PASSWORD='your-password'` before running  # pragma: allowlist secret
-> (see Quick Start for details).
+> **Security Note**: Use environment variables to avoid shell-history exposure. Note the expanded value can
+> still appear in process listings inside the container; prefer OpenShift Secrets or other secret injection where
+> possible. Set `export CLUSTER_PASSWORD='your-password'` before running.  # pragma: allowlist secret
 
 **When to use these flags**:
 
@@ -597,7 +599,9 @@ podman run --rm \
 # Report will be saved to ./results/junit-report.xml
 ```
 
-> **Security Note**: Set `export CLUSTER_PASSWORD='your-password'` before running.  # pragma: allowlist secret
+> **Security Note**: Use environment variables to avoid shell-history exposure. Note the expanded value can
+> still appear in process listings inside the container; prefer OpenShift Secrets or other secret injection where
+> possible. Set `export CLUSTER_PASSWORD='your-password'` before running.  # pragma: allowlist secret
 
 **From OpenShift Job**:
 
@@ -760,7 +764,7 @@ git clone https://github.com/RedHatQE/mtv-api-tests.git
 cd mtv-api-tests
 uv sync  # uv will automatically handle Python version
 
-# 3. Set cluster password (secure - not exposed in shell history)
+# 3. Set cluster password (avoids shell history; still visible in process listings)
 export CLUSTER_PASSWORD='your-cluster-password'  # pragma: allowlist secret
 
 # 4. Run tests
