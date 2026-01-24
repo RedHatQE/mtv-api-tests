@@ -64,4 +64,3 @@ repos:
     hooks:
       - id: markdownlint-cli2
         args: ["--fix"]
-        exclude: ^CLAUDE\.md$

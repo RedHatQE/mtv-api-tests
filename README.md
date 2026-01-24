@@ -23,7 +23,7 @@ You need a base VM/template in your source provider:
 | **VMware vSphere** | VM | Powered off, QEMU guest agent installed |
 | **RHV/oVirt** | Template | Min 1536 MiB memory |
 | **OpenStack** | Instance | ACTIVE/SHUTOFF state, QEMU guest agent installed |
-| **OVA** ⚠️ Tech Preview | OVA file | NFS-accessible OVA files |
+| **OVA** | OVA file | NFS-accessible OVA files |
 
 > **Note**: Copy-offload tests have additional prerequisites. See the
 > [Copy-Offload Testing Guide](docs/copyoffload/how-to-run-copyoffload-tests.md) for details.
