@@ -161,7 +161,9 @@ Add the `copyoffload` section to your `.providers.json` file:
 - `storage_username` - Storage array admin username
 - `storage_password` - Storage array admin password
 
-> **Important**: If using `secondary_datastore_id`, both datastores must be on the **same storage array** and support XCOPY/VAAI primitives for copy-offload to work.
+> **Important**: If using `secondary_datastore_id`, both datastores must be on the **same storage array** and support
+> XCOPY/VAAI primitives for copy-offload to work. If this requirement isn't met, copy-offload will use fallback
+> alternative transfer method.
 
 ### Clone Method Configuration
 
