@@ -1,6 +1,6 @@
 # Copy-Offload: Accelerated Migrations Guide
 
-**What is copy-offload?** Copy-offload is an MTV feature that uses the  storage array to directly copy
+**What is copy-offload?** Copy-offload is an MTV feature that uses the storage array to directly copy
 VM disks from vSphere datastores to OpenShift PVCs using offload operations, such as XCOPY, volume cow or
 host based copy, bypassing the traditional v2v transfer path. This requires shared storage infrastructure
 between vSphere and OpenShift, VAAI (vSphere APIs for Array Integration) enabled on ESXi hosts, and a
@@ -19,8 +19,8 @@ Before running copy-offload tests, ensure your environment meets these requireme
 
 - **ESXi + vCenter** (recommended) or standalone ESXi
 - **Clone method configured**: Choose either VIB or SSH method
-  - **VIB**: Requires pre-installing VMware Installation Bundle on ESXi hosts
-  - **SSH**: Requires SSH access to ESXi hosts (simpler setup)
+  - **VIB**: Requires setting ESXi permissions to allow community-level VIB installation
+  - **SSH**: Requires SSH access to ESXi hosts
   - See setup guide: [Clone Methods (VIB vs SSH)](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator#clone-methods-vib-vs-ssh)
 
 ### 2. **Shared Storage Configuration**
@@ -34,17 +34,16 @@ Before running copy-offload tests, ensure your environment meets these requireme
   - Infinidat
   - IBM FlashSystem
   - Full vendor list: [Supported Storage Providers](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator#supported-storage-providers)
-- **Storage type**: Must be SAN/Block (iSCSI or FC) - **NFS is not supported** for xcopy
-- **Configuration**: Same physical storage accessible from both VMware and OpenShift
-  - Use matching configurations (e.g., same NetApp SVM for both environments)
+- **Storage type**: Must be SAN/Block (iSCSI or FC) - **NFS is not supported at the moment** for copyoffload
+- **Configuration**: Same physical storage array accessible from both VMware and OpenShift
+  - For optimal copy-offload performance, use matching configurations when possible (e.g., same NetApp SVM for both environments)
+  - If requirements aren't fully met, migration will fallback to standard transfer method
 
 ### 3. **OpenShift Environment**
 
 - **CNV (OpenShift Virtualization)** installed
 - **Storage Classes configured**:
   - **Block storage class**: Required for VM disk storage, must use vendor CSI driver (iSCSI or FC) connected to the same storage array as VMware
-  - **File-based storage class**: Optional, used for CDI scratch space during certain operations
-  - **VolumeSnapshot classes**: Required for snapshot operations, configured according to your storage vendor's CSI driver documentation
 - **MTV (Migration Toolkit for Virtualization)** installed:
   - For versions before 2.11: Enable copy-offload by adding to ForkliftController spec:
 
@@ -155,7 +154,7 @@ Add the `copyoffload` section to your `.providers.json` file:
 ### Copy-offload Required Fields
 
 - `storage_vendor_product` - Storage vendor product name (see supported values in [Vendor-Specific Fields](#vendor-specific-fields) section)
-- `datastore_id` - vSphere datastore ID (e.g., `"datastore-123"`)
+- `datastore_id` - vSphere datastore ID where test VMs are cloned and stored (e.g., `"datastore-123"`)
   - Get via vSphere: **Datacenter → Storage → Datastore → Summary → More Objects ID**
 - `default_vm_name` - VM name configured with cloud-init for testing
 - `storage_hostname` - Storage array management hostname/IP
@@ -166,17 +165,14 @@ Add the `copyoffload` section to your `.providers.json` file:
 
 ### Clone Method Configuration
 
-**For SSH method** (simpler, recommended):
+**For SSH method** (recommended):
 
 - `esxi_clone_method: "ssh"`
 - `esxi_host` - ESXi hostname/IP
 - `esxi_user` - ESXi SSH username (typically `root`)
 - `esxi_password` - ESXi SSH password
 
-> **Note**: ESXi SSH settings can be overridden via environment variables:
-> `COPYOFFLOAD_ESXI_HOST`, `COPYOFFLOAD_ESXI_USER`, `COPYOFFLOAD_ESXI_PASSWORD`
-
-**For VIB method** (requires VIB pre-installation):
+**For VIB method** (requires community-level VIB permissions):
 
 - `esxi_clone_method: "vib"` (or omit, as it's the default)
 
@@ -229,25 +225,30 @@ Add the `copyoffload` section to your `.providers.json` file:
 
 ### Multi-Datastore Support (Advanced)
 
-For VMs with disks distributed across multiple datastores on the same storage array:
+Configuration for VMs with disks distributed across multiple datastores:
 
-- `datastore_id` - Primary/default datastore for VM base disks (required)
-- `secondary_datastore_id` - Secondary datastore on the same storage system for additional disks
+- `datastore_id` - Primary datastore where cloned test VMs are created (required for all tests)
+- `secondary_datastore_id` - Secondary datastore on the same storage array for multi-datastore disk tests (optional)
 
-**Example**: The `test_copyoffload_multi_disk_different_path_migration` test will use this feature to
-validate multi-datastore migrations.
+> **Note**: If `secondary_datastore_id` is not provided, tests that require multi-datastore configurations
+> (e.g., `test_copyoffload_multi_disk_different_path_migration`) will fail. Other copy-offload tests will
+> continue to work normally.
 
 ### RDM (Raw Device Mapping) Support (Advanced)
 
-For testing RDM virtual disk migrations:
+Configuration for testing RDM virtual disk migrations:
 
 - `rdm_lun_uuid` - UUID of the RDM LUN to use for RDM virtual disk tests (optional)
 
+> **Note**: If `rdm_lun_uuid` is not provided, tests that require RDM virtual disks
+> (e.g., `test_copyoffload_rdm_virtual_disk_migration`) will fail. Other copy-offload tests will
+> continue to work normally.
+>
+> **Important**: RDM copy-offload is **currently supported only for Pure Storage**. Other storage vendors
+> do not yet support copy-offload for RDM disks.
+>
 > **Important**: The `datastore_id` must be a **VMFS datastore** for RDM disk support. RDM disks are not
 > supported on vSAN or NFS datastores.
-
-**Example**: The `test_copyoffload_rdm_virtual_disk_migration` test uses this feature to validate
-migration of VMs with RDM virtual disks.
 
 ---
 
@@ -258,12 +259,18 @@ and reliable execution environment. Follow these steps:
 
 ### Step 1: Create Secret with Configuration
 
-Store your `.providers.json` file and cluster credentials as an OpenShift secret:
+Create a secret containing:
+
+- **`providers.json`** - Your provider configuration file
+- **`cluster_host`** - OpenShift API endpoint (e.g., `https://api.your-cluster.com:6443`)
+- **`cluster_username`** - OpenShift username (e.g., `kubeadmin`)
+- **`cluster_password`** - OpenShift password
+
+Example:
 
 ```bash
 oc create namespace mtv-tests
 
-# Create secret with credentials (avoids shell history exposure)
 read -sp "Enter cluster password: " CLUSTER_PASSWORD && echo
 oc create secret generic mtv-test-config \
   --from-file=providers.json=.providers.json \
@@ -272,33 +279,6 @@ oc create secret generic mtv-test-config \
   --from-literal=cluster_password="${CLUSTER_PASSWORD}" \
   -n mtv-tests
 unset CLUSTER_PASSWORD
-```
-
-Replace `cluster_host` and `cluster_username` with your actual OpenShift API endpoint and username. The password
-is read securely without echoing to terminal or storing in shell history. This approach keeps sensitive data out
-of the Job definition and prevents credential exposure in `oc get job -o yaml` output.
-
-**Alternative: Using files for all credentials** (most secure):
-
-```bash
-# Create credential files (ensure they're in .gitignore)
-# Use secure permissions to prevent other users from reading
-umask 077
-echo "https://api.your-cluster.com:6443" > /tmp/cluster_host
-echo "kubeadmin" > /tmp/cluster_username
-read -sp "Enter cluster password: " CLUSTER_PASSWORD && echo "${CLUSTER_PASSWORD}" > /tmp/cluster_password && unset CLUSTER_PASSWORD
-
-# Create secret from files
-oc create namespace mtv-tests
-oc create secret generic mtv-test-config \
-  --from-file=providers.json=.providers.json \
-  --from-file=cluster_host=/tmp/cluster_host \
-  --from-file=cluster_username=/tmp/cluster_username \
-  --from-file=cluster_password=/tmp/cluster_password \
-  -n mtv-tests
-
-# Clean up temporary files
-rm -f /tmp/cluster_host /tmp/cluster_username /tmp/cluster_password
 ```
 
 ### Step 2: Create and Run Job
@@ -349,7 +329,7 @@ spec:
               ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \
               --tc=source_provider_type:vsphere \
               --tc=source_provider_version:8.0.3.00400 \
-              --tc=storage_class:ontap-san-block
+              --tc=storage_class:my-block-storageclass
         volumeMounts:
         - name: config
           mountPath: /app/.providers.json
@@ -365,8 +345,8 @@ EOF
 
 - Change `name: mtv-copyoffload-tests` to a unique job name if needed
 - Replace `8.0.3.00400` with your vSphere version (must match key in `.providers.json`)
-- Replace `ontap-san-block` with your OpenShift storage class name
-- To run a specific test, add `-k test_name` to the pytest command (e.g., `-k test_copyoffload_thin_migration`)
+- Replace `my-block-storageclass` with your OpenShift block storage class name
+- To run a specific test, add `-k test_name` after `-m copyoffload` (e.g., `-m copyoffload -k test_copyoffload_thin_migration`)
 - To use a custom image, replace `ghcr.io/redhatqe/mtv-api-tests:latest` with your registry URL
 
 The Job automatically reads cluster credentials from the Secret created in Step 1.
@@ -425,9 +405,14 @@ After reviewing logs and resources, delete the Job and any test resources:
 oc delete job mtv-copyoffload-tests -n mtv-tests
 
 # If you used --skip-teardown, manually clean up test resources:
+# OpenShift resources:
 oc delete vm --all -n <test-namespace>
 oc delete plan --all -n openshift-mtv
 oc delete provider <provider-name> -n openshift-mtv
+
+# vSphere resources (cloned VMs):
+# Delete cloned test VMs via vSphere UI or CLI
+# Test VMs have names like: auto-<session-uuid>-<vm-name>
 ```
 
 > **Note**: The Job pod remains available after completion until you delete the Job, allowing you to retrieve logs
@@ -441,7 +426,7 @@ oc delete provider <provider-name> -n openshift-mtv
 
 If tests fail with storage connection errors:
 
-1. Verify storage credentials in `.providers.json`
+1. Verify storage credentials in the `mtv-test-config` secret (update and recreate the secret if needed)
 2. Check network connectivity from OpenShift to storage array
 3. Validate storage CSI driver installation: `oc get pods -n <csi-driver-namespace>`
 4. Review CSI driver logs for errors
@@ -456,8 +441,11 @@ If tests fail with storage connection errors:
 
 **VIB method**:
 
-- Verify VIB is installed on all ESXi hosts
-- Check VIB version compatibility with copy-offload feature
+- VIB installation is automatic - verify ESXi host permissions allow community-level VIB installation
+- Check the volume populator pod logs for permission or VIB installation errors:
+  `oc logs -n openshift-mtv -l app=vsphere-xcopy-volume-populator`
+- Refer to the [Clone Methods Guide](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator#clone-methods-vib-vs-ssh)
+  for VIB configuration requirements and troubleshooting
 
 ### StorageMap Configuration
 
