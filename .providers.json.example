@@ -47,7 +47,7 @@
       # When specified, tests can validate copy-offload with disks on different datastores
       "secondary_datastore_id": "datastore-67890",
 
-      "template_name": "rhel9-template",
+      "default_vm_name": "rhel9-template",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
       "storage_password": "your-password-here",  # pragma: allowlist secret
@@ -92,7 +92,7 @@
 
       # RDM testing (optional, for RDM disk tests):
       # Note: datastore_id must be a VMFS datastore for RDM disk support
-      "rdm_lun_uuid": "naa.600a098038313954492458313032306f"
+      "rdm_lun_uuid": "naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     }
   },
 
