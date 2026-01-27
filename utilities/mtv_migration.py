@@ -248,7 +248,9 @@ def get_storage_migration_map(
         copy-offload storage map instead of querying the inventory.
         Optionally supports secondary_datastore_id for multi-datastore scenarios.
         Also supports non_xcopy_datastore_id for mixed datastore scenarios where
-        some disks use copy-offload and others use standard migration.
+        some disks are on XCOPY-capable datastores and others are on non-XCOPY
+        datastores. The non-XCOPY datastore is still configured with the offload
+        plugin to enable XCOPY fallback behavior.
 
     Args:
         fixture_store: Pytest fixture store for resource tracking
@@ -261,7 +263,7 @@ def get_storage_migration_map(
         storage_class: Storage class to use (optional, defaults to config value)
         datastore_id: Primary datastore ID for copy-offload (optional, triggers copy-offload mode)
         secondary_datastore_id: Secondary datastore ID for multi-datastore copy-offload (optional)
-        non_xcopy_datastore_id: Non-XCOPY datastore ID for mixed migrations (optional, mapped without offload plugin)
+        non_xcopy_datastore_id: Non-XCOPY datastore ID for mixed migrations (optional, mapped with offload plugin for fallback support)
         offload_plugin_config: Copy-offload plugin configuration (optional, required if datastore_id is set)
         access_mode: Access mode for copy-offload (optional, used only in copy-offload mode)
         volume_mode: Volume mode for copy-offload (optional, used only in copy-offload mode)
@@ -329,15 +331,12 @@ def get_storage_migration_map(
                 destination_config["accessMode"] = access_mode
             if volume_mode:
                 destination_config["volumeMode"] = volume_mode
-            LOGGER.info(f"Adding non-XCOPY datastore mapping for: {non_xcopy_datastore_id}")
             storage_map_list.append({
                 "destination": destination_config,
                 "source": {"id": non_xcopy_datastore_id},
                 "offloadPlugin": offload_plugin_config,
             })
-            LOGGER.info(
-                f"Added storage map entry for non-XCOPY datastore: {non_xcopy_datastore_id} (with xcopy fallback)"
-            )
+            LOGGER.info(f"Added non-XCOPY datastore mapping for: {non_xcopy_datastore_id} (with xcopy fallback)")
     else:
         LOGGER.info(f"Creating standard storage map for VMs: {vms}")
         storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
