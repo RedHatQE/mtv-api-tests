@@ -868,11 +868,11 @@ class VMWareProvider(BaseProvider):
 
             # Check if this disk should use secondary datastore
             if disk_datastore_id == "secondary_datastore_id":
-                if not secondary_datastore:
+                if secondary_datastore is None:
                     raise VmCloneError(ERR_SECONDARY_DS_NOT_CONFIGURED)
                 disk_datastore_id = secondary_datastore._moId
             elif disk_datastore_id == "non_xcopy_datastore_id":
-                if not non_xcopy_datastore:
+                if non_xcopy_datastore is None:
                     raise VmCloneError(
                         "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
                     )
