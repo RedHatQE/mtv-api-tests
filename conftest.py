@@ -1059,18 +1059,23 @@ def copyoffload_config(source_provider, source_provider_data):
 
 
 @pytest.fixture(scope="class")
-def validate_mixed_datastore_config(source_provider_data):
-    """
-    Validate mixed datastore configuration for TestCopyoffloadMixedDatastoreMigration.
+def validate_mixed_datastore_config(source_provider_data: dict[str, Any]) -> None:
+    """Validate mixed datastore configuration for TestCopyoffloadMixedDatastoreMigration.
 
-    This fixture ensures that the non_xcopy_datastore_id is configured,
-    which is required for tests that use both XCOPY and non-XCOPY datastores.
+    Args:
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If non_xcopy_datastore_id is missing.
     """
-    copyoffload_config_data = source_provider_data.get("copyoffload", {})
-    non_xcopy_datastore_id = copyoffload_config_data.get("non_xcopy_datastore_id")
+    copyoffload_config_data: dict[str, Any] = source_provider_data.get("copyoffload", {})
+    non_xcopy_datastore_id: str | None = copyoffload_config_data.get("non_xcopy_datastore_id")
 
     if not non_xcopy_datastore_id:
-        pytest.fail(
+        raise ValueError(
             "Mixed datastore test requires 'non_xcopy_datastore_id' to be configured in copyoffload section. "
             "This should be a datastore that does NOT support XCOPY."
         )
