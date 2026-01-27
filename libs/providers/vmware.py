@@ -860,6 +860,8 @@ class VMWareProvider(BaseProvider):
                 ) from None
             LOGGER.info("Non-XCOPY datastore available: %s (%s)", non_xcopy_datastore.name, non_xcopy_datastore_id)
 
+        resolved_datastores: dict[str | None, vim.Datastore] = {}
+
         def _resolve_datastore(disk_datastore_id: str | None) -> vim.Datastore:
             """Helper to resolve datastore ID to datastore object.
 
@@ -873,26 +875,31 @@ class VMWareProvider(BaseProvider):
                 VmCloneError: If datastore is not found or not configured
 
             """
+            if disk_datastore_id in resolved_datastores:
+                return resolved_datastores[disk_datastore_id]
             if disk_datastore_id == "secondary_datastore_id":
                 if secondary_datastore is None:
                     raise VmCloneError(ERR_SECONDARY_DS_NOT_CONFIGURED)
-                return secondary_datastore
-            if disk_datastore_id == "non_xcopy_datastore_id":
+                resolved = secondary_datastore
+            elif disk_datastore_id == "non_xcopy_datastore_id":
                 if non_xcopy_datastore is None:
                     raise VmCloneError(
                         "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
                     )
-                return non_xcopy_datastore
-            if disk_datastore_id is not None:
+                resolved = non_xcopy_datastore
+            elif disk_datastore_id is not None:
                 if not disk_datastore_id:
                     raise VmCloneError("Disk datastore_id is empty. Provide a valid MoID or omit the field.")
                 try:
-                    return self.get_obj([vim.Datastore], disk_datastore_id)
+                    resolved = self.get_obj([vim.Datastore], disk_datastore_id)
                 except ValueError:
                     raise VmCloneError(
                         f"Custom datastore not found for disk. MoID '{disk_datastore_id}' is invalid or not accessible."
                     ) from None
-            return target_datastore
+            else:
+                resolved = target_datastore
+            resolved_datastores[disk_datastore_id] = resolved
+            return resolved
 
         # Validate datastore capacity per datastore (group disks by datastore)
         datastore_capacity_requirements: dict[str, float] = {}
