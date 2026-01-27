@@ -883,7 +883,9 @@ class VMWareProvider(BaseProvider):
                         "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
                     )
                 return non_xcopy_datastore
-            if disk_datastore_id:
+            if disk_datastore_id is not None:
+                if not disk_datastore_id:
+                    raise VmCloneError("Disk datastore_id is empty. Provide a valid MoID or omit the field.")
                 try:
                     return self.get_obj([vim.Datastore], disk_datastore_id)
                 except ValueError:
