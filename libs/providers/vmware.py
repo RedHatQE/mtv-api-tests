@@ -844,10 +844,18 @@ class VMWareProvider(BaseProvider):
 
         if secondary_datastore_id:
             secondary_datastore = self.get_obj([vim.Datastore], secondary_datastore_id)
+            if not secondary_datastore:
+                raise VmCloneError(
+                    f"Secondary datastore not found. MoID '{secondary_datastore_id}' is invalid or not accessible."
+                )
             LOGGER.info("Secondary datastore available: %s (%s)", secondary_datastore.name, secondary_datastore_id)
 
         if non_xcopy_datastore_id:
             non_xcopy_datastore = self.get_obj([vim.Datastore], non_xcopy_datastore_id)
+            if not non_xcopy_datastore:
+                raise VmCloneError(
+                    f"Non-XCOPY datastore not found. MoID '{non_xcopy_datastore_id}' is invalid or not accessible."
+                )
             LOGGER.info("Non-XCOPY datastore available: %s (%s)", non_xcopy_datastore.name, non_xcopy_datastore_id)
 
         # Validate datastore capacity per datastore (group disks by datastore)
