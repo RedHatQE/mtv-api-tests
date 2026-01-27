@@ -1165,7 +1165,9 @@ class TestCopyoffloadMultiDatastoreMigration:
     indirect=True,
     ids=["copyoffload-mixed-datastore"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "multus_network_name", "copyoffload_config", "validate_mixed_datastore_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadMixedDatastoreMigration:
     """Copy-offload migration test - mixed XCOPY and non-XCOPY datastores.
 
@@ -1199,13 +1201,6 @@ class TestCopyoffloadMixedDatastoreMigration:
         datastore_id = copyoffload_config_data["datastore_id"]
         non_xcopy_datastore_id = copyoffload_config_data["non_xcopy_datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # Validate non-XCOPY datastore is configured
-        if not non_xcopy_datastore_id:
-            pytest.fail(
-                "Mixed datastore test requires 'non_xcopy_datastore_id' to be configured in copyoffload section. "
-                "This should be a datastore that does NOT support XCOPY."
-            )
 
         LOGGER.info("Mixed datastore migration using XCOPY datastore: %s", datastore_id)
         LOGGER.info("Mixed datastore migration using non-XCOPY datastore: %s", non_xcopy_datastore_id)
