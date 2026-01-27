@@ -322,7 +322,7 @@ def get_storage_migration_map(
             })
             LOGGER.info(f"Added storage map entry for datastore: {ds_id} with copy-offload")
 
-        # Add non-XCOPY datastore mapping (without offload plugin)
+        # Add non-XCOPY datastore mapping (with offload plugin for fallback)
         if non_xcopy_datastore_id:
             destination_config = {"storageClass": target_storage_class}
             if access_mode:
@@ -333,9 +333,10 @@ def get_storage_migration_map(
             storage_map_list.append({
                 "destination": destination_config,
                 "source": {"id": non_xcopy_datastore_id},
+                "offloadPlugin": offload_plugin_config,
             })
             LOGGER.info(
-                f"Added storage map entry for non-XCOPY datastore: {non_xcopy_datastore_id} (standard migration)"
+                f"Added storage map entry for non-XCOPY datastore: {non_xcopy_datastore_id} (with xcopy fallback)"
             )
     else:
         LOGGER.info(f"Creating standard storage map for VMs: {vms}")
