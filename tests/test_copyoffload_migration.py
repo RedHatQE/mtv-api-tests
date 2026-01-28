@@ -1939,7 +1939,7 @@ class TestCopyoffloadLargeVmMigration:
     indirect=True,
     ids=["copyoffload-nonconforming-name"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadNonconformingNameMigration:
     """
     Copy-offload migration test - VM with non-conforming name.
@@ -2106,9 +2106,13 @@ class TestCopyoffloadNonconformingNameMigration:
             vm_ssh_connections=vm_ssh_connections,
         )
 
-        # Verify that the destination VM was created with the sanitized Kubernetes-compliant name
+        # Verify that the destination VM was created with the sanitized Kubernetes-compliant name.
+        # This is an explicit test of the name sanitization behavior, separate from the general
+        # VM validation done by check_vms(). We need this additional check to verify the specific
+        # test scenario: that non-conforming names (capitals, underscores) are properly sanitized.
         vm_cfg = prepared_plan["virtual_machines"][0]
-        # Get the actual cloned VM name from source (with session UUID prefix and random suffix)
+        # vm_cfg["name"] contains the cloned VM name (mutated by prepared_plan fixture).
+        # source_vms_data is keyed by this same name to store the provider API object.
         provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
         actual_source_vm_name = provider_vm_api.name
         # MTV should sanitize the source VM name to create the destination VM name
