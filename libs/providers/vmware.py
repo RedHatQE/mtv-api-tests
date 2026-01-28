@@ -231,7 +231,9 @@ class VMWareProvider(BaseProvider):
         session_uuid: str = "",
         clone_options: dict | None = None,
     ) -> vim.VirtualMachine:
-        # Use custom clone_name if provided, otherwise use default naming
+        # Determine target VM name with clone_name precedence:
+        # 1. If clone_options contains a non-empty clone_name, use that (allows custom VM names for testing)
+        # 2. Otherwise, fall back to default naming: query + vm_name_suffix
         clone_options = clone_options or {}
         clone_name = clone_options.get("clone_name")
         if isinstance(clone_name, str) and clone_name.strip():
@@ -1035,23 +1037,32 @@ class VMWareProvider(BaseProvider):
             power_on: Whether to power on the VM after cloning. Defaults to False.
             regenerate_mac: Whether to regenerate MAC addresses for network interfaces.
                           Prevents MAC address conflicts between cloned VMs. Default: True.
-            **kwargs: Additional keyword arguments for cloning options.
-                add_disks (list[dict]): A list of dictionaries, where each dict
+            **kwargs: Additional keyword arguments for cloning options:
+                - add_disks (list[dict], optional): A list of dictionaries, where each dict
                     defines a new disk to be added to the cloned VM.
-                    Supported keys for each disk:
-                    - 'size_gb' (int): The size of the disk in gigabytes.
-                    - 'provision_type' (str): 'thin', 'thick-lazy', or 'thick-eager'.
-                    - 'disk_mode' (str): e.g., 'persistent', 'independent_persistent'.
-                    - 'datastore_path' (str, optional): A custom folder path on the datastore
-                                        where the disk's .vmdk file should be placed.
-                                        E.g., "shared_disks". If not provided, defaults
-                                        to the VM's main folder.
-                target_datastore_id (str, optional): The MoRef ID of the specific datastore
-                                        to use for the cloned VM and all its disks.
-                                        If not provided, defaults to the source VM's datastore.
+                    Supported keys for each disk dict:
+                      * 'size_gb' (int): The size of the disk in gigabytes.
+                      * 'provision_type' (str): 'thin', 'thick-lazy', or 'thick-eager'.
+                      * 'disk_mode' (str): e.g., 'persistent', 'independent_persistent'.
+                      * 'datastore_path' (str, optional): A custom folder path on the datastore
+                          where the disk's .vmdk file should be placed.
+                          E.g., "shared_disks". If not provided, defaults to the VM's main folder.
+                - target_datastore_id (str, optional): The MoRef ID of the specific datastore
+                    to use for the cloned VM and all its disks.
+                    If not provided, defaults to the source VM's datastore.
+                - preserve_name_format (bool, optional): Whether to preserve the original clone_vm_name
+                    format (e.g., capitals, underscores) instead of the default
+                    sanitization. Used for testing non-conforming name handling.
+                    Defaults to False.
 
         Returns:
             vim.VirtualMachine: The cloned VM object.
+
+        Raises:
+            ValueError: If the session_uuid is too long to build a valid clone name within
+                      63 characters when preserve_name_format is True.
+            VmCloneError: If the datastore or resource pool cannot be determined, or if
+                        cloning fails.
 
         """
         # Check if we should preserve the original name format (for non-conforming name tests)
