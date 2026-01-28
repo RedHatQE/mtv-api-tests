@@ -1059,7 +1059,7 @@ def copyoffload_config(source_provider, source_provider_data):
 
 
 @pytest.fixture(scope="class")
-def validate_mixed_datastore_config(source_provider_data: dict[str, Any]) -> None:
+def mixed_datastore_config(source_provider_data: dict[str, Any]) -> None:
     """Validate mixed datastore configuration for TestCopyoffloadMixedDatastoreMigration.
 
     Args:
@@ -1080,7 +1080,7 @@ def validate_mixed_datastore_config(source_provider_data: dict[str, Any]) -> Non
             "This should be a datastore that does NOT support XCOPY."
         )
 
-    LOGGER.info("✓ Mixed datastore configuration validated: non_xcopy_datastore_id = %s", non_xcopy_datastore_id)
+    LOGGER.info(f"✓ Mixed datastore configuration validated: non_xcopy_datastore_id = {non_xcopy_datastore_id}")
 
 
 @pytest.fixture(scope="session")

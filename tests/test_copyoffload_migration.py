@@ -1165,9 +1165,7 @@ class TestCopyoffloadMultiDatastoreMigration:
     indirect=True,
     ids=["copyoffload-mixed-datastore"],
 )
-@pytest.mark.usefixtures(
-    "multus_network_name", "copyoffload_config", "validate_mixed_datastore_config", "cleanup_migrated_vms"
-)
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "mixed_datastore_config", "cleanup_migrated_vms")
 class TestCopyoffloadMixedDatastoreMigration:
     """Copy-offload migration test - mixed XCOPY and non-XCOPY datastores.
 
