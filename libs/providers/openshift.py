@@ -123,10 +123,11 @@ class OCPProvider(BaseProvider):
         if not _source:
             try:
                 cnv_vm_name = sanitize_kubernetes_name(cnv_vm_name)
-            except InvalidVMNameError as exc:
-                raise ValueError(
+            except InvalidVMNameError:
+                LOGGER.error(
                     f"Failed to sanitize VM name for Kubernetes lookup. original_name='{original_name}', namespace='{kwargs.get('namespace')}'"
-                ) from exc
+                )
+                raise
 
             if original_name != cnv_vm_name:
                 LOGGER.info(
