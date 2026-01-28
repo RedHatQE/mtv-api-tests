@@ -3,6 +3,10 @@ import shortuuid
 
 from exceptions.exceptions import InvalidVMNameError
 
+# Compiled regex patterns for performance (reused in sanitize_kubernetes_name)
+_INVALID_CHARS_PATTERN = re.compile(r"[^a-z0-9-]+")
+_LEADING_TRAILING_PATTERN = re.compile(r"^[^a-z0-9]+|[^a-z0-9]+$")
+
 
 def generate_name_with_uuid(name: str) -> str:
     _name = f"{name}-{shortuuid.ShortUUID().random(length=4).lower()}"
@@ -30,8 +34,8 @@ def sanitize_kubernetes_name(name: str, max_length: int = 63) -> str:
             (i.e., contains no alphanumeric characters)
     """
     sanitized = name.replace("_", "-").replace(".", "-").lower()
-    sanitized = re.sub(r"[^a-z0-9-]+", "-", sanitized)
-    sanitized = re.sub(r"^[^a-z0-9]+|[^a-z0-9]+$", "", sanitized)
+    sanitized = _INVALID_CHARS_PATTERN.sub("-", sanitized)
+    sanitized = _LEADING_TRAILING_PATTERN.sub("", sanitized)
     sanitized = sanitized[:max_length].rstrip("-")
     if not sanitized:
         raise InvalidVMNameError(
