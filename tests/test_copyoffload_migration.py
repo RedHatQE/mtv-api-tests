@@ -1320,6 +1320,182 @@ class TestCopyoffloadMixedDatastoreMigration:
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_fallback_large_migration"])],
+    indirect=True,
+    ids=["copyoffload-fallback-large"],
+)
+@pytest.mark.usefixtures(
+    "multus_network_name",
+    "copyoffload_config",
+    "mixed_datastore_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadFallbackLargeMigration:
+    """Copy-offload migration test - large VM with disks on non-XCOPY datastore.
+
+    This test validates copy-offload fallback functionality when VM disks are
+    located on a datastore that does NOT support VAAI XCOPY acceleration.
+    The VM is configured with:
+    - One disk from the template (relocated to non_xcopy_datastore)
+    - One additional 100GB disk (also on non_xcopy_datastore)
+
+    The migration should complete successfully using XCOPY's fallback method
+    for datastores without VAAI support.
+    """
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    def test_create_storagemap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+        source_provider_data,
+        copyoffload_storage_secret,
+    ):
+        """Create StorageMap with copy-offload configuration for non-XCOPY datastore."""
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        non_xcopy_datastore_id = copyoffload_config_data["non_xcopy_datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        LOGGER.info("Non-XCOPY large VM migration test - 2 disks on non-VAAI datastore")
+        LOGGER.info(f"XCOPY datastore (for storage map): {datastore_id}")
+        LOGGER.info(f"Non-XCOPY datastore (VM disks location): {non_xcopy_datastore_id}")
+        LOGGER.info("VM configuration: template disk + 100GB added disk (both on non_xcopy_datastore)")
+        LOGGER.info("Testing fallback behavior for large VM with disks on non-VAAI datastore")
+
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            non_xcopy_datastore_id=non_xcopy_datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            access_mode="ReadWriteOnce",
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+        multus_network_name,
+    ):
+        """Create NetworkMap resource."""
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        target_namespace,
+        source_provider_inventory,
+    ):
+        """Create MTV Plan CR resource."""
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan["copyoffload"],
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+        """Execute migration."""
+        execute_migration(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+        )
+
+    def test_check_vms(
+        self,
+        prepared_plan,
+        source_provider,
+        destination_provider,
+        source_provider_data,
+        target_namespace,
+        source_vms_namespace,
+        source_provider_inventory,
+        vm_ssh_connections,
+    ):
+        """Validate migrated VMs and verify disk count."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            destination_namespace=target_namespace,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_independent_persistent_disk_migration"])],
     indirect=True,
     ids=["MTV-567:copyoffload-independent-persistent"],

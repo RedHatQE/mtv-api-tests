@@ -339,6 +339,27 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_fallback_large_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "target_datastore_id": "non_xcopy_datastore_id",
+                "disk_type": "thin",
+                "add_disks": [
+                    {
+                        "size_gb": 100,
+                        "provision_type": "thin",
+                        "datastore_id": "non_xcopy_datastore_id",
+                    },
+                ],
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
     "test_target_scheduling_all_features": {
         "virtual_machines": [
             {
