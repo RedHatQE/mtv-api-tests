@@ -6,8 +6,9 @@ vsphere-xcopy-volume-populator to migrate VMs with shared storage between
 vSphere and OpenShift environments.
 """
 
+from typing import TYPE_CHECKING
+
 import pytest
-from kubernetes.dynamic import DynamicClient
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
@@ -30,6 +31,9 @@ from utilities.mtv_migration import (
 from utilities.naming import sanitize_kubernetes_name
 from utilities.post_migration import check_vms
 from utilities.ssh_utils import SSHConnectionManager
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
 
 
 LOGGER = get_logger(__name__)
@@ -1358,7 +1362,7 @@ class TestCopyoffloadFallbackLargeMigration:
         self,
         prepared_plan: dict,
         fixture_store: dict,
-        ocp_admin_client: DynamicClient,
+        ocp_admin_client: "DynamicClient",
         source_provider: BaseProvider,
         destination_provider: BaseProvider,
         source_provider_inventory: ForkliftInventory,
@@ -1427,7 +1431,7 @@ class TestCopyoffloadFallbackLargeMigration:
         self,
         prepared_plan: dict,
         fixture_store: dict,
-        ocp_admin_client: DynamicClient,
+        ocp_admin_client: "DynamicClient",
         source_provider: BaseProvider,
         destination_provider: BaseProvider,
         source_provider_inventory: ForkliftInventory,
@@ -1469,7 +1473,7 @@ class TestCopyoffloadFallbackLargeMigration:
         self,
         prepared_plan: dict,
         fixture_store: dict,
-        ocp_admin_client: DynamicClient,
+        ocp_admin_client: "DynamicClient",
         source_provider: BaseProvider,
         destination_provider: OCPProvider,
         target_namespace: str,
@@ -1514,7 +1518,7 @@ class TestCopyoffloadFallbackLargeMigration:
     def test_migrate_vms(
         self,
         fixture_store: dict,
-        ocp_admin_client: DynamicClient,
+        ocp_admin_client: "DynamicClient",
         target_namespace: str,
     ) -> None:
         """Execute migration.
