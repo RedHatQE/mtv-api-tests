@@ -1055,7 +1055,42 @@ def copyoffload_config(source_provider, source_provider_data):
             f"{', '.join([f'COPYOFFLOAD_{c.upper()}' for c in missing_credentials])}"
         )
 
+    # Validate required copy-offload parameters
+    required_params = ["storage_vendor_product", "datastore_id"]
+    missing_params = [param for param in required_params if not config.get(param)]
+
+    if missing_params:
+        raise ValueError(
+            f"Missing required copy-offload parameters in config: {', '.join(missing_params)}. "
+            "Add them to .providers.json copyoffload section"
+        )
+
     LOGGER.info("✓ Copy-offload configuration validated successfully")
+
+
+@pytest.fixture(scope="class")
+def mixed_datastore_config(source_provider_data: dict[str, Any]) -> None:
+    """Validate mixed datastore configuration for TestCopyoffloadMixedDatastoreMigration.
+
+    Args:
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If non_xcopy_datastore_id is missing.
+    """
+    copyoffload_config_data: dict[str, Any] = source_provider_data.get("copyoffload", {})
+    non_xcopy_datastore_id: str | None = copyoffload_config_data.get("non_xcopy_datastore_id")
+
+    if not non_xcopy_datastore_id:
+        raise ValueError(
+            "Mixed datastore test requires 'non_xcopy_datastore_id' to be configured in copyoffload section. "
+            "This should be a datastore that does NOT support XCOPY."
+        )
+
+    LOGGER.info(f"✓ Mixed datastore configuration validated: non_xcopy_datastore_id = {non_xcopy_datastore_id}")
 
 
 @pytest.fixture(scope="session")

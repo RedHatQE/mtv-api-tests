@@ -288,6 +288,41 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_mixed_datastore_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "add_disks": [
+                    {
+                        "size_gb": 30,
+                        "provision_type": "thin",
+                        "datastore_id": "non_xcopy_datastore_id",
+                    },
+                ],
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
+    "test_copyoffload_nonconforming_name_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "clone_name": "XCopy_Test_VM_CAPS",  # Non-conforming name for cloned VM
+                "preserve_name_format": True,  # Don't sanitize the name (keep capitals and underscores)
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
 }
 
 for _dir in dir():

@@ -52,3 +52,7 @@ class MissingProvidersFileError(Exception):
 
 class VmCloneError(Exception):
     pass
+
+
+class InvalidVMNameError(Exception):
+    pass

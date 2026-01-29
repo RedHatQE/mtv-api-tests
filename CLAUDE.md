@@ -367,11 +367,6 @@ if plan.get("warm_migration", False):  # OK
     setup_warm_migration()
 ```
 
-**Required fields** (access directly via `[]`, let KeyError propagate if missing): Core config like `storage_class`, `virtual_machines`, `provider_type`
-**Optional flags** (use `.get()` with defaults): Feature toggles and enhancements like `warm_migration`, `create_scale_report`, `check_vms_signals`
-
-**How to classify:** If the test cannot run without the field, it's required. If the test can run but behaves differently, it's optional.
-
 ### Resource Creation - create_and_store_resource()
 
 Every OpenShift resource must use `utilities/resources.py:create_and_store_resource()`.
