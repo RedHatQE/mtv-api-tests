@@ -1101,22 +1101,27 @@ class VMWareProvider(BaseProvider):
         target_datastore_id = kwargs.get("target_datastore_id")
         if target_datastore_id:
             # Support string resolution for special datastore keywords
-            if target_datastore_id == "non_xcopy_datastore_id":
-                if not self.copyoffload_config or "non_xcopy_datastore_id" not in self.copyoffload_config:
+            datastore_keywords = {
+                "non_xcopy_datastore_id": ("non-XCOPY target", "Non-XCOPY"),
+                "secondary_datastore_id": ("secondary target", "Secondary"),
+            }
+
+            if target_datastore_id in datastore_keywords:
+                log_prefix, error_prefix = datastore_keywords[target_datastore_id]
+                if not self.copyoffload_config or target_datastore_id not in self.copyoffload_config:
                     raise VmCloneError(
-                        "target_datastore_id='non_xcopy_datastore_id' requires copyoffload.non_xcopy_datastore_id to be configured"
+                        f"target_datastore_id='{target_datastore_id}' requires copyoffload.{target_datastore_id} to be configured"
                     )
-                actual_datastore_id = self.copyoffload_config["non_xcopy_datastore_id"]
-                target_datastore = self.get_obj([vim.Datastore], actual_datastore_id)
-                LOGGER.info(f"Using non-XCOPY target datastore: {target_datastore.name} ({actual_datastore_id})")
-            elif target_datastore_id == "secondary_datastore_id":
-                if not self.copyoffload_config or "secondary_datastore_id" not in self.copyoffload_config:
+                actual_datastore_id = self.copyoffload_config[target_datastore_id]
+                if not actual_datastore_id:
+                    raise VmCloneError(f"copyoffload.{target_datastore_id} is empty")
+                try:
+                    target_datastore = self.get_obj([vim.Datastore], actual_datastore_id)
+                except ValueError as exc:
                     raise VmCloneError(
-                        "target_datastore_id='secondary_datastore_id' requires copyoffload.secondary_datastore_id to be configured"
-                    )
-                actual_datastore_id = self.copyoffload_config["secondary_datastore_id"]
-                target_datastore = self.get_obj([vim.Datastore], actual_datastore_id)
-                LOGGER.info(f"Using secondary target datastore: {target_datastore.name} ({actual_datastore_id})")
+                        f"{error_prefix} datastore not found. MoID '{actual_datastore_id}' is invalid or not accessible"
+                    ) from exc
+                LOGGER.info(f"Using {log_prefix} datastore: {target_datastore.name} ({actual_datastore_id})")
             else:
                 # Regular MoRef ID or datastore name
                 target_datastore = self.get_obj([vim.Datastore], target_datastore_id)
