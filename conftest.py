@@ -925,6 +925,52 @@ def prepared_plan(
 
 
 @pytest.fixture(scope="class")
+def prepared_plan_1(prepared_plan: dict[str, Any]) -> Generator[dict[str, Any], None, None]:
+    """Prepare first migration plan configuration for simultaneous migrations.
+
+    This fixture extracts the first VM from a prepared plan containing multiple VMs,
+    creating an independent plan for the first migration. Use this with prepared_plan_2
+    to run two migrations simultaneously.
+
+    Args:
+        prepared_plan (dict[str, Any]): Base prepared plan with cloned VMs
+
+    Yields:
+        dict[str, Any]: Deep copy of prepared plan with first VM only
+    """
+    plan: dict[str, Any] = deepcopy(prepared_plan)
+    # Use only the first VM for plan 1
+    plan["virtual_machines"] = [plan["virtual_machines"][0]]
+    # Copy source VM data for the first VM only
+    vm_name = plan["virtual_machines"][0]["name"]
+    plan["source_vms_data"] = {vm_name: prepared_plan["source_vms_data"][vm_name]}
+    yield plan
+
+
+@pytest.fixture(scope="class")
+def prepared_plan_2(prepared_plan: dict[str, Any]) -> Generator[dict[str, Any], None, None]:
+    """Prepare second migration plan configuration for simultaneous migrations.
+
+    This fixture extracts the second VM from a prepared plan containing multiple VMs,
+    creating an independent plan for the second migration. Use this with prepared_plan_1
+    to run two migrations simultaneously.
+
+    Args:
+        prepared_plan (dict[str, Any]): Base prepared plan with cloned VMs
+
+    Yields:
+        dict[str, Any]: Deep copy of prepared plan with second VM only
+    """
+    plan: dict[str, Any] = deepcopy(prepared_plan)
+    # Use only the second VM for plan 2
+    plan["virtual_machines"] = [plan["virtual_machines"][1]]
+    # Copy source VM data for the second VM only
+    vm_name = plan["virtual_machines"][0]["name"]
+    plan["source_vms_data"] = {vm_name: prepared_plan["source_vms_data"][vm_name]}
+    yield plan
+
+
+@pytest.fixture(scope="class")
 def mtv_version_checker(request: pytest.FixtureRequest, ocp_admin_client: DynamicClient) -> None:
     """Check if test requires minimum MTV version and skip if not met.
 

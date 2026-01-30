@@ -9,6 +9,7 @@ vSphere and OpenShift environments.
 from typing import TYPE_CHECKING
 
 import pytest
+from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
@@ -27,9 +28,11 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
     verify_vm_disk_count,
+    wait_for_migration_complate,
 )
 from utilities.naming import sanitize_kubernetes_name
 from utilities.post_migration import check_vms
+from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager
 
 if TYPE_CHECKING:
@@ -2710,4 +2713,432 @@ class TestCopyoffloadScaleMigration:
         )
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_simultaneous_copyoffload_migrations"])],
+    indirect=True,
+    ids=["simultaneous-copyoffload"],
+)
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+class TestSimultaneousCopyoffloadMigrations:
+    """Test simultaneous execution of two copyoffload migration plans."""
+
+    storage_map_1: StorageMap
+    network_map_1: NetworkMap
+    plan_resource_1: Plan
+
+    storage_map_2: StorageMap
+    network_map_2: NetworkMap
+    plan_resource_2: Plan
+
+    def test_create_storagemap_plan1(
+        self,
+        prepared_plan_1: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with copy-offload configuration for first plan.
+
+        Args:
+            prepared_plan_1: Prepared plan configuration for plan 1
+            fixture_store: Fixture store for resource tracking
+            ocp_admin_client: OpenShift admin client
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            source_provider_inventory: Source provider inventory
+            target_namespace: Target namespace for resources
+            source_provider_data: Source provider configuration data
+            copyoffload_storage_secret: Secret for copy-offload storage access
+
+        Raises:
+            AssertionError: If StorageMap creation fails
+        """
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map_1 = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            access_mode="ReadWriteOnce",
+            volume_mode="Block",
+        )
+        assert self.storage_map_1, "StorageMap creation failed for plan 1"
+
+    def test_create_storagemap_plan2(
+        self,
+        prepared_plan_2: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with copy-offload configuration for second plan.
+
+        Args:
+            prepared_plan_2: Prepared plan configuration for plan 2
+            fixture_store: Fixture store for resource tracking
+            ocp_admin_client: OpenShift admin client
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            source_provider_inventory: Source provider inventory
+            target_namespace: Target namespace for resources
+            source_provider_data: Source provider configuration data
+            copyoffload_storage_secret: Secret for copy-offload storage access
+
+        Raises:
+            AssertionError: If StorageMap creation fails
+        """
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan_2["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map_2 = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            access_mode="ReadWriteOnce",
+            volume_mode="Block",
+        )
+        assert self.storage_map_2, "StorageMap creation failed for plan 2"
+
+    def test_create_networkmap_plan1(
+        self,
+        prepared_plan_1: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource for first plan.
+
+        Args:
+            prepared_plan_1: Prepared plan configuration for plan 1
+            fixture_store: Fixture store for resource tracking
+            ocp_admin_client: OpenShift admin client
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            source_provider_inventory: Source provider inventory
+            target_namespace: Target namespace for resources
+            multus_network_name: Network mapping from source to destination networks
+
+        Raises:
+            AssertionError: If NetworkMap creation fails
+        """
+        vms_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
+
+        self.__class__.network_map_1 = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            multus_network_name=multus_network_name,
+            vms=vms_names,
+        )
+        assert self.network_map_1, "NetworkMap creation failed for plan 1"
+
+    def test_create_networkmap_plan2(
+        self,
+        prepared_plan_2: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource for second plan.
+
+        Args:
+            prepared_plan_2: Prepared plan configuration for plan 2
+            fixture_store: Fixture store for resource tracking
+            ocp_admin_client: OpenShift admin client
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            source_provider_inventory: Source provider inventory
+            target_namespace: Target namespace for resources
+            multus_network_name: Network mapping from source to destination networks
+
+        Raises:
+            AssertionError: If NetworkMap creation fails
+        """
+        vms_names = [vm["name"] for vm in prepared_plan_2["virtual_machines"]]
+
+        self.__class__.network_map_2 = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            multus_network_name=multus_network_name,
+            vms=vms_names,
+        )
+        assert self.network_map_2, "NetworkMap creation failed for plan 2"
+
+    def test_create_plan1(
+        self,
+        prepared_plan_1: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create first MTV Plan CR resource for copy-offload.
+
+        Args:
+            prepared_plan_1: Prepared plan configuration for plan 1
+            fixture_store: Fixture store for resource tracking
+            ocp_admin_client: OpenShift admin client
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            target_namespace: Target namespace for resources
+            source_provider_inventory: Source provider inventory
+
+        Raises:
+            AssertionError: If Plan creation fails
+        """
+        for vm in prepared_plan_1["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource_1 = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map_1,
+            network_map=self.network_map_1,
+            virtual_machines_list=prepared_plan_1["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan_1.get("warm_migration", False),
+            copyoffload=prepared_plan_1.get("copyoffload", False),
+            test_name="simultaneous-copyoffload-plan1",
+        )
+        assert self.plan_resource_1, "Plan creation failed for plan 1"
+
+    def test_create_plan2(
+        self,
+        prepared_plan_2: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create second MTV Plan CR resource for copy-offload.
+
+        Args:
+            prepared_plan_2: Prepared plan configuration for plan 2
+            fixture_store: Fixture store for resource tracking
+            ocp_admin_client: OpenShift admin client
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            target_namespace: Target namespace for resources
+            source_provider_inventory: Source provider inventory
+
+        Raises:
+            AssertionError: If Plan creation fails
+        """
+        for vm in prepared_plan_2["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource_2 = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map_2,
+            network_map=self.network_map_2,
+            virtual_machines_list=prepared_plan_2["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan_2.get("warm_migration", False),
+            copyoffload=prepared_plan_2.get("copyoffload", False),
+            test_name="simultaneous-copyoffload-plan2",
+        )
+        assert self.plan_resource_2, "Plan creation failed for plan 2"
+
+    def test_migrate_vms_simultaneously(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        target_namespace: str,
+    ) -> None:
+        """Execute both copyoffload migrations simultaneously.
+
+        Args:
+            fixture_store: Fixture store for resource tracking
+            ocp_admin_client: OpenShift admin client
+            target_namespace: Target namespace for migrations
+        """
+        LOGGER.info("Starting simultaneous execution of both copyoffload migration plans")
+
+        # Create Migration CR for first plan
+        migration_1 = create_and_store_resource(
+            client=ocp_admin_client,
+            fixture_store=fixture_store,
+            resource=Migration,
+            namespace=target_namespace,
+            plan_name=self.plan_resource_1.name,
+            plan_namespace=self.plan_resource_1.namespace,
+            test_name="simultaneous-copyoffload-migration1",
+        )
+        LOGGER.info(f"Created Migration CR for plan 1: {migration_1.name}")
+
+        # Create Migration CR for second plan
+        migration_2 = create_and_store_resource(
+            client=ocp_admin_client,
+            fixture_store=fixture_store,
+            resource=Migration,
+            namespace=target_namespace,
+            plan_name=self.plan_resource_2.name,
+            plan_namespace=self.plan_resource_2.namespace,
+            test_name="simultaneous-copyoffload-migration2",
+        )
+        LOGGER.info(f"Created Migration CR for plan 2: {migration_2.name}")
+
+        # Wait for both migrations to complete
+        LOGGER.info("Waiting for both copyoffload migrations to complete")
+        wait_for_migration_complate(plan=self.plan_resource_1)
+        LOGGER.info("Copyoffload migration 1 completed")
+
+        wait_for_migration_complate(plan=self.plan_resource_2)
+        LOGGER.info("Copyoffload migration 2 completed")
+
+    def test_check_vms_plan1(
+        self,
+        prepared_plan_1: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs from first plan.
+
+        Args:
+            prepared_plan_1: Prepared plan configuration for plan 1
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            source_provider_data: Source provider configuration data
+            target_namespace: Target namespace where VMs were migrated
+            source_vms_namespace: Source VMs namespace
+            source_provider_inventory: Source provider inventory
+            vm_ssh_connections: SSH connections manager for VMs
+        """
+        check_vms(
+            plan=prepared_plan_1,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map_1,
+            storage_map_resource=self.storage_map_1,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan_1, target_namespace=target_namespace
+        )
+
+    def test_check_vms_plan2(
+        self,
+        prepared_plan_2: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs from second plan.
+
+        Args:
+            prepared_plan_2: Prepared plan configuration for plan 2
+            source_provider: Source provider instance
+            destination_provider: Destination provider instance
+            source_provider_data: Source provider configuration data
+            target_namespace: Target namespace where VMs were migrated
+            source_vms_namespace: Source VMs namespace
+            source_provider_inventory: Source provider inventory
+            vm_ssh_connections: SSH connections manager for VMs
+        """
+        check_vms(
+            plan=prepared_plan_2,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map_2,
+            storage_map_resource=self.storage_map_2,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan_2, target_namespace=target_namespace
         )
