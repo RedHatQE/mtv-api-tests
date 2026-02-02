@@ -1313,7 +1313,6 @@ class TestCopyoffloadMixedDatastoreMigration:
             plan=prepared_plan,
             source_provider=source_provider,
             destination_provider=destination_provider,
-            destination_namespace=target_namespace,
             network_map_resource=self.network_map,
             storage_map_resource=self.storage_map,
             source_provider_data=source_provider_data,
@@ -1332,7 +1331,7 @@ class TestCopyoffloadMixedDatastoreMigration:
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_fallback_large_migration"])],
     indirect=True,
-    ids=["copyoffload-fallback-large"],
+    ids=["MTV-614:copyoffload-fallback-large"],
 )
 @pytest.mark.usefixtures(
     "multus_network_name",
@@ -1436,7 +1435,7 @@ class TestCopyoffloadFallbackLargeMigration:
         destination_provider: BaseProvider,
         source_provider_inventory: ForkliftInventory,
         target_namespace: str,
-        multus_network_name: str,
+        multus_network_name: dict[str, str],
     ) -> None:
         """Create NetworkMap resource.
 
@@ -1448,7 +1447,7 @@ class TestCopyoffloadFallbackLargeMigration:
             destination_provider: Destination provider instance (OpenShift).
             source_provider_inventory: Forklift inventory for source provider.
             target_namespace: Target namespace for migration.
-            multus_network_name: Name of the Multus network for VM connectivity.
+            multus_network_name: Dictionary with Multus network configuration (name and namespace).
 
         Returns:
             None
@@ -1574,7 +1573,6 @@ class TestCopyoffloadFallbackLargeMigration:
             plan=prepared_plan,
             source_provider=source_provider,
             destination_provider=destination_provider,
-            destination_namespace=target_namespace,
             network_map_resource=self.network_map,
             storage_map_resource=self.storage_map,
             source_provider_data=source_provider_data,
@@ -2357,7 +2355,6 @@ class TestCopyoffloadNonconformingNameMigration:
             plan=prepared_plan,
             source_provider=source_provider,
             destination_provider=destination_provider,
-            destination_namespace=target_namespace,
             network_map_resource=self.network_map,
             storage_map_resource=self.storage_map,
             source_provider_data=source_provider_data,
