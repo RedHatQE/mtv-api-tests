@@ -13,11 +13,6 @@ import pytest
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
-    from libs.base_provider import BaseProvider
-    from libs.forklift_inventory import ForkliftInventory
-    from libs.providers.openshift import OCPProvider
-    from utilities.ssh_utils import SSHConnectionManager
-
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -27,6 +22,9 @@ from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
+from libs.base_provider import BaseProvider
+from libs.forklift_inventory import ForkliftInventory
+from libs.providers.openshift import OCPProvider
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -39,6 +37,7 @@ from utilities.mtv_migration import (
 from utilities.naming import sanitize_kubernetes_name
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
+from utilities.ssh_utils import SSHConnectionManager
 
 
 LOGGER = get_logger(__name__)
@@ -2724,7 +2723,7 @@ class TestCopyoffloadScaleMigration:
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_simultaneous_copyoffload_migrations"])],
     indirect=True,
-    ids=["simultaneous-copyoffload"],
+    ids=["MTV-574:simultaneous-copyoffload"],
 )
 @pytest.mark.usefixtures("copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestSimultaneousCopyoffloadMigrations:
