@@ -3098,7 +3098,19 @@ class TestSimultaneousCopyoffloadMigrations:
         both_executing_validated = False
 
         def _check_plan_status(plan: Plan) -> str:
-            """Check if plan is executing, succeeded, or failed."""
+            """Check if plan is executing, succeeded, or failed.
+
+            Args:
+                plan: The Plan resource to check status for
+
+            Returns:
+                str: "Executing" if migration is in progress, Plan.Status.SUCCEEDED if completed successfully,
+                    or Plan.Status.FAILED if migration failed
+
+            Raises:
+                AttributeError: If plan.instance.status.conditions is not accessible
+                KeyError: If condition dictionary is missing required keys (category, status, type)
+            """
             for cond in plan.instance.status.conditions:
                 if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
                     cond_type = cond["type"]
