@@ -2762,6 +2762,9 @@ class TestSimultaneousCopyoffloadMigrations:
             source_provider_data: Source provider configuration data
             copyoffload_storage_secret: Secret for copy-offload storage access
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If StorageMap creation fails
         """
@@ -2820,6 +2823,9 @@ class TestSimultaneousCopyoffloadMigrations:
             source_provider_data: Source provider configuration data
             copyoffload_storage_secret: Secret for copy-offload storage access
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If StorageMap creation fails
         """
@@ -2876,6 +2882,9 @@ class TestSimultaneousCopyoffloadMigrations:
             target_namespace: Target namespace for resources
             multus_network_name: Network mapping from source to destination networks
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If NetworkMap creation fails
         """
@@ -2916,6 +2925,9 @@ class TestSimultaneousCopyoffloadMigrations:
             target_namespace: Target namespace for resources
             multus_network_name: Network mapping from source to destination networks
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If NetworkMap creation fails
         """
@@ -2953,6 +2965,9 @@ class TestSimultaneousCopyoffloadMigrations:
             destination_provider: Destination provider instance
             target_namespace: Target namespace for resources
             source_provider_inventory: Source provider inventory
+
+        Returns:
+            None
 
         Raises:
             AssertionError: If Plan creation fails
@@ -2998,6 +3013,9 @@ class TestSimultaneousCopyoffloadMigrations:
             target_namespace: Target namespace for resources
             source_provider_inventory: Source provider inventory
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If Plan creation fails
         """
@@ -3033,6 +3051,12 @@ class TestSimultaneousCopyoffloadMigrations:
             fixture_store: Fixture store for resource tracking
             ocp_admin_client: OpenShift admin client
             target_namespace: Target namespace for migrations
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If migration execution or completion fails
         """
         LOGGER.info("Starting simultaneous execution of both copyoffload migration plans")
 
