@@ -941,7 +941,7 @@ def prepared_plan_1(prepared_plan: dict[str, Any]) -> dict[str, Any]:
 
     Raises:
         ValueError: If prepared_plan contains fewer than 1 VM
-        KeyError: If VM name is missing from source_vms_data
+        ValueError: If VM name is missing from source_vms_data
     """
     return extract_vm_from_plan(prepared_plan, vm_index=0, fixture_name="prepared_plan_1")
 
@@ -962,7 +962,7 @@ def prepared_plan_2(prepared_plan: dict[str, Any]) -> dict[str, Any]:
 
     Raises:
         ValueError: If prepared_plan contains fewer than 2 VMs
-        KeyError: If VM name is missing from source_vms_data
+        ValueError: If VM name is missing from source_vms_data
     """
     return extract_vm_from_plan(prepared_plan, vm_index=1, fixture_name="prepared_plan_2")
 

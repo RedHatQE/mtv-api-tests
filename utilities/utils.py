@@ -617,7 +617,7 @@ def extract_vm_from_plan(
 
     Raises:
         ValueError: If prepared_plan contains insufficient VMs for the requested index
-        KeyError: If VM name is missing from source_vms_data
+        ValueError: If VM name is missing from source_vms_data
     """
     vms = prepared_plan.get("virtual_machines", [])
     min_required_vms = vm_index + 1
@@ -630,7 +630,7 @@ def extract_vm_from_plan(
 
     vm_name = plan["virtual_machines"][0]["name"]
     if vm_name not in prepared_plan.get("source_vms_data", {}):
-        raise KeyError(f"VM '{vm_name}' missing from prepared_plan source_vms_data")
+        raise ValueError(f"VM '{vm_name}' missing from prepared_plan source_vms_data")
 
     plan["source_vms_data"] = {vm_name: prepared_plan["source_vms_data"][vm_name]}
     return plan
