@@ -530,7 +530,7 @@ def verify_vm_disk_count(destination_provider, plan, target_namespace):
         source_vm_name = vm_config["name"]
 
         # Calculate expected disks: 1 base disk + number of disks in "add_disks"
-        num_added_disks = len(vm_config["add_disks"])
+        num_added_disks = len(vm_config.get("add_disks", []))
         expected_disks = 1 + num_added_disks
 
         LOGGER.info(f"Fetching details for migrated VM: {source_vm_name} in namespace {target_namespace}")
