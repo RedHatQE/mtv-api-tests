@@ -3090,6 +3090,9 @@ class TestSimultaneousCopyoffloadMigrations:
             source_vms_namespace: Source VMs namespace
             source_provider_inventory: Source provider inventory
             vm_ssh_connections: SSH connections manager for VMs
+
+        Raises:
+            AssertionError: If VM validation fails or disk counts mismatch
         """
         check_vms(
             plan=prepared_plan_1,
@@ -3128,6 +3131,9 @@ class TestSimultaneousCopyoffloadMigrations:
             source_vms_namespace: Source VMs namespace
             source_provider_inventory: Source provider inventory
             vm_ssh_connections: SSH connections manager for VMs
+
+        Raises:
+            AssertionError: If VM validation fails or disk counts mismatch
         """
         check_vms(
             plan=prepared_plan_2,
