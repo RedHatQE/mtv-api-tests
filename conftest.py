@@ -66,6 +66,7 @@ from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
+    extract_vm_from_plan,
     generate_class_hash_prefix,
     get_cluster_client,
     get_cluster_version,
@@ -924,45 +925,6 @@ def prepared_plan(
     # (e.g., if cleanup_migrated_vms is not used) will be caught by namespace deletion.
 
 
-def _extract_vm_from_plan(
-    prepared_plan: dict[str, Any],
-    vm_index: int,
-    fixture_name: str,
-) -> dict[str, Any]:
-    """Extract a single VM from a multi-VM prepared plan.
-
-    Helper function to create independent plan configurations for simultaneous migrations
-    by extracting a specific VM from a prepared plan containing multiple VMs.
-
-    Args:
-        prepared_plan: Base prepared plan with cloned VMs
-        vm_index: Zero-based index of the VM to extract
-        fixture_name: Name of the calling fixture (for error messages)
-
-    Returns:
-        Deep copy of prepared plan with only the specified VM
-
-    Raises:
-        ValueError: If prepared_plan contains insufficient VMs for the requested index
-        KeyError: If VM name is missing from source_vms_data
-    """
-    vms = prepared_plan.get("virtual_machines", [])
-    min_required_vms = vm_index + 1
-
-    if len(vms) < min_required_vms:
-        raise ValueError(f"{fixture_name} requires at least {min_required_vms} VM(s) in prepared_plan")
-
-    plan: dict[str, Any] = deepcopy(prepared_plan)
-    plan["virtual_machines"] = [plan["virtual_machines"][vm_index]]
-
-    vm_name = plan["virtual_machines"][0]["name"]
-    if vm_name not in prepared_plan.get("source_vms_data", {}):
-        raise KeyError(f"VM '{vm_name}' missing from prepared_plan source_vms_data")
-
-    plan["source_vms_data"] = {vm_name: prepared_plan["source_vms_data"][vm_name]}
-    return plan
-
-
 @pytest.fixture(scope="class")
 def prepared_plan_1(prepared_plan: dict[str, Any]) -> dict[str, Any]:
     """Prepare first migration plan configuration for simultaneous migrations.
@@ -981,7 +943,7 @@ def prepared_plan_1(prepared_plan: dict[str, Any]) -> dict[str, Any]:
         ValueError: If prepared_plan contains fewer than 1 VM
         KeyError: If VM name is missing from source_vms_data
     """
-    return _extract_vm_from_plan(prepared_plan, vm_index=0, fixture_name="prepared_plan_1")
+    return extract_vm_from_plan(prepared_plan, vm_index=0, fixture_name="prepared_plan_1")
 
 
 @pytest.fixture(scope="class")
@@ -1002,7 +964,7 @@ def prepared_plan_2(prepared_plan: dict[str, Any]) -> dict[str, Any]:
         ValueError: If prepared_plan contains fewer than 2 VMs
         KeyError: If VM name is missing from source_vms_data
     """
-    return _extract_vm_from_plan(prepared_plan, vm_index=1, fixture_name="prepared_plan_2")
+    return extract_vm_from_plan(prepared_plan, vm_index=1, fixture_name="prepared_plan_2")
 
 
 @pytest.fixture(scope="class")

@@ -597,6 +597,45 @@ def populate_vm_ids(plan: dict[str, Any], inventory: ForkliftInventory) -> None:
         vm["id"] = vm_data["id"]
 
 
+def extract_vm_from_plan(
+    prepared_plan: dict[str, Any],
+    vm_index: int,
+    fixture_name: str,
+) -> dict[str, Any]:
+    """Extract a single VM from a multi-VM prepared plan.
+
+    Helper function to create independent plan configurations for simultaneous migrations
+    by extracting a specific VM from a prepared plan containing multiple VMs.
+
+    Args:
+        prepared_plan: Base prepared plan with cloned VMs
+        vm_index: Zero-based index of the VM to extract
+        fixture_name: Name of the calling fixture (for error messages)
+
+    Returns:
+        Deep copy of prepared plan with only the specified VM
+
+    Raises:
+        ValueError: If prepared_plan contains insufficient VMs for the requested index
+        KeyError: If VM name is missing from source_vms_data
+    """
+    vms = prepared_plan.get("virtual_machines", [])
+    min_required_vms = vm_index + 1
+
+    if len(vms) < min_required_vms:
+        raise ValueError(f"{fixture_name} requires at least {min_required_vms} VM(s) in prepared_plan")
+
+    plan: dict[str, Any] = copy.deepcopy(prepared_plan)
+    plan["virtual_machines"] = [plan["virtual_machines"][vm_index]]
+
+    vm_name = plan["virtual_machines"][0]["name"]
+    if vm_name not in prepared_plan.get("source_vms_data", {}):
+        raise KeyError(f"VM '{vm_name}' missing from prepared_plan source_vms_data")
+
+    plan["source_vms_data"] = {vm_name: prepared_plan["source_vms_data"][vm_name]}
+    return plan
+
+
 def get_mtv_version(client: DynamicClient) -> str:
     """Get MTV operator version from ClusterServiceVersion.
 
