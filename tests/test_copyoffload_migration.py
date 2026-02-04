@@ -21,6 +21,7 @@ from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutSampler
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
@@ -3056,7 +3057,7 @@ class TestSimultaneousCopyoffloadMigrations:
             None
 
         Raises:
-            AssertionError: If migration execution or completion fails
+            AssertionError: If migration execution or completion fails or if simultaneous execution is not validated
         """
         LOGGER.info("Starting simultaneous execution of both copyoffload migration plans")
 
@@ -3083,6 +3084,61 @@ class TestSimultaneousCopyoffloadMigrations:
             test_name="simultaneous-copyoffload-migration2",
         )
         LOGGER.info(f"Created Migration CR for plan 2: {migration_2.name}")
+
+        # Validate both migrations are executing simultaneously before either completes
+        LOGGER.info("Validating both migrations enter executing state simultaneously")
+        plan_1_executing = False
+        plan_2_executing = False
+        both_executing_validated = False
+
+        def _check_plan_status(plan: Plan) -> str:
+            """Check if plan is executing, succeeded, or failed."""
+            for cond in plan.instance.status.conditions:
+                if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
+                    cond_type = cond["type"]
+                    if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                        return cond_type
+            return "Executing"
+
+        # Poll both plans to ensure both reach executing state before either completes
+        for sample in TimeoutSampler(
+            func=lambda: (_check_plan_status(self.plan_resource_1), _check_plan_status(self.plan_resource_2)),
+            sleep=2,
+            wait_timeout=120,
+        ):
+            status_1, status_2 = sample
+
+            # Check if plan 1 is executing
+            if status_1 == "Executing":
+                if not plan_1_executing:
+                    LOGGER.info(f"Plan 1 '{self.plan_resource_1.name}' is now executing")
+                plan_1_executing = True
+
+            # Check if plan 2 is executing
+            if status_2 == "Executing":
+                if not plan_2_executing:
+                    LOGGER.info(f"Plan 2 '{self.plan_resource_2.name}' is now executing")
+                plan_2_executing = True
+
+            # Assert both are executing simultaneously
+            if plan_1_executing and plan_2_executing and not both_executing_validated:
+                LOGGER.info("SUCCESS: Both migrations are executing simultaneously")
+                both_executing_validated = True
+                break
+
+            # If either plan completed before both were executing, fail the test
+            if status_1 in (Plan.Status.SUCCEEDED, Plan.Status.FAILED) and not both_executing_validated:
+                raise AssertionError(
+                    f"Plan 1 reached {status_1} before both plans were executing simultaneously. "
+                    f"Plan 2 status: {status_2}"
+                )
+            if status_2 in (Plan.Status.SUCCEEDED, Plan.Status.FAILED) and not both_executing_validated:
+                raise AssertionError(
+                    f"Plan 2 reached {status_2} before both plans were executing simultaneously. "
+                    f"Plan 1 status: {status_1}"
+                )
+
+        assert both_executing_validated, "Failed to validate both migrations executing simultaneously"
 
         # Wait for both migrations to complete
         LOGGER.info("Waiting for both copyoffload migrations to complete")
