@@ -43,6 +43,12 @@ from utilities.ssh_utils import SSHConnectionManager
 
 LOGGER = get_logger(__name__)
 
+# Error message template for simultaneous migration validation
+EARLY_COMPLETION_MSG = (
+    "Plan {plan_num} reached {completed_status} before both plans were executing simultaneously. "
+    "Other plan status: {other_status}"
+)
+
 
 @pytest.mark.copyoffload
 @pytest.mark.incremental
@@ -3129,13 +3135,11 @@ class TestSimultaneousCopyoffloadMigrations:
             # If either plan completed before both were executing, fail the test
             if status_1 in (Plan.Status.SUCCEEDED, Plan.Status.FAILED) and not both_executing_validated:
                 raise AssertionError(
-                    f"Plan 1 reached {status_1} before both plans were executing simultaneously. "
-                    f"Plan 2 status: {status_2}"
+                    EARLY_COMPLETION_MSG.format(plan_num=1, completed_status=status_1, other_status=status_2)
                 )
             if status_2 in (Plan.Status.SUCCEEDED, Plan.Status.FAILED) and not both_executing_validated:
                 raise AssertionError(
-                    f"Plan 2 reached {status_2} before both plans were executing simultaneously. "
-                    f"Plan 1 status: {status_1}"
+                    EARLY_COMPLETION_MSG.format(plan_num=2, completed_status=status_2, other_status=status_1)
                 )
 
         assert both_executing_validated, "Failed to validate both migrations executing simultaneously"
