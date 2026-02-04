@@ -3171,6 +3171,9 @@ class TestSimultaneousCopyoffloadMigrations:
             source_provider_inventory: Source provider inventory
             vm_ssh_connections: SSH connections manager for VMs
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If VM validation fails or disk counts mismatch
         """
@@ -3211,6 +3214,9 @@ class TestSimultaneousCopyoffloadMigrations:
             source_vms_namespace: Source VMs namespace
             source_provider_inventory: Source provider inventory
             vm_ssh_connections: SSH connections manager for VMs
+
+        Returns:
+            None
 
         Raises:
             AssertionError: If VM validation fails or disk counts mismatch
