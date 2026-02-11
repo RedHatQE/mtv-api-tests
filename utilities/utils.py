@@ -1,6 +1,7 @@
 import copy
 import functools
 import hashlib
+import json
 import multiprocessing
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
@@ -25,6 +26,7 @@ from ocp_resources.virtual_machine_cluster_preference import VirtualMachineClust
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
+from exceptions.exceptions import MissingProvidersFileError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
@@ -35,6 +37,23 @@ from libs.providers.vmware import VMWareProvider
 from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
+
+
+def load_source_providers() -> dict[str, dict[str, Any]]:
+    """Load source providers from .providers.json.
+
+    Returns:
+        dict[str, dict[str, Any]]: Provider configurations keyed by provider name.
+
+    Raises:
+        MissingProvidersFileError: If .providers.json doesn't exist.
+    """
+    providers_file = Path(".providers.json")
+    if not providers_file.exists():
+        raise MissingProvidersFileError(f"{providers_file} file is missing")
+
+    with open(providers_file, "r") as fd:
+        return json.load(fd)
 
 
 def generate_class_hash_prefix(nodeid: str, length: int = 6) -> str:

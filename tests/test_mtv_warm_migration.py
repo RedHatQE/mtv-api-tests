@@ -13,21 +13,21 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
 )
 from utilities.post_migration import check_vms
-from utilities.utils import get_value_from_py_config, populate_vm_ids
+from utilities.utils import get_value_from_py_config, load_source_providers, populate_vm_ids
 
-SOURCE_PROVIDER_TYPE = py_config.get("source_provider_type")
+_SOURCE_PROVIDER_TYPE = load_source_providers().get(py_config.get("source_provider", ""), {}).get("type")
 
 
 pytestmark = [
     pytest.mark.skipif(
-        SOURCE_PROVIDER_TYPE
+        _SOURCE_PROVIDER_TYPE
         in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT, Provider.ProviderType.OVA),
-        reason=f"{SOURCE_PROVIDER_TYPE} warm migration is not supported.",
+        reason=f"{_SOURCE_PROVIDER_TYPE} warm migration is not supported.",
     ),
 ]
 
 # Only apply Jira marker for RHV - skip if issue unresolved, run normally if resolved
-if SOURCE_PROVIDER_TYPE == Provider.ProviderType.RHV:
+if _SOURCE_PROVIDER_TYPE == Provider.ProviderType.RHV:
     pytestmark.append(pytest.mark.jira("MTV-2846", run=False))
 
 
