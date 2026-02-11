@@ -21,7 +21,6 @@ from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutSampler
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
@@ -33,15 +32,14 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
     verify_vm_disk_count,
-    wait_for_migration_complate,
     wait_for_concurrent_migration_execution,
+    wait_for_migration_complate,
 )
 from utilities.naming import sanitize_kubernetes_name
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import load_source_providers
-
 
 LOGGER = get_logger(__name__)
 
@@ -52,6 +50,7 @@ EARLY_COMPLETION_MSG = (
     "Plan {plan_num} reached {completed_status} before both plans were executing simultaneously. "
     "Other plan status: {other_status}"
 )
+
 
 @pytest.mark.copyoffload
 @pytest.mark.incremental
