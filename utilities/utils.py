@@ -49,7 +49,10 @@ def load_source_providers() -> dict[str, dict[str, Any]]:
         return {}
 
     with open(providers_file) as fd:
-        return json.load(fd)
+        content = fd.read()
+        if not content.strip():
+            return {}
+        return json.loads(content)
 
 
 def generate_class_hash_prefix(nodeid: str, length: int = 6) -> str:
