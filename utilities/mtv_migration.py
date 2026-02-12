@@ -305,25 +305,48 @@ def get_vm_suffix(warm_migration: bool) -> str:
     return vm_suffix
 
 
-def wait_for_migration_complate(plan: Plan) -> None:
-    def _wait_for_migration_complate(_plan: Plan) -> str:
-        for cond in _plan.instance.status.conditions:
+def get_plan_migration_status(plan: Plan) -> str:
+    """Get the migration status from the Plan conditions.
+
+    Args:
+        plan (Plan): The Plan resource to check.
+
+    Returns:
+        str: The status of the plan ("Executing", "Succeeded", "Failed", or empty string if unknown).
+
+    Raises:
+        None
+    """
+    status = plan.instance.status
+    if not status:
+        return ""
+
+    conditions = status.conditions
+    if conditions:
+        for cond in conditions:
             if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
                 cond_type = cond["type"]
 
                 if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
                     return cond_type
 
-        return "Executing"
+    # Check if Migration CR exists to confirm execution
+    try:
+        _find_migration_for_plan(plan)
+        return Plan.Status.EXECUTING
+    except MigrationNotFoundError:
+        return ""
 
+
+def wait_for_migration_complate(plan: Plan) -> None:
     try:
         last_status: str = ""
 
         for sample in TimeoutSampler(
-            func=_wait_for_migration_complate,
+            func=get_plan_migration_status,
             sleep=1,
             wait_timeout=py_config.get("plan_wait_timeout", 600),
-            _plan=plan,
+            plan=plan,
         ):
             if sample != last_status:
                 LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
@@ -542,3 +565,56 @@ def verify_vm_disk_count(destination_provider, plan, target_namespace):
             f"Expected {expected_disks} disks on migrated VM '{source_vm_name}', but found {num_disks_migrated}."
         )
         LOGGER.info(f"Successfully verified {expected_disks} disks on the migrated VM '{source_vm_name}'.")
+
+
+def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int = 120) -> None:
+    """Wait for multiple migration plans to be executing simultaneously.
+
+    Polls the status of all provided plans and validates that they all reach the "Executing"
+    state at the same time. If any plan completes (Succeeded or Failed) before all plans
+    are executing, the validation fails.
+
+    Args:
+        plan_list: List of Plan resources to monitor.
+        timeout: Timeout in seconds to wait for simultaneous execution.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: If plans do not execute simultaneously or if any plan completes early.
+    """
+    LOGGER.info(f"Validating {len(plan_list)} migrations enter executing state simultaneously")
+    plans_executing = {plan.name: False for plan in plan_list}
+
+    try:
+        for current_statuses in TimeoutSampler(
+            func=lambda: {plan.name: get_plan_migration_status(plan) for plan in plan_list},
+            sleep=2,
+            wait_timeout=timeout,
+        ):
+            # Update executing state for each plan
+            for plan in plan_list:
+                status = current_statuses[plan.name]
+                if status == Plan.Status.EXECUTING:
+                    if not plans_executing[plan.name]:
+                        LOGGER.info(f"Plan '{plan.name}' is now executing")
+                    plans_executing[plan.name] = True
+                    continue
+
+                # Check for early completion failure
+                elif status in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                    # Construct error message with status of all plans
+                    status_msg = ", ".join([f"{name}: {stat}" for name, stat in current_statuses.items()])
+                    raise AssertionError(
+                        f"Plan {plan.name} reached {status} before all plans were executing simultaneously. "
+                        f"Statuses: {status_msg}"
+                    )
+
+            # Check if all plans are executing
+            if all(plans_executing.values()):
+                LOGGER.info("SUCCESS: All migrations are executing simultaneously")
+                return
+
+    except TimeoutExpiredError:
+        raise AssertionError("Failed to validate all migrations executing simultaneously within timeout") from None

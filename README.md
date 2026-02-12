@@ -165,6 +165,7 @@ Create a `.providers.json` file in your current directory with your provider's d
 **Key requirements:**
 
 - Configuration key must follow pattern: `{type}-{version}` (e.g., `"vsphere-8.0.1"` for vSphere 8.0.1)
+- This key is used directly with `--tc=source_provider:vsphere-8.0.1`
 - Replace `8.0.1` with your actual vSphere version - both the key and `version` field must match
 - All fields shown above are required
 - Replace placeholder values with your actual credentials and endpoints
@@ -208,8 +209,7 @@ podman run --rm \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
     --tc=cluster_password:${CLUSTER_PASSWORD} \
-    --tc=source_provider_type:vsphere \
-    --tc=source_provider_version:8.0.1 \
+    --tc=source_provider:vsphere-8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
 
@@ -230,8 +230,7 @@ podman run --rm \
 - `kubeadmin` → Your cluster username
 - `your-cluster-password` → Your cluster password
 - `YOUR-STORAGE-CLASS` → Your storage class from step 4
-- `vsphere` → Provider type from your `.providers.json` key: `vsphere`, `ovirt`, `openstack`, or `ova`
-- `8.0.1` → Provider version from your `.providers.json` key (must match exactly)
+- `vsphere-8.0.1` → Provider key from your `.providers.json` (e.g., `vsphere-8.0.1`, `ovirt-4.4.9`)
 
 ---
 
@@ -252,13 +251,13 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 
 ```bash
 # Warm migration tests
-podman run ... uv run pytest -m warm -v --tc=source_provider_type:vsphere ...
+podman run ... uv run pytest -m warm -v --tc=source_provider:vsphere-8.0.1 ...
 
 # Copy-offload tests
-podman run ... uv run pytest -m copyoffload -v --tc=source_provider_type:vsphere ...
+podman run ... uv run pytest -m copyoffload -v --tc=source_provider:vsphere-8.0.1 ...
 
 # Combine markers
-podman run ... uv run pytest -m "tier0 or warm" -v --tc=source_provider_type:vsphere ...
+podman run ... uv run pytest -m "tier0 or warm" -v --tc=source_provider:vsphere-8.0.1 ...
 ```
 
 ---
@@ -351,11 +350,9 @@ spec:
               ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \
               ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \
               ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \
-              --tc=source_provider_type:[PROVIDER_TYPE] \
-              --tc=source_provider_version:[PROVIDER_VERSION] \
+              --tc=source_provider:[SOURCE_PROVIDER] \
               --tc=storage_class:[STORAGE_CLASS]
-            # Replace [PROVIDER_TYPE] with: vsphere, ovirt, openstack, or ova
-            # Replace [PROVIDER_VERSION] with the exact version from your .providers.json key
+            # Replace [SOURCE_PROVIDER] with the key from your .providers.json (e.g., vsphere-8.0.3.00400)
             # Replace [STORAGE_CLASS] with your OpenShift storage class name
             # Optional: To run a specific test, add: -k [TEST_FILTER]
         volumeMounts:
@@ -375,8 +372,7 @@ Replace placeholders:
 
 - `[JOB_NAME]` → `mtv-tier0-tests`
 - `[TEST_MARKERS]` → `tier0`
-- `[PROVIDER_TYPE]` → `vsphere` (or `ovirt`, `openstack`, `ova`)
-- `[PROVIDER_VERSION]` → `8.0.3.00400` (must match your `.providers.json` key exactly)
+- `[SOURCE_PROVIDER]` → `vsphere-8.0.3.00400` (key from your `.providers.json`)
 - `[STORAGE_CLASS]` → `rhosqe-ontap-san-block` (your OpenShift storage class)
 - Remove the commented `-k` and `[TEST_FILTER]` lines
 
@@ -386,7 +382,7 @@ Replace placeholders:
   from Quick Start Step 1 (e.g., `<YOUR-REGISTRY>/mtv-tests:latest`)
 - If you used **Option A** (credentials in Job): Replace the command with explicit `--tc` flags as shown below
 - If you used **Option B** (credentials in Secret): The Job template above automatically reads from the Secret
-- `vsphere` / `8.0.3.00400` - Your source provider type and version (must match key in `.providers.json`)
+- `vsphere-8.0.3.00400` - Your source provider key (must match key in `.providers.json`)
 - `your-storage-class` - Your OpenShift storage class name
 
 **For Option A (credentials in Job YAML) - NOT RECOMMENDED:**
@@ -411,8 +407,7 @@ If you must use Option A (only for isolated test environments), replace the comm
           - --tc=cluster_host:https://api.your-cluster.com:6443
           - --tc=cluster_username:kubeadmin
           - --tc=cluster_password:your-cluster-password  # pragma: allowlist secret
-          - --tc=source_provider_type:vsphere
-          - --tc=source_provider_version:8.0.3.00400
+          - --tc=source_provider:vsphere-8.0.3.00400
           - --tc=storage_class:your-storage-class
 ```
 
@@ -586,8 +581,7 @@ podman run --rm \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
     --tc=cluster_password:${CLUSTER_PASSWORD} \
-    --tc=source_provider_type:vsphere \
-    --tc=source_provider_version:8.0.1 \
+    --tc=source_provider:vsphere-8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
 ```
 
@@ -613,7 +607,7 @@ The `-k` flag allows you to run specific tests by matching their names:
 ```bash
 # Run only the thin migration test from copyoffload
 podman run ... uv run pytest -k test_copyoffload_thin_migration -v \
-  --tc=source_provider_type:vsphere --tc=storage_class:ontap-san-block
+  --tc=source_provider:vsphere-8.0.1 --tc=storage_class:ontap-san-block
 
 # Run multiple tests with pattern matching
 podman run ... uv run pytest -k "test_copyoffload_multi_disk" -v ...  # Matches both multi-disk tests
@@ -648,7 +642,7 @@ Tests automatically generate a **JUnit XML report** (`junit-report.xml`) contain
 ```bash
 # Default path: /app/junit-report.xml (WORKDIR /app, pytest.ini: --junit-xml=junit-report.xml)
 # Override with --junit-xml to write to a mounted volume for persistence:
-# Note: source_provider_type and source_provider_version must match your .providers.json key (e.g., vsphere-8.0.1)
+# Note: source_provider must match a key from your .providers.json (e.g., vsphere-8.0.1)
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -v $(pwd)/results:/app/results \
@@ -659,8 +653,7 @@ podman run --rm \
     --tc=cluster_host:https://api.your-cluster.com:6443 \
     --tc=cluster_username:kubeadmin \
     --tc=cluster_password:${CLUSTER_PASSWORD} \
-    --tc=source_provider_type:vsphere \
-    --tc=source_provider_version:8.0.1 \
+    --tc=source_provider:vsphere-8.0.1 \
     --tc=storage_class:YOUR-STORAGE-CLASS
 
 # Report will be saved to ./results/junit-report.xml
@@ -839,8 +832,7 @@ uv run pytest -v \
   --tc=cluster_host:https://api.cluster.com:6443 \
   --tc=cluster_username:kubeadmin \
   --tc=cluster_password:${CLUSTER_PASSWORD} \
-  --tc=source_provider_type:vsphere \
-  --tc=source_provider_version:8.0.1 \
+  --tc=source_provider:vsphere-8.0.1 \
   --tc=storage_class:standard-csi
 
 # For debug options (--skip-teardown, -s -vv, etc.), see "Useful Test Options" section above

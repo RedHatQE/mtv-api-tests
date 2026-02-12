@@ -1,6 +1,7 @@
 import copy
 import functools
 import hashlib
+import json
 import multiprocessing
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
@@ -35,6 +36,23 @@ from libs.providers.vmware import VMWareProvider
 from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
+
+
+def load_source_providers() -> dict[str, dict[str, Any]]:
+    """Load source providers from .providers.json.
+
+    Returns:
+        dict[str, dict[str, Any]]: Provider configurations keyed by provider name.
+    """
+    providers_file = Path(".providers.json")
+    if not providers_file.exists():
+        return {}
+
+    with open(providers_file) as fd:
+        content = fd.read()
+        if not content.strip():
+            return {}
+        return json.loads(content)
 
 
 def generate_class_hash_prefix(nodeid: str, length: int = 6) -> str:

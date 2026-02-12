@@ -21,7 +21,6 @@ from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutSampler
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
@@ -33,15 +32,18 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
     verify_vm_disk_count,
+    wait_for_concurrent_migration_execution,
     wait_for_migration_complate,
 )
 from utilities.naming import sanitize_kubernetes_name
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager
-
+from utilities.utils import load_source_providers
 
 LOGGER = get_logger(__name__)
+
+_SOURCE_PROVIDER_TYPE = load_source_providers().get(py_config.get("source_provider", ""), {}).get("type")
 
 # Error message template for simultaneous migration validation
 EARLY_COMPLETION_MSG = (
@@ -380,7 +382,7 @@ class CopyoffloadSnapshotBase:
     ids=["copyoffload-thin-snapshots"],
 )
 @pytest.mark.skipif(
-    py_config.get("source_provider_type") != Provider.ProviderType.VSPHERE,
+    _SOURCE_PROVIDER_TYPE != Provider.ProviderType.VSPHERE,
     reason="Snapshots copy-offload test is only applicable to vSphere source providers",
 )
 @pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
@@ -397,7 +399,7 @@ class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     ids=["MTV-575:copyoffload-2tb-vm-snapshots"],
 )
 @pytest.mark.skipif(
-    py_config.get("source_provider_type") != Provider.ProviderType.VSPHERE,
+    _SOURCE_PROVIDER_TYPE != Provider.ProviderType.VSPHERE,
     reason="Snapshots copy-offload test is only applicable to vSphere source providers",
 )
 @pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
@@ -3092,69 +3094,7 @@ class TestSimultaneousCopyoffloadMigrations:
         LOGGER.info(f"Created Migration CR for plan 2: {migration_2.name}")
 
         # Validate both migrations are executing simultaneously before either completes
-        LOGGER.info("Validating both migrations enter executing state simultaneously")
-        plan_1_executing = False
-        plan_2_executing = False
-        both_executing_validated = False
-
-        def _check_plan_status(plan: Plan) -> str:
-            """Check if plan is executing, succeeded, or failed.
-
-            Args:
-                plan: The Plan resource to check status for
-
-            Returns:
-                str: "Executing" if migration is in progress, Plan.Status.SUCCEEDED if completed successfully,
-                    or Plan.Status.FAILED if migration failed
-
-            Raises:
-                AttributeError: If plan.instance.status.conditions is not accessible
-                KeyError: If condition dictionary is missing required keys (category, status, type)
-            """
-            for cond in plan.instance.status.conditions:
-                if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
-                    cond_type = cond["type"]
-                    if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
-                        return cond_type
-            return "Executing"
-
-        # Poll both plans to ensure both reach executing state before either completes
-        for sample in TimeoutSampler(
-            func=lambda: (_check_plan_status(self.plan_resource_1), _check_plan_status(self.plan_resource_2)),
-            sleep=2,
-            wait_timeout=120,
-        ):
-            status_1, status_2 = sample
-
-            # Check if plan 1 is executing
-            if status_1 == "Executing":
-                if not plan_1_executing:
-                    LOGGER.info(f"Plan 1 '{self.plan_resource_1.name}' is now executing")
-                plan_1_executing = True
-
-            # Check if plan 2 is executing
-            if status_2 == "Executing":
-                if not plan_2_executing:
-                    LOGGER.info(f"Plan 2 '{self.plan_resource_2.name}' is now executing")
-                plan_2_executing = True
-
-            # Assert both are executing simultaneously
-            if plan_1_executing and plan_2_executing and not both_executing_validated:
-                LOGGER.info("SUCCESS: Both migrations are executing simultaneously")
-                both_executing_validated = True
-                break
-
-            # If either plan completed before both were executing, fail the test
-            if status_1 in (Plan.Status.SUCCEEDED, Plan.Status.FAILED) and not both_executing_validated:
-                raise AssertionError(
-                    EARLY_COMPLETION_MSG.format(plan_num=1, completed_status=status_1, other_status=status_2)
-                )
-            if status_2 in (Plan.Status.SUCCEEDED, Plan.Status.FAILED) and not both_executing_validated:
-                raise AssertionError(
-                    EARLY_COMPLETION_MSG.format(plan_num=2, completed_status=status_2, other_status=status_1)
-                )
-
-        assert both_executing_validated, "Failed to validate both migrations executing simultaneously"
+        wait_for_concurrent_migration_execution([self.plan_resource_1, self.plan_resource_2])
 
         # Wait for both migrations to complete
         LOGGER.info("Waiting for both copyoffload migrations to complete")
@@ -3243,6 +3183,427 @@ class TestSimultaneousCopyoffloadMigrations:
             destination_provider=destination_provider,
             network_map_resource=self.network_map_2,
             storage_map_resource=self.storage_map_2,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan_2, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_concurrent_xcopy_vddk_migration"])],
+    indirect=True,
+    ids=["MTV-569:concurrent-xcopy-vddk"],
+)
+@pytest.mark.usefixtures("copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+class TestConcurrentXcopyVddkMigration:
+    """Test simultaneous execution of XCOPY and VDDK migration plans.
+
+    Plan 1: XCOPY based (copyoffload=True)
+    Plan 2: VDDK based (copyoffload=False)
+    """
+
+    storage_map_xcopy: StorageMap
+    network_map_xcopy: NetworkMap
+    plan_xcopy: Plan
+
+    storage_map_vddk: StorageMap
+    network_map_vddk: NetworkMap
+    plan_vddk: Plan
+
+    def test_create_storagemap_xcopy(
+        self,
+        prepared_plan_1: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with copy-offload configuration for XCOPY plan.
+
+        Args:
+            prepared_plan_1 (dict[str, Any]): Prepared plan configuration for the first VM.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace.
+            source_provider_data (dict[str, Any]): Source provider data.
+            copyoffload_storage_secret (Secret): Secret for copy-offload.
+
+        Raises:
+            AssertionError: If StorageMap creation fails or offloadPlugin is missing.
+        """
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map_xcopy = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            access_mode="ReadWriteOnce",
+            volume_mode="Block",
+        )
+        assert self.storage_map_xcopy, "StorageMap creation failed for XCOPY plan"
+        assert self.storage_map_xcopy.instance.spec.map[0].get("offloadPlugin"), (
+            "XCOPY StorageMap missing offloadPlugin configuration"
+        )
+
+    def test_create_storagemap_vddk(
+        self,
+        prepared_plan_2: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+    ) -> None:
+        """Create standard StorageMap for VDDK plan.
+
+        Args:
+            prepared_plan_2 (dict[str, Any]): Prepared plan configuration for the second VM.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace.
+
+        Raises:
+            AssertionError: If StorageMap creation fails or offloadPlugin is present.
+        """
+        vms_names = [vm["name"] for vm in prepared_plan_2["virtual_machines"]]
+
+        self.__class__.storage_map_vddk = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+        )
+        assert self.storage_map_vddk, "StorageMap creation failed for VDDK plan"
+        assert not self.storage_map_vddk.instance.spec.map[0].get("offloadPlugin"), (
+            "VDDK StorageMap should NOT have offloadPlugin configuration"
+        )
+
+    def test_create_networkmap_xcopy(
+        self,
+        prepared_plan_1: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource for XCOPY plan.
+
+        Args:
+            prepared_plan_1 (dict[str, Any]): Prepared plan configuration for the first VM.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace.
+            multus_network_name (dict[str, str]): Multus network name mapping.
+
+        Raises:
+            AssertionError: If NetworkMap creation fails.
+        """
+        vms_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
+
+        self.__class__.network_map_xcopy = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            multus_network_name=multus_network_name,
+            vms=vms_names,
+        )
+        assert self.network_map_xcopy, "NetworkMap creation failed for XCOPY plan"
+
+    def test_create_networkmap_vddk(
+        self,
+        prepared_plan_2: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource for VDDK plan.
+
+        Args:
+            prepared_plan_2 (dict[str, Any]): Prepared plan configuration for the second VM.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace.
+            multus_network_name (dict[str, str]): Multus network name mapping.
+
+        Raises:
+            AssertionError: If NetworkMap creation fails.
+        """
+        vms_names = [vm["name"] for vm in prepared_plan_2["virtual_machines"]]
+
+        self.__class__.network_map_vddk = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            multus_network_name=multus_network_name,
+            vms=vms_names,
+        )
+        assert self.network_map_vddk, "NetworkMap creation failed for VDDK plan"
+
+    def test_create_plan_xcopy(
+        self,
+        prepared_plan_1: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource for XCOPY migration.
+
+        Args:
+            prepared_plan_1 (dict[str, Any]): Prepared plan configuration for the first VM.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            target_namespace (str): Target namespace.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+
+        Raises:
+            AssertionError: If Plan creation fails.
+        """
+        for vm in prepared_plan_1["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_xcopy = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map_xcopy,
+            network_map=self.network_map_xcopy,
+            virtual_machines_list=prepared_plan_1["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan_1.get("warm_migration", False),
+            copyoffload=True,
+            test_name="concurrent-xcopy-plan",
+        )
+        assert self.plan_xcopy, "Plan creation failed for XCOPY plan"
+
+    def test_create_plan_vddk(
+        self,
+        prepared_plan_2: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource for VDDK migration.
+
+        Args:
+            prepared_plan_2 (dict[str, Any]): Prepared plan configuration for the second VM.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            target_namespace (str): Target namespace.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+
+        Raises:
+            AssertionError: If Plan creation fails.
+        """
+        for vm in prepared_plan_2["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_vddk = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map_vddk,
+            network_map=self.network_map_vddk,
+            virtual_machines_list=prepared_plan_2["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan_2.get("warm_migration", False),
+            copyoffload=False,
+            test_name="concurrent-vddk-plan",
+        )
+        assert self.plan_vddk, "Plan creation failed for VDDK plan"
+
+    def test_migrate_vms_concurrently(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        target_namespace: str,
+    ) -> None:
+        """Execute both migrations concurrently and verify simultaneous execution.
+
+        Args:
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Target namespace.
+        """
+        LOGGER.info("Starting simultaneous execution of XCOPY and VDDK migration plans")
+
+        # Create Migration CR for XCOPY plan
+        migration_xcopy = create_and_store_resource(
+            client=ocp_admin_client,
+            fixture_store=fixture_store,
+            resource=Migration,
+            namespace=target_namespace,
+            plan_name=self.plan_xcopy.name,
+            plan_namespace=self.plan_xcopy.namespace,
+            test_name="concurrent-xcopy-migration",
+        )
+        LOGGER.info(f"Created Migration CR for XCOPY plan: {migration_xcopy.name}")
+
+        # Create Migration CR for VDDK plan
+        migration_vddk = create_and_store_resource(
+            client=ocp_admin_client,
+            fixture_store=fixture_store,
+            resource=Migration,
+            namespace=target_namespace,
+            plan_name=self.plan_vddk.name,
+            plan_namespace=self.plan_vddk.namespace,
+            test_name="concurrent-vddk-migration",
+        )
+        LOGGER.info(f"Created Migration CR for VDDK plan: {migration_vddk.name}")
+
+        # Validate both migrations are executing simultaneously before either completes
+        wait_for_concurrent_migration_execution([self.plan_xcopy, self.plan_vddk])
+
+        # Wait for both migrations to complete
+        LOGGER.info("Waiting for XCOPY migration to complete")
+        wait_for_migration_complate(plan=self.plan_xcopy)
+        LOGGER.info("XCOPY migration completed")
+
+        LOGGER.info("Waiting for VDDK migration to complete")
+        wait_for_migration_complate(plan=self.plan_vddk)
+        LOGGER.info("VDDK migration completed")
+
+    def test_check_vms_xcopy(
+        self,
+        prepared_plan_1: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs from XCOPY plan.
+
+        Args:
+            prepared_plan_1 (dict[str, Any]): Prepared plan configuration for the first VM.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_data (dict[str, Any]): Source provider data.
+            target_namespace (str): Target namespace.
+            source_vms_namespace (str): Source VMs namespace.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (SSHConnectionManager | None): SSH connection manager.
+        """
+        check_vms(
+            plan=prepared_plan_1,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map_xcopy,
+            storage_map_resource=self.storage_map_xcopy,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan_1, target_namespace=target_namespace
+        )
+
+    def test_check_vms_vddk(
+        self,
+        prepared_plan_2: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs from VDDK plan.
+
+        Args:
+            prepared_plan_2 (dict[str, Any]): Prepared plan configuration for the second VM.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_data (dict[str, Any]): Source provider data.
+            target_namespace (str): Target namespace.
+            source_vms_namespace (str): Source VMs namespace.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (SSHConnectionManager | None): SSH connection manager.
+        """
+        check_vms(
+            plan=prepared_plan_2,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map_vddk,
+            storage_map_resource=self.storage_map_vddk,
             source_provider_data=source_provider_data,
             source_vms_namespace=source_vms_namespace,
             source_provider_inventory=source_provider_inventory,

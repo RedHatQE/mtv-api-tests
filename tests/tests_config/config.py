@@ -470,6 +470,26 @@ tests_params: dict = {
         "copyoffload": True,
         "guest_agent_timeout": 600,
     },
+    "test_concurrent_xcopy_vddk_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thick-lazy",
+            },
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thick-lazy",
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
 }
 
 for _dir in dir():

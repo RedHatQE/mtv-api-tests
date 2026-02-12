@@ -101,17 +101,9 @@ Add the `copyoffload` section to your `.providers.json` file:
 
 > **Note: Provider Key Format**
 >
-> Provider keys **must** follow the format `{type}-{version}` (e.g., `vsphere-8.0.3.00400`).
->
-> **Why this matters**: The test loader constructs the provider lookup key as
-> `{source_provider_type}-{source_provider_version}` using your CLI arguments. If your provider key doesn't
-> match this exact format, the tests will fail with "provider not found" errors.
->
-> **Example**:
->
-> - CLI args: `--tc=source_provider_type:vsphere --tc=source_provider_version:8.0.3.00400`
-> - Required key: `"vsphere-8.0.3.00400"` (must match `{type}-{version}`)
-> - The `"version"` field inside the configuration must also be `"8.0.3.00400"`
+> The provider key in `.providers.json` (e.g., `vsphere-8.0.3.00400`) is passed directly via
+> `--tc=source_provider:vsphere-8.0.3.00400`. The value must match exactly what is defined as the
+> key in your `.providers.json` file.
 >
 > **Action required**: Replace `vsphere-8.0.3.00400` in both the key name and `version` field below with your
 > actual vSphere version.
@@ -329,8 +321,7 @@ spec:
               ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \
               ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \
               ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \
-              --tc=source_provider_type:vsphere \
-              --tc=source_provider_version:8.0.3.00400 \
+              --tc=source_provider:vsphere-8.0.3.00400 \
               --tc=storage_class:my-block-storageclass
         volumeMounts:
         - name: config
@@ -346,7 +337,7 @@ EOF
 **Customization notes:**
 
 - Change `name: mtv-copyoffload-tests` to a unique job name if needed
-- Replace `8.0.3.00400` with your vSphere version (must match key in `.providers.json`)
+- Replace `vsphere-8.0.3.00400` with your provider key from `.providers.json`
 - Replace `my-block-storageclass` with your OpenShift block storage class name
 - To run a specific test, add `-k test_name` after `-m copyoffload` (e.g., `-m copyoffload -k test_copyoffload_thin_migration`)
 - To use a custom image, replace `ghcr.io/redhatqe/mtv-api-tests:latest` with your registry URL

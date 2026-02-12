@@ -71,6 +71,7 @@ from utilities.utils import (
     get_cluster_client,
     get_cluster_version,
     get_value_from_py_config,
+    load_source_providers,
 )
 from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
@@ -119,7 +120,7 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionstart(session):
-    required_config = ("storage_class", "source_provider_type", "source_provider_version")
+    required_config = ("storage_class", "source_provider")
 
     if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
         missing_configs: list[str] = []
@@ -231,7 +232,7 @@ def pytest_collection_modifyitems(session, config, items):
     vms_for_current_session: set = set()
 
     for item in items:
-        item.name = f"{item.name}-{py_config.get('source_provider_type')}-{py_config.get('source_provider_version')}-{py_config.get('storage_class')}"
+        item.name = f"{item.name}-{py_config.get('source_provider')}-{py_config.get('storage_class')}"
 
         # Get test config from parametrization or tests_params
         test_config = None
@@ -257,6 +258,9 @@ def pytest_collection_modifyitems(session, config, items):
 
 
 def pytest_exception_interact(node, call, report):
+    if node.session.config.option.setupplan or node.session.config.option.collectonly:
+        return
+
     if not node.session.config.getoption("skip_data_collector"):
         _session_store = get_fixture_store(node.session)
         _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
@@ -333,15 +337,7 @@ def base_resource_name(fixture_store, session_uuid, source_provider_data):
 
 @pytest.fixture(scope="session")
 def source_providers() -> dict[str, dict[str, Any]]:
-    _provider_file_name = ".providers.json"
-    providers_file = Path(_provider_file_name)
-    if not providers_file.exists():
-        raise MissingProvidersFileError(f"{_provider_file_name} file is missing")
-
-    with open(providers_file, "r") as fd:
-        source_providers_dict = json.load(fd)
-
-    return source_providers_dict
+    return load_source_providers()
 
 
 @pytest.fixture(scope="session")
@@ -565,13 +561,27 @@ def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixtu
 
 
 @pytest.fixture(scope="session")
-def source_provider_data(source_providers, fixture_store):
-    _source_provider_key = f"{py_config['source_provider_type']}-{py_config['source_provider_version']}"
-    _source_provider = source_providers[_source_provider_key]
+def source_provider_data(source_providers: dict[str, dict[str, Any]], fixture_store: dict[str, Any]) -> dict[str, Any]:
+    """Resolve source provider configuration from .providers.json.
 
-    if not _source_provider:
-        raise ValueError(f"Source provider {_source_provider['type']}-{_source_provider['version']} not found")
+    Args:
+        source_providers (dict[str, dict[str, Any]]): All provider configurations from .providers.json.
+        fixture_store (dict[str, Any]): Session fixture store for teardown tracking.
 
+    Returns:
+        dict[str, Any]: The resolved source provider configuration dict.
+    """
+    if not source_providers:
+        raise MissingProvidersFileError()
+
+    requested_provider = py_config["source_provider"]
+    if requested_provider not in source_providers:
+        raise ValueError(
+            f"Source provider '{requested_provider}' not found in '.providers.json'. "
+            f"Available providers: {sorted(source_providers.keys())}"
+        )
+
+    _source_provider = source_providers[requested_provider]
     fixture_store["source_provider_data"] = _source_provider
     return _source_provider
 

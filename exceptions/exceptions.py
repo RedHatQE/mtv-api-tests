@@ -47,7 +47,8 @@ class OvirtMTVDatacenterStatusError(Exception):
 
 
 class MissingProvidersFileError(Exception):
-    pass
+    def __init__(self) -> None:
+        super().__init__("'.providers.json' file is missing or empty")
 
 
 class VmCloneError(Exception):
