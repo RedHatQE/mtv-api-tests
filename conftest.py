@@ -35,6 +35,7 @@ from timeout_sampler import TimeoutSampler
 
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
+    MissingProvidersFileError,
     RemoteClusterAndLocalCluterNamesError,
 )
 from libs.base_provider import BaseProvider
@@ -257,6 +258,9 @@ def pytest_collection_modifyitems(session, config, items):
 
 
 def pytest_exception_interact(node, call, report):
+    if node.session.config.option.setupplan or node.session.config.option.collectonly:
+        return
+
     if not node.session.config.getoption("skip_data_collector"):
         _session_store = get_fixture_store(node.session)
         _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
@@ -567,7 +571,17 @@ def source_provider_data(source_providers: dict[str, dict[str, Any]], fixture_st
     Returns:
         dict[str, Any]: The resolved source provider configuration dict.
     """
-    _source_provider = source_providers[py_config["source_provider"]]
+    if not source_providers:
+        raise MissingProvidersFileError()
+
+    requested_provider = py_config["source_provider"]
+    if requested_provider not in source_providers:
+        raise ValueError(
+            f"Source provider '{requested_provider}' not found in '.providers.json'. "
+            f"Available providers: {sorted(source_providers.keys())}"
+        )
+
+    _source_provider = source_providers[requested_provider]
     fixture_store["source_provider_data"] = _source_provider
     return _source_provider
 

@@ -26,7 +26,6 @@ from ocp_resources.virtual_machine_cluster_preference import VirtualMachineClust
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
-from exceptions.exceptions import MissingProvidersFileError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
@@ -44,13 +43,10 @@ def load_source_providers() -> dict[str, dict[str, Any]]:
 
     Returns:
         dict[str, dict[str, Any]]: Provider configurations keyed by provider name.
-
-    Raises:
-        MissingProvidersFileError: If .providers.json doesn't exist.
     """
     providers_file = Path(".providers.json")
     if not providers_file.exists():
-        raise MissingProvidersFileError(f"{providers_file} file is missing")
+        return {}
 
     with open(providers_file, "r") as fd:
         return json.load(fd)
