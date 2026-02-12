@@ -48,7 +48,7 @@ def load_source_providers() -> dict[str, dict[str, Any]]:
     if not providers_file.exists():
         return {}
 
-    with open(providers_file, "r") as fd:
+    with open(providers_file) as fd:
         return json.load(fd)
 
 
