@@ -128,6 +128,8 @@ def pytest_sessionstart(session):
     required_config = ("storage_class", "source_provider")
 
     if not is_dry_run(session.config):
+        BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION START')}")
+
         missing_configs: list[str] = []
 
         for _req in required_config:
@@ -210,6 +212,8 @@ def pytest_report_teststatus(report, config):
 def pytest_sessionfinish(session, exitstatus):
     if is_dry_run(session.config):
         return
+
+    BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION FINISH')}")
 
     _session_store = get_fixture_store(session)
 
