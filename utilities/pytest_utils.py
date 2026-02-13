@@ -77,6 +77,8 @@ def setup_ai_analysis(session: pytest.Session) -> None:
 
     load_dotenv()
 
+    LOGGER.info("Setting up AI-powered test failure analysis")
+
     if not os.environ.get("JJI_SERVER_URL"):
         LOGGER.warning("JJI_SERVER_URL is not set. Analyze with AI features will be disabled.")
         session.config.option.analyze_with_ai = False

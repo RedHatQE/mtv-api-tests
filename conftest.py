@@ -236,6 +236,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     if session.config.getoption("analyze_with_ai"):
         try:
+            LOGGER.info("Starting AI-powered test failure analysis")
             enrich_junit_xml(session)
         except Exception as exp:
             LOGGER.warning(f"jenkins-job-insight: failed to enrich JUnit XML, original preserved. Error: {exp}")
