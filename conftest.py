@@ -24,11 +24,11 @@ from ocp_resources.network_attachment_definition import NetworkAttachmentDefinit
 from ocp_resources.node import Node
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
+from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
-from ocp_resources.resource import ResourceEditor
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
@@ -58,8 +58,11 @@ from utilities.must_gather import run_must_gather
 from utilities.naming import generate_name_with_uuid
 from utilities.pytest_utils import (
     collect_created_resources,
+    enrich_junit_xml,
+    is_dry_run,
     prepare_base_path,
     session_teardown,
+    setup_ai_analysis,
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
 from utilities.ssh_utils import SSHConnectionManager
@@ -73,8 +76,8 @@ from utilities.utils import (
     get_value_from_py_config,
     load_source_providers,
 )
-from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
+from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 
 RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
@@ -89,6 +92,8 @@ def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
+    analyze_with_ai_group = parser.getgroup(name="Analyze with AI")
+    analyze_with_ai_group.addoption("--analyze-with-ai", action="store_true", help="Analyze test failures using AI")
 
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
@@ -122,7 +127,7 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionstart(session):
     required_config = ("storage_class", "source_provider")
 
-    if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
+    if not is_dry_run(session.config):
         missing_configs: list[str] = []
 
         for _req in required_config:
@@ -155,6 +160,9 @@ def pytest_sessionstart(session):
         log_file=tests_log_file,
         log_level=_log_level,
     )
+
+    if session.config.getoption("analyze_with_ai"):
+        setup_ai_analysis(session)
 
 
 def pytest_fixture_setup(fixturedef, request):
@@ -200,7 +208,7 @@ def pytest_report_teststatus(report, config):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    if session.config.option.setupplan or session.config.option.collectonly:
+    if is_dry_run(session.config):
         return
 
     _session_store = get_fixture_store(session)
@@ -225,6 +233,12 @@ def pytest_sessionfinish(session, exitstatus):
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     reporter.summary_stats()
+
+    if session.config.getoption("analyze_with_ai"):
+        try:
+            enrich_junit_xml(session)
+        except Exception as exp:
+            LOGGER.warning(f"jenkins-job-insight: failed to enrich JUnit XML, original preserved. Error: {exp}")
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -253,12 +267,12 @@ def pytest_collection_modifyitems(session, config, items):
 
     _session_store["vms_for_current_session"] = vms_for_current_session
 
-    if not (session.config.getoption("--setupplan") or session.config.getoption("--collectonly")):
+    if not is_dry_run(session.config):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
 def pytest_exception_interact(node, call, report):
-    if node.session.config.option.setupplan or node.session.config.option.collectonly:
+    if is_dry_run(node.session.config):
         return
 
     if not node.session.config.getoption("skip_data_collector"):

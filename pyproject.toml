@@ -63,4 +63,6 @@ dependencies = [
   "jc>=1.25.0",
   "py-go-template>=0.2.0",
   "filelock>=3.16.0",
+  "python-dotenv>=1.2.1",
+  "requests>=2.32.5",
 ]

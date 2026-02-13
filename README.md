@@ -675,6 +675,44 @@ oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 **View report in CI/CD tools**: Most CI/CD platforms (Jenkins, GitLab CI, GitHub Actions) can parse JUnit XML
 for test result dashboards.
 
+### AI-Powered Failure Analysis (`--analyze-with-ai`)
+
+The `--analyze-with-ai` flag enriches JUnit XML reports with AI-powered failure analysis. After tests complete,
+failed test cases are sent to a [Jenkins Job Insight](https://github.com/myk-org/jenkins-job-insight) (JJI) server,
+which classifies failures and suggests fixes. The analysis results are injected back into the JUnit XML as
+structured properties (classification, details, suggested code fixes, bug reports) and human-readable summaries.
+
+**Prerequisites:**
+
+- A running [Jenkins Job Insight](https://github.com/myk-org/jenkins-job-insight) server
+- `JJI_SERVER_URL` environment variable set to the server URL
+
+**Environment variables:**
+
+| Variable | Required | Default | Description |
+| -------- | -------- | ------- | ----------- |
+| `JJI_SERVER_URL` | Yes | - | JJI server URL |
+| `JJI_AI_PROVIDER` | No | `claude` | AI provider |
+| `JJI_AI_MODEL` | No | `claude-opus-4-6[1m]` | AI model |
+| `JJI_TIMEOUT` | No | `600` | Request timeout in seconds |
+
+Environment variables can be set via a `.env` file in the project root (loaded automatically when the flag is used).
+
+**Usage:**
+
+```bash
+uv run pytest -m tier0 -v --analyze-with-ai \
+  --tc=source_provider:vsphere-8.0.1 \
+  --tc=storage_class:YOUR-STORAGE-CLASS
+```
+
+**Notes:**
+
+- Requires `--junit-xml` (enabled by default in `pytest.ini`)
+- Skipped automatically during `--collectonly` and `--setupplan`
+- If `JJI_SERVER_URL` is not set, the feature is disabled with a warning
+- Original JUnit XML is preserved if enrichment fails
+
 ---
 
 ## Troubleshooting
