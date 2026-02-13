@@ -352,7 +352,6 @@ def base_resource_name(fixture_store, session_uuid, source_provider_data):
 
 @pytest.fixture(scope="session")
 def source_providers() -> dict[str, dict[str, Any]]:
-    raise AssertionError
     return load_source_providers()
 
 
