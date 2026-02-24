@@ -32,12 +32,15 @@ def _get_idms_name(channel: str) -> str:
         str: The derived IDMS resource name.
 
     Raises:
-        ValueError: If ``channel`` is empty.
+        ValueError: If ``channel`` is empty or has no version after
+            the ``release-v`` prefix.
     """
     if not channel:
         raise ValueError("Subscription channel is empty")
 
     stripped = channel.removeprefix("release-v")
+    if not stripped:
+        raise ValueError(f"Subscription channel '{channel}' has no version after 'release-v'")
     return f"devel-testing-for-{stripped.replace('.', '-')}"
 
 
@@ -67,6 +70,25 @@ def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
     raise ValueError(f"No must-gather entry found in IDMS '{idms.name}'")
 
 
+def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
+    """Extract the MUST_GATHER_IMAGE value from the MTV CSV.
+
+    Args:
+        mtv_csv (ClusterServiceVersion): The MTV ClusterServiceVersion resource.
+
+    Returns:
+        str: The MUST_GATHER_IMAGE value.
+
+    Raises:
+        ValueError: If MUST_GATHER_IMAGE is missing from the CSV environment variables.
+    """
+    envs = mtv_csv.instance.spec.install.spec.deployments[0].spec.template.spec.containers[0].env
+    images = [env["value"] for env in envs if env["name"] == "MUST_GATHER_IMAGE"]
+    if not images:
+        raise ValueError(f"No MUST_GATHER_IMAGE found in MTV ClusterServiceVersion '{mtv_csv.name}'")
+    return images[0]
+
+
 def _resolve_must_gather_image(
     ocp_admin_client: DynamicClient,
     mtv_subs: Subscription,
@@ -89,7 +111,6 @@ def _resolve_must_gather_image(
     Raises:
         ValueError: If the Subscription channel is empty, no must-gather entry
             is found in the IDMS, or the CSV image has no digest separator.
-        NotFoundError: If the IDMS resource does not exist on the cluster.
     """
     channel = mtv_subs.instance.spec.channel
     idms_name = _get_idms_name(channel=channel)
@@ -131,16 +152,12 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
             client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
         )
 
-        mtv_envs = mtv_csv.instance.spec.install.spec.deployments[0].spec.template.spec.containers[0].env
-        csv_must_gather_images = [env["value"] for env in mtv_envs if env["name"] == "MUST_GATHER_IMAGE"]
-
-        if not csv_must_gather_images:
-            raise ValueError(f"No MUST_GATHER_IMAGE found in MTV ClusterServiceVersion '{installed_csv}'")
+        csv_image = _get_csv_must_gather_image(mtv_csv=mtv_csv)
 
         must_gather_image = _resolve_must_gather_image(
             ocp_admin_client=ocp_admin_client,
             mtv_subs=mtv_subs,
-            csv_image=csv_must_gather_images[0],
+            csv_image=csv_image,
         )
 
         _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
@@ -154,4 +171,4 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
         else:
             run_command(shlex.split(f"{_must_gather_base_cmd} -- -- NS={mtv_namespace}"))
     except Exception as ex:
-        LOGGER.error(f"Failed to run must-gather. {ex}")
+        LOGGER.exception(f"Failed to run must-gather. {ex}")
