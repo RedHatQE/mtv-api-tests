@@ -85,9 +85,12 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
         str: The MUST_GATHER_IMAGE value.
 
     Raises:
-        ValueError: If MUST_GATHER_IMAGE is missing from the CSV environment variables.
+        ValueError: If the container env list is None or MUST_GATHER_IMAGE is
+            missing from the CSV environment variables.
     """
     envs = mtv_csv.instance.spec.install.spec.deployments[0].spec.template.spec.containers[0].env
+    if envs is None:
+        raise ValueError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no container env list")
     images = [env["value"] for env in envs if env["name"] == "MUST_GATHER_IMAGE"]
     if not images:
         raise ValueError(f"No MUST_GATHER_IMAGE found in MTV ClusterServiceVersion '{mtv_csv.name}'")
