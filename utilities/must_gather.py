@@ -23,10 +23,12 @@ def _get_idms_name(channel: str) -> str:
     """Convert a Subscription channel to an IDMS name.
 
     Strips the ``release-v`` prefix (if present), replaces dots with dashes,
-    and prepends ``devel-testing-for-``.
+    and prepends ``devel-testing-for-``. Non-release channels like
+    ``dev-preview`` are used as-is after the prefix.
 
     Args:
-        channel (str): The Subscription channel string (e.g. ``release-v2.11``).
+        channel (str): The Subscription channel string
+            (e.g. ``release-v2.11``, ``dev-preview``).
 
     Returns:
         str: The derived IDMS resource name.
@@ -47,14 +49,16 @@ def _get_idms_name(channel: str) -> str:
 def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
     """Extract the must-gather mirror URL from an ImageDigestMirrorSet.
 
-    Iterates over ``imageDigestMirrors`` entries and returns the first mirror
-    URL from the entry whose ``source`` contains ``must-gather``.
+    Iterates over ``imageDigestMirrors`` entries and returns the mirror URL
+    from the entry whose ``source`` contains ``must-gather``. Prefers a mirror
+    containing ``quay`` in the URL; falls back to the first mirror otherwise.
 
     Args:
         idms (ImageDigestMirrorSet): The IDMS resource to inspect.
 
     Returns:
-        str: The first mirror URL for the must-gather image.
+        str: The preferred quay mirror URL, or the first mirror URL if no
+            quay mirror exists.
 
     Raises:
         ValueError: If no ``imageDigestMirrors`` entry contains ``must-gather``
@@ -65,7 +69,8 @@ def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
             mirrors = mirror_entry.get("mirrors", [])
             if not mirrors:
                 raise ValueError(f"IDMS '{idms.name}' has must-gather entry with no mirrors")
-            return mirrors[0]
+            quay_mirrors = [m for m in mirrors if "quay" in m]
+            return quay_mirrors[0] if quay_mirrors else mirrors[0]
 
     raise ValueError(f"No must-gather entry found in IDMS '{idms.name}'")
 
@@ -92,26 +97,29 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
 def _resolve_must_gather_image(
     ocp_admin_client: DynamicClient,
     mtv_subs: Subscription,
-    csv_image: str,
+    mtv_csv: ClusterServiceVersion,
 ) -> str:
     """Resolve the must-gather image via IDMS.
 
-    Builds the IDMS resource name from the Subscription channel, retrieves the
-    mirror URL, extracts the SHA from the CSV image, and combines them.
+    Extracts the must-gather image from the CSV, builds the IDMS resource name
+    from the Subscription channel, retrieves the mirror URL, extracts the SHA
+    from the CSV image, and combines them.
 
     Args:
         ocp_admin_client (DynamicClient): The OpenShift admin client.
         mtv_subs (Subscription): The MTV operator Subscription resource.
-        csv_image (str): The must-gather image reference from the CSV
-            (used for SHA extraction).
+        mtv_csv (ClusterServiceVersion): The MTV ClusterServiceVersion resource
+            (used to extract the must-gather image for SHA extraction).
 
     Returns:
         str: The resolved must-gather image string.
 
     Raises:
-        ValueError: If the Subscription channel is empty, no must-gather entry
+        ValueError: If MUST_GATHER_IMAGE is missing from the CSV environment
+            variables, the Subscription channel is empty, no must-gather entry
             is found in the IDMS, or the CSV image has no digest separator.
     """
+    csv_image = _get_csv_must_gather_image(mtv_csv=mtv_csv)
     channel = mtv_subs.instance.spec.channel
     idms_name = _get_idms_name(channel=channel)
     LOGGER.info(f"Looking up IDMS '{idms_name}' for must-gather mirror")
@@ -152,12 +160,10 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
             client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
         )
 
-        csv_image = _get_csv_must_gather_image(mtv_csv=mtv_csv)
-
         must_gather_image = _resolve_must_gather_image(
             ocp_admin_client=ocp_admin_client,
             mtv_subs=mtv_subs,
-            csv_image=csv_image,
+            mtv_csv=mtv_csv,
         )
 
         _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
