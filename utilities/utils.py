@@ -587,9 +587,15 @@ def get_cluster_version(client: DynamicClient) -> Version:
 
     try:
         version_str = cluster_version.instance.status.desired.version
-        return Version(version_str)
     except (AttributeError, KeyError) as e:
         raise ValueError(f"Failed to get OCP version: {e}") from e
+
+    try:
+        return Version(version_str)
+    except InvalidVersion:
+        base_version = version_str.split("-")[0]
+        LOGGER.warning(f"OCP version '{version_str}' is not PEP 440 compliant, using base version '{base_version}'")
+        return Version(base_version)
 
 
 def populate_vm_ids(plan: dict[str, Any], inventory: ForkliftInventory) -> None:
