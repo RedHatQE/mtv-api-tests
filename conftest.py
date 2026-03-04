@@ -73,6 +73,7 @@ from utilities.utils import (
     generate_class_hash_prefix,
     get_cluster_client,
     get_cluster_version,
+    get_cluster_version_str,
     get_value_from_py_config,
     load_source_providers,
 )
@@ -474,7 +475,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
         TimeoutError: If timeout waiting for file lock.
     """
     # Get cluster version for versioned caching
-    cluster_version = get_cluster_version(ocp_admin_client)
+    cluster_version_str = get_cluster_version_str(ocp_admin_client)
 
     # Persistent shared directory for virtctl binary caching:
     # - Path is intentionally persistent across test runs (not session-scoped tmp)
@@ -482,7 +483,7 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     # - Avoids re-downloading virtctl on every test session
     # - Includes cluster version for automatic cache invalidation
     # - Do NOT change to pytest's tmp_path or similar session-scoped directories
-    shared_dir = Path(tempfile.gettempdir()) / "pytest-shared-virtctl" / str(cluster_version)
+    shared_dir = Path(tempfile.gettempdir()) / "pytest-shared-virtctl" / cluster_version_str.replace(".", "-")
     shared_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
     # Security: check for symlink hijack attack

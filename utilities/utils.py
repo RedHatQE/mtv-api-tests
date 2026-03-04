@@ -3,6 +3,7 @@ import functools
 import hashlib
 import json
 import multiprocessing
+import re
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -571,31 +572,63 @@ def get_cluster_client() -> DynamicClient:
     raise ValueError("Failed to get client for cluster")
 
 
-def get_cluster_version(client: DynamicClient) -> Version:
-    """Get the OpenShift cluster version.
+def get_cluster_version_str(client: DynamicClient) -> str:
+    """Get the raw OpenShift cluster version string.
+
+    Returns the version string exactly as reported by the cluster, without
+    any PEP 440 normalization. Use this when the exact version string matters
+    (e.g., cache directory naming).
 
     Args:
-        client (DynamicClient): OpenShift client
+        client (DynamicClient): OpenShift client.
 
     Returns:
-        Version: Cluster version object (e.g., Version("4.20.1"))
+        str: Raw cluster version string (e.g., "4.22.0-ec.2", "4.20.1").
 
     Raises:
-        ValueError: If version cannot be determined
+        ValueError: If version cannot be determined.
     """
     cluster_version = ClusterVersion(client=client, name="version", ensure_exists=True)
 
     try:
-        version_str = cluster_version.instance.status.desired.version
+        return cluster_version.instance.status.desired.version
     except (AttributeError, KeyError) as e:
         raise ValueError(f"Failed to get OCP version: {e}") from e
+
+
+def get_cluster_version(client: DynamicClient) -> Version:
+    """Get the OpenShift cluster version as a PEP 440 Version object.
+
+    Handles non-PEP 440 compliant versions (e.g., "4.22.0-ec.2") by extracting
+    the base semantic version (X.Y.Z) and returning it as a Version object.
+    A warning is logged when this fallback is used.
+
+    Args:
+        client (DynamicClient): OpenShift client.
+
+    Returns:
+        Version: Cluster version object (e.g., Version("4.20.1")).
+            For non-PEP 440 versions like "4.22.0-ec.2", returns Version("4.22.0").
+
+    Raises:
+        ValueError: If version cannot be determined or parsed.
+    """
+    version_str = get_cluster_version_str(client=client)
 
     try:
         return Version(version_str)
     except InvalidVersion:
-        base_version = version_str.split("-")[0]
+        match = re.match(r"(\d+\.\d+(?:\.\d+)?)", version_str)
+        if not match:
+            raise ValueError(f"Failed to parse OCP version '{version_str}': no base version found")
+        base_version = match.group(1)
         LOGGER.warning(f"OCP version '{version_str}' is not PEP 440 compliant, using base version '{base_version}'")
-        return Version(base_version)
+        try:
+            return Version(base_version)
+        except InvalidVersion as e:
+            raise ValueError(
+                f"Failed to parse OCP version '{version_str}': base version '{base_version}' is also invalid"
+            ) from e
 
 
 def populate_vm_ids(plan: dict[str, Any], inventory: ForkliftInventory) -> None:
