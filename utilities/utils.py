@@ -620,7 +620,7 @@ def get_cluster_version(client: DynamicClient) -> Version:
     except InvalidVersion:
         match = re.match(r"(\d+\.\d+(?:\.\d+)?)", version_str)
         if not match:
-            raise ValueError(f"Failed to parse OCP version '{version_str}': no base version found")
+            raise ValueError(f"Failed to parse OCP version '{version_str}': no base version found") from None
         base_version = match.group(1)
         LOGGER.warning(f"OCP version '{version_str}' is not PEP 440 compliant, using base version '{base_version}'")
         try:

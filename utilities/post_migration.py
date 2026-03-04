@@ -14,7 +14,6 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
-from packaging.version import InvalidVersion, Version
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
 from pyhelper_utils.exceptions import CommandExecFailed
 from pytest_testconfig import py_config
@@ -890,8 +889,7 @@ def check_serial_preservation(
 
     Raises:
         AssertionError: If serial number validation fails
-        ValueError: If OCP version cannot be determined
-        InvalidVersion: If OCP version cannot be parsed
+        ValueError: If OCP version cannot be determined or parsed
     """
     source_uuid = source_vm["uuid"]
     dest_serial = destination_vm["serial"]
