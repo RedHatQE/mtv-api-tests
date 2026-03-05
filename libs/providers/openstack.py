@@ -395,7 +395,9 @@ class OpenStackProvider(BaseProvider):
                     name=f"{clone_vm_name}-{volume_name_suffix}",
                     snapshot_id=vol_snapshot.id,
                     size=volume_size,
-                    wait=True,
+                )
+                new_volume = self.api.block_storage.wait_for_status(
+                    new_volume, status="available", failures=["error"], wait=300
                 )
 
                 bdm.append({
