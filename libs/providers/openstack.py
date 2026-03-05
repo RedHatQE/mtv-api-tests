@@ -338,6 +338,9 @@ class OpenStackProvider(BaseProvider):
         snapshot: OSP_Image | None = None
         snapshot_name = f"{clone_vm_name}-snapshot"
 
+        created_volume_ids: list[str] = []
+        server_created = False
+
         try:
             LOGGER.info(f"Creating snapshot '{snapshot_name}'...")
             snapshot = self.api.compute.create_server_image(server=source_vm.id, name=snapshot_name, wait=True)
@@ -399,6 +402,7 @@ class OpenStackProvider(BaseProvider):
                 new_volume = self.api.block_storage.wait_for_status(
                     new_volume, status="available", failures=["error"], wait=300
                 )
+                created_volume_ids.append(new_volume.id)
 
                 bdm.append({
                     "uuid": new_volume.id,
@@ -427,6 +431,7 @@ class OpenStackProvider(BaseProvider):
                 networks=[{"uuid": network_id}],
             )
             new_server = self.api.compute.wait_for_server(new_server, wait=300)
+            server_created = True
 
             # Track cloned VM for cleanup immediately after creation
             if self.fixture_store:
@@ -444,6 +449,12 @@ class OpenStackProvider(BaseProvider):
             return new_server
 
         finally:
+            # Clean up orphaned volumes if server was not created
+            if not server_created and created_volume_ids:
+                LOGGER.warning(f"Cleaning up {len(created_volume_ids)} orphaned volume(s) after failed clone")
+                for vol_id in created_volume_ids:
+                    self.api.block_storage.delete_volume(vol_id, ignore_missing=True)
+
             # Clean up Glance image snapshot if it exists
             if snapshot:
                 LOGGER.info(f"Cleaning up Glance image snapshot '{snapshot.name}'...")
