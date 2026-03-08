@@ -41,6 +41,19 @@ Your goal is to classify each failure as `CODE ISSUE` or `PRODUCT BUG` only when
 available evidence supports that conclusion. Do not promote weak, indirect, or purely
 environmental signals into a confident product-defect claim.
 
+**Allowed classification values:**
+
+- `CODE ISSUE` - Test framework, test code, or test-owned configuration problem
+- `PRODUCT BUG` - Actual MTV, Forklift, or related product defect
+
+**Allowed confidence levels:**
+
+- `high` - Direct causal evidence (e.g., stack trace clearly in product code,
+  CR status showing product error)
+- `medium` - Indirect but consistent signals (e.g., pattern matches known
+  product issue, but logs incomplete)
+- `low` - Environmental blockers, contradictory signals, or missing direct cause
+
 ### Required Decision Order
 
 1. **Identify the first true failure.**
@@ -138,7 +151,7 @@ Guidance:
 - Do NOT classify a pure environmental blocker as a confirmed `PRODUCT BUG`.
 - If the evidence only shows environment instability, say so explicitly and keep
   confidence low.
-- If a binary label is absolutely required by the consuming system, make it explicit
+- If a binary label is required by the consuming system, make it explicit
   that the issue is environmental and the binary label is only a fallback, not a
   confirmed product-defect conclusion.
 - `skipif` or runtime `skip` caused by missing prerequisites is not a product defect.
@@ -231,7 +244,7 @@ Rules for using that structure:
   the failure; do not dismiss a warning without a reason
 - Multiple issues can coexist. Identify the PRIMARY cause and list secondary issues
   separately instead of collapsing them into one vague explanation
-- Do not let a generic warning outweigh a direct failure signal unless you can explain
+- Do not let a generic warning outweigh a direct failure signal unless you can demonstrate
   the causal path
 - If the evidence is contradictory, say so explicitly and lower confidence
 
