@@ -314,7 +314,6 @@ Key product and runtime components to inspect:
 ## 6. Reference Links
 
 - Product docs: [MTV Documentation][mtv-doc],
-  [MTV CLI Migration with CRDs][mtv-cli],
   [OpenShift Virtualization Documentation][ocp-virt-doc]
 - Upstream: [kubev2v/forklift][forklift-repo],
   [kubev2v/forklift-console-plugin][forklift-console],
@@ -327,7 +326,6 @@ Key product and runtime components to inspect:
   [Hooks documentation][hooks-docs]
 
 [mtv-doc]: https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/
-[mtv-cli]: https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/
 [ocp-virt-doc]: https://docs.redhat.com/en/documentation/red_hat_openshift_virtualization/
 [forklift-repo]: https://github.com/kubev2v/forklift
 [forklift-console]: https://github.com/kubev2v/forklift-console-plugin
