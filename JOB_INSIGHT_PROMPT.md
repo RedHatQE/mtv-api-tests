@@ -301,23 +301,21 @@ Investigate it explicitly before ruling it out.
 
 Key product and runtime components to inspect:
 
-- `forklift-controller` - orchestrates migrations; inspect pod logs in `openshift-mtv`
-- `forklift-inventory` - provides source provider inventory data and inventory sync
-- Validation or admission logic - inspect when valid Plan or mapping CRs are rejected
-- `virt-v2v` - performs VM disk conversion; inspect migration pod logs in the target
-  namespace
-- `CDI` - handles DataVolume import or upload workflows; inspect DataVolume objects,
-  PVCs, and CDI pod logs
-- `KubeVirt` - manages the resulting VM runtime; inspect `VirtualMachine`, `VMI`, and
-  related pod status
-- Provider, StorageMap, NetworkMap, Plan, Migration, and Hook CRs - inspect status,
-  conditions, and per-VM pipeline steps
+| Component | Role in failure analysis | First place to inspect |
+| --- | --- | --- |
+| `forklift-controller` | Orchestrates migrations | Pod logs in `openshift-mtv` |
+| `forklift-inventory` | Source inventory sync | Pod logs and provider sync status |
+| Validation / admission | Rejects invalid CRs | Controller logs, webhook errors |
+| `virt-v2v` | VM disk conversion | Migration pod logs in target namespace |
+| `CDI` | DataVolume/PVC workflows | DataVolumes, PVCs, CDI pod logs |
+| `KubeVirt` | Resulting VM runtime | `VirtualMachine`, `VMI`, launcher pod status |
+| Provider / Map / Plan / Migration / Hook CRs | Declarative control-plane state | `status`, conditions, per-VM pipeline |
 
 ## 6. Reference Links
 
-- Product docs: [MTV 2.10 Documentation][mtv-doc],
+- Product docs: [MTV Documentation][mtv-doc],
   [MTV CLI Migration with CRDs][mtv-cli],
-  [OpenShift Virtualization 4.21 Documentation][ocp-virt-doc]
+  [OpenShift Virtualization Documentation][ocp-virt-doc]
 - Upstream: [kubev2v/forklift][forklift-repo],
   [kubev2v/forklift-console-plugin][forklift-console],
   [kubev2v/forklift-must-gather][forklift-must-gather],
@@ -328,9 +326,9 @@ Key product and runtime components to inspect:
   [Forklift CRDs source][forklift-crds],
   [Hooks documentation][hooks-docs]
 
-[mtv-doc]: https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/2.10
-[mtv-cli]: https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/2.10/html/planning_your_migration_to_red_hat_openshift_virtualization/
-[ocp-virt-doc]: https://docs.redhat.com/en/documentation/red_hat_openshift_virtualization/4.21
+[mtv-doc]: https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/
+[mtv-cli]: https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/
+[ocp-virt-doc]: https://docs.redhat.com/en/documentation/red_hat_openshift_virtualization/
 [forklift-repo]: https://github.com/kubev2v/forklift
 [forklift-console]: https://github.com/kubev2v/forklift-console-plugin
 [forklift-must-gather]: https://github.com/kubev2v/forklift-must-gather
