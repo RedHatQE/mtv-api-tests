@@ -532,8 +532,8 @@ tests_params: dict = {
 
 ### conftest.py Structure
 
-Fixtures and hooks must be defined in `conftest.py` files, not in test files. Helper functions go to `utilities/`.
-Place fixtures in the `conftest.py` closest to the tests that use them.
+Only pytest fixtures and hooks belong in conftest.py. Helper functions go to `utilities/`.
+Place fixtures in the `conftest.py` closest to the tests that use them, never in test files.
 
 ### Fixture Scopes
 
