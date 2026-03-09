@@ -283,6 +283,11 @@ def labeled_worker_node(worker_nodes, target_node_selector):
 
 Test methods should never contain validation logic - if a config value is required, create a fixture that validates it.
 
+### Test Methods Must Be Tests (SHOULD)
+
+Before adding a `test_` prefixed method, consider whether it belongs as a test or as a fixture/helper.
+If the method's sole purpose is a precondition for other tests and has no value as a standalone test step, it likely belongs in a fixture.
+
 ### Fixture Rules (MUST)
 
 - **Autouse sparingly:** Only the `autouse_fixtures` fixture in conftest.py uses `autouse=True`. All other fixtures must be requested explicitly via parameters or `@pytest.mark.usefixtures()`
@@ -528,6 +533,8 @@ tests_params: dict = {
 ### conftest.py Structure
 
 Only pytest fixtures and hooks belong in conftest.py. Helper functions go to `utilities/`.
+
+Fixtures must be defined in `conftest.py` files, not in test files. Place fixtures in the `conftest.py` closest to the tests that use them.
 
 ### Fixture Scopes
 
