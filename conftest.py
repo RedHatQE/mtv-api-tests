@@ -76,6 +76,7 @@ from utilities.utils import (
     get_cluster_version_str,
     get_value_from_py_config,
     load_source_providers,
+    resolve_providers_json_path,
 )
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
 from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
@@ -95,6 +96,13 @@ def pytest_addoption(parser):
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
     analyze_with_ai_group = parser.getgroup(name="Analyze with AI")
     analyze_with_ai_group.addoption("--analyze-with-ai", action="store_true", help="Analyze test failures using AI")
+
+    providers_group = parser.getgroup(name="Providers")
+    providers_group.addoption(
+        "--providers-json",
+        help="Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json",
+        default=None,
+    )
 
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
     data_collector_group.addoption(
@@ -251,6 +259,61 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_collection_modifyitems(session, config, items):
+    # -------------------------------------------------------------------
+    # Provider-type based test skipping at collection time.
+    #
+    # This section conditionally skips or marks tests based on the source
+    # provider type (e.g., vSphere, RHV, OpenStack). It runs during
+    # pytest collection so that incompatible tests are excluded before
+    # execution begins.
+    #
+    # Why here (not at module level): The provider JSON path comes from
+    # the --providers-json CLI arg, which is only available via `config`
+    # inside pytest hooks.
+    #
+    # How to add a new skip rule:
+    #   1. Register the marker in pytest.ini under [pytest] > markers.
+    #   2. Add a condition block below following the existing pattern:
+    #        - Check source_provider_type against Provider.ProviderType.*
+    #        - Create a skip/jira marker with a descriptive reason
+    #        - Iterate over items and add the marker where the keyword matches
+    #   3. Apply the marker to the relevant test class, e.g.:
+    #        @pytest.mark.my_new_marker
+    #        class TestMyFeature: ...
+    # -------------------------------------------------------------------
+    if not is_dry_run(config):
+        providers_json_path = config.getoption("providers_json", default=None)
+        providers = load_source_providers(providers_json_path=providers_json_path)
+        source_provider_type = providers.get(py_config.get("source_provider", ""), {}).get("type")
+
+        if source_provider_type:
+            # Skip warm migration tests for providers that do not support warm migration.
+            warm_unsupported = (
+                Provider.ProviderType.OPENSTACK,
+                Provider.ProviderType.OPENSHIFT,
+                Provider.ProviderType.OVA,
+            )
+            if source_provider_type in warm_unsupported:
+                warm_skip = pytest.mark.skip(reason=f"{source_provider_type} warm migration is not supported.")
+                for item in items:
+                    if "warm" in item.keywords:
+                        item.add_marker(warm_skip)
+
+            # Mark RHV warm migration tests with a Jira issue (disables execution until resolved).
+            if source_provider_type == Provider.ProviderType.RHV:
+                for item in items:
+                    if "warm" in item.keywords:
+                        item.add_marker(pytest.mark.jira("MTV-2846", run=False))
+
+            # Skip copy-offload snapshot tests for non-vSphere providers (vSphere-only feature).
+            if source_provider_type != Provider.ProviderType.VSPHERE:
+                snapshot_skip = pytest.mark.skip(
+                    reason="Snapshots copy-offload test is only applicable to vSphere source providers"
+                )
+                for item in items:
+                    if "copyoffload_snapshots" in item.keywords:
+                        item.add_marker(snapshot_skip)
+
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
 
@@ -359,8 +422,9 @@ def base_resource_name(fixture_store, session_uuid, source_provider_data):
 
 
 @pytest.fixture(scope="session")
-def source_providers() -> dict[str, dict[str, Any]]:
-    return load_source_providers()
+def source_providers(request: pytest.FixtureRequest) -> dict[str, dict[str, Any]]:
+    providers_json_path = request.config.getoption("providers_json")
+    return load_source_providers(providers_json_path=providers_json_path)
 
 
 @pytest.fixture(scope="session")
@@ -584,23 +648,34 @@ def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixtu
 
 
 @pytest.fixture(scope="session")
-def source_provider_data(source_providers: dict[str, dict[str, Any]], fixture_store: dict[str, Any]) -> dict[str, Any]:
-    """Resolve source provider configuration from .providers.json.
+def source_provider_data(
+    source_providers: dict[str, dict[str, Any]],
+    fixture_store: dict[str, Any],
+    request: pytest.FixtureRequest,
+) -> dict[str, Any]:
+    """Resolve source provider configuration from the loaded providers data.
 
     Args:
-        source_providers (dict[str, dict[str, Any]]): All provider configurations from .providers.json.
+        source_providers (dict[str, dict[str, Any]]): All provider configurations loaded from providers JSON file.
         fixture_store (dict[str, Any]): Session fixture store for teardown tracking.
+        request (pytest.FixtureRequest): Pytest request object to access CLI options.
 
     Returns:
         dict[str, Any]: The resolved source provider configuration dict.
+
+    Raises:
+        MissingProvidersFileError: If providers data is empty.
+        ValueError: If the requested provider is not found.
     """
+    providers_path = resolve_providers_json_path(cli_path=request.config.getoption("providers_json"))
+
     if not source_providers:
-        raise MissingProvidersFileError()
+        raise MissingProvidersFileError(path=providers_path)
 
     requested_provider = py_config["source_provider"]
     if requested_provider not in source_providers:
         raise ValueError(
-            f"Source provider '{requested_provider}' not found in '.providers.json'. "
+            f"Source provider '{requested_provider}' not found in '{providers_path}'. "
             f"Available providers: {sorted(source_providers.keys())}"
         )
 
@@ -1235,7 +1310,7 @@ def multus_cni_config() -> str:
 
 
 @pytest.fixture(scope="session")
-def copyoffload_config(source_provider, source_provider_data):
+def copyoffload_config(source_provider, source_provider_data, request):
     """
     Validate copy-offload configuration before running copy-offload tests.
 
@@ -1246,23 +1321,25 @@ def copyoffload_config(source_provider, source_provider_data):
 
     If any validation fails, the test will fail early with a clear error message.
     """
+    providers_path = resolve_providers_json_path(cli_path=request.config.getoption("providers_json"))
+
     # Validate that this is a vSphere provider
     if source_provider.type != Provider.ProviderType.VSPHERE:
         pytest.fail(
             f"Copy-offload tests require vSphere provider, but got '{source_provider.type}'. "
-            "Check your provider configuration in .providers.json"
+            f"Check your provider configuration in {providers_path}"
         )
 
     # Validate copy-offload configuration exists
     if "copyoffload" not in source_provider_data:
         pytest.fail(
             "Copy-offload configuration not found in source provider data. "
-            "Add 'copyoffload' section to your provider in .providers.json"
+            f"Add 'copyoffload' section to your provider in {providers_path}"
         )
 
     config = source_provider_data["copyoffload"]
 
-    # Validate required storage credentials are available (from either env vars or .providers.json)
+    # Validate required storage credentials are available (from either env vars or providers JSON)
     required_credentials = ["storage_hostname", "storage_username", "storage_password"]
     missing_credentials = []
 
@@ -1274,7 +1351,7 @@ def copyoffload_config(source_provider, source_provider_data):
     if missing_credentials:
         pytest.fail(
             f"Required storage credentials not found: {missing_credentials}. "
-            f"Add them to .providers.json copyoffload section or set environment variables: "
+            f"Add them to {providers_path} copyoffload section or set environment variables: "
             f"{', '.join([f'COPYOFFLOAD_{c.upper()}' for c in missing_credentials])}"
         )
 
@@ -1285,7 +1362,7 @@ def copyoffload_config(source_provider, source_provider_data):
     if missing_params:
         raise ValueError(
             f"Missing required copy-offload parameters in config: {', '.join(missing_params)}. "
-            "Add them to .providers.json copyoffload section"
+            f"Add them to {providers_path} copyoffload section"
         )
 
     LOGGER.info("✓ Copy-offload configuration validated successfully")
@@ -1323,12 +1400,13 @@ def copyoffload_storage_secret(
     target_namespace,
     source_provider_data,
     copyoffload_config,
+    request,
 ):
     """
     Create a storage secret for copy-offload functionality.
 
     This fixture creates the storage secret required for copy-offload migrations
-    with credentials from environment variables or .providers.json.
+    with credentials from environment variables or providers JSON file.
 
     Args:
         fixture_store: Pytest fixture store for resource tracking
@@ -1336,11 +1414,13 @@ def copyoffload_storage_secret(
         target_namespace: Target namespace for the secret
         source_provider_data: Source provider configuration data
         copyoffload_config: Copy-offload configuration (validates prerequisites)
+        request: Pytest request object to access CLI options
 
     Returns:
         Secret: Created storage secret resource
     """
     LOGGER.info("Creating copy-offload storage secret")
+    providers_path = resolve_providers_json_path(cli_path=request.config.getoption("providers_json"))
 
     copyoffload_cfg = source_provider_data["copyoffload"]
 
@@ -1352,7 +1432,7 @@ def copyoffload_storage_secret(
     if not all([storage_hostname, storage_username, storage_password]):
         raise ValueError(
             "Storage credentials are required. Set COPYOFFLOAD_STORAGE_HOSTNAME, COPYOFFLOAD_STORAGE_USERNAME, "
-            "and COPYOFFLOAD_STORAGE_PASSWORD environment variables or include them in .providers.json"
+            f"and COPYOFFLOAD_STORAGE_PASSWORD environment variables or include them in {providers_path}"
         )
 
     # Validate storage vendor product
@@ -1415,7 +1495,7 @@ def copyoffload_storage_secret(
                 env_var_name = f"COPYOFFLOAD_{config_key.upper()}"
                 raise ValueError(
                     f"Required vendor-specific field '{config_key}' not found for vendor '{storage_vendor}'. "
-                    f"Add it to .providers.json copyoffload section or set environment variable: {env_var_name}"
+                    f"Add it to {providers_path} copyoffload section or set environment variable: {env_var_name}"
                 )
 
     LOGGER.info("Creating storage secret for copy-offload with vendor: %s", storage_vendor)

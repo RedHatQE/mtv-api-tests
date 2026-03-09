@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
-from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 
@@ -15,7 +14,7 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
 )
 from utilities.post_migration import check_vms
-from utilities.utils import load_source_providers, populate_vm_ids
+from utilities.utils import populate_vm_ids
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -24,21 +23,6 @@ if TYPE_CHECKING:
     from libs.forklift_inventory import ForkliftInventory
     from libs.providers.openshift import OCPProvider
     from utilities.ssh_utils import SSHConnectionManager
-
-_SOURCE_PROVIDER_TYPE = load_source_providers().get(py_config.get("source_provider", ""), {}).get("type")
-
-
-pytestmark = [
-    pytest.mark.skipif(
-        _SOURCE_PROVIDER_TYPE
-        in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT, Provider.ProviderType.OVA),
-        reason=f"{_SOURCE_PROVIDER_TYPE} warm migration is not supported.",
-    ),
-]
-
-# Only apply Jira marker for RHV - skip if issue unresolved, run normally if resolved
-if _SOURCE_PROVIDER_TYPE == Provider.ProviderType.RHV:
-    pytestmark.append(pytest.mark.jira("MTV-2846", run=False))
 
 
 @pytest.mark.tier0

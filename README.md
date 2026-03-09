@@ -143,6 +143,13 @@ virtualization platform.
 > repository's pre-commit hooks** but are **NOT valid JSON**. Do NOT copy these comments to your actual
 > `.providers.json` file. They exist only for documentation tooling, not security.
 
+By default, the file is loaded from `.providers.json` in the current directory. You can override this with:
+
+- `--providers-json /path/to/file.json` pytest CLI argument
+- `PROVIDERS_JSON_PATH=/path/to/file.json` environment variable
+
+Priority: CLI arg > environment variable > default `.providers.json`
+
 Create a `.providers.json` file in your current directory with your provider's details.
 
 **VMware vSphere Example:**

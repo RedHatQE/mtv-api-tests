@@ -1,7 +1,6 @@
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
-from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 
@@ -13,22 +12,7 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
 )
 from utilities.post_migration import check_vms
-from utilities.utils import get_value_from_py_config, load_source_providers, populate_vm_ids
-
-_SOURCE_PROVIDER_TYPE = load_source_providers().get(py_config.get("source_provider", ""), {}).get("type")
-
-
-pytestmark = [
-    pytest.mark.skipif(
-        _SOURCE_PROVIDER_TYPE
-        in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT, Provider.ProviderType.OVA),
-        reason=f"{_SOURCE_PROVIDER_TYPE} warm migration is not supported.",
-    ),
-]
-
-# Only apply Jira marker for RHV - skip if issue unresolved, run normally if resolved
-if _SOURCE_PROVIDER_TYPE == Provider.ProviderType.RHV:
-    pytestmark.append(pytest.mark.jira("MTV-2846", run=False))
+from utilities.utils import get_value_from_py_config, populate_vm_ids
 
 
 @pytest.mark.tier0

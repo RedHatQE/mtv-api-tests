@@ -340,6 +340,20 @@ AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live
 AI can: Read/analyze/write/fix tests, suggest improvements, review structure
 AI cannot: Execute tests, validate by running
 
+### No Module-Level Provider Loading (MUST)
+
+`load_source_providers()` must only be called within the pytest ecosystem (fixtures, hooks).
+Never call it at module level in test files — module-level code runs before pytest parses
+CLI args like `--providers-json`, causing the arg to be ignored.
+
+```python
+# Wrong - module level, ignores --providers-json
+_SOURCE_PROVIDER_TYPE = load_source_providers().get(...)
+
+# Correct - use pytest_collection_modifyitems hook
+# (see conftest.py for the documented pattern)
+```
+
 ### Deterministic Tests - No Defaults for Our Config
 
 For configurations we control (`py_config`, `plan`, `tests_params`), never use defaults:
@@ -578,12 +592,32 @@ Class-scoped teardown fixture that cleans up migrated VMs after each test class 
 
 ## Test Markers
 
-| Marker        | Purpose                          |
-| ------------- | -------------------------------- |
-| `tier0`       | Core functionality (smoke tests) |
-| `warm`        | Warm migration tests             |
-| `remote`      | Remote cluster tests             |
-| `copyoffload` | Copy-offload (XCOPY) tests       |
+| Marker                  | Purpose                               |
+| ----------------------- | ------------------------------------- |
+| `tier0`                 | Core functionality (smoke tests)      |
+| `warm`                  | Warm migration tests                  |
+| `remote`                | Remote cluster tests                  |
+| `copyoffload`           | Copy-offload (XCOPY) tests            |
+| `copyoffload_snapshots` | Copy-offload snapshot tests (vSphere) |
+
+**Marker requirements for collection-time skipping (MUST):**
+
+Provider-type skip logic runs in `pytest_collection_modifyitems` (in `conftest.py`) and matches tests by marker keywords. Tests MUST use the correct markers for skipping to work:
+
+- Warm migration tests → `@pytest.mark.warm`
+- Copy-offload snapshot tests → `@pytest.mark.copyoffload_snapshots`
+
+See the documented hook in `conftest.py` for how to add new provider-type skip rules.
+
+**Test class naming for marker-based features (MUST):**
+
+Test classes for marker-gated features must include the feature name in the class name:
+
+- Warm migration → class name must contain `Warm` (e.g., `TestSanityWarmMtvMigration`)
+- Copy-offload snapshots → class name must contain both `Copyoffload` and `Snapshot` (e.g., `TestCopyoffloadThinSnapshotsMigration`)
+- Copy-offload → class name must contain `Copyoffload` (e.g., `TestCopyoffloadThinMigration`)
+
+This ensures discoverability and consistency with the markers applied to the class.
 
 ```python
 @pytest.mark.tier0

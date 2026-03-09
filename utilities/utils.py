@@ -3,6 +3,7 @@ import functools
 import hashlib
 import json
 import multiprocessing
+import os
 import re
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
@@ -34,25 +35,62 @@ from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
+from exceptions.exceptions import ProviderEmptyContentError
 from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
 
+DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
 
-def load_source_providers() -> dict[str, dict[str, Any]]:
-    """Load source providers from .providers.json.
+
+def resolve_providers_json_path(cli_path: str | None = None) -> str:
+    """Resolve and validate the providers JSON file path.
+
+    Resolution order:
+        1. ``cli_path`` argument (e.g. from ``--providers-json`` pytest CLI arg).
+        2. ``PROVIDERS_JSON_PATH`` environment variable.
+        3. Default ``.providers.json`` in the current working directory.
+
+    Args:
+        cli_path (str | None): Explicit path from CLI argument.
+
+    Returns:
+        str: The resolved file path.
+
+    Raises:
+        FileNotFoundError: If the resolved file does not exist.
+    """
+    if cli_path is not None:
+        resolved = cli_path
+    else:
+        resolved = os.environ.get("PROVIDERS_JSON_PATH", DEFAULT_PROVIDERS_JSON_PATH)
+
+    if not Path(resolved).is_file():
+        raise FileNotFoundError(f"Providers JSON file not found: '{resolved}'")
+
+    return resolved
+
+
+def load_source_providers(providers_json_path: str | None = None) -> dict[str, dict[str, Any]]:
+    """Load source providers from providers JSON file.
+
+    The file path is resolved and validated via ``resolve_providers_json_path()``.
+
+    Args:
+        providers_json_path (str | None): Explicit path to the providers JSON file.
 
     Returns:
         dict[str, dict[str, Any]]: Provider configurations keyed by provider name.
-    """
-    providers_file = Path(".providers.json")
-    if not providers_file.exists():
-        return {}
 
-    with open(providers_file) as fd:
+    Raises:
+        ProviderEmptyContentError: If the file is empty.
+    """
+    resolved_path = resolve_providers_json_path(cli_path=providers_json_path)
+
+    with open(resolved_path) as fd:
         content = fd.read()
         if not content.strip():
-            return {}
+            raise ProviderEmptyContentError(path=resolved_path)
         return json.loads(content)
 
 

@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
-from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
@@ -39,11 +38,8 @@ from utilities.naming import sanitize_kubernetes_name
 from utilities.post_migration import check_vms
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager
-from utilities.utils import load_source_providers
 
 LOGGER = get_logger(__name__)
-
-_SOURCE_PROVIDER_TYPE = load_source_providers().get(py_config.get("source_provider", ""), {}).get("type")
 
 # Error message template for simultaneous migration validation
 EARLY_COMPLETION_MSG = (
@@ -381,10 +377,7 @@ class CopyoffloadSnapshotBase:
     indirect=True,
     ids=["copyoffload-thin-snapshots"],
 )
-@pytest.mark.skipif(
-    _SOURCE_PROVIDER_TYPE != Provider.ProviderType.VSPHERE,
-    reason="Snapshots copy-offload test is only applicable to vSphere source providers",
-)
+@pytest.mark.copyoffload_snapshots
 @pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - thin disk with snapshots."""
@@ -398,10 +391,7 @@ class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     indirect=True,
     ids=["MTV-575:copyoffload-2tb-vm-snapshots"],
 )
-@pytest.mark.skipif(
-    _SOURCE_PROVIDER_TYPE != Provider.ProviderType.VSPHERE,
-    reason="Snapshots copy-offload test is only applicable to vSphere source providers",
-)
+@pytest.mark.copyoffload_snapshots
 @pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - 2TB VM with snapshots."""
