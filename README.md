@@ -460,6 +460,68 @@ oc delete job [JOB_NAME] -n mtv-tests
 
 ---
 
+## Interactive Setup Tool
+
+The `mtv-api-tests` CLI tool automates configuration and test execution. It discovers
+vSphere and OpenShift resources via their APIs, generates `.providers.json` and a self-contained
+`mtv-api-tests-manifests.yaml` (Namespace + Secret + Job), and can run tests locally or as an OpenShift Job.
+
+### Generate Configuration
+
+```bash
+uv run mtv-api-tests generate
+```
+
+The wizard will:
+
+1. Prompt for vSphere credentials (or read from `VSPHERE_HOST`, `VSPHERE_USERNAME`, `VSPHERE_PASSWORD`)
+2. Connect to vSphere and let you select datastores, a test VM, and an ESXi host
+3. Prompt for storage vendor and credentials
+4. Connect to OpenShift and let you select a storage class
+5. Ask which test category to run (`all`, `copyoffload`, `tier0`, `warm`, `remote`)
+6. Write `.providers.json` and `mtv-api-tests-manifests.yaml`
+
+> **Security Note:** The generated `mtv-api-tests-manifests.yaml` contains embedded credentials
+> (cluster username/password and provider secrets encoded in base64).
+> Do not commit this file to version control or share it.
+> The file is created with `0600` permissions and is listed in `.dockerignore`.
+
+### Run Tests
+
+```bash
+# Run locally
+uv run mtv-api-tests run --mode local
+
+# Run as OpenShift Job (uses the generated mtv-api-tests-manifests.yaml)
+uv run mtv-api-tests run --mode job
+```
+
+When `--category` or `--source-provider` are omitted, the tool prompts interactively.
+
+### Non-Interactive / CI Usage
+
+All interactive prompts can be bypassed with CLI flags, making the tool suitable for CI pipelines
+and repeatable lab scripts:
+
+```bash
+# Generate configuration with a specific category and custom image
+uv run mtv-api-tests generate --category copyoffload --image quay.io/myorg/mtv-api-tests:v2.8.3
+
+# Run locally with all options pre-set (no prompts)
+uv run mtv-api-tests run --mode local \
+  --category tier0 \
+  --source-provider vsphere-8.0.3.00400 \
+  --storage-class ontap-san-block \
+  -k "thin or thick"
+
+# Run as OpenShift Job with a custom manifest path
+uv run mtv-api-tests run --mode job --job-yaml /path/to/mtv-api-tests-manifests.yaml
+```
+
+Use `uv run mtv-api-tests generate --help` or `uv run mtv-api-tests run --help` to see all available flags.
+
+---
+
 ## Copy-Offload: Accelerated Migrations (Advanced)
 
 Copy-offload is an MTV feature that uses the storage backend to directly copy VM disks from vSphere datastores
@@ -816,7 +878,8 @@ oc delete provider <provider-name> -n openshift-mtv
 ## FAQ
 
 **Q: Do I need Python/pytest/uv on my machine?**
-A: No. Everything runs inside the container. You only need Podman or Docker.
+A: Not for container-based runs — you only need Podman or Docker.
+For local runs, you need uv (which manages Python automatically). See [Running Locally Without Container](#running-locally-without-container).
 
 **Q: How long do tests take?**
 A: Test duration varies. tier0 tests are fastest (smoke tests), warm migration tests include warm migration

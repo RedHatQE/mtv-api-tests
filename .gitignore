@@ -151,6 +151,9 @@ bugs/
 # Providers
 .providers.json
 
+# Generated manifests
+mtv-api-tests-manifests.yaml
+
 # Jira
 jira.cfg
 
@@ -161,7 +164,12 @@ jira.cfg
 # AI
 .cursor/
 .cursorrules
+.claude/
 !.claude/commands
+!.claude/settings.json
+!.claude/agents/
+!.claude/rules/
+!.claude/scripts/
 
 # ENV
 .env

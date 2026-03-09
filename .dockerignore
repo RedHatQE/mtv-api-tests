@@ -1,3 +1,7 @@
 *.pyc
 *.pyo
 *__pycache__/
+.env
+.env*
+.providers.json
+mtv-api-tests-manifests.yaml

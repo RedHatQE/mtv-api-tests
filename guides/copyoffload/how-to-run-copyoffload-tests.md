@@ -248,7 +248,27 @@ Configuration for testing RDM virtual disk migrations:
 
 ## Running Copy-Offload Tests
 
-The recommended approach for running copy-offload tests is using **OpenShift Jobs**, which provides a consistent
+### Quick: Interactive Setup Tool
+
+The fastest way to configure and run copy-offload tests is the interactive CLI tool. It connects to vSphere
+and OpenShift, discovers datastores/VMs/storage classes, and generates all required configuration:
+
+```bash
+# Generate .providers.json and mtv-api-tests-manifests.yaml interactively (select "copyoffload" category)
+uv run mtv-api-tests generate
+
+# Run locally
+uv run mtv-api-tests run --mode local
+
+# Or run as OpenShift Job
+uv run mtv-api-tests run --mode job
+```
+
+See [Interactive Setup Tool](../../README.md#interactive-setup-tool) in the main README for details.
+
+### Manual: OpenShift Job
+
+The alternative approach is manually creating the secret and Job YAML. This provides a consistent
 and reliable execution environment. Follow these steps:
 
 ### Step 1: Create Secret with Configuration

@@ -30,7 +30,7 @@ name = "mtv-api-tests"
 version = "2.12.0"
 description = "MTV API Tests"
 authors = []
-license = "Apache Software License"
+license = "Apache-2.0"
 readme = "README.md"
 dependencies = [
   "humanfriendly>=10.0",
@@ -66,3 +66,13 @@ dependencies = [
   "python-dotenv>=1.2.1",
   "requests>=2.32.5",
 ]
+
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cli*", "utilities*", "libs*", "exceptions*"]
+
+[project.scripts]
+mtv-api-tests = "cli.mtv_api_tests:app"

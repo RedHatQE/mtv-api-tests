@@ -601,6 +601,18 @@ class VirtualMachineFromInstanceType(VirtualMachine):
 def get_cluster_client() -> DynamicClient:
     """Get a DynamicClient for the cluster.
 
+    Credentials are resolved from pytest-testconfig (``py_config``) first,
+    then from environment variables (``CLUSTER_HOST``, ``CLUSTER_USERNAME``,
+    ``CLUSTER_PASSWORD``).
+    This allows the CLI to pass sensitive credentials via env vars instead of
+    exposing them in process arguments.
+
+    SSL verification is resolved from ``py_config["insecure_verify_skip"]``
+    first, then from the ``CLUSTER_VERIFY_SSL`` environment variable (note
+    the inverted semantics: ``CLUSTER_VERIFY_SSL=true`` means
+    ``insecure_verify_skip=False``). When neither is set, SSL verification
+    is skipped by default (``insecure_verify_skip=True``).
+
     Returns:
         DynamicClient: The cluster client.
 
@@ -608,9 +620,20 @@ def get_cluster_client() -> DynamicClient:
         ValueError: If the client cannot be created.
     """
     host = get_value_from_py_config("cluster_host")
+    if host is None:
+        host = os.environ.get("CLUSTER_HOST")
+
     username = get_value_from_py_config("cluster_username")
+    if username is None:
+        username = os.environ.get("CLUSTER_USERNAME")
+
     password = get_value_from_py_config("cluster_password")
+    if password is None:
+        password = os.environ.get("CLUSTER_PASSWORD")
     insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
+    if insecure_verify_skip is None:
+        verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL", "").lower()
+        insecure_verify_skip = verify_ssl_env != "true"
     _client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 
     if isinstance(_client, DynamicClient):

@@ -1071,7 +1071,7 @@ wheels = [
 [[package]]
 name = "mtv-api-tests"
 version = "2.12.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "cloudpickle" },
     { name = "filelock" },
