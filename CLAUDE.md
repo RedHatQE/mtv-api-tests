@@ -609,7 +609,7 @@ Provider-type skip logic runs in `pytest_collection_modifyitems` (in `conftest.p
 
 See the documented hook in `conftest.py` for how to add new provider-type skip rules.
 
-**Test class naming for marker-based features (MUST):**
+**Test class naming for marker-based features (SHOULD):**
 
 Test classes for marker-gated features must include the feature name in the class name:
 

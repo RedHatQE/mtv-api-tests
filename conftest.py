@@ -284,6 +284,8 @@ def pytest_collection_modifyitems(session, config, items):
     if not is_dry_run(config):
         providers_json_path = config.getoption("providers_json", default=None)
         providers = load_source_providers(providers_json_path=providers_json_path)
+        # .get() with default is intentional: source_provider may not be configured (e.g., partial config),
+        # in which case provider-type gating is silently skipped.
         source_provider_type = providers.get(py_config.get("source_provider", ""), {}).get("type")
 
         if source_provider_type:
@@ -305,14 +307,14 @@ def pytest_collection_modifyitems(session, config, items):
                     if "warm" in item.keywords:
                         item.add_marker(pytest.mark.jira("MTV-2846", run=False))
 
-            # Skip copy-offload snapshot tests for non-vSphere providers (vSphere-only feature).
+            # Skip copy-offload tests for non-vSphere providers (vSphere-only feature).
             if source_provider_type != Provider.ProviderType.VSPHERE:
-                snapshot_skip = pytest.mark.skip(
-                    reason="Snapshots copy-offload test is only applicable to vSphere source providers"
+                copyoffload_skip = pytest.mark.skip(
+                    reason="Copy-offload tests are only applicable to vSphere source providers"
                 )
                 for item in items:
-                    if "copyoffload_snapshots" in item.keywords:
-                        item.add_marker(snapshot_skip)
+                    if "copyoffload" in item.keywords:
+                        item.add_marker(copyoffload_skip)
 
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
@@ -1310,7 +1312,11 @@ def multus_cni_config() -> str:
 
 
 @pytest.fixture(scope="session")
-def copyoffload_config(source_provider, source_provider_data, request):
+def copyoffload_config(
+    source_provider: BaseProvider,
+    source_provider_data: dict[str, Any],
+    request: pytest.FixtureRequest,
+) -> None:
     """
     Validate copy-offload configuration before running copy-offload tests.
 
@@ -1395,13 +1401,13 @@ def mixed_datastore_config(source_provider_data: dict[str, Any]) -> None:
 
 @pytest.fixture(scope="session")
 def copyoffload_storage_secret(
-    fixture_store,
-    ocp_admin_client,
-    target_namespace,
-    source_provider_data,
-    copyoffload_config,
-    request,
-):
+    fixture_store: dict[str, Any],
+    ocp_admin_client: "DynamicClient",
+    target_namespace: str,
+    source_provider_data: dict[str, Any],
+    copyoffload_config: None,
+    request: pytest.FixtureRequest,
+) -> Secret:
     """
     Create a storage secret for copy-offload functionality.
 

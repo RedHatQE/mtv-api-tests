@@ -84,6 +84,7 @@ def load_source_providers(providers_json_path: str | None = None) -> dict[str, d
 
     Raises:
         ProviderEmptyContentError: If the file is empty.
+        ValueError: If the file does not contain a JSON mapping.
     """
     resolved_path = resolve_providers_json_path(cli_path=providers_json_path)
 
@@ -91,7 +92,13 @@ def load_source_providers(providers_json_path: str | None = None) -> dict[str, d
         content = fd.read()
         if not content.strip():
             raise ProviderEmptyContentError(path=resolved_path)
-        return json.loads(content)
+        providers = json.loads(content)
+        if not isinstance(providers, dict):
+            raise ValueError(
+                f"Providers JSON must be a mapping of provider names to configurations, "
+                f"got {type(providers).__name__}: '{resolved_path}'"
+            )
+        return providers
 
 
 def generate_class_hash_prefix(nodeid: str, length: int = 6) -> str:

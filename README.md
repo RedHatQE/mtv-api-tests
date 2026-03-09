@@ -150,7 +150,10 @@ By default, the file is loaded from `.providers.json` in the current directory. 
 
 Priority: CLI arg > environment variable > default `.providers.json`
 
-Create a `.providers.json` file in your current directory with your provider's details.
+Create a providers JSON file with your provider's details:
+
+- default location: `.providers.json` in the current directory
+- custom location: any path passed via `--providers-json` or `PROVIDERS_JSON_PATH`
 
 **VMware vSphere Example:**
 
