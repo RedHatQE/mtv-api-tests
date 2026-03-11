@@ -255,6 +255,7 @@ def pytest_sessionfinish(session, exitstatus):
                 LOGGER.exception("Failed to enrich JUnit XML, original preserved")
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(session, config, items):
     # -------------------------------------------------------------------
     # Provider-type based test skipping at collection time.
