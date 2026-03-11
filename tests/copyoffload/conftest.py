@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -27,28 +28,37 @@ def copyoffload_config(
     source_provider_data: dict[str, Any],
     request: pytest.FixtureRequest,
 ) -> None:
-    """
-    Validate copy-offload configuration before running copy-offload tests.
+    """Validate copy-offload configuration before running copy-offload tests.
 
     This fixture performs all necessary validations:
     - Verifies vSphere provider type
     - Checks for copyoffload configuration
     - Validates storage credentials availability
 
-    If any validation fails, the test will fail early with a clear error message.
+    Args:
+        source_provider (BaseProvider): The source provider to validate.
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+        request (pytest.FixtureRequest): Pytest request object to access CLI options.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If provider type is not vSphere, copyoffload config is missing,
+            credentials are missing, or required parameters are missing.
     """
     providers_path = resolve_providers_json_path(cli_path=request.config.getoption("providers_json"))
 
     # Validate that this is a vSphere provider
     if source_provider.type != Provider.ProviderType.VSPHERE:
-        pytest.fail(
+        raise ValueError(
             f"Copy-offload tests require vSphere provider, but got '{source_provider.type}'. "
             f"Check your provider configuration in {providers_path}"
         )
 
     # Validate copy-offload configuration exists
     if "copyoffload" not in source_provider_data:
-        pytest.fail(
+        raise ValueError(
             "Copy-offload configuration not found in source provider data. "
             f"Add 'copyoffload' section to your provider in {providers_path}"
         )
@@ -65,7 +75,7 @@ def copyoffload_config(
             missing_credentials.append(cred)
 
     if missing_credentials:
-        pytest.fail(
+        raise ValueError(
             f"Required storage credentials not found: {missing_credentials}. "
             f"Add them to {providers_path} copyoffload section or set environment variables: "
             f"{', '.join([f'COPYOFFLOAD_{c.upper()}' for c in missing_credentials])}"
@@ -159,11 +169,8 @@ def copyoffload_storage_secret(
             f"Valid values: {', '.join(SUPPORTED_VENDORS)}"
         )
     if storage_vendor not in SUPPORTED_VENDORS:
-        LOGGER.warning(
-            "storage_vendor_product '%s' is not in the list of known vendors: %s. "
-            "Continuing anyway, but this may cause issues if the vendor is not supported by the populator.",
-            storage_vendor,
-            SUPPORTED_VENDORS,
+        raise ValueError(
+            f"Unsupported storage_vendor_product '{storage_vendor}'. Valid values: {', '.join(SUPPORTED_VENDORS)}"
         )
 
     # Base secret data (required for all vendors)
@@ -194,11 +201,13 @@ def copyoffload_storage_secret(
     }
 
     # Ensure vendor_specific_fields keys match SUPPORTED_VENDORS to prevent drift
-    assert set(vendor_specific_fields.keys()) == set(SUPPORTED_VENDORS), (
-        f"vendor_specific_fields keys must match SUPPORTED_VENDORS. "
-        f"Missing in vendor_specific_fields: {set(SUPPORTED_VENDORS) - set(vendor_specific_fields.keys())}. "
-        f"Extra in vendor_specific_fields: {set(vendor_specific_fields.keys()) - set(SUPPORTED_VENDORS)}"
-    )
+    missing_vendors = set(SUPPORTED_VENDORS) - set(vendor_specific_fields)
+    extra_vendors = set(vendor_specific_fields) - set(SUPPORTED_VENDORS)
+    if missing_vendors or extra_vendors:
+        raise ValueError(
+            "vendor_specific_fields keys must match SUPPORTED_VENDORS. "
+            f"Missing: {missing_vendors}. Extra: {extra_vendors}"
+        )
 
     # Add vendor-specific fields if configured
     if storage_vendor in vendor_specific_fields:
@@ -206,7 +215,7 @@ def copyoffload_storage_secret(
             value = get_copyoffload_credential(config_key, copyoffload_cfg)
             if value:
                 secret_data[secret_key] = value
-                LOGGER.info("✓ Added vendor-specific field: %s", secret_key)
+                LOGGER.info(f"✓ Added vendor-specific field: {secret_key}")
             elif required:
                 env_var_name = f"COPYOFFLOAD_{config_key.upper()}"
                 raise ValueError(
@@ -214,7 +223,7 @@ def copyoffload_storage_secret(
                     f"Add it to {providers_path} copyoffload section or set environment variable: {env_var_name}"
                 )
 
-    LOGGER.info("Creating storage secret for copy-offload with vendor: %s", storage_vendor)
+    LOGGER.info(f"Creating storage secret for copy-offload with vendor: {storage_vendor}")
 
     storage_secret = create_and_store_resource(
         client=ocp_admin_client,
@@ -224,16 +233,30 @@ def copyoffload_storage_secret(
         string_data=secret_data,
     )
 
-    LOGGER.info("✓ Copy-offload storage secret created: %s", storage_secret.name)
+    LOGGER.info(f"✓ Copy-offload storage secret created: {storage_secret.name}")
     return storage_secret
 
 
 @pytest.fixture(scope="session")
-def setup_copyoffload_ssh(source_provider, source_provider_data, copyoffload_config):
-    """
-    Sets up SSH key on ESXi host for copy-offload if SSH method is enabled.
+def copyoffload_ssh_key(
+    source_provider: VMWareProvider,
+    source_provider_data: dict[str, Any],
+    copyoffload_config: None,
+) -> Generator[None, None, None]:
+    """SSH key on ESXi host for copy-offload if SSH method is enabled.
 
     Depends on copyoffload_config to ensure validation runs first.
+
+    Args:
+        source_provider (VMWareProvider): The VMware source provider instance.
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+        copyoffload_config (None): Copy-offload configuration (validates prerequisites).
+
+    Yields:
+        None
+
+    Raises:
+        ValueError: If datastore_id or ESXi credentials are missing.
     """
     copyoffload_cfg = source_provider_data["copyoffload"]  # Safe: copyoffload_config validates this exists
     if copyoffload_cfg.get("esxi_clone_method") != "ssh":
@@ -249,7 +272,7 @@ def setup_copyoffload_ssh(source_provider, source_provider_data, copyoffload_con
     # Get datastore name
     datastore_id = copyoffload_cfg.get("datastore_id")
     if not datastore_id:
-        pytest.fail("datastore_id is required in copyoffload config for SSH method.")
+        raise ValueError("datastore_id is required in copyoffload config for SSH method.")
     datastore_name = source_provider.get_datastore_name_by_id(datastore_id)
 
     # Get ESXi credentials from the 'copyoffload' config section
@@ -258,8 +281,8 @@ def setup_copyoffload_ssh(source_provider, source_provider_data, copyoffload_con
     esxi_user = get_copyoffload_credential("esxi_user", copyoffload_cfg)
     esxi_password = get_copyoffload_credential("esxi_password", copyoffload_cfg)
 
-    if not all([esxi_host, esxi_user, esxi_password]):
-        pytest.fail(
+    if not esxi_host or not esxi_user or not esxi_password:
+        raise ValueError(
             "esxi_host, esxi_user, and esxi_password are required in the 'copyoffload' section of provider config for SSH method."
         )
 
@@ -290,7 +313,16 @@ def vmware_cloud_init_complete(
     source_provider: VMWareProvider,
     source_provider_data: dict[str, Any],
 ) -> None:
-    """Ensure cloud-init has finished on all VMs before migration tests run."""
+    """Ensure cloud-init has finished on all VMs before migration tests run.
+
+    Args:
+        prepared_plan (dict[str, Any]): Processed test plan configuration.
+        source_provider (VMWareProvider): The VMware source provider instance.
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        None
+    """
     wait_for_vmware_cloud_init_all_vms(
         prepared_plan=prepared_plan,
         source_provider=source_provider,
@@ -305,7 +337,17 @@ def vmware_cloud_init_complete_both_plans(
     source_provider: VMWareProvider,
     source_provider_data: dict[str, Any],
 ) -> None:
-    """Ensure cloud-init has finished on all VMs from both plans before migration tests run."""
+    """Ensure cloud-init has finished on all VMs from both plans before migration tests run.
+
+    Args:
+        prepared_plan_1 (dict[str, Any]): First processed test plan configuration.
+        prepared_plan_2 (dict[str, Any]): Second processed test plan configuration.
+        source_provider (VMWareProvider): The VMware source provider instance.
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        None
+    """
     for plan in (prepared_plan_1, prepared_plan_2):
         wait_for_vmware_cloud_init_all_vms(
             prepared_plan=plan,

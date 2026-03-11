@@ -62,7 +62,7 @@ EARLY_COMPLETION_MSG = (
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThinMigration:
@@ -390,7 +390,7 @@ class CopyoffloadSnapshotBase:
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
@@ -410,7 +410,7 @@ class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
@@ -429,7 +429,7 @@ class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThickLazyMigration:
@@ -583,7 +583,7 @@ class TestCopyoffloadThickLazyMigration:
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMultiDiskMigration:
@@ -740,7 +740,7 @@ class TestCopyoffloadMultiDiskMigration:
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMultiDiskDifferentPathMigration:
@@ -1389,7 +1389,7 @@ class TestCopyoffloadMixedDatastoreMigration:
     "multus_network_name",
     "copyoffload_config",
     "mixed_datastore_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadFallbackLargeMigration:
@@ -2261,7 +2261,7 @@ class TestCopyoffloadLargeVmMigration:
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadNonconformingNameMigration:
@@ -2644,7 +2644,7 @@ class TestCopyoffloadWarmMigration:
     "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
-    "setup_copyoffload_ssh",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadScaleMigration:
@@ -2798,7 +2798,7 @@ class TestCopyoffloadScaleMigration:
     ids=["MTV-574:simultaneous-copyoffload"],
 )
 @pytest.mark.usefixtures(
-    "vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms"
+    "vmware_cloud_init_complete_both_plans", "copyoffload_config", "copyoffload_ssh_key", "cleanup_migrated_vms"
 )
 class TestSimultaneousCopyoffloadMigrations:
     """Test simultaneous execution of two copyoffload migration plans."""
@@ -3267,7 +3267,7 @@ class TestSimultaneousCopyoffloadMigrations:
     ids=["MTV-569:concurrent-xcopy-vddk"],
 )
 @pytest.mark.usefixtures(
-    "vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms"
+    "vmware_cloud_init_complete_both_plans", "copyoffload_config", "copyoffload_ssh_key", "cleanup_migrated_vms"
 )
 class TestConcurrentXcopyVddkMigration:
     """Test simultaneous execution of XCOPY and VDDK migration plans.
