@@ -513,7 +513,7 @@ tests_params: dict = {
 }
 ```
 
-1. Create test file `tests/<feature>/test_<feature>_migration.py`
+1. Create the test file in the feature subdirectory described in **Test File Location (MUST)** (for example, `tests/<feature>/test_<feature>_migration.py`)
 2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
 3. Add pytest markers at class level (tier0, warm, remote, copyoffload)
 4. Implement the 5 test methods following the pattern in the example above
