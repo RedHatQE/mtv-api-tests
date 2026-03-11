@@ -530,6 +530,10 @@ tests_params: dict = {
 
 ## Fixture Patterns
 
+### Test File Location (MUST)
+
+Test files must be placed in feature subdirectories under `tests/`, not directly in the `tests/` root. Each subdirectory groups related tests (e.g., `tests/cold/`, `tests/warm/`, `tests/copyoffload/`).
+
 ### conftest.py Structure
 
 Only pytest fixtures and hooks belong in conftest.py. Helper functions go to `utilities/`.
