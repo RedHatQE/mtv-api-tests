@@ -308,7 +308,7 @@ def copyoffload_ssh_key(
 
 
 @pytest.fixture(scope="class")
-def vmware_cloud_init_complete(
+def vmware_cloud_init_ready(
     prepared_plan: dict[str, Any],
     source_provider: VMWareProvider,
     source_provider_data: dict[str, Any],
@@ -331,7 +331,7 @@ def vmware_cloud_init_complete(
 
 
 @pytest.fixture(scope="class")
-def vmware_cloud_init_complete_both_plans(
+def vmware_cloud_init_ready_both_plans(
     prepared_plan_1: dict[str, Any],
     prepared_plan_2: dict[str, Any],
     source_provider: VMWareProvider,
