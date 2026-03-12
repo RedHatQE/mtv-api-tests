@@ -22,6 +22,7 @@ tests_params: dict = {
             },
         ],
         "warm_migration": True,
+        "preserve_static_ips": True,
     },
     "test_mtv_migration_warm_2disks2nics": {
         "virtual_machines": [

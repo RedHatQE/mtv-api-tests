@@ -187,6 +187,41 @@ def _parse_windows_network_config(ipconfig_output: str) -> dict[str, dict[str, A
     return interfaces
 
 
+def _parse_linux_network_config(nmcli_output: str) -> dict[str, dict[str, Any]]:
+    """Parse Linux 'nmcli device show' output to extract network interface information.
+
+    Args:
+        nmcli_output (str): Output from 'nmcli device show' command
+
+    Returns:
+        dict[str, dict[str, Any]]: Dictionary mapping interface names to their configuration
+
+    Raises:
+        jc.exceptions.ParseError: If jc cannot parse the nmcli output
+        KeyError: If jc-parsed device data is missing the required 'device' key
+    """
+    parsed: list[dict[str, Any]] = jc.parse("nmcli", nmcli_output)
+    interfaces: dict[str, dict[str, Any]] = {}
+
+    for device in parsed:
+        if device["device"] == "lo" or device.get("state_text") != "connected":
+            continue
+
+        cidrs = [v for k, v in device.items() if k.startswith("ip4_address_") and "/" in v]
+        if not cidrs:
+            continue
+
+        interfaces[device["device"]] = {
+            "name": device["device"],
+            "ip_addresses": [{"ip_address": str(ipaddress.ip_interface(c).ip), "status": ""} for c in cidrs],
+            "subnet_mask": str(ipaddress.ip_interface(cidrs[0]).netmask),
+            **({"macAddress": device["hwaddr"]} if device.get("hwaddr") else {}),
+            **({"gateway": device["ip4_gateway"]} if device.get("ip4_gateway") else {}),
+        }
+
+    return interfaces
+
+
 def _extract_static_interfaces(source_vm_data: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Extract static IP interfaces from source VM data.
@@ -310,10 +345,11 @@ def check_static_ip_preservation(
     """
     LOGGER.info(f"Verifying static IP preservation for VM {vm_name}")
 
-    if source_vm_data.get("win_os"):
-        ipconfig_cmd = ["ipconfig", "/all"]
+    is_windows = source_vm_data.get("win_os", False)
+    if is_windows:
+        network_cmd = ["ipconfig", "/all"]
     else:
-        raise NotImplementedError("The static IP verification is not implemented for non Windows OS")
+        network_cmd = ["nmcli", "device", "show"]
 
     # Extract static interfaces
     static_interfaces = _extract_static_interfaces(source_vm_data)
@@ -353,7 +389,7 @@ def check_static_ip_preservation(
             """
             try:
                 with ssh_conn:
-                    LOGGER.info(f"Attempting to get network configuration using ipconfig {' '.join(ipconfig_cmd)}")
+                    LOGGER.info(f"Attempting to get network configuration using {' '.join(network_cmd)}")
 
                     # Execute command using executor with the correct user
                     # We need to use the executor with our specific user instead
@@ -361,21 +397,24 @@ def check_static_ip_preservation(
                     executor.port = ssh_conn.local_port
 
                     # Run the command directly
-                    rc, stdout, err = executor.run_cmd(ipconfig_cmd)
+                    rc, stdout, err = executor.run_cmd(network_cmd)
                     if rc != 0:
-                        raise CommandExecFailed(name=" ".join(ipconfig_cmd), err=err)
+                        raise CommandExecFailed(name=" ".join(network_cmd), err=err)
 
                     if not stdout.strip():
-                        LOGGER.warning(f"{' '.join(ipconfig_cmd)} returned empty output")
+                        LOGGER.warning(f"{' '.join(network_cmd)} returned empty output")
                         return None
 
                     # Parse network configuration
                     try:
-                        current_interfaces = _parse_windows_network_config(stdout)
-                        LOGGER.info(f"{' '.join(ipconfig_cmd)} command executed successfully")
-                    except Exception as e:
-                        LOGGER.warning(f"Failed to parse {' '.join(ipconfig_cmd)} output: {e}")
-                        return None
+                        if is_windows:
+                            current_interfaces = _parse_windows_network_config(stdout)
+                        else:
+                            current_interfaces = _parse_linux_network_config(stdout)
+                        LOGGER.info(f"{' '.join(network_cmd)} command executed successfully")
+                    except Exception:
+                        LOGGER.exception(f"Failed to parse {' '.join(network_cmd)} output")
+                        raise
 
                     # Find matching interface
                     matching_interface = None
@@ -411,7 +450,7 @@ def check_static_ip_preservation(
 
             except CommandExecFailed as e:
                 # Permanent failure - don't retry
-                LOGGER.warning(f"{' '.join(ipconfig_cmd)} command failed: {e}")
+                LOGGER.warning(f"{' '.join(network_cmd)} command failed: {e}")
                 raise
             except (SSHException, ChannelException, NoValidConnectionsError, AuthenticationException) as e:
                 # Connection issue - retry
@@ -435,7 +474,7 @@ def check_static_ip_preservation(
             ) from e
         except CommandExecFailed as e:
             # Re-raise command failures (don't retry)
-            raise RuntimeError(f"{' '.join(ipconfig_cmd)} command failed: {e}") from e
+            raise ValueError(f"Network configuration command failed: {' '.join(network_cmd)} - {e}") from e
 
         # Verify subnet mask
         if expected_subnet and matching_interface:
@@ -1254,7 +1293,7 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_ssh_connectivity - {str(exp)}")
 
-            # Static IP preservation check - only for Windows VMs with static IPs migrated from VSPHERE
+            # Static IP preservation check - for VMs with preserve_static_ips enabled, migrated from VSPHERE
             source_vm_data = plan.get("source_vms_data", {}).get(vm["name"], {})
 
             # Fail fast: if preserve_static_ips is requested for vSphere, source_vms_data must exist
@@ -1267,7 +1306,7 @@ def check_vms(
 
             if (
                 source_vm_data
-                and source_vm_data.get("win_os")
+                and plan.get("preserve_static_ips")
                 and source_provider.type == Provider.ProviderType.VSPHERE
             ):
                 try:

@@ -75,6 +75,7 @@ from utilities.utils import (
     load_source_providers,
     resolve_providers_json_path,
 )
+from utilities.vmware_guest_operations import detect_vmware_ip_origins_via_guest_ops
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
 from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 
@@ -1020,6 +1021,29 @@ def prepared_plan(
             vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
             # Store complete source VM data separately (keeps virtual_machines clean for Plan CR serialization)
             plan["source_vms_data"][vm["name"]] = source_vm_details
+
+            # Detect IP origins via Guest Operations for Linux VMs where VMware doesn't report origin
+            # (known open-vm-tools limitation: https://github.com/vmware/open-vm-tools/issues/694)
+            if source_provider.type == Provider.ProviderType.VSPHERE and not source_vm_details.get("win_os"):
+                try:
+                    detect_vmware_ip_origins_via_guest_ops(
+                        source_provider=source_provider,
+                        vm=provider_vm_api,
+                        source_provider_data=fixture_store["source_provider_data"],
+                        vm_details=source_vm_details,
+                    )
+                except ValueError:
+                    raise
+                except Exception as e:
+                    if plan.get("preserve_static_ips"):
+                        raise ValueError(
+                            f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
+                            "IP origin detection is required when preserve_static_ips is enabled."
+                        ) from e
+                    LOGGER.warning(
+                        f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
+                        "Static IP verification may not work for this VM."
+                    )
 
     # Create Hooks if configured
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)

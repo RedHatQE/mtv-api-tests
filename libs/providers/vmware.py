@@ -569,7 +569,7 @@ class VMWareProvider(BaseProvider):
                     ip_config["dns_servers"] = dns_servers
 
                 # Get definitive IP assignment method from VMware API
-                if hasattr(ip_info, "origin"):
+                if hasattr(ip_info, "origin") and ip_info.origin is not None:
                     ip_config["ip_origin"] = ip_info.origin
                     ip_config["is_static_ip"] = ip_info.origin == "manual"
                     LOGGER.info(
@@ -1346,12 +1346,11 @@ class VMWareProvider(BaseProvider):
         """Wait for VMware guest information to become available after VM power-on.
 
         Args:
-            vm: VMware VM object (vim.VirtualMachine)
-            timeout: Maximum time to wait in seconds (default: 60)
+            vm (vim.VirtualMachine): VMware VM object
+            timeout (int): Maximum time to wait in seconds (default: 60)
 
         Returns:
             bool: True if guest info becomes available, False if timeout
-
         """
         LOGGER.info(f"Waiting for VMware Tools guest info for VM {vm.name} (timeout: {timeout}s)")
 

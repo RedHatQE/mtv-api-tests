@@ -105,3 +105,7 @@ class VmMigrationStepMismatchError(Exception):
 
 class InvalidVMNameError(Exception):
     pass
+
+
+class GuestCommandError(Exception):
+    """Raised when a command executed via VMware Guest Operations exits with non-zero code."""

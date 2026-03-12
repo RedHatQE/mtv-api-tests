@@ -156,6 +156,7 @@ class TestSanityWarmMtvMigration:
             virtual_machines_list=prepared_plan["virtual_machines"],
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
+            preserve_static_ips=prepared_plan.get("preserve_static_ips", False),
         )
         assert self.plan_resource, "Plan creation failed"
 
