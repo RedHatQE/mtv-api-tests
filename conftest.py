@@ -273,8 +273,9 @@ def pytest_collection_modifyitems(session, config, items):
     #   1. Register the marker in pytest.ini under [pytest] > markers.
     #   2. Add a condition block below following the existing pattern:
     #        - Check source_provider_type against Provider.ProviderType.*
-    #        - Create a skip/jira marker with a descriptive reason
-    #        - Iterate over items and add the marker where the keyword matches
+    #        - Add a skip marker, or deselect items (mutate items[:])
+    #        - Use skip for tests that should appear as "skipped" in reports
+    #        - Use deselection for tests that should not appear at all
     #   3. Apply the marker to the relevant test class, e.g.:
     #        @pytest.mark.my_new_marker
     #        class TestMyFeature: ...
@@ -299,11 +300,12 @@ def pytest_collection_modifyitems(session, config, items):
                     if "warm" in item.keywords:
                         item.add_marker(warm_skip)
 
-            # Mark RHV warm migration tests with a Jira issue (disables execution until resolved).
+            # Deselect warm migration tests for RHV (not working, MTV-2846).
             if source_provider_type == Provider.ProviderType.RHV:
-                for item in items:
-                    if "warm" in item.keywords:
-                        item.add_marker(pytest.mark.jira("MTV-2846", run=False))
+                warm_items = [item for item in items if "warm" in item.keywords]
+                if warm_items:
+                    items[:] = [item for item in items if "warm" not in item.keywords]
+                    config.hook.pytest_deselected(items=warm_items)
 
             # Skip copy-offload tests for non-vSphere providers (vSphere-only feature).
             if source_provider_type != Provider.ProviderType.VSPHERE:
