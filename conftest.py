@@ -274,8 +274,9 @@ def pytest_collection_modifyitems(session, config, items):
     #   1. Register the marker in pytest.ini under [pytest] > markers.
     #   2. Add a condition block below following the existing pattern:
     #        - Check source_provider_type against Provider.ProviderType.*
-    #        - Create a skip/jira marker with a descriptive reason
-    #        - Iterate over items and add the marker where the keyword matches
+    #        - Add a skip marker, or deselect items (mutate items[:])
+    #        - Use skip for tests that should appear as "skipped" in reports
+    #        - Use deselection for tests that should not appear at all
     #   3. Apply the marker to the relevant test class, e.g.:
     #        @pytest.mark.my_new_marker
     #        class TestMyFeature: ...
@@ -300,11 +301,12 @@ def pytest_collection_modifyitems(session, config, items):
                     if "warm" in item.keywords:
                         item.add_marker(warm_skip)
 
-            # Mark RHV warm migration tests with a Jira issue (disables execution until resolved).
+            # Deselect warm migration tests for RHV (not working, MTV-2846).
             if source_provider_type == Provider.ProviderType.RHV:
-                for item in items:
-                    if "warm" in item.keywords:
-                        item.add_marker(pytest.mark.jira("MTV-2846", run=False))
+                warm_items = [item for item in items if "warm" in item.keywords]
+                if warm_items:
+                    items[:] = [item for item in items if "warm" not in item.keywords]
+                    config.hook.pytest_deselected(items=warm_items)
 
             # Skip copy-offload tests for non-vSphere providers (vSphere-only feature).
             if source_provider_type != Provider.ProviderType.VSPHERE:
@@ -1140,7 +1142,8 @@ def labeled_worker_node(
         dict with keys: node_name, label_key, label_value
 
     Raises:
-        ValueError: If target_node_selector not in test config or no worker nodes found
+        ValueError: If target_node_selector not in test config, does not contain exactly one label,
+            or no worker nodes found
     """
     try:
         target_node_selector = prepared_plan["target_node_selector"]
@@ -1150,17 +1153,33 @@ def labeled_worker_node(
             "Add 'target_node_selector' to your test config in tests/tests_config/config.py"
         ) from None
 
+    if len(target_node_selector) != 1:
+        raise ValueError(f"target_node_selector must contain exactly one label, got {len(target_node_selector)}")
+
     worker_nodes = get_worker_nodes(ocp_admin_client)
     if not worker_nodes:
         raise ValueError("No worker nodes found in cluster")
 
     target_node = select_node_by_available_memory(ocp_admin_client, worker_nodes)
 
-    # Extract label key and configured value
-    label_key, config_value = next(iter(target_node_selector.items()))
+    # Extract base label key and configured value
+    base_label_key, config_value = next(iter(target_node_selector.items()))
 
-    # Use session_uuid if configured value is None (allows unique labeling)
-    label_value = fixture_store["session_uuid"] if config_value is None else config_value
+    # When config_value is None (auto-generated mode), make key unique per session
+    # to prevent parallel execution conflicts (two sessions on same node would overwrite each other's label)
+    if config_value is None:
+        session_uuid = fixture_store["session_uuid"]
+        suffix = f"-{session_uuid}"
+        # For qualified keys (prefix/name), only truncate the name segment
+        if "/" in base_label_key:
+            prefix, name = base_label_key.split("/", 1)
+            label_key = f"{prefix}/{name[: 63 - len(suffix)]}{suffix}"
+        else:
+            label_key = f"{base_label_key[: 63 - len(suffix)]}{suffix}"
+        label_value = session_uuid
+    else:
+        label_key = base_label_key
+        label_value = config_value
 
     LOGGER.info(f"Labeling node '{target_node}' with {label_key}={label_value} for target scheduling")
 
