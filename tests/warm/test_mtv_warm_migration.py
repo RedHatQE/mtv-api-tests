@@ -429,6 +429,7 @@ class TestMtvMigrationWarm2disks2nics:
         )
 
 
+@pytest.mark.warm
 @pytest.mark.remote
 @pytest.mark.incremental
 @pytest.mark.parametrize(
