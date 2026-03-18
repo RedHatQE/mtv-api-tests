@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copy-Offload Migrations - mtv-api-tests</title>
+    <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">mtv-api-tests</a>
+            <p class="sidebar-tagline">Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Overview</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="introduction.html"
+                           class="nav-link">
+                            Introduction
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="project-structure.html"
+                           class="nav-link">
+                            Project Structure
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="architecture-and-workflow.html"
+                           class="nav-link">
+                            Architecture And Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="supported-providers-and-scenarios.html"
+                           class="nav-link">
+                            Supported Providers And Scenarios
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="prerequisites.html"
+                           class="nav-link">
+                            Prerequisites
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="installation-and-local-setup.html"
+                           class="nav-link">
+                            Installation And Local Setup
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="quickstart-first-run.html"
+                           class="nav-link">
+                            Quickstart First Run
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="container-and-openshift-job-execution.html"
+                           class="nav-link">
+                            Container And OpenShift Job Execution
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Configuration</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="runtime-configuration.html"
+                           class="nav-link">
+                            Runtime Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-config-file.html"
+                           class="nav-link">
+                            Provider Config File
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="test-plan-configuration.html"
+                           class="nav-link">
+                            Test Plan Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="optional-integrations-and-secrets.html"
+                           class="nav-link">
+                            Optional Integrations And Secrets
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cold-migrations.html"
+                           class="nav-link">
+                            Cold Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="warm-migrations.html"
+                           class="nav-link">
+                            Warm Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="copy-offload-migrations.html"
+                           class="nav-link active">
+                            Copy-Offload Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="remote-openshift-migrations.html"
+                           class="nav-link">
+                            Remote OpenShift Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="hooks-and-expected-failures.html"
+                           class="nav-link">
+                            Hooks And Expected Failures
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="advanced-plan-features.html"
+                           class="nav-link">
+                            Advanced Plan Features
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="pytest-options-and-markers.html"
+                           class="nav-link">
+                            Pytest Options And Markers
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="plan-and-resource-reference.html"
+                           class="nav-link">
+                            Plan And Resource Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-and-inventory-reference.html"
+                           class="nav-link">
+                            Provider And Inventory Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="python-module-reference.html"
+                           class="nav-link">
+                            Python Module Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="troubleshooting-and-diagnostics.html"
+                           class="nav-link">
+                            Troubleshooting And Diagnostics
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Maintenance</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cleanup-and-teardown.html"
+                           class="nav-link">
+                            Cleanup And Teardown
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="extending-the-suite.html"
+                           class="nav-link">
+                            Extending The Suite
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="development-workflow.html"
+                           class="nav-link">
+                            Development Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="automation-and-release.html"
+                           class="nav-link">
+                            Automation And Release
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">mtv-api-tests</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="copy-offload-migrations">Copy-Offload Migrations</h1>
+<p>Copy-offload migrations in <code>mtv-api-tests</code> cover the VMware-to-OpenShift path where MTV can let the storage array move VM disk data instead of using the standard VDDK copy path. In practice, that means a vSphere source provider, shared storage between vSphere and OpenShift, a <code>StorageMap</code> with <code>offloadPlugin.vsphereXcopyConfig</code>, and the right storage credentials.</p>
+<p>This project does more than validate a single happy path. The existing copy-offload coverage includes thin and thick disks, snapshots, RDM, multi-datastore layouts, warm migration, non-XCOPY fallback, VM naming edge cases, scale, and concurrent XCOPY/VDDK execution.</p>
+<h2 id="what-you-need">What You Need</h2>
+<ul>
+<li>A vSphere source provider. The copy-offload validation in this project fails fast for non-VMware sources.</li>
+<li>Shared storage between vSphere and OpenShift.</li>
+<li>A block-backed OpenShift storage class. The copy-offload tests map the destination as <code>ReadWriteOnce</code> with <code>Block</code> volume mode.</li>
+<li>MTV installed and healthy.</li>
+<li>A cloneable test VM or template with working guest access. Several scenarios power VMs on, wait for guest info, create snapshots, or validate guest connectivity after migration.</li>
+<li>A clone method: <code>vib</code> or <code>ssh</code>.</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> The repository's copy-offload guidance assumes SAN or block-backed storage. The existing project docs explicitly call out NFS as unsupported for copy-offload scenarios.</p>
+</blockquote>
+<p>For older MTV environments, the project docs include this feature-gate example:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">feature_copy_offload</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;true&#39;</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> <code>mtv-api-tests</code> does not toggle that feature gate for you. If your MTV version requires it, enable it before running copy-offload scenarios.</p>
+</blockquote>
+<h2 id="copy-offload-provider-config">Copy-Offload Provider Config</h2>
+<p>The copy-offload settings live under the VMware provider entry in <code>.providers.json</code>. This is the actual <code>copyoffload</code> block from <code>.providers.json.example</code>:</p>
+<div class="highlight"><pre><span></span><code>&quot;copyoffload&quot;: {
+  # Supported storage_vendor_product values:
+  # - &quot;ontap&quot;           (NetApp ONTAP)
+  # - &quot;vantara&quot;         (Hitachi Vantara)
+  # - &quot;primera3par&quot;     (HPE Primera/3PAR)
+  # - &quot;pureFlashArray&quot;  (Pure Storage FlashArray)
+  # - &quot;powerflex&quot;       (Dell PowerFlex)
+  # - &quot;powermax&quot;        (Dell PowerMax)
+  # - &quot;powerstore&quot;      (Dell PowerStore)
+  # - &quot;infinibox&quot;       (Infinidat InfiniBox)
+  # - &quot;flashsystem&quot;     (IBM FlashSystem)
+  &quot;storage_vendor_product&quot;: &quot;ontap&quot;,
+
+  # Primary datastore for copy-offload operations (required)
+  # This is the vSphere datastore ID (e.g., &quot;datastore-12345&quot;) where VMs reside
+  # Get via vSphere: Datacenter → Storage → Datastore → Summary → More Objects ID
+  &quot;datastore_id&quot;: &quot;datastore-12345&quot;,
+
+  # Optional: Secondary datastore for multi-datastore copy-offload tests
+  # Only needed when testing VMs with disks spanning multiple datastores
+  # When specified, tests can validate copy-offload with disks on different datastores
+  &quot;secondary_datastore_id&quot;: &quot;datastore-67890&quot;,
+
+  # Optional: Non-XCOPY datastore for mixed datastore tests
+  # This should be a datastore that does NOT support XCOPY/VAAI primitives
+  # Used for testing VMs with disks on both XCOPY and non-XCOPY datastores
+  &quot;non_xcopy_datastore_id&quot;: &quot;datastore-99999&quot;,
+
+  &quot;default_vm_name&quot;: &quot;rhel9-template&quot;,
+  &quot;storage_hostname&quot;: &quot;storage.example.com&quot;,
+  &quot;storage_username&quot;: &quot;admin&quot;,
+  &quot;storage_password&quot;: &quot;your-password-here&quot;,  # pragma: allowlist secret
+
+  # Vendor-specific fields (configure based on your storage_vendor_product):
+  # IMPORTANT: Only configure the fields for your selected storage_vendor_product.
+  # For example, if storage_vendor_product == &quot;ontap&quot;, only configure ontap_svm.
+  # You may leave other vendor-specific fields blank or remove them from your config.
+  # Note: Both datastore_id and secondary_datastore_id (if used) must be on the
+  # same storage array and support XCOPY/VAAI primitives for copy-offload to work.
+  # See forklift vsphere-xcopy-volume-populator code/README for details
+
+  # NetApp ONTAP (required for &quot;ontap&quot;):
+  &quot;ontap_svm&quot;: &quot;vserver-name&quot;,
+
+  # Hitachi Vantara (required for &quot;vantara&quot;):
+  &quot;vantara_storage_id&quot;: &quot;123456789&quot;,  # Storage array serial number
+  &quot;vantara_storage_port&quot;: &quot;443&quot;,  # Storage API port
+  &quot;vantara_hostgroup_id_list&quot;: &quot;CL1-A,1:CL2-B,2:CL4-A,1:CL6-A,1&quot;,  # IO ports and host group IDs
+
+  # Pure Storage FlashArray (required for &quot;pureFlashArray&quot;):
+  # Get with: printf &quot;px_%.8s&quot; $(oc get storagecluster -A -o=jsonpath=&#39;{.items[?(@.spec.cloudStorage.provider==&quot;pure&quot;)].status.clusterUid}&#39;)
+  &quot;pure_cluster_prefix&quot;: &quot;px_a1b2c3d4&quot;,
+
+  # Dell PowerFlex (required for &quot;powerflex&quot;):
+  # Get from vxflexos-config ConfigMap in vxflexos or openshift-operators namespace
+  &quot;powerflex_system_id&quot;: &quot;system-id&quot;,
+
+  # Dell PowerMax (required for &quot;powermax&quot;):
+  # Get from ConfigMap in powermax namespace used by CSI driver
+  &quot;powermax_symmetrix_id&quot;: &quot;000123456789&quot;,
+
+  # HPE Primera/3PAR, Dell PowerStore, Infinidat InfiniBox, IBM FlashSystem:
+  # No additional vendor-specific fields required - use only the common fields above
+
+  # ESXi SSH configuration (optional, for SSH-based cloning):
+  # Can be overridden via environment variables: COPYOFFLOAD_ESXI_HOST, COPYOFFLOAD_ESXI_USER, COPYOFFLOAD_ESXI_PASSWORD
+  &quot;esxi_clone_method&quot;: &quot;ssh&quot;,  # &quot;vib&quot; (default) or &quot;ssh&quot;
+  &quot;esxi_host&quot;: &quot;your-esxi-host.example.com&quot;,  # required for ssh method
+  &quot;esxi_user&quot;: &quot;root&quot;,  # required for ssh method
+  &quot;esxi_password&quot;: &quot;your-esxi-password&quot;,  # pragma: allowlist secret # required for ssh method
+
+  # RDM testing (optional, for RDM disk tests):
+  # Note: datastore_id must be a VMFS datastore for RDM disk support
+  &quot;rdm_lun_uuid&quot;: &quot;naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;
+}
+</code></pre></div>
+
+<p>The minimum fields that this project validates before running are:</p>
+<ul>
+<li><code>storage_vendor_product</code></li>
+<li><code>datastore_id</code></li>
+<li><code>storage_hostname</code></li>
+<li><code>storage_username</code></li>
+<li><code>storage_password</code></li>
+</ul>
+<p>Add these when you want advanced scenarios:</p>
+<ul>
+<li><code>secondary_datastore_id</code> for multi-datastore tests</li>
+<li><code>non_xcopy_datastore_id</code> for mixed and fallback tests</li>
+<li><code>rdm_lun_uuid</code> for RDM tests</li>
+<li><code>default_vm_name</code> if your copy-offload-ready template differs from the default test data</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> The <code># pragma: allowlist secret</code> comments in <code>.providers.json.example</code> are there for repository tooling. They are not valid JSON and must be removed from your real <code>.providers.json</code>.</p>
+</blockquote>
+<p><code>default_vm_name</code> is especially useful when your environment has a single known-good copy-offload template. The suite applies that override to cloned VM scenarios so you do not have to change every test entry by hand.</p>
+<h2 id="environment-variable-overrides">Environment Variable Overrides</h2>
+<p>The repository lets you override any copy-offload credential from the environment, and environment values always win over <code>.providers.json</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">env_var_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">copyoffload_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">credential_name</span><span class="p">)</span>
+</code></pre></div>
+
+<p>That pattern works for the common storage credentials:</p>
+<ul>
+<li><code>COPYOFFLOAD_STORAGE_HOSTNAME</code></li>
+<li><code>COPYOFFLOAD_STORAGE_USERNAME</code></li>
+<li><code>COPYOFFLOAD_STORAGE_PASSWORD</code></li>
+</ul>
+<p>It also works for vendor-specific and ESXi-specific values such as:</p>
+<ul>
+<li><code>COPYOFFLOAD_ONTAP_SVM</code></li>
+<li><code>COPYOFFLOAD_VANTARA_HOSTGROUP_ID_LIST</code></li>
+<li><code>COPYOFFLOAD_ESXI_HOST</code></li>
+<li><code>COPYOFFLOAD_ESXI_USER</code></li>
+<li><code>COPYOFFLOAD_ESXI_PASSWORD</code></li>
+</ul>
+<blockquote>
+<p><strong>Tip:</strong> A good pattern is to keep the structural values in <code>.providers.json</code> and inject the sensitive values through environment variables at runtime.</p>
+</blockquote>
+<h2 id="supported-storage-vendors">Supported Storage Vendors</h2>
+<p>Use these exact <code>storage_vendor_product</code> values. They come directly from the repository's copy-offload constants and secret-mapping logic.</p>
+<table>
+<thead>
+<tr>
+<th><code>storage_vendor_product</code></th>
+<th>Storage platform</th>
+<th>Extra required fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ontap</code></td>
+<td>NetApp ONTAP</td>
+<td><code>ontap_svm</code></td>
+</tr>
+<tr>
+<td><code>vantara</code></td>
+<td>Hitachi Vantara</td>
+<td><code>vantara_storage_id</code>, <code>vantara_storage_port</code>, <code>vantara_hostgroup_id_list</code></td>
+</tr>
+<tr>
+<td><code>pureFlashArray</code></td>
+<td>Pure Storage FlashArray</td>
+<td><code>pure_cluster_prefix</code></td>
+</tr>
+<tr>
+<td><code>powerflex</code></td>
+<td>Dell PowerFlex</td>
+<td><code>powerflex_system_id</code></td>
+</tr>
+<tr>
+<td><code>powermax</code></td>
+<td>Dell PowerMax</td>
+<td><code>powermax_symmetrix_id</code></td>
+</tr>
+<tr>
+<td><code>powerstore</code></td>
+<td>Dell PowerStore</td>
+<td>None beyond base storage credentials</td>
+</tr>
+<tr>
+<td><code>primera3par</code></td>
+<td>HPE Primera / 3PAR</td>
+<td>None beyond base storage credentials</td>
+</tr>
+<tr>
+<td><code>infinibox</code></td>
+<td>Infinidat InfiniBox</td>
+<td>None beyond base storage credentials</td>
+</tr>
+<tr>
+<td><code>flashsystem</code></td>
+<td>IBM FlashSystem</td>
+<td>None beyond base storage credentials</td>
+</tr>
+</tbody>
+</table>
+<h2 id="storage-secrets">Storage Secrets</h2>
+<p>In <code>mtv-api-tests</code>, you usually do not create the copy-offload storage secret by hand. The suite creates it automatically from the VMware provider's <code>copyoffload</code> block.</p>
+<p>That matters because:</p>
+<ul>
+<li>The secret values can come from <code>.providers.json</code> or environment variables.</li>
+<li>The secret is created in the same target namespace where the suite creates the <code>StorageMap</code> and <code>Plan</code>.</li>
+<li>The <code>offloadPlugin</code> can reference the secret by name, without extra manual wiring.</li>
+</ul>
+<p>The suite always creates these base secret keys:</p>
+<ul>
+<li><code>STORAGE_HOSTNAME</code></li>
+<li><code>STORAGE_USERNAME</code></li>
+<li><code>STORAGE_PASSWORD</code></li>
+</ul>
+<p>It then adds vendor-specific keys such as <code>ONTAP_SVM</code>, <code>STORAGE_ID</code>, <code>HOSTGROUP_ID_LIST</code>, <code>PURE_CLUSTER_PREFIX</code>, <code>POWERFLEX_SYSTEM_ID</code>, or <code>POWERMAX_SYMMETRIX_ID</code>, depending on <code>storage_vendor_product</code>.</p>
+<p>After the plan is created, the suite also waits for Forklift to create the plan-specific secret used during copy-offload. If that secret never appears, the run continues long enough to fail with a clearer migration error.</p>
+<blockquote>
+<p><strong>Note:</strong> This automatic secret handling is specific to how <code>mtv-api-tests</code> drives copy-offload. It removes a lot of manual setup from the test workflow.</p>
+</blockquote>
+<h2 id="storagemap-and-plan-behavior">StorageMap and Plan Behavior</h2>
+<p>The core of copy-offload in this project is the <code>offloadPlugin</code> block. The tests build it like this:</p>
+<div class="highlight"><pre><span></span><code><span class="n">offload_plugin_config</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;vsphereXcopyConfig&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;secretRef&quot;</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">&quot;storageVendorProduct&quot;</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The storage map entries then attach that plugin to the source datastore mapping and set the destination for block-backed PVCs:</p>
+<div class="highlight"><pre><span></span><code><span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+    <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">,</span>
+        <span class="s2">&quot;accessMode&quot;</span><span class="p">:</span> <span class="s2">&quot;ReadWriteOnce&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;volumeMode&quot;</span><span class="p">:</span> <span class="s2">&quot;Block&quot;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">ds_id</span><span class="p">},</span>
+    <span class="s2">&quot;offloadPlugin&quot;</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
+<span class="p">})</span>
+</code></pre></div>
+
+<p>The project also changes plan behavior for copy-offload runs:</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">copyoffload</span><span class="p">:</span>
+    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pvc&quot;</span>
+
+<span class="n">plan</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span><span class="o">**</span><span class="n">plan_kwargs</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">copyoffload</span><span class="p">:</span>
+    <span class="n">wait_for_plan_secret</span><span class="p">(</span><span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">,</span> <span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+</code></pre></div>
+
+<p>And when the suite creates the VMware <code>Provider</code> for copy-offload, it adds this annotation:</p>
+<div class="highlight"><pre><span></span><code><span class="n">provider_annotations</span><span class="p">[</span><span class="s2">&quot;forklift.konveyor.io/empty-vddk-init-image&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;yes&quot;</span>
+</code></pre></div>
+
+<p>That is the repository's way of steering the provider toward the copy-offload path instead of a VDDK-only setup.</p>
+<p>The difference is explicit in the concurrent XCOPY/VDDK scenario: the XCOPY <code>StorageMap</code> must contain <code>offloadPlugin</code>, and the VDDK <code>StorageMap</code> must not.</p>
+<blockquote>
+<p><strong>Tip:</strong> If you want a fast sanity check that your environment is wired correctly, start with <code>test_copyoffload_thin_migration</code>. It uses the same <code>offloadPlugin</code> structure as the advanced scenarios, but with fewer moving parts.</p>
+</blockquote>
+<h2 id="clone-methods">Clone Methods</h2>
+<p>The suite supports both copy-offload clone methods exposed by the populator: <code>vib</code> and <code>ssh</code>.</p>
+<h3 id="vib">VIB</h3>
+<p><code>vib</code> is the default. If you omit <code>esxi_clone_method</code>, the repository leaves the provider's clone method alone and relies on the default VIB behavior.</p>
+<p>Use <code>vib</code> when:</p>
+<ul>
+<li>Your ESXi environment allows community-level VIB installation.</li>
+<li>You do not want the suite to manage ESXi SSH credentials.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> The repository does not perform extra VIB-specific setup. It assumes the populator and ESXi host permissions are already ready for the VIB path.</p>
+</blockquote>
+<h3 id="ssh">SSH</h3>
+<p>If you set <code>esxi_clone_method</code> to <code>ssh</code>, the suite patches the VMware <code>Provider</code> so MTV uses SSH-based cloning:</p>
+<div class="highlight"><pre><span></span><code><span class="n">patch</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;spec&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;settings&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;esxiCloneMethod&quot;</span><span class="p">:</span> <span class="n">clone_method</span><span class="p">}}}</span>
+<span class="n">ResourceEditor</span><span class="p">(</span><span class="n">patches</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ocp_resource</span><span class="p">:</span> <span class="n">patch</span><span class="p">})</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+</code></pre></div>
+
+<p>It then retrieves the provider-generated public key from the <code>offload-ssh-keys-&lt;provider&gt;-public</code> secret and installs a restricted key on the ESXi host. The restricted command is taken directly from the ESXi helper:</p>
+<div class="highlight"><pre><span></span><code><span class="n">command_template</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s1">&#39;command=&quot;python /vmfs/volumes/</span><span class="si">{datastore_name}</span><span class="s1">/secure-vmkfstools-wrapper.py&quot;,&#39;</span>
+    <span class="s2">&quot;no-port-forwarding,no-agent-forwarding,no-X11-forwarding </span><span class="si">{public_key}</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>For SSH mode, you must provide:</p>
+<ul>
+<li><code>esxi_host</code></li>
+<li><code>esxi_user</code></li>
+<li><code>esxi_password</code></li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> SSH mode temporarily updates <code>/etc/ssh/keys-root/authorized_keys</code> on the ESXi host. The suite removes the key during teardown, but it is still a real host-side change.</p>
+<p><strong>Tip:</strong> SSH mode is a good choice when you want a fully test-managed setup path. The suite handles the provider patch, key installation, and cleanup for you.</p>
+</blockquote>
+<h2 id="fallback-modes">Fallback Modes</h2>
+<p>Copy-offload is not all-or-nothing in this repository. The existing tests explicitly cover cases where some or all disks live on a datastore that does not support XCOPY/VAAI.</p>
+<p>There are two main fallback patterns:</p>
+<ul>
+<li>Mixed-datastore fallback: one disk uses an XCOPY-capable datastore and another disk lives on <code>non_xcopy_datastore_id</code>.</li>
+<li>Full non-XCOPY fallback: the VM is relocated to <code>non_xcopy_datastore_id</code>, and added disks are placed there too.</li>
+</ul>
+<p>The storage-map helper keeps the <code>offloadPlugin</code> on the non-XCOPY mapping so Forklift can exercise fallback behavior:</p>
+<div class="highlight"><pre><span></span><code><span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+    <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
+    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">non_xcopy_datastore_id</span><span class="p">},</span>
+    <span class="s2">&quot;offloadPlugin&quot;</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
+<span class="p">})</span>
+</code></pre></div>
+
+<p>The full fallback case is modeled directly in the repository like this:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_fallback_large_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;target_datastore_id&quot;</span><span class="p">:</span> <span class="s2">&quot;non_xcopy_datastore_id&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;add_disks&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;size_gb&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+                    <span class="s2">&quot;provision_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;datastore_id&quot;</span><span class="p">:</span> <span class="s2">&quot;non_xcopy_datastore_id&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">],</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Warning:</strong> <code>non_xcopy_datastore_id</code> must point to a real datastore that does not support XCOPY/VAAI. If it is missing, the mixed and fallback scenarios fail fast before migration starts.</p>
+</blockquote>
+<h2 id="advanced-copy-offload-scenarios">Advanced Copy-Offload Scenarios</h2>
+<p>The copy-offload test matrix in this repository is broader than the basic thin-disk path.</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>What it validates</th>
+<th>Key test name(s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Basic provisioning</td>
+<td>Thin and thick-lazy disk copy-offload</td>
+<td><code>test_copyoffload_thin_migration</code>, <code>test_copyoffload_thick_lazy_migration</code></td>
+</tr>
+<tr>
+<td>Multi-disk layouts</td>
+<td>Additional disks on the same datastore</td>
+<td><code>test_copyoffload_multi_disk_migration</code></td>
+</tr>
+<tr>
+<td>Custom datastore paths</td>
+<td>Extra disks placed under a custom folder like <code>shared_disks</code></td>
+<td><code>test_copyoffload_multi_disk_different_path_migration</code></td>
+</tr>
+<tr>
+<td>Multi-datastore</td>
+<td>A VM with disks spanning primary and secondary XCOPY datastores</td>
+<td><code>test_copyoffload_multi_datastore_migration</code></td>
+</tr>
+<tr>
+<td>Mixed XCOPY / non-XCOPY</td>
+<td>Some disks accelerate while others fall back</td>
+<td><code>test_copyoffload_mixed_datastore_migration</code></td>
+</tr>
+<tr>
+<td>Full fallback on non-XCOPY</td>
+<td>Large VM and added disk entirely on a non-XCOPY datastore</td>
+<td><code>test_copyoffload_fallback_large_migration</code></td>
+</tr>
+<tr>
+<td>RDM</td>
+<td>RDM virtual-disk migration using <code>rdm_lun_uuid</code></td>
+<td><code>test_copyoffload_rdm_virtual_disk_migration</code></td>
+</tr>
+<tr>
+<td>Snapshots</td>
+<td>Source snapshots before migration, including a 2 TB case</td>
+<td><code>test_copyoffload_thin_snapshots_migration</code>, <code>test_copyoffload_2tb_vm_snapshots_migration</code></td>
+</tr>
+<tr>
+<td>Disk modes</td>
+<td>Independent persistent and independent nonpersistent disks</td>
+<td><code>test_copyoffload_independent_persistent_disk_migration</code>, <code>test_copyoffload_independent_nonpersistent_disk_migration</code></td>
+</tr>
+<tr>
+<td>Large and dense VMs</td>
+<td>1 TB VM and 10 mixed thin/thick disks</td>
+<td><code>test_copyoffload_large_vm_migration</code>, <code>test_copyoffload_10_mixed_disks_migration</code></td>
+</tr>
+<tr>
+<td>Warm copy-offload</td>
+<td>Warm migration with cutover</td>
+<td><code>test_copyoffload_warm_migration</code></td>
+</tr>
+<tr>
+<td>Name edge cases</td>
+<td>Non-Kubernetes VM names with uppercase letters and underscores</td>
+<td><code>test_copyoffload_nonconforming_name_migration</code></td>
+</tr>
+<tr>
+<td>Scale</td>
+<td>Five copy-offload VMs in one run</td>
+<td><code>test_copyoffload_scale_migration</code></td>
+</tr>
+<tr>
+<td>Concurrency</td>
+<td>Two copy-offload plans at once</td>
+<td><code>test_simultaneous_copyoffload_migrations</code></td>
+</tr>
+<tr>
+<td>XCOPY vs VDDK</td>
+<td>One copy-offload plan and one standard VDDK plan running together</td>
+<td><code>test_concurrent_xcopy_vddk_migration</code></td>
+</tr>
+</tbody>
+</table>
+<p>The repository's multi-datastore scenario uses a symbolic secondary datastore key instead of hardcoding the MoID into every disk entry:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_multi_datastore_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;add_disks&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;size_gb&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
+                    <span class="s2">&quot;disk_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;persistent&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;provision_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;datastore_id&quot;</span><span class="p">:</span> <span class="s2">&quot;secondary_datastore_id&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">],</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The non-conforming-name scenario is also deliberate. Its source config preserves uppercase letters and underscores in the cloned VMware name, and the suite then verifies that MTV sanitizes the destination VM name to a Kubernetes-safe value.</p>
+<blockquote>
+<p><strong>Note:</strong> The project docs currently call out RDM copy-offload support only for Pure Storage, and they require <code>datastore_id</code> to be a VMFS datastore for RDM scenarios.</p>
+</blockquote>
+<h2 id="what-the-suite-automates-for-you">What the Suite Automates for You</h2>
+<p>When you run copy-offload scenarios through <code>mtv-api-tests</code>, the project handles several setup steps automatically:</p>
+<ul>
+<li>It validates that the source provider is vSphere and that the <code>copyoffload</code> section exists.</li>
+<li>It creates the copy-offload storage secret from <code>.providers.json</code> or environment variables.</li>
+<li>It creates <code>StorageMap</code> entries with <code>offloadPlugin.vsphereXcopyConfig</code>.</li>
+<li>It annotates the VMware provider with <code>forklift.konveyor.io/empty-vddk-init-image: "yes"</code>.</li>
+<li>It patches <code>esxiCloneMethod</code> to <code>ssh</code> when you choose SSH cloning.</li>
+<li>It waits for Forklift to create the plan-specific copy-offload secret.</li>
+<li>It forces <code>pvc_name_template</code> to <code>pvc</code> for copy-offload plans.</li>
+</ul>
+<p>That is why the user-facing setup is mostly about getting the provider config, datastore IDs, storage array credentials, and clone method right.</p>
+<h2 id="running-the-copy-offload-marker">Running the Copy-Offload Marker</h2>
+<p>The repository's copy-offload guide uses the <code>copyoffload</code> pytest marker. This command is taken directly from the existing Job example:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="p">:+--tc=cluster_host:</span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_USERNAME</span><span class="p">:+--tc=cluster_username:</span><span class="si">${</span><span class="nv">CLUSTER_USERNAME</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="p">:+--tc=cluster_password:</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>source_provider:vsphere-8.0.3.00400<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>storage_class:my-block-storageclass
+</code></pre></div>
+
+<p>Replace the provider key with the exact key from your <code>.providers.json</code>, and replace the storage class with the block-backed class that maps to the same storage array as your vSphere datastores.</p>
+<blockquote>
+<p><strong>Tip:</strong> Start with <code>test_copyoffload_thin_migration</code>, then move to <code>test_copyoffload_multi_datastore_migration</code>, <code>test_copyoffload_mixed_datastore_migration</code>, or <code>test_concurrent_xcopy_vddk_migration</code> once the base path is working.</p>
+</blockquote>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <a href="warm-migrations.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Warm Migrations</span>
+                </a>
+
+
+                <a href="remote-openshift-migrations.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Remote OpenShift Migrations</span>
+                </a>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#what-you-need">What You Need</a></li>
+<li><a href="#copy-offload-provider-config">Copy-Offload Provider Config</a></li>
+<li><a href="#environment-variable-overrides">Environment Variable Overrides</a></li>
+<li><a href="#supported-storage-vendors">Supported Storage Vendors</a></li>
+<li><a href="#storage-secrets">Storage Secrets</a></li>
+<li><a href="#storagemap-and-plan-behavior">StorageMap and Plan Behavior</a></li>
+<li><a href="#clone-methods">Clone Methods</a><ul>
+<li><a href="#vib">VIB</a></li>
+<li><a href="#ssh">SSH</a></li>
+</ul>
+</li>
+<li><a href="#fallback-modes">Fallback Modes</a></li>
+<li><a href="#advanced-copy-offload-scenarios">Advanced Copy-Offload Scenarios</a></li>
+<li><a href="#what-the-suite-automates-for-you">What the Suite Automates for You</a></li>
+<li><a href="#running-the-copy-offload-marker">Running the Copy-Offload Marker</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+        </main>
+
+        <footer class="page-footer">
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">·</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>

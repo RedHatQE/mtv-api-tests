@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extending The Suite - mtv-api-tests</title>
+    <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">mtv-api-tests</a>
+            <p class="sidebar-tagline">Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Overview</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="introduction.html"
+                           class="nav-link">
+                            Introduction
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="project-structure.html"
+                           class="nav-link">
+                            Project Structure
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="architecture-and-workflow.html"
+                           class="nav-link">
+                            Architecture And Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="supported-providers-and-scenarios.html"
+                           class="nav-link">
+                            Supported Providers And Scenarios
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="prerequisites.html"
+                           class="nav-link">
+                            Prerequisites
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="installation-and-local-setup.html"
+                           class="nav-link">
+                            Installation And Local Setup
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="quickstart-first-run.html"
+                           class="nav-link">
+                            Quickstart First Run
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="container-and-openshift-job-execution.html"
+                           class="nav-link">
+                            Container And OpenShift Job Execution
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Configuration</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="runtime-configuration.html"
+                           class="nav-link">
+                            Runtime Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-config-file.html"
+                           class="nav-link">
+                            Provider Config File
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="test-plan-configuration.html"
+                           class="nav-link">
+                            Test Plan Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="optional-integrations-and-secrets.html"
+                           class="nav-link">
+                            Optional Integrations And Secrets
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cold-migrations.html"
+                           class="nav-link">
+                            Cold Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="warm-migrations.html"
+                           class="nav-link">
+                            Warm Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="copy-offload-migrations.html"
+                           class="nav-link">
+                            Copy-Offload Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="remote-openshift-migrations.html"
+                           class="nav-link">
+                            Remote OpenShift Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="hooks-and-expected-failures.html"
+                           class="nav-link">
+                            Hooks And Expected Failures
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="advanced-plan-features.html"
+                           class="nav-link">
+                            Advanced Plan Features
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="pytest-options-and-markers.html"
+                           class="nav-link">
+                            Pytest Options And Markers
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="plan-and-resource-reference.html"
+                           class="nav-link">
+                            Plan And Resource Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-and-inventory-reference.html"
+                           class="nav-link">
+                            Provider And Inventory Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="python-module-reference.html"
+                           class="nav-link">
+                            Python Module Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="troubleshooting-and-diagnostics.html"
+                           class="nav-link">
+                            Troubleshooting And Diagnostics
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Maintenance</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cleanup-and-teardown.html"
+                           class="nav-link">
+                            Cleanup And Teardown
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="extending-the-suite.html"
+                           class="nav-link active">
+                            Extending The Suite
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="development-workflow.html"
+                           class="nav-link">
+                            Development Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="automation-and-release.html"
+                           class="nav-link">
+                            Automation And Release
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">mtv-api-tests</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="extending-the-suite">Extending The Suite</h1>
+<p>Most new coverage in <code>mtv-api-tests</code> follows the same recipe:</p>
+<ol>
+<li>Add a scenario to <code>tests/tests_config/config.py</code>.</li>
+<li>Point a class at that scenario with <code>class_plan_config</code>.</li>
+<li>Keep the standard five-step migration flow.</li>
+<li>Reuse the shared fixtures for setup, cleanup, and validation.</li>
+<li>Extend provider or validation helpers only when the existing abstractions stop being enough.</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> This suite is intentionally class-based. In most cases, adding a new test means adding one config entry and one new class, not building a brand-new setup stack.</p>
+</blockquote>
+<h2 id="add-a-test-config">Add A Test Config</h2>
+<p><code>pytest.ini</code> wires pytest-testconfig to <code>tests/tests_config/config.py</code>, so new scenarios start there.</p>
+<p>A minimal cold-migration entry can be very small:</p>
+<div class="highlight"><pre><span></span><code>    <span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span> <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">},</span>
+</code></pre></div>
+
+<p>When you need more coverage, keep the same shape and add the keys the suite already understands:</p>
+<div class="highlight"><pre><span></span><code>    <span class="s2">&quot;test_cold_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2019-3disks&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s2">&quot;{{.VmName}}-disk-{{.DiskIndex}}&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">&quot;target_node_selector&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;mtv-comprehensive-node&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;mtv-comprehensive-label&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;test-type&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive&quot;</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;test&quot;</span><span class="p">}},</span>
+                            <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                        <span class="p">},</span>
+                        <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">]</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-comprehensive-vms&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+    <span class="p">},</span>
+</code></pre></div>
+
+<p>A few patterns are worth knowing up front:</p>
+<ul>
+<li><code>virtual_machines</code> is always the center of the scenario.</li>
+<li><code>warm_migration</code> controls whether the flow is warm or cold.</li>
+<li>VM-level keys such as <code>source_vm_power</code>, <code>guest_agent</code>, <code>clone</code>, <code>disk_type</code>, <code>add_disks</code>, <code>snapshots</code>, and <code>clone_name</code> are already used by existing tests.</li>
+<li>Plan-level keys such as <code>target_power_state</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>, <code>vm_target_namespace</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>, <code>pre_hook</code>, <code>post_hook</code>, and <code>copyoffload</code> are already supported by the shared helpers.</li>
+</ul>
+<blockquote>
+<p><strong>Tip:</strong> In <code>target_node_selector</code> and <code>target_labels</code>, a value of <code>None</code> does not mean “missing”. The fixtures replace it with the current <code>session_uuid</code>, which makes it easy to create unique labels safely.</p>
+<p><strong>Note:</strong> The runtime plan is not the raw config entry. <code>prepared_plan</code> deep-copies the config, clones VMs when needed, updates VM names, creates hooks, and stores extra source VM metadata. In test methods, always work from <code>prepared_plan</code>, not the literal values from <code>config.py</code>.</p>
+</blockquote>
+<h2 id="follow-the-five-step-class-pattern">Follow The Five-Step Class Pattern</h2>
+<p>The standard migration classes all use the same shape. The cold sanity test is the simplest example:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">tier0</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">incremental</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
+    <span class="s2">&quot;class_plan_config&quot;</span><span class="p">,</span>
+    <span class="p">[</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;tests_params&quot;</span><span class="p">][</span><span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="p">],</span>
+    <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;rhel8&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">&quot;cleanup_migrated_vms&quot;</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestSanityColdMtvMigration</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cold migration test - sanity check.&quot;&quot;&quot;</span>
+
+    <span class="n">storage_map</span><span class="p">:</span> <span class="n">StorageMap</span>
+    <span class="n">network_map</span><span class="p">:</span> <span class="n">NetworkMap</span>
+    <span class="n">plan_resource</span><span class="p">:</span> <span class="n">Plan</span>
+</code></pre></div>
+
+<p>From there, the class follows the same five steps every time:</p>
+<ol>
+<li><code>test_create_storagemap()</code> builds the <code>StorageMap</code> with <code>get_storage_migration_map()</code>.</li>
+<li><code>test_create_networkmap()</code> builds the <code>NetworkMap</code> with <code>get_network_migration_map()</code>.</li>
+<li><code>test_create_plan()</code> populates VM IDs and creates the MTV <code>Plan</code> with <code>create_plan_resource()</code>.</li>
+<li><code>test_migrate_vms()</code> starts the migration with <code>execute_migration()</code>.</li>
+<li><code>test_check_vms()</code> validates the result with <code>check_vms()</code>.</li>
+</ol>
+<p>That pattern is consistent across:</p>
+<ul>
+<li><code>tests/test_mtv_cold_migration.py</code></li>
+<li><code>tests/test_mtv_warm_migration.py</code></li>
+<li><code>tests/test_cold_migration_comprehensive.py</code></li>
+<li><code>tests/test_warm_migration_comprehensive.py</code></li>
+<li><code>tests/test_copyoffload_migration.py</code></li>
+<li><code>tests/test_post_hook_retain_failed_vm.py</code></li>
+</ul>
+<p>The shared state also stays consistent: classes store <code>storage_map</code>, <code>network_map</code>, and <code>plan_resource</code> on the class itself so later steps can reuse them.</p>
+<blockquote>
+<p><strong>Warning:</strong> Keep <code>@pytest.mark.incremental</code> on these classes. The steps depend on each other, and the suite is written to stop later steps cleanly when an earlier one fails.</p>
+</blockquote>
+<p>When choosing markers, reuse the ones already declared in <code>pytest.ini</code>:</p>
+<ul>
+<li><code>tier0</code> for core migration coverage</li>
+<li><code>warm</code> for warm migration coverage</li>
+<li><code>remote</code> for remote-cluster destination coverage</li>
+<li><code>copyoffload</code> for XCOPY/copy-offload coverage</li>
+<li><code>incremental</code> for dependent class flows</li>
+</ul>
+<p>Warm classes also use <code>precopy_interval_forkliftcontroller</code>, and remote-destination classes switch from <code>destination_provider</code> to <code>destination_ocp_provider</code>.</p>
+<h2 id="reuse-fixtures-instead-of-rebuilding-setup">Reuse Fixtures Instead Of Rebuilding Setup</h2>
+<p>Most of the hard work is already in <code>conftest.py</code> and the utility modules. Reuse that layer first.</p>
+<ul>
+<li><code>prepared_plan</code> is the main runtime plan fixture. It deep-copies the class config, prepares cloned VMs, tracks source VM metadata in <code>source_vms_data</code>, creates hooks when configured, and sets <code>_vm_target_namespace</code>.</li>
+<li><code>target_namespace</code> creates a unique namespace for migration resources and stores it for cleanup.</li>
+<li><code>source_provider</code> and <code>destination_provider</code> give you provider objects instead of raw credentials.</li>
+<li><code>source_provider_inventory</code> gives you the Forklift inventory view that the mapping helpers use.</li>
+<li><code>multus_network_name</code> automatically creates as many NetworkAttachmentDefinitions as the source VMs need and returns the base name and namespace that <code>get_network_migration_map()</code> expects.</li>
+<li><code>cleanup_migrated_vms</code> deletes migrated VMs after the class finishes and automatically uses the custom VM namespace if your plan sets <code>vm_target_namespace</code>.</li>
+<li><code>precopy_interval_forkliftcontroller</code> patches the <code>ForkliftController</code> for warm-migration snapshot timing, so warm tests should keep using it rather than patching the controller themselves.</li>
+<li><code>labeled_worker_node</code> and <code>target_vm_labels</code> are the fixtures to use when your config includes <code>target_node_selector</code> or <code>target_labels</code>.</li>
+<li><code>vm_ssh_connections</code> gives post-migration validation a reusable SSH connection manager.</li>
+<li><code>copyoffload_config</code>, <code>copyoffload_storage_secret</code>, <code>setup_copyoffload_ssh</code>, and <code>mixed_datastore_config</code> are the copy-offload-specific fixtures already used by the XCOPY tests.</li>
+<li><code>prepared_plan_1</code> and <code>prepared_plan_2</code> split a multi-VM plan into two independent plans for simultaneous migration coverage.</li>
+</ul>
+<p>If you need to create an extra OpenShift resource for a new scenario, use <code>create_and_store_resource()</code> instead of deploying it directly. That helper generates a safe name when needed, deploys the resource, and registers it in the fixture store for teardown.</p>
+<blockquote>
+<p><strong>Tip:</strong> <code>target_namespace</code> and <code>vm_target_namespace</code> are different things. <code>target_namespace</code> is where the migration resources live. <code>vm_target_namespace</code> is an optional plan setting that tells MTV to place the migrated VMs in a different namespace.</p>
+</blockquote>
+<h2 id="extend-provider-coverage">Extend Provider Coverage</h2>
+<p>Most test classes are already provider-neutral because they work through <code>source_provider</code>, <code>destination_provider</code>, and <code>source_provider_inventory</code>. In practice, extending provider coverage usually means keeping the same five-step class and passing a few extra provider-specific arguments.</p>
+<p>The copy-offload tests are a good example. They still use <code>get_storage_migration_map()</code>, but add provider-specific storage plugin data instead of rewriting the whole flow:</p>
+<div class="highlight"><pre><span></span><code>        <span class="n">offload_plugin_config</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;vsphereXcopyConfig&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;secretRef&quot;</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="s2">&quot;storageVendorProduct&quot;</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">storage_map</span> <span class="o">=</span> <span class="n">get_storage_migration_map</span><span class="p">(</span>
+            <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+            <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+            <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
+            <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
+            <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+            <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span>
+            <span class="n">vms</span><span class="o">=</span><span class="n">vms_names</span><span class="p">,</span>
+            <span class="n">storage_class</span><span class="o">=</span><span class="n">storage_class</span><span class="p">,</span>
+            <span class="n">datastore_id</span><span class="o">=</span><span class="n">datastore_id</span><span class="p">,</span>
+            <span class="n">offload_plugin_config</span><span class="o">=</span><span class="n">offload_plugin_config</span><span class="p">,</span>
+            <span class="n">access_mode</span><span class="o">=</span><span class="s2">&quot;ReadWriteOnce&quot;</span><span class="p">,</span>
+            <span class="n">volume_mode</span><span class="o">=</span><span class="s2">&quot;Block&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+</code></pre></div>
+
+<p>That is the pattern to follow when you want to add provider-specific behavior:</p>
+<ul>
+<li>Keep the class structure the same.</li>
+<li>Keep using the shared map and plan helpers.</li>
+<li>Add only the extra provider inputs the helper already supports.</li>
+</ul>
+<p>A few existing provider-specific patterns are already in the suite:</p>
+<ul>
+<li>Warm migration tests gate unsupported source providers at module level with <code>pytest.mark.skipif(...)</code>.</li>
+<li>Remote destination tests use <code>destination_ocp_provider</code> and skip when <code>remote_ocp_cluster</code> is not configured.</li>
+<li>Copy-offload tests layer extra fixtures on top of the standard class flow rather than creating a separate framework.</li>
+</ul>
+<h3 id="adding-a-new-provider-backend">Adding A New Provider Backend</h3>
+<p>If you need a brand-new provider type, there are two places where the provider/inventory pairing is wired together. One of them is <code>source_provider_inventory</code> in <code>conftest.py</code>:</p>
+<div class="highlight"><pre><span></span><code>    <span class="n">providers</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">:</span> <span class="n">OvaForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">RHV</span><span class="p">:</span> <span class="n">OvirtForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span> <span class="n">VsphereForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">:</span> <span class="n">OpenshiftForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">:</span> <span class="n">OpenstackForliftinventory</span><span class="p">,</span>
+    <span class="p">}</span>
+</code></pre></div>
+
+<p>A new provider type needs all of the following:</p>
+<ol>
+<li>A concrete <code>BaseProvider</code> implementation under <code>libs/providers/</code>.</li>
+<li>A matching <code>ForkliftInventory</code> implementation in <code>libs/forklift_inventory.py</code>.</li>
+<li>Registration in <code>utilities/utils.py:create_source_provider()</code> so the fixture layer can construct the provider from <code>.providers.json</code>.</li>
+<li>Registration in <code>conftest.py:source_provider_inventory()</code> so the mapping helpers know how to query storage and network data.</li>
+<li>A <code>vm_dict()</code> implementation that fills the fields the validators already expect, including CPU, memory, NICs, disks, power state, and any provider-specific metadata your checks need.</li>
+</ol>
+<p>The active source provider is selected from <code>.providers.json</code> through <code>load_source_providers()</code>, so provider coverage should usually be added by configuration first. Only add a new provider implementation when the suite genuinely needs a new backend, not just a new scenario.</p>
+<h2 id="extend-validation-coverage">Extend Validation Coverage</h2>
+<p>For most new test scenarios, the best place to add coverage is <code>utilities/post_migration.py</code>, not the <code>test_check_vms()</code> method itself.</p>
+<p><code>check_vms()</code> is the central post-migration validator. It already covers:</p>
+<ul>
+<li>power state</li>
+<li>CPU and memory</li>
+<li>network mapping</li>
+<li>storage mapping</li>
+<li>PVC naming templates</li>
+<li>snapshots</li>
+<li>serial preservation</li>
+<li>guest agent state</li>
+<li>SSH connectivity</li>
+<li>static IP preservation</li>
+<li>node placement</li>
+<li>VM labels</li>
+<li>VM affinity</li>
+<li>RHV-specific power-off behavior</li>
+</ul>
+<p>The existing label, node-placement, and affinity checks show the pattern clearly:</p>
+<div class="highlight"><pre><span></span><code>        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_node_selector&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">labeled_worker_node</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">check_vm_node_placement</span><span class="p">(</span>
+                    <span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">,</span>
+                    <span class="n">expected_node</span><span class="o">=</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">&quot;node_name&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+                <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_vm_node_placement - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_labels&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">target_vm_labels</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">check_vm_labels</span><span class="p">(</span>
+                    <span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">,</span>
+                    <span class="n">expected_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">&quot;vm_labels&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+                <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_vm_labels - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">check_vm_affinity</span><span class="p">(</span>
+                    <span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">,</span>
+                    <span class="n">expected_affinity</span><span class="o">=</span><span class="n">plan</span><span class="p">[</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+                <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_vm_affinity - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>When you want to add a new validation, the usual path is:</p>
+<ol>
+<li>Add a plan key to <code>tests/tests_config/config.py</code> if the validation is scenario-driven.</li>
+<li>Collect any setup-time data in <code>prepared_plan</code> or a dedicated fixture.</li>
+<li>Pass any plan-level MTV fields through <code>create_plan_resource()</code> if the validation depends on plan configuration.</li>
+<li>Add a focused helper such as <code>check_vm_labels()</code> or <code>check_pvc_names()</code> to <code>utilities/post_migration.py</code>.</li>
+<li>Call that helper from <code>check_vms()</code> behind an <code>if plan.get("your_key"):</code> guard.</li>
+</ol>
+<p>This keeps the test classes simple. The class still ends with <code>check_vms()</code>, and the validation logic stays in one place.</p>
+<blockquote>
+<p><strong>Tip:</strong> Negative-path tests should still keep the five-step flow. <code>tests/test_post_hook_retain_failed_vm.py</code> shows the pattern: wrap <code>execute_migration()</code> in <code>pytest.raises(MigrationPlanExecError)</code> when failure is expected, then decide whether <code>check_vms()</code> should still run based on where the failure happened.</p>
+</blockquote>
+<h2 id="validate-and-collect-your-new-tests">Validate And Collect Your New Tests</h2>
+<p>The repository does not include a checked-in GitHub Actions or GitLab pipeline file. The validation path that is checked into the repo is visible in <code>pytest.ini</code>, <code>tox.toml</code>, <code>Dockerfile</code>, and <code>.pre-commit-config.yaml</code>.</p>
+<p><code>tox.toml</code> already defines the first validation pass for new tests:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[env.pytest-check]</span>
+<span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;--setup-plan&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="p">]</span>
+</code></pre></div>
+
+<p>That leads to a practical workflow for new suite extensions:</p>
+<ul>
+<li>Run <code>uv run pytest --collect-only</code> first. It is also the default <code>CMD</code> in the <code>Dockerfile</code>, which makes test discovery a first-class check in this repo.</li>
+<li>Run <code>uv run pytest --setup-plan</code> or <code>tox -e pytest-check</code> to catch setup and collection issues before trying a full migration run.</li>
+<li>Run <code>pre-commit run --all-files</code> before you send changes out. The repo’s hooks include <code>flake8</code>, <code>ruff</code>, <code>ruff-format</code>, <code>mypy</code>, <code>detect-secrets</code>, <code>gitleaks</code>, and <code>markdownlint-cli2</code>.</li>
+<li>Keep using the existing markers unless you truly need a new one.</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> <code>pytest.ini</code> enables <code>--strict-markers</code>. If you introduce a new marker and do not add it to <code>pytest.ini</code>, collection will fail.</p>
+<p><strong>Tip:</strong> Start with collection and setup validation before a live run. This suite depends on real clusters, real providers, and real credentials, so the fastest feedback loop is usually <code>--collect-only</code>, <code>--setup-plan</code>, and pre-commit.</p>
+</blockquote>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <a href="cleanup-and-teardown.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Cleanup And Teardown</span>
+                </a>
+
+
+                <a href="development-workflow.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Development Workflow</span>
+                </a>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#add-a-test-config">Add A Test Config</a></li>
+<li><a href="#follow-the-five-step-class-pattern">Follow The Five-Step Class Pattern</a></li>
+<li><a href="#reuse-fixtures-instead-of-rebuilding-setup">Reuse Fixtures Instead Of Rebuilding Setup</a></li>
+<li><a href="#extend-provider-coverage">Extend Provider Coverage</a><ul>
+<li><a href="#adding-a-new-provider-backend">Adding A New Provider Backend</a></li>
+</ul>
+</li>
+<li><a href="#extend-validation-coverage">Extend Validation Coverage</a></li>
+<li><a href="#validate-and-collect-your-new-tests">Validate And Collect Your New Tests</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+        </main>
+
+        <footer class="page-footer">
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">·</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>

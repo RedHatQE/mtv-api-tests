@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Container And OpenShift Job Execution - mtv-api-tests</title>
+    <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">mtv-api-tests</a>
+            <p class="sidebar-tagline">Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Overview</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="introduction.html"
+                           class="nav-link">
+                            Introduction
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="project-structure.html"
+                           class="nav-link">
+                            Project Structure
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="architecture-and-workflow.html"
+                           class="nav-link">
+                            Architecture And Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="supported-providers-and-scenarios.html"
+                           class="nav-link">
+                            Supported Providers And Scenarios
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="prerequisites.html"
+                           class="nav-link">
+                            Prerequisites
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="installation-and-local-setup.html"
+                           class="nav-link">
+                            Installation And Local Setup
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="quickstart-first-run.html"
+                           class="nav-link">
+                            Quickstart First Run
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="container-and-openshift-job-execution.html"
+                           class="nav-link active">
+                            Container And OpenShift Job Execution
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Configuration</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="runtime-configuration.html"
+                           class="nav-link">
+                            Runtime Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-config-file.html"
+                           class="nav-link">
+                            Provider Config File
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="test-plan-configuration.html"
+                           class="nav-link">
+                            Test Plan Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="optional-integrations-and-secrets.html"
+                           class="nav-link">
+                            Optional Integrations And Secrets
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cold-migrations.html"
+                           class="nav-link">
+                            Cold Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="warm-migrations.html"
+                           class="nav-link">
+                            Warm Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="copy-offload-migrations.html"
+                           class="nav-link">
+                            Copy-Offload Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="remote-openshift-migrations.html"
+                           class="nav-link">
+                            Remote OpenShift Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="hooks-and-expected-failures.html"
+                           class="nav-link">
+                            Hooks And Expected Failures
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="advanced-plan-features.html"
+                           class="nav-link">
+                            Advanced Plan Features
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="pytest-options-and-markers.html"
+                           class="nav-link">
+                            Pytest Options And Markers
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="plan-and-resource-reference.html"
+                           class="nav-link">
+                            Plan And Resource Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-and-inventory-reference.html"
+                           class="nav-link">
+                            Provider And Inventory Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="python-module-reference.html"
+                           class="nav-link">
+                            Python Module Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="troubleshooting-and-diagnostics.html"
+                           class="nav-link">
+                            Troubleshooting And Diagnostics
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Maintenance</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cleanup-and-teardown.html"
+                           class="nav-link">
+                            Cleanup And Teardown
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="extending-the-suite.html"
+                           class="nav-link">
+                            Extending The Suite
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="development-workflow.html"
+                           class="nav-link">
+                            Development Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="automation-and-release.html"
+                           class="nav-link">
+                            Automation And Release
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">mtv-api-tests</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="container-and-openshift-job-execution">Container And OpenShift Job Execution</h1>
+<p>Running <code>mtv-api-tests</code> from a container or an OpenShift <code>Job</code> gives you a repeatable environment for long migration runs, shared execution in CI-style workflows, and predictable artifact collection. The key is understanding what the image expects at runtime:</p>
+<ul>
+<li>a <code>.providers.json</code> file in the container working directory</li>
+<li>pytest testconfig values for the OpenShift cluster and test selection</li>
+<li>an overridden container command, because the image defaults to collection only</li>
+</ul>
+<h2 id="how-the-image-starts">How The Image Starts</h2>
+<p>The checked-in image is built to run from <code>/app</code>, and its default command only collects tests:</p>
+<div class="highlight"><pre><span></span><code><span class="k">ARG</span><span class="w"> </span><span class="nv">APP_DIR</span><span class="o">=</span>/app
+<span class="k">WORKDIR</span><span class="w"> </span><span class="s">${APP_DIR}</span>
+
+<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">]</span>
+</code></pre></div>
+
+<p>Pytest is also preconfigured in the repo:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[pytest]</span>
+<span class="na">addopts</span><span class="w"> </span><span class="o">=</span>
+<span class="w">  </span><span class="na">-s</span>
+<span class="w">  </span><span class="na">-o log_cli</span><span class="o">=</span><span class="s">true</span>
+<span class="w">  </span><span class="na">-p no</span><span class="o">:</span><span class="s">logging</span>
+<span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
+<span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
+<span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
+<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
+<span class="w">  </span><span class="na">--show-progress</span>
+<span class="w">  </span><span class="na">--strict-markers</span>
+<span class="w">  </span><span class="na">--jira</span>
+<span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> A plain <code>podman run ... ghcr.io/redhatqe/mtv-api-tests:latest</code> will not execute migrations. Override the command with <code>uv run pytest ...</code>.</p>
+</blockquote>
+<p>The suite reads provider definitions from <code>.providers.json</code> and builds the OpenShift client from pytest config values:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_source_providers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="n">providers_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;.providers.json&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">providers_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_host&quot;</span><span class="p">)</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_username&quot;</span><span class="p">)</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_password&quot;</span><span class="p">)</span>
+    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;insecure_verify_skip&quot;</span><span class="p">)</span>
+    <span class="n">_client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+</code></pre></div>
+
+<p>In practice, every real run needs these values:</p>
+<ul>
+<li><code>.providers.json</code></li>
+<li><code>source_provider</code></li>
+<li><code>storage_class</code></li>
+<li><code>cluster_host</code></li>
+<li><code>cluster_username</code></li>
+<li><code>cluster_password</code></li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> The suite does not currently create its OpenShift client from the pod service account. Even inside an OpenShift <code>Job</code>, you still need to provide <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>.</p>
+</blockquote>
+<h2 id="provider-and-test-config">Provider And Test Config</h2>
+<h3 id="providersjson"><code>.providers.json</code></h3>
+<p>The provider file lives at <code>.providers.json</code> in the working directory, so inside the image the simplest path is <code>/app/.providers.json</code>.</p>
+<p>A real example from <code>.providers.json.example</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;vsphere&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vsphere&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER VERSION&gt;&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SERVER FQDN/IP&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;api_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;USERNAME&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PASSWORD&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_linux_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS USERNAME&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_linux_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS PASSWORD&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_win_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS USERNAME&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_win_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS PASSWORD&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;vddk_init_image&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The top-level key is the provider name you pass through pytest. If your file uses <code>"vsphere"</code>, then your run must include <code>--tc=source_provider:vsphere</code>.</p>
+<blockquote>
+<p><strong>Tip:</strong> The top-level key can be descriptive, versioned, or site-specific. What matters is that <code>source_provider</code> matches it exactly.</p>
+</blockquote>
+<h3 id="teststests_configconfigpy"><code>tests/tests_config/config.py</code></h3>
+<p>The repo already ships a Python testconfig file with global defaults and <code>tests_params</code> used by the test modules:</p>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>
+<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
+<span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
+
+<span class="n">tests_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;test_sanity_warm_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">},</span>
+</code></pre></div>
+
+<p>Most users should keep the checked-in <code>config.py</code> and supply runtime values with <code>--tc=...</code>.</p>
+<p>If you do mount your own replacement config file, start from <code>tests/tests_config/config.py</code> instead of creating an empty file. The tests rely on <code>tests_params</code> being present.</p>
+<h2 id="running-from-the-container-image">Running From The Container Image</h2>
+<p>Examples below use <code>podman</code>, but the same pattern works with Docker.</p>
+<p>A practical local run mounts <code>.providers.json</code>, exports cluster credentials into the container, and overrides the image command:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_HOST</span><span class="o">=</span><span class="s2">&quot;https://api.example.com:6443&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_USERNAME</span><span class="o">=</span><span class="s2">&quot;kubeadmin&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_PASSWORD</span><span class="o">=</span><span class="s2">&quot;&lt;password&gt;&quot;</span>
+
+podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span>CLUSTER_HOST<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span>CLUSTER_USERNAME<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/.providers.json:/app/.providers.json:ro&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/results:/app/results&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>ghcr.io/redhatqe/mtv-api-tests:latest<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/bin/bash<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;uv run pytest -m tier0 \</span>
+<span class="s1">    -v \</span>
+<span class="s1">    ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \</span>
+<span class="s1">    ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \</span>
+<span class="s1">    ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \</span>
+<span class="s1">    --tc=source_provider:vsphere \</span>
+<span class="s1">    --tc=storage_class:my-block-storageclass \</span>
+<span class="s1">    --junit-xml=/app/results/junit-report.xml \</span>
+<span class="s1">    --log-file=/app/results/pytest-tests.log \</span>
+<span class="s1">    --data-collector-path=/app/results/data&#39;</span>
+</code></pre></div>
+
+<p>Useful marker selections come directly from <code>pytest.ini</code> and the test modules:</p>
+<ul>
+<li><code>-m tier0</code> for smoke-style coverage</li>
+<li><code>-m warm</code> for warm migration coverage</li>
+<li><code>-m copyoffload</code> for copy-offload coverage</li>
+<li><code>-m remote</code> for remote-cluster scenarios when <code>remote_ocp_cluster</code> is configured</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> <code>warm</code> is not universally supported for every provider type. If you select <code>-m warm</code> against a provider that the warm test module skips, pytest will report skips rather than failures.</p>
+</blockquote>
+<p>If you prefer a mounted config file instead of many <code>--tc=</code> flags, mount your own Python config and point pytest at it:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--tc-file<span class="o">=</span>/app/config.py<span class="w"> </span>--tc-format<span class="o">=</span>python<span class="w"> </span>...
+</code></pre></div>
+
+<p>That is only safe when <code>/app/config.py</code> is based on the repo’s existing <code>tests/tests_config/config.py</code>.</p>
+<h2 id="running-inside-an-openshift-job">Running Inside An OpenShift Job</h2>
+<p>The repo already contains a checked-in <code>Job</code> pattern under <code>docs/copyoffload/</code>. It is written for copy-offload, but the wiring is the same for any suite: mount <code>.providers.json</code>, provide cluster credentials from a <code>Secret</code>, and expand them into <code>--tc=</code> arguments in the container command.</p>
+<h3 id="1-create-a-secret">1. Create A Secret</h3>
+<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>mtv-tests
+
+<span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">&quot;Enter cluster password: &quot;</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
+oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>mtv-test-config<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-file<span class="o">=</span>providers.json<span class="o">=</span>.providers.json<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_host</span><span class="o">=</span>https://api.your-cluster.com:6443<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_username</span><span class="o">=</span>kubeadmin<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_password</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-n<span class="w"> </span>mtv-tests
+<span class="nb">unset</span><span class="w"> </span>CLUSTER_PASSWORD
+</code></pre></div>
+
+<h3 id="2-create-the-job">2. Create The Job</h3>
+<p>This example is copied from the checked-in documentation:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Job</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-copyoffload-tests</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">template</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">restartPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Never</span>
+<span class="w">      </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tests</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/redhatqe/mtv-api-tests:latest</span>
+<span class="w">        </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_HOST</span>
+<span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+<span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cluster_host</span>
+<span class="w">              </span><span class="nt">optional</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_USERNAME</span>
+<span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+<span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cluster_username</span>
+<span class="w">              </span><span class="nt">optional</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_PASSWORD</span>
+<span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+<span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cluster_password</span>
+<span class="w">              </span><span class="nt">optional</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/bin/bash</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-c</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">            </span><span class="no">uv run pytest -m copyoffload \</span>
+<span class="w">              </span><span class="no">-v \</span>
+<span class="w">              </span><span class="no">${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \</span>
+<span class="w">              </span><span class="no">${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \</span>
+<span class="w">              </span><span class="no">${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \</span>
+<span class="w">              </span><span class="no">--tc=source_provider:vsphere-8.0.3.00400 \</span>
+<span class="w">              </span><span class="no">--tc=storage_class:my-block-storageclass</span>
+<span class="w">        </span><span class="nt">volumeMounts</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config</span>
+<span class="w">          </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/app/.providers.json</span>
+<span class="w">          </span><span class="nt">subPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">providers.json</span>
+<span class="w">      </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config</span>
+<span class="w">        </span><span class="nt">secret</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+</code></pre></div>
+
+<p>To reuse this pattern for other suites:</p>
+<ul>
+<li>change <code>-m copyoffload</code> to <code>-m tier0</code> for smoke tests</li>
+<li>change <code>-m copyoffload</code> to <code>-m warm</code> for warm migration runs</li>
+<li>replace <code>vsphere-8.0.3.00400</code> with your actual <code>.providers.json</code> key</li>
+<li>replace <code>my-block-storageclass</code> with the storage class used by your target cluster</li>
+<li>replace the image if you built and pushed your own copy</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and <code>CLUSTER_PASSWORD</code> are not read directly by the test code. In this pattern they exist only so the shell can expand them into <code>--tc=</code> options.</p>
+</blockquote>
+<h2 id="copy-offload-credentials">Copy-Offload Credentials</h2>
+<p>Copy-offload is the one area where the suite can read credentials directly from environment variables as well as from <code>.providers.json</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_copyoffload_credential</span><span class="p">(</span>
+    <span class="n">credential_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">copyoffload_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">env_var_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">copyoffload_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">credential_name</span><span class="p">)</span>
+</code></pre></div>
+
+<p>That means a <code>Job</code> can inject copy-offload storage credentials from a <code>Secret</code> without hard-coding them in <code>.providers.json</code>.</p>
+<p>Common environment variable names come straight from the fixtures:</p>
+<ul>
+<li><code>COPYOFFLOAD_STORAGE_HOSTNAME</code></li>
+<li><code>COPYOFFLOAD_STORAGE_USERNAME</code></li>
+<li><code>COPYOFFLOAD_STORAGE_PASSWORD</code></li>
+<li>vendor-specific names such as <code>COPYOFFLOAD_ONTAP_SVM</code></li>
+<li>ESXi SSH values such as <code>COPYOFFLOAD_ESXI_HOST</code>, <code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code></li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> This environment-variable fallback applies to copy-offload storage credentials. It does not replace the normal <code>cluster_host</code>, <code>cluster_username</code>, <code>cluster_password</code>, or <code>source_provider</code> inputs.</p>
+</blockquote>
+<h2 id="collecting-results">Collecting Results</h2>
+<p>By default, a run produces these useful artifacts inside <code>/app</code>:</p>
+<ul>
+<li><code>junit-report.xml</code></li>
+<li><code>pytest-tests.log</code></li>
+<li><code>.data-collector/</code></li>
+</ul>
+<p>The data collector path is configurable, and the suite uses it for resource tracking and failure collection:</p>
+<ul>
+<li>default path: <code>.data-collector</code></li>
+<li>change it with <code>--data-collector-path=/some/path</code></li>
+<li>disable it with <code>--skip-data-collector</code></li>
+</ul>
+<p>When data collection is enabled, the suite writes <code>resources.json</code> there and can also collect must-gather data on failures.</p>
+<p>For a finished OpenShift <code>Job</code>, the checked-in docs already show how to stream logs and copy the JUnit file out of the pod:</p>
+<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>mtv-tests<span class="w"> </span>job/mtv-copyoffload-tests<span class="w"> </span>-f
+
+<span class="nv">POD_NAME</span><span class="o">=</span><span class="k">$(</span>oc<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>mtv-tests<span class="w"> </span>-l<span class="w"> </span>job-name<span class="o">=</span>mtv-copyoffload-tests<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.items[0].metadata.name}&#39;</span><span class="k">)</span>
+oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$POD_NAME</span>:/app/junit-report.xml<span class="w"> </span>./junit-report.xml
+</code></pre></div>
+
+<p>You can collect the other artifacts the same way:</p>
+<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$POD_NAME</span>:/app/pytest-tests.log<span class="w"> </span>./pytest-tests.log
+oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$POD_NAME</span>:/app/.data-collector<span class="w"> </span>./data-collector
+</code></pre></div>
+
+<p>For container runs, the easiest pattern is to mount a results directory and redirect outputs into it with:</p>
+<ul>
+<li><code>--junit-xml=/app/results/junit-report.xml</code></li>
+<li><code>--log-file=/app/results/pytest-tests.log</code></li>
+<li><code>--data-collector-path=/app/results/data</code></li>
+</ul>
+<blockquote>
+<p><strong>Tip:</strong> For long-running OpenShift Jobs, mount a PVC and write all artifacts to that volume. That avoids depending on the pod filesystem after completion.</p>
+</blockquote>
+<h2 id="cleanup-and-debugging">Cleanup And Debugging</h2>
+<p>The suite cleans up resources automatically unless you opt out. That includes created MTV resources and tracked VMs.</p>
+<p>If you want to keep resources around for investigation, add:</p>
+<div class="highlight"><pre><span></span><code>--skip-teardown
+</code></pre></div>
+
+<p>If you skip teardown, keep the data collector output. The repo includes a cleanup helper that can use the saved <code>resources.json</code> file:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>tools/clean_cluster.py<span class="w"> </span>.data-collector/resources.json
+</code></pre></div>
+
+<p><code>resources.json</code> is only created when data collection is enabled.</p>
+<blockquote>
+<p><strong>Warning:</strong> If you pass <code>--skip-data-collector</code>, the suite will not write <code>.data-collector/resources.json</code>, and failed runs will not gather the extra collector output.</p>
+<p><strong>Note:</strong> The completed <code>Job</code> pod remains available until you delete the <code>Job</code>, so you can still fetch logs and artifacts after the test run finishes.</p>
+</blockquote>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <a href="quickstart-first-run.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Quickstart First Run</span>
+                </a>
+
+
+                <a href="runtime-configuration.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Runtime Configuration</span>
+                </a>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#how-the-image-starts">How The Image Starts</a></li>
+<li><a href="#provider-and-test-config">Provider And Test Config</a><ul>
+<li><a href="#providersjson">.providers.json</a></li>
+<li><a href="#teststests_configconfigpy">tests/tests_config/config.py</a></li>
+</ul>
+</li>
+<li><a href="#running-from-the-container-image">Running From The Container Image</a></li>
+<li><a href="#running-inside-an-openshift-job">Running Inside An OpenShift Job</a><ul>
+<li><a href="#1-create-a-secret">1. Create A Secret</a></li>
+<li><a href="#2-create-the-job">2. Create The Job</a></li>
+</ul>
+</li>
+<li><a href="#copy-offload-credentials">Copy-Offload Credentials</a></li>
+<li><a href="#collecting-results">Collecting Results</a></li>
+<li><a href="#cleanup-and-debugging">Cleanup And Debugging</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+        </main>
+
+        <footer class="page-footer">
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">·</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>

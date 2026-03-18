@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quickstart First Run - mtv-api-tests</title>
+    <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">mtv-api-tests</a>
+            <p class="sidebar-tagline">Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Overview</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="introduction.html"
+                           class="nav-link">
+                            Introduction
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="project-structure.html"
+                           class="nav-link">
+                            Project Structure
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="architecture-and-workflow.html"
+                           class="nav-link">
+                            Architecture And Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="supported-providers-and-scenarios.html"
+                           class="nav-link">
+                            Supported Providers And Scenarios
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="prerequisites.html"
+                           class="nav-link">
+                            Prerequisites
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="installation-and-local-setup.html"
+                           class="nav-link">
+                            Installation And Local Setup
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="quickstart-first-run.html"
+                           class="nav-link active">
+                            Quickstart First Run
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="container-and-openshift-job-execution.html"
+                           class="nav-link">
+                            Container And OpenShift Job Execution
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Configuration</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="runtime-configuration.html"
+                           class="nav-link">
+                            Runtime Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-config-file.html"
+                           class="nav-link">
+                            Provider Config File
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="test-plan-configuration.html"
+                           class="nav-link">
+                            Test Plan Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="optional-integrations-and-secrets.html"
+                           class="nav-link">
+                            Optional Integrations And Secrets
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cold-migrations.html"
+                           class="nav-link">
+                            Cold Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="warm-migrations.html"
+                           class="nav-link">
+                            Warm Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="copy-offload-migrations.html"
+                           class="nav-link">
+                            Copy-Offload Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="remote-openshift-migrations.html"
+                           class="nav-link">
+                            Remote OpenShift Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="hooks-and-expected-failures.html"
+                           class="nav-link">
+                            Hooks And Expected Failures
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="advanced-plan-features.html"
+                           class="nav-link">
+                            Advanced Plan Features
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="pytest-options-and-markers.html"
+                           class="nav-link">
+                            Pytest Options And Markers
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="plan-and-resource-reference.html"
+                           class="nav-link">
+                            Plan And Resource Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-and-inventory-reference.html"
+                           class="nav-link">
+                            Provider And Inventory Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="python-module-reference.html"
+                           class="nav-link">
+                            Python Module Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="troubleshooting-and-diagnostics.html"
+                           class="nav-link">
+                            Troubleshooting And Diagnostics
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Maintenance</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cleanup-and-teardown.html"
+                           class="nav-link">
+                            Cleanup And Teardown
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="extending-the-suite.html"
+                           class="nav-link">
+                            Extending The Suite
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="development-workflow.html"
+                           class="nav-link">
+                            Development Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="automation-and-release.html"
+                           class="nav-link">
+                            Automation And Release
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">mtv-api-tests</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="quickstart-first-run">Quickstart First Run</h1>
+<p><code>mtv-api-tests</code> uses <code>pytest</code> with <code>pytest-testconfig</code>. The shared test catalog is already wired into the repo, so a first run is mostly about three things:</p>
+<ol>
+<li>Create <code>.providers.json</code> in the repository root.</li>
+<li>Pass the environment-specific runtime values with <code>--tc=...</code>.</li>
+<li>Start with <code>--collect-only</code> or <code>--setup-plan</code>, then run one small sanity class.</li>
+</ol>
+<p>This page assumes you are running from the repository root with project dependencies already available.</p>
+<h2 id="how-configuration-works">How Configuration Works</h2>
+<p><code>pytest.ini</code> already tells pytest to load <code>tests/tests_config/config.py</code> through <code>pytest-testconfig</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[pytest]</span>
+<span class="na">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">tests</span>
+
+<span class="na">addopts</span><span class="w"> </span><span class="o">=</span>
+<span class="w">  </span><span class="na">-s</span>
+<span class="w">  </span><span class="na">-o log_cli</span><span class="o">=</span><span class="s">true</span>
+<span class="w">  </span><span class="na">-p no</span><span class="o">:</span><span class="s">logging</span>
+<span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
+<span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
+<span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
+<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
+<span class="w">  </span><span class="na">--show-progress</span>
+<span class="w">  </span><span class="na">--strict-markers</span>
+<span class="w">  </span><span class="na">--jira</span>
+<span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
+</code></pre></div>
+
+<p>For real test execution, the suite requires two runtime keys:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_sessionstart</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
+    <span class="n">required_config</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;storage_class&quot;</span><span class="p">,</span> <span class="s2">&quot;source_provider&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> You normally do not need to pass <code>--tc-file</code> yourself. The repo already points pytest at <code>tests/tests_config/config.py</code>, so the usual workflow is to add runtime overrides with <code>--tc=key:value</code>.</p>
+</blockquote>
+<h2 id="create-providersjson">Create <code>.providers.json</code></h2>
+<p>The provider loader looks for <code>.providers.json</code> in the current working directory and parses it as JSON:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_source_providers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="n">providers_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;.providers.json&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">providers_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">providers_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">fd</span><span class="p">:</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">fd</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">content</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+            <span class="k">return</span> <span class="p">{}</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Create <code>.providers.json</code> in the repository root. Use <code>.providers.json.example</code> as the starting template. This is the vSphere block from that file:</p>
+<div class="highlight"><pre><span></span><code>&quot;vsphere&quot;: {
+  &quot;type&quot;: &quot;vsphere&quot;,
+  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
+  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
+  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
+  &quot;username&quot;: &quot;USERNAME&quot;,
+  &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
+  &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
+  &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
+  &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
+  &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
+  &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+}
+</code></pre></div>
+
+<p>The same example file also includes templates for <code>ovirt</code>, <code>openstack</code>, <code>openshift</code>, and <code>ova</code>.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>.providers.json.example</code> is not valid JSON as-is. It contains comments and placeholder values. Your real <code>.providers.json</code> must be valid JSON, because the loader uses <code>json.loads(...)</code>.</p>
+<p><strong>Note:</strong> The top-level provider key is what you pass later as <code>--tc=source_provider:&lt;key&gt;</code>. If your file uses <code>"vsphere"</code>, then your runtime flag must use <code>--tc=source_provider:vsphere</code>.</p>
+<p><strong>Warning:</strong> <code>.providers.json</code> contains credentials. Keep it local and treat it as sensitive.</p>
+</blockquote>
+<h2 id="know-what-the-built-in-plans-expect">Know What the Built-In Plans Expect</h2>
+<p>The shared defaults and named test plans live in <code>tests/tests_config/config.py</code>. These are the defaults most relevant to a first run:</p>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>
+<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
+<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
+</code></pre></div>
+
+<p>For a first targeted migration, the smallest built-in cold plan is:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span> <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p>The warm equivalent is:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_sanity_warm_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Tip:</strong> If you want the smoothest first run, prepare a source VM named <code>mtv-tests-rhel8</code> and start with the cold sanity plan. If your lab uses different VM names, update the matching entry in <code>tests/tests_config/config.py</code> before your first real run.</p>
+</blockquote>
+<h2 id="pass-runtime-settings-with-pytest-testconfig">Pass Runtime Settings With <code>pytest-testconfig</code></h2>
+<p>For a first run, these are the settings you will usually care about:</p>
+<ul>
+<li><code>source_provider</code>: required for real execution; must match a top-level key in <code>.providers.json</code></li>
+<li><code>storage_class</code>: required for real execution; destination OpenShift storage class</li>
+<li><code>cluster_host</code>, <code>cluster_username</code>, <code>cluster_password</code>: useful when you want to pass OpenShift access explicitly on the command line</li>
+<li><code>mtv_namespace</code>: optional; defaults to <code>openshift-mtv</code></li>
+<li><code>target_namespace_prefix</code>: optional; defaults to <code>auto</code></li>
+<li><code>insecure_verify_skip</code>: optional; controls OpenShift API TLS verification</li>
+<li><code>source_provider_insecure_skip_verify</code>: optional; controls source-provider TLS verification</li>
+</ul>
+<p>A typical first-run command shape is:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-v<span class="w"> </span>tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>source_provider:vsphere<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>storage_class:&lt;storage-class&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_host:https://api.&lt;cluster&gt;:6443<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_username:&lt;username&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_password:<span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span>
+</code></pre></div>
+
+<p>If your provider key is not <code>vsphere</code>, replace it with the top-level key you actually used in <code>.providers.json</code>.</p>
+<p>If you need to relax source-provider TLS verification in a lab environment, add:</p>
+<div class="highlight"><pre><span></span><code>--tc<span class="o">=</span>source_provider_insecure_skip_verify:true
+</code></pre></div>
+
+<p>If your MTV operator is not installed in <code>openshift-mtv</code>, add:</p>
+<div class="highlight"><pre><span></span><code>--tc<span class="o">=</span>mtv_namespace:&lt;your-mtv-namespace&gt;
+</code></pre></div>
+
+<h2 id="start-with-collect-only-or-setup-plan">Start With <code>--collect-only</code> Or <code>--setup-plan</code></h2>
+<p>This repo treats both <code>--collect-only</code> and <code>--setup-plan</code> as normal dry-run entry points. In fact, <code>tox.toml</code> uses both as a basic pytest check, and the container image in <code>Dockerfile</code> defaults to <code>uv run pytest --collect-only</code>.</p>
+<p>Use <code>--collect-only</code> when you want to confirm what pytest will select:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--collect-only<span class="w"> </span>-q<span class="w"> </span>tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration
+</code></pre></div>
+
+<p>Use <code>--setup-plan</code> when you want to see fixture/setup planning for the same target before a real run:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--setup-plan<span class="w"> </span>tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>source_provider:vsphere<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>storage_class:&lt;storage-class&gt;
+</code></pre></div>
+
+<p>If you want to browse by marker first, the built-in markers are:</p>
+<ul>
+<li><code>tier0</code></li>
+<li><code>warm</code></li>
+<li><code>remote</code></li>
+<li><code>copyoffload</code></li>
+</ul>
+<p>For example, to list the smoke-suite tests:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--collect-only<span class="w"> </span>-q<span class="w"> </span>-m<span class="w"> </span>tier0
+</code></pre></div>
+
+<blockquote>
+<p><strong>Tip:</strong> <code>--collect-only</code> is the safest place to start when you want to confirm test names, markers, and node IDs before wiring in all runtime values.</p>
+</blockquote>
+<h2 id="run-the-first-targeted-test-class">Run The First Targeted Test Class</h2>
+<p>The cold sanity test is defined in <code>tests/test_mtv_cold_migration.py</code> like this:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">tier0</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">incremental</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
+    <span class="s2">&quot;class_plan_config&quot;</span><span class="p">,</span>
+    <span class="p">[</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;tests_params&quot;</span><span class="p">][</span><span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="p">],</span>
+    <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;rhel8&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">&quot;cleanup_migrated_vms&quot;</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestSanityColdMtvMigration</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cold migration test - sanity check.&quot;&quot;&quot;</span>
+</code></pre></div>
+
+<p>That class runs the migration as five dependent steps:</p>
+<ul>
+<li><code>test_create_storagemap</code></li>
+<li><code>test_create_networkmap</code></li>
+<li><code>test_create_plan</code></li>
+<li><code>test_migrate_vms</code></li>
+<li><code>test_check_vms</code></li>
+</ul>
+<p>Run the whole class, not a single method:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-v<span class="w"> </span>tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>source_provider:vsphere<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>storage_class:&lt;storage-class&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_host:https://api.&lt;cluster&gt;:6443<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_username:&lt;username&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_password:<span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span>
+</code></pre></div>
+
+<p>If you specifically want to try the warm sanity path afterward, use:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-v<span class="w"> </span>tests/test_mtv_warm_migration.py::TestSanityWarmMtvMigration<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>source_provider:vsphere<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>storage_class:&lt;storage-class&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_host:https://api.&lt;cluster&gt;:6443<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_username:&lt;username&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_password:<span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Warning:</strong> Warm tests are explicitly skipped in this repo for <code>openstack</code>, <code>openshift</code>, and <code>ova</code> providers. For a first run, the cold sanity class is the safer starting point.</p>
+</blockquote>
+<h2 id="common-first-run-problems">Common First-Run Problems</h2>
+<p>If the run fails early, check these first:</p>
+<ul>
+<li><code>.providers.json</code> is missing or empty.</li>
+<li>The value passed in <code>--tc=source_provider:...</code> does not exactly match a top-level key in <code>.providers.json</code>.</li>
+<li><code>.providers.json</code> was copied from <code>.providers.json.example</code> without removing comments.</li>
+<li>The built-in sanity plan expects a source VM named <code>mtv-tests-rhel8</code>, but that VM does not exist in your provider.</li>
+<li>You targeted a single method such as <code>::test_create_plan</code> instead of the full class.</li>
+<li>You chose a warm test on a provider type that the repo skips for warm migration.</li>
+</ul>
+<blockquote>
+<p><strong>Tip:</strong> By default, the suite writes <code>junit-report.xml</code> and tears down created resources after the run. If you need to inspect what was created after a failure, rerun with <code>--skip-teardown</code>.</p>
+</blockquote>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <a href="installation-and-local-setup.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Installation And Local Setup</span>
+                </a>
+
+
+                <a href="container-and-openshift-job-execution.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Container And OpenShift Job Execution</span>
+                </a>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#how-configuration-works">How Configuration Works</a></li>
+<li><a href="#create-providersjson">Create .providers.json</a></li>
+<li><a href="#know-what-the-built-in-plans-expect">Know What the Built-In Plans Expect</a></li>
+<li><a href="#pass-runtime-settings-with-pytest-testconfig">Pass Runtime Settings With pytest-testconfig</a></li>
+<li><a href="#start-with-collect-only-or-setup-plan">Start With --collect-only Or --setup-plan</a></li>
+<li><a href="#run-the-first-targeted-test-class">Run The First Targeted Test Class</a></li>
+<li><a href="#common-first-run-problems">Common First-Run Problems</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+        </main>
+
+        <footer class="page-footer">
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">·</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>

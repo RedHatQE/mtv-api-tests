@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Introduction - mtv-api-tests</title>
+    <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">mtv-api-tests</a>
+            <p class="sidebar-tagline">Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Overview</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="introduction.html"
+                           class="nav-link active">
+                            Introduction
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="project-structure.html"
+                           class="nav-link">
+                            Project Structure
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="architecture-and-workflow.html"
+                           class="nav-link">
+                            Architecture And Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="supported-providers-and-scenarios.html"
+                           class="nav-link">
+                            Supported Providers And Scenarios
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="prerequisites.html"
+                           class="nav-link">
+                            Prerequisites
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="installation-and-local-setup.html"
+                           class="nav-link">
+                            Installation And Local Setup
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="quickstart-first-run.html"
+                           class="nav-link">
+                            Quickstart First Run
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="container-and-openshift-job-execution.html"
+                           class="nav-link">
+                            Container And OpenShift Job Execution
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Configuration</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="runtime-configuration.html"
+                           class="nav-link">
+                            Runtime Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-config-file.html"
+                           class="nav-link">
+                            Provider Config File
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="test-plan-configuration.html"
+                           class="nav-link">
+                            Test Plan Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="optional-integrations-and-secrets.html"
+                           class="nav-link">
+                            Optional Integrations And Secrets
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cold-migrations.html"
+                           class="nav-link">
+                            Cold Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="warm-migrations.html"
+                           class="nav-link">
+                            Warm Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="copy-offload-migrations.html"
+                           class="nav-link">
+                            Copy-Offload Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="remote-openshift-migrations.html"
+                           class="nav-link">
+                            Remote OpenShift Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="hooks-and-expected-failures.html"
+                           class="nav-link">
+                            Hooks And Expected Failures
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="advanced-plan-features.html"
+                           class="nav-link">
+                            Advanced Plan Features
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="pytest-options-and-markers.html"
+                           class="nav-link">
+                            Pytest Options And Markers
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="plan-and-resource-reference.html"
+                           class="nav-link">
+                            Plan And Resource Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-and-inventory-reference.html"
+                           class="nav-link">
+                            Provider And Inventory Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="python-module-reference.html"
+                           class="nav-link">
+                            Python Module Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="troubleshooting-and-diagnostics.html"
+                           class="nav-link">
+                            Troubleshooting And Diagnostics
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Maintenance</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cleanup-and-teardown.html"
+                           class="nav-link">
+                            Cleanup And Teardown
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="extending-the-suite.html"
+                           class="nav-link">
+                            Extending The Suite
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="development-workflow.html"
+                           class="nav-link">
+                            Development Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="automation-and-release.html"
+                           class="nav-link">
+                            Automation And Release
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">mtv-api-tests</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="introduction">Introduction</h1>
+<p><code>mtv-api-tests</code> is an end-to-end validation suite for Migration Toolkit for Virtualization (MTV). It is built on <code>pytest</code>, but it is not a typical unit-test project: it connects to real source providers, creates real MTV custom resources on OpenShift, runs actual migrations, and then checks the migrated virtual machines on the destination cluster.</p>
+<p>That makes it useful when you need to answer practical questions such as:</p>
+<ul>
+<li>Can MTV migrate this VM from my provider into OpenShift Virtualization?</li>
+<li>Do warm migrations still behave correctly after an MTV or cluster upgrade?</li>
+<li>Did advanced plan settings such as hooks, copy-offload, PVC naming, labels, affinity, or target placement actually take effect?</li>
+</ul>
+<h2 id="what-mtv-api-tests-is-for">What mtv-api-tests is for</h2>
+<p>This project is aimed at people who need confidence in real migration behavior, not just API-level validation:</p>
+<ul>
+<li>QE and release-validation teams qualifying MTV across supported migration paths</li>
+<li>Platform engineers testing migrations in their own OpenShift environments</li>
+<li>Storage, provider, and partner teams validating feature-specific scenarios such as copy-offload</li>
+<li>Operators who need proof that a migrated VM still behaves the way they expect after the move</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> <code>mtv-api-tests</code> is not a mock-based local test harness. It expects a live OpenShift environment with MTV installed, real source-provider credentials, and real VMs or templates to migrate.</p>
+</blockquote>
+<h2 id="what-it-validates">What it validates</h2>
+<p>The repository covers the full MTV workflow, not just a single API call or resource:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What the suite covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source providers</td>
+<td>vSphere, RHV/oVirt, OpenStack, OVA, and OpenShift source-provider flows</td>
+</tr>
+<tr>
+<td>Destination</td>
+<td>OpenShift Virtualization, including remote-cluster-style scenarios</td>
+</tr>
+<tr>
+<td>Migration types</td>
+<td>Cold migration, warm migration, copy-offload, hook-based flows, and comprehensive feature combinations</td>
+</tr>
+<tr>
+<td>MTV resources</td>
+<td><code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, <code>Hook</code>, and <code>Migration</code> custom resources</td>
+</tr>
+<tr>
+<td>VM outcome checks</td>
+<td>Power state, CPU, memory, network mapping, storage mapping, PVC naming, guest agent, SSH connectivity, static IP preservation, node placement, labels, and affinity</td>
+</tr>
+</tbody>
+</table>
+<p>Warm migration coverage is provider-aware. The warm test suite explicitly skips unsupported source types such as OpenStack, OpenShift, and OVA, so the test matrix follows the support rules encoded by the project itself.</p>
+<blockquote>
+<p><strong>Tip:</strong> Start with the <code>tier0</code> scenarios such as <code>test_sanity_cold_mtv_migration</code> or <code>test_sanity_warm_mtv_migration</code>. They exercise the same MTV lifecycle as the larger suites, but with a smaller and easier-to-debug scope.</p>
+</blockquote>
+<h2 id="how-a-migration-is-validated">How a migration is validated</h2>
+<p>A typical <code>mtv-api-tests</code> run follows the same five-step pattern used throughout the repository:</p>
+<ol>
+<li>Load the selected source provider from <code>.providers.json</code>.</li>
+<li>Create or connect the MTV <code>Provider</code> resources on OpenShift.</li>
+<li>Build <code>StorageMap</code> and <code>NetworkMap</code> resources for the selected VMs.</li>
+<li>Create a <code>Plan</code> and then a <code>Migration</code> custom resource.</li>
+<li>Inspect the migrated VM on OpenShift and compare it to the source VM and expected plan settings.</li>
+</ol>
+<p>The core cold-migration test shows that pattern directly:</p>
+<div class="highlight"><pre><span></span><code><span class="n">vms</span> <span class="o">=</span> <span class="p">[</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">]]</span>
+<span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">storage_map</span> <span class="o">=</span> <span class="n">get_storage_migration_map</span><span class="p">(</span>
+    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
+    <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
+    <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span>
+    <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+    <span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span> <span class="s2">&quot;StorageMap creation failed&quot;</span>
+
+<span class="n">vms</span> <span class="o">=</span> <span class="p">[</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">]]</span>
+<span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">network_map</span> <span class="o">=</span> <span class="n">get_network_migration_map</span><span class="p">(</span>
+    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
+    <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
+    <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span>
+    <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+    <span class="n">multus_network_name</span><span class="o">=</span><span class="n">multus_network_name</span><span class="p">,</span>
+    <span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">network_map</span><span class="p">,</span> <span class="s2">&quot;NetworkMap creation failed&quot;</span>
+
+<span class="n">populate_vm_ids</span><span class="p">(</span><span class="n">prepared_plan</span><span class="p">,</span> <span class="n">source_provider_inventory</span><span class="p">)</span>
+
+<span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">plan_resource</span> <span class="o">=</span> <span class="n">create_plan_resource</span><span class="p">(</span>
+    <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
+    <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
+    <span class="n">storage_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span>
+    <span class="n">network_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">network_map</span><span class="p">,</span>
+    <span class="n">virtual_machines_list</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">],</span>
+    <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+    <span class="n">warm_migration</span><span class="o">=</span><span class="n">prepared_plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;warm_migration&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span> <span class="s2">&quot;Plan creation failed&quot;</span>
+
+<span class="n">execute_migration</span><span class="p">(</span>
+    <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="n">plan</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span>
+    <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">check_vms</span><span class="p">(</span>
+    <span class="n">plan</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">,</span>
+    <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
+    <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
+    <span class="n">network_map_resource</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">network_map</span><span class="p">,</span>
+    <span class="n">storage_map_resource</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span>
+    <span class="n">source_provider_data</span><span class="o">=</span><span class="n">source_provider_data</span><span class="p">,</span>
+    <span class="n">source_vms_namespace</span><span class="o">=</span><span class="n">source_vms_namespace</span><span class="p">,</span>
+    <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span>
+    <span class="n">vm_ssh_connections</span><span class="o">=</span><span class="n">vm_ssh_connections</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>That same lifecycle appears across cold, warm, comprehensive, hook, remote, and copy-offload suites. What changes from test to test is the migration scenario and the validation expectations, not the basic MTV flow.</p>
+<p>Under the hood, that flow stays grounded in real platform state:</p>
+<ul>
+<li>Source-provider adapters in <code>libs/providers/</code> connect to actual provider APIs.</li>
+<li>The <code>prepared_plan</code> fixture can clone source VMs, power them on or off, create hooks, and prepare extra namespaces or networks before migration begins.</li>
+<li>The <code>ForkliftInventory</code> helpers query the live <code>forklift-inventory</code> route and wait until provider, VM, storage, and network data are actually available before proceeding.</li>
+</ul>
+<h2 id="how-configuration-works">How configuration works</h2>
+<p><code>mtv-api-tests</code> separates environment configuration from migration-scenario configuration.</p>
+<h3 id="provider-and-environment-configuration">Provider and environment configuration</h3>
+<p>Source-provider credentials and connection details are loaded from <code>.providers.json</code>. The example file shows the expected shape:</p>
+<div class="highlight"><pre><span></span><code>{
+  &quot;vsphere&quot;: {
+    &quot;type&quot;: &quot;vsphere&quot;,
+    &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
+    &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
+    &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
+    &quot;username&quot;: &quot;USERNAME&quot;,
+    &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
+    &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
+    &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
+    &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
+    &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
+    &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+  }
+}
+</code></pre></div>
+
+<p>The same example file also includes entries for <code>ovirt</code>, <code>openstack</code>, <code>openshift</code>, and <code>ova</code>, so the project can model more than one kind of source platform. For copy-offload scenarios, the example file adds a <code>copyoffload</code> section with storage-vendor and datastore settings.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>.providers.json.example</code> contains inline comments for documentation and secret-scanning rules. Your real <code>.providers.json</code> must be valid JSON without those comments.</p>
+</blockquote>
+<p>Those provider entries do more than create MTV <code>Provider</code> resources. They also supply guest credentials used later for SSH-based validation of migrated VMs.</p>
+<h3 id="scenario-configuration">Scenario configuration</h3>
+<p>Individual migration scenarios live in <code>tests/tests_config/config.py</code>. That file is effectively the catalog of what the project knows how to validate. A single scenario can switch advanced MTV features on and off:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
+    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
+                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">]</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p>This is a good example of what makes <code>mtv-api-tests</code> more than a smoke suite. A scenario can describe not only which VM to migrate, but also which migration mode to use and what should still be true afterward.</p>
+<p>The same configuration file also carries global test settings such as:</p>
+<ul>
+<li><code>mtv_namespace = "openshift-mtv"</code></li>
+<li><code>target_namespace_prefix = "auto"</code></li>
+<li><code>snapshots_interval = 2</code></li>
+<li><code>plan_wait_timeout = 3600</code></li>
+</ul>
+<p>Those defaults tell you a lot about the intended environment: MTV is expected to be present on the cluster, namespaces are created per test session, warm-migration precopy timing is tunable, and migrations are expected to run long enough to justify an explicit timeout.</p>
+<h2 id="why-this-is-real-migration-validation">Why this is real migration validation</h2>
+<p>A successful MTV <code>Plan</code> is not the same thing as a successful migration outcome. <code>mtv-api-tests</code> adds value because it keeps checking after the migration controller finishes.</p>
+<p>The <code>check_vms()</code> logic in <code>utilities/post_migration.py</code> shows the kind of user-visible validation the suite performs:</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">vm_guest_agent</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">check_guest_agent</span><span class="p">(</span><span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+        <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_guest_agent - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># SSH connectivity check - only when destination VM is powered on</span>
+<span class="k">if</span> <span class="n">vm_ssh_connections</span> <span class="ow">and</span> <span class="n">destination_vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;power_state&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;on&quot;</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">check_ssh_connectivity</span><span class="p">(</span>
+            <span class="n">vm_name</span><span class="o">=</span><span class="n">vm_name</span><span class="p">,</span>
+            <span class="n">vm_ssh_connections</span><span class="o">=</span><span class="n">vm_ssh_connections</span><span class="p">,</span>
+            <span class="n">source_provider_data</span><span class="o">=</span><span class="n">source_provider_data</span><span class="p">,</span>
+            <span class="n">source_vm_info</span><span class="o">=</span><span class="n">source_vm</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+        <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_ssh_connectivity - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Static IP preservation check - only for Windows VMs with static IPs migrated from VSPHERE</span>
+    <span class="n">source_vm_data</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source_vms_data&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="p">{})</span>
+
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">source_vm_data</span>
+        <span class="ow">and</span> <span class="n">source_vm_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;win_os&quot;</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span>
+    <span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">check_static_ip_preservation</span><span class="p">(</span>
+                <span class="n">vm_name</span><span class="o">=</span><span class="n">vm_name</span><span class="p">,</span>
+                <span class="n">vm_ssh_connections</span><span class="o">=</span><span class="n">vm_ssh_connections</span><span class="p">,</span>
+                <span class="n">source_vm_data</span><span class="o">=</span><span class="n">source_vm_data</span><span class="p">,</span>
+                <span class="n">source_provider_data</span><span class="o">=</span><span class="n">source_provider_data</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+            <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_static_ip_preservation - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check node placement if configured</span>
+<span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_node_selector&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">labeled_worker_node</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">check_vm_node_placement</span><span class="p">(</span>
+            <span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">,</span>
+            <span class="n">expected_node</span><span class="o">=</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">&quot;node_name&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+        <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_vm_node_placement - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check VM labels if configured</span>
+<span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_labels&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">target_vm_labels</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">check_vm_labels</span><span class="p">(</span>
+            <span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">,</span>
+            <span class="n">expected_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">&quot;vm_labels&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+        <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_vm_labels - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check affinity if configured</span>
+<span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">check_vm_affinity</span><span class="p">(</span>
+            <span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">,</span>
+            <span class="n">expected_affinity</span><span class="o">=</span><span class="n">plan</span><span class="p">[</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+        <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;check_vm_affinity - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>That means a run can fail for the reasons users actually care about:</p>
+<ul>
+<li>The VM came up with the wrong power state</li>
+<li>Guest connectivity never returned</li>
+<li>Static IP preservation did not hold</li>
+<li>The VM landed on the wrong node</li>
+<li>Labels or affinity settings were not applied</li>
+<li>Storage or network mappings did not produce the expected result</li>
+</ul>
+<p>The repository also includes feature-specific suites that go beyond basic migration success:</p>
+<ul>
+<li>Copy-offload tests validate vSphere shared-storage migrations using <code>vsphere-xcopy-volume-populator</code></li>
+<li>Hook tests validate both expected success and expected failure paths for pre- and post-migration hooks</li>
+<li>Comprehensive tests validate PVC naming, target namespaces, affinity, labels, and node selectors</li>
+<li>Remote scenarios validate migrations where the destination is modeled as an explicit OpenShift provider</li>
+</ul>
+<h2 id="automation-friendly-by-design">Automation-friendly by design</h2>
+<p>Although these are real-environment tests, the project is structured to run cleanly in automation. The repository-wide <code>pytest.ini</code> configuration makes that clear:</p>
+<div class="highlight"><pre><span></span><code><span class="na">addopts</span><span class="w"> </span><span class="o">=</span>
+<span class="w">  </span><span class="na">-s</span>
+<span class="w">  </span><span class="na">-o log_cli</span><span class="o">=</span><span class="s">true</span>
+<span class="w">  </span><span class="na">-p no</span><span class="o">:</span><span class="s">logging</span>
+<span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
+<span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
+<span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
+<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
+<span class="w">  </span><span class="na">--show-progress</span>
+<span class="w">  </span><span class="na">--strict-markers</span>
+<span class="w">  </span><span class="na">--jira</span>
+<span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
+</code></pre></div>
+
+<p>In practice, that means:</p>
+<ul>
+<li>Scenario data is injected consistently from <code>tests/tests_config/config.py</code></li>
+<li>Results are emitted in JUnit format for downstream reporting</li>
+<li>Marker usage is enforced</li>
+<li>The suite is prepared for class-scoped parallel execution</li>
+<li>Jira integration is part of the default test run</li>
+</ul>
+<p>The repository also ships a <code>Dockerfile</code> that installs the project with <code>uv</code> and provides a repeatable containerized execution environment. That makes it easier to run the same validation flow across teams, clusters, or lab environments without rebuilding the toolchain by hand.</p>
+<p><code>mtv-api-tests</code> is best understood as a migration-confidence suite. If you need to know whether MTV can really move VMs from a supported source provider into OpenShift Virtualization, and whether the result still matches your expectations after the move, this project is built to answer that question.</p>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <div></div>
+
+
+                <a href="project-structure.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Project Structure</span>
+                </a>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#what-mtv-api-tests-is-for">What mtv-api-tests is for</a></li>
+<li><a href="#what-it-validates">What it validates</a></li>
+<li><a href="#how-a-migration-is-validated">How a migration is validated</a></li>
+<li><a href="#how-configuration-works">How configuration works</a><ul>
+<li><a href="#provider-and-environment-configuration">Provider and environment configuration</a></li>
+<li><a href="#scenario-configuration">Scenario configuration</a></li>
+</ul>
+</li>
+<li><a href="#why-this-is-real-migration-validation">Why this is real migration validation</a></li>
+<li><a href="#automation-friendly-by-design">Automation-friendly by design</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+        </main>
+
+        <footer class="page-footer">
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">·</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>

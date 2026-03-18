@@ -3,6 +3,8 @@
 Test suite for validating VM migrations to OpenShift from VMware vSphere,
 RHV, OpenStack, and OVA using Migration Toolkit for Virtualization (MTV).
 
+**[Full Documentation](https://redhatqe.github.io/mtv-api-tests/)** | [Copy-Offload Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)
+
 ---
 
 ## Prerequisites
@@ -26,7 +28,7 @@ You need a base VM/template in your source provider:
 | **OVA** | OVA file | NFS-accessible OVA files |
 
 > **Note**: Copy-offload tests have additional prerequisites. See the
-> [Copy-Offload Testing Guide](docs/copyoffload/how-to-run-copyoffload-tests.md) for details.
+> [Copy-Offload Testing Guide](guides/copyoffload/how-to-run-copyoffload-tests.md) for details.
 
 ### Verify Setup
 
@@ -312,7 +314,7 @@ Use this template to run tests. Customize the placeholders:
 - `[TEST_MARKERS]` - Pytest marker(s) (e.g., `tier0`, `warm`, `copyoffload`)
 - `[TEST_FILTER]` - Optional: specific test name for `-k` flag (omit lines for all tests)
 
-> **Note**: This Job template is also used in `docs/copyoffload/how-to-run-copyoffload-tests.md`. If updating, ensure both
+> **Note**: This Job template is also used in `guides/copyoffload/how-to-run-copyoffload-tests.md`. If updating, ensure both
 > files remain in sync for the following fields: `apiVersion`, `kind`, `metadata.name`, `spec.template`,
 > container `image`, `command`, and `volumeMounts`/`volumes` configuration.
 
@@ -465,7 +467,7 @@ and a configured StorageMap with offload plugin settings.
 **For detailed instructions on running copy-offload tests**, including prerequisites, configuration, and
 troubleshooting, see:
 
-📖 **[Copy-Offload Testing Guide](docs/copyoffload/how-to-run-copyoffload-tests.md)**
+📖 **[Copy-Offload Testing Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)**
 
 For technical implementation details, see the
 [vsphere-xcopy-volume-populator documentation](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator).

@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prerequisites - mtv-api-tests</title>
+    <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">mtv-api-tests</a>
+            <p class="sidebar-tagline">Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Overview</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="introduction.html"
+                           class="nav-link">
+                            Introduction
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="project-structure.html"
+                           class="nav-link">
+                            Project Structure
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="architecture-and-workflow.html"
+                           class="nav-link">
+                            Architecture And Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="supported-providers-and-scenarios.html"
+                           class="nav-link">
+                            Supported Providers And Scenarios
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="prerequisites.html"
+                           class="nav-link active">
+                            Prerequisites
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="installation-and-local-setup.html"
+                           class="nav-link">
+                            Installation And Local Setup
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="quickstart-first-run.html"
+                           class="nav-link">
+                            Quickstart First Run
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="container-and-openshift-job-execution.html"
+                           class="nav-link">
+                            Container And OpenShift Job Execution
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Configuration</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="runtime-configuration.html"
+                           class="nav-link">
+                            Runtime Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-config-file.html"
+                           class="nav-link">
+                            Provider Config File
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="test-plan-configuration.html"
+                           class="nav-link">
+                            Test Plan Configuration
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="optional-integrations-and-secrets.html"
+                           class="nav-link">
+                            Optional Integrations And Secrets
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cold-migrations.html"
+                           class="nav-link">
+                            Cold Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="warm-migrations.html"
+                           class="nav-link">
+                            Warm Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="copy-offload-migrations.html"
+                           class="nav-link">
+                            Copy-Offload Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="remote-openshift-migrations.html"
+                           class="nav-link">
+                            Remote OpenShift Migrations
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="hooks-and-expected-failures.html"
+                           class="nav-link">
+                            Hooks And Expected Failures
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="advanced-plan-features.html"
+                           class="nav-link">
+                            Advanced Plan Features
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="pytest-options-and-markers.html"
+                           class="nav-link">
+                            Pytest Options And Markers
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="plan-and-resource-reference.html"
+                           class="nav-link">
+                            Plan And Resource Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="provider-and-inventory-reference.html"
+                           class="nav-link">
+                            Provider And Inventory Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="python-module-reference.html"
+                           class="nav-link">
+                            Python Module Reference
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="troubleshooting-and-diagnostics.html"
+                           class="nav-link">
+                            Troubleshooting And Diagnostics
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Maintenance</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="cleanup-and-teardown.html"
+                           class="nav-link">
+                            Cleanup And Teardown
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="extending-the-suite.html"
+                           class="nav-link">
+                            Extending The Suite
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="development-workflow.html"
+                           class="nav-link">
+                            Development Workflow
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="automation-and-release.html"
+                           class="nav-link">
+                            Automation And Release
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">mtv-api-tests</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="prerequisites">Prerequisites</h1>
+<p><code>mtv-api-tests</code> runs live end-to-end migrations. It talks to a real OpenShift cluster, a real MTV installation, and a real source provider. Before you run it, make sure the target cluster, source environment, storage, network, and RBAC are ready for destructive integration testing.</p>
+<blockquote>
+<p><strong>Warning:</strong> Run this suite only in a lab or other disposable environment. The tests create and delete <code>Namespace</code>, <code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, <code>Migration</code>, <code>Hook</code>, <code>Secret</code>, <code>NetworkAttachmentDefinition</code>, <code>Pod</code>, and <code>VirtualMachine</code> resources. Some scenarios also clone source VMs, change source power state, add disks, and create snapshots.</p>
+</blockquote>
+<p>Example test definitions in <code>tests/tests_config/config.py</code> show that clearly:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_thin_snapshots_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;snapshots&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p>Choose source VMs that match the scenario you plan to run. Do not point the suite at production VMs or production-only datastores.</p>
+<h2 id="minimum-environment">Minimum environment</h2>
+<p>Every run needs all of the following:</p>
+<ul>
+<li>A reachable OpenShift API endpoint.</li>
+<li>Valid OpenShift credentials for the test runner.</li>
+<li>MTV installed and healthy in <code>openshift-mtv</code>, unless you intentionally override <code>mtv_namespace</code>.</li>
+<li>OpenShift Virtualization installed on the destination cluster.</li>
+<li>A usable destination <code>storage_class</code>.</li>
+<li>A <code>source_provider</code> value that matches a key in <code>.providers.json</code>.</li>
+</ul>
+<p>The cluster client is created from these settings:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_host&quot;</span><span class="p">)</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_username&quot;</span><span class="p">)</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_password&quot;</span><span class="p">)</span>
+    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;insecure_verify_skip&quot;</span><span class="p">)</span>
+    <span class="n">_client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The built-in test config also defines the key global defaults:</p>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
+<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">snapshots_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> <code>insecure_verify_skip</code> controls TLS verification for the OpenShift API connection. <code>source_provider_insecure_skip_verify</code> is separate and defaults to <code>false</code>, so source-provider certificate verification is on unless you change it.</p>
+</blockquote>
+<p>Before tests start, the suite checks <code>forklift-*</code> pods in the MTV namespace and fails if the <code>forklift-controller</code> pod is missing or any <code>forklift</code> pod is not healthy.</p>
+<h2 id="source-provider-configuration">Source provider configuration</h2>
+<p>The code supports these source provider types:</p>
+<table>
+<thead>
+<tr>
+<th>Source provider</th>
+<th>Cold migration</th>
+<th>Warm migration</th>
+<th>Copy-offload</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vsphere</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>ovirt</code> / RHV</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>openstack</code></td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>openshift</code></td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>ova</code></td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p>Your <code>.providers.json</code> file must exist, must be non-empty, and must contain a key that exactly matches the <code>source_provider</code> value you pass at runtime.</p>
+<p>A trimmed example from <code>.providers.json.example</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;vsphere&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vsphere&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER VERSION&gt;&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SERVER FQDN/IP&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;api_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;USERNAME&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PASSWORD&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_linux_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS USERNAME&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_linux_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS PASSWORD&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_win_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS USERNAME&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;guest_vm_win_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS PASSWORD&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;vddk_init_image&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Warning:</strong> <code>.providers.json.example</code> is only an example. The real <code>.providers.json</code> is loaded with <code>json.loads()</code>, so it must be strict JSON. Remove example comments before you use it.</p>
+</blockquote>
+<p>Provider-specific expectations:</p>
+<ul>
+<li><code>vsphere</code> needs <code>fqdn</code>, <code>api_url</code>, username/password, and usually guest credentials for post-migration validation. If your MTV deployment expects VDDK, include <code>vddk_init_image</code>.</li>
+<li><code>ovirt</code> / RHV needs an API URL and username/password.</li>
+<li><code>openstack</code> needs extra auth fields: <code>project_name</code>, <code>user_domain_name</code>, <code>region_name</code>, <code>user_domain_id</code>, and <code>project_domain_id</code>.</li>
+<li><code>openshift</code> uses the local cluster as the source provider.</li>
+<li><code>ova</code> expects <code>api_url</code> to point at the OVA source location.</li>
+</ul>
+<p>Post-migration validation also uses guest credentials from <code>.providers.json</code>. Linux checks read <code>guest_vm_linux_user</code> and <code>guest_vm_linux_password</code>. Windows checks read <code>guest_vm_win_user</code> and <code>guest_vm_win_password</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> With the default <code>source_provider_insecure_skip_verify: "false"</code>, the suite validates source-provider TLS. vSphere and OpenStack provider setup fetch CA data from <code>fqdn:443</code>, and RHV always pulls a CA certificate. Use insecure provider connections only in lab environments where that is acceptable.</p>
+</blockquote>
+<p>If you use OpenShift as the source provider, the suite expects OpenShift Virtualization template assets that match the hard-coded source VM fixture:</p>
+<div class="highlight"><pre><span></span><code><span class="n">create_and_store_resource</span><span class="p">(</span>
+    <span class="n">resource</span><span class="o">=</span><span class="n">VirtualMachineFromInstanceType</span><span class="p">,</span>
+    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">vm_dict</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}{</span><span class="n">vm_name_suffix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">namespace</span><span class="o">=</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">,</span>
+    <span class="n">instancetype_name</span><span class="o">=</span><span class="s2">&quot;u1.small&quot;</span><span class="p">,</span>
+    <span class="n">preference_name</span><span class="o">=</span><span class="s2">&quot;rhel.9&quot;</span><span class="p">,</span>
+    <span class="n">datasource_name</span><span class="o">=</span><span class="s2">&quot;rhel9&quot;</span><span class="p">,</span>
+    <span class="n">storage_size</span><span class="o">=</span><span class="s2">&quot;30Gi&quot;</span><span class="p">,</span>
+    <span class="n">additional_networks</span><span class="o">=</span><span class="p">[</span><span class="n">network_name</span><span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>That means an OpenShift-source lab needs:</p>
+<ul>
+<li>The <code>rhel9</code> <code>DataSource</code>.</li>
+<li>The <code>u1.small</code> <code>VirtualMachineClusterInstancetype</code>.</li>
+<li>The <code>rhel.9</code> <code>VirtualMachineClusterPreference</code>.</li>
+</ul>
+<h2 id="storage-prerequisites">Storage prerequisites</h2>
+<p>The <code>storage_class</code> you choose must be a real, usable storage class for OpenShift Virtualization VM disks. The suite validates that migrated disks land on that exact storage class after migration.</p>
+<p>For standard cold and warm migration tests, that usually means:</p>
+<ul>
+<li>the storage class can provision PVCs for KubeVirt,</li>
+<li>the cluster can schedule VMs that use it,</li>
+<li>the storage class is available in the target cluster where the tests run.</li>
+</ul>
+<p>Copy-offload adds stricter requirements:</p>
+<ul>
+<li>the source provider must be <code>vSphere</code>,</li>
+<li>the storage must be shared between vSphere and OpenShift,</li>
+<li>the target storage class must be block-backed,</li>
+<li>the environment must support <code>ReadWriteOnce</code> and <code>Block</code> volume mode for copy-offload mappings.</li>
+</ul>
+<p>The example provider file shows the copy-offload fields the suite expects:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;vsphere-copy-offload&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vsphere&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER VERSION&gt;&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SERVER FQDN/IP&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;api_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;USERNAME&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PASSWORD&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;copyoffload&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;storage_vendor_product&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ontap&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;datastore_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;datastore-12345&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;secondary_datastore_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;datastore-67890&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;non_xcopy_datastore_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;datastore-99999&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;default_vm_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rhel9-template&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;storage_hostname&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;storage.example.com&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;storage_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;storage_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-password-here&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ontap_svm&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vserver-name&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;esxi_clone_method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ssh&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;esxi_host&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-esxi-host.example.com&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;esxi_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;root&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;esxi_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-esxi-password&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;rdm_lun_uuid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Supported copy-offload storage vendors are:</p>
+<ul>
+<li><code>ontap</code></li>
+<li><code>vantara</code></li>
+<li><code>primera3par</code></li>
+<li><code>pureFlashArray</code></li>
+<li><code>powerflex</code></li>
+<li><code>powermax</code></li>
+<li><code>powerstore</code></li>
+<li><code>infinibox</code></li>
+<li><code>flashsystem</code></li>
+</ul>
+<p>Some copy-offload scenarios need extra fields:</p>
+<ul>
+<li><code>secondary_datastore_id</code> for multi-datastore tests</li>
+<li><code>non_xcopy_datastore_id</code> for mixed XCOPY/non-XCOPY tests</li>
+<li><code>rdm_lun_uuid</code> for RDM disk tests</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> Copy-offload is not an NFS scenario. The project’s copy-offload guide requires shared SAN/block storage and explicitly states that NFS is not supported for copy-offload.</p>
+</blockquote>
+<p>If you set <code>storage_class</code> to <code>nfs</code>, the suite patches the cluster <code>nfs</code> <code>StorageProfile</code> to <code>ReadWriteOnce</code> and <code>Filesystem</code> before running.</p>
+<blockquote>
+<p><strong>Note:</strong> That <code>StorageProfile</code> change is cluster-wide. Only use it in environments where changing the <code>nfs</code> profile is acceptable.</p>
+</blockquote>
+<h2 id="network-prerequisites">Network prerequisites</h2>
+<p>Source VMs must have at least one NIC. The suite fails immediately if it cannot discover any network interfaces for the selected source VMs.</p>
+<p>Network mapping works like this:</p>
+<ul>
+<li>the first source NIC is mapped to the OpenShift pod network,</li>
+<li>every additional source NIC is mapped to a <code>Multus</code> <code>NetworkAttachmentDefinition</code>.</li>
+</ul>
+<p>That behavior comes directly from the network mapping helper:</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">pod_only</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pod&quot;</span><span class="p">}</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
+        <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
+        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;multus&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+</code></pre></div>
+
+<p>The default <code>Multus</code> CNI config created by the suite is a bridge called <code>cnv-bridge</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">bridge_type_and_name</span> <span class="o">=</span> <span class="s2">&quot;cnv-bridge&quot;</span>
+<span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;cniVersion&quot;</span><span class="p">:</span> <span class="s2">&quot;0.3.1&quot;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;bridge&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+</code></pre></div>
+
+<p>In practice:</p>
+<ul>
+<li>single-NIC migrations can run with the default pod-network mapping,</li>
+<li>multi-NIC migrations need <code>Multus</code> to be installed and working,</li>
+<li>the test account must be allowed to create <code>NetworkAttachmentDefinition</code> resources,</li>
+<li>if you use a custom <code>multus_namespace</code>, the account must be allowed to create or reuse NADs there.</li>
+</ul>
+<h2 id="optional-scenario-prerequisites">Optional scenario prerequisites</h2>
+<h3 id="warm-migration">Warm migration</h3>
+<p>Warm tests are written only for <code>vSphere</code> and <code>RHV</code>.</p>
+<p>They also update the <code>ForkliftController</code> precopy interval, so the test account must be able to patch <code>forklift-controller</code> in the MTV namespace.</p>
+<p>The comprehensive warm scenario is written around MTV 2.10+ features such as:</p>
+<ul>
+<li>static IP preservation,</li>
+<li>custom target VM namespace,</li>
+<li>PVC name templates,</li>
+<li>target labels,</li>
+<li>target affinity.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> If you plan to run the comprehensive warm scenario, use an MTV version that already supports those features.</p>
+</blockquote>
+<h3 id="copy-offload">Copy-offload</h3>
+<p>Copy-offload tests are <code>vSphere</code>-only. They also need:</p>
+<ul>
+<li>shared block storage visible from both vSphere and OpenShift,</li>
+<li>storage credentials,</li>
+<li>the copy-offload vendor-specific fields for your array,</li>
+<li>an ESXi clone method:</li>
+<li><code>ssh</code>, with <code>esxi_host</code>, <code>esxi_user</code>, <code>esxi_password</code></li>
+<li>or the default <code>vib</code> path, if your ESXi environment allows the required community VIB install</li>
+</ul>
+<p>The copy-offload credential helper lets you supply sensitive values either in <code>.providers.json</code> or through environment variables, with environment variables taking precedence.</p>
+<blockquote>
+<p><strong>Tip:</strong> Useful copy-offload overrides include <code>COPYOFFLOAD_STORAGE_HOSTNAME</code>, <code>COPYOFFLOAD_STORAGE_USERNAME</code>, <code>COPYOFFLOAD_STORAGE_PASSWORD</code>, <code>COPYOFFLOAD_ESXI_HOST</code>, <code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code>.</p>
+</blockquote>
+<p>For MTV versions earlier than 2.11, copy-offload must already be enabled on the <code>ForkliftController</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">feature_copy_offload</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;true&#39;</span>
+</code></pre></div>
+
+<h3 id="remote-scenarios">Remote scenarios</h3>
+<p>Tests marked <code>remote</code> are skipped unless <code>remote_ocp_cluster</code> is set.</p>
+<p>In the current fixture implementation, that value is also validated against the connected cluster host string, so set it deliberately and make sure it matches your target environment naming.</p>
+<h3 id="scheduling-and-labeling-scenarios">Scheduling and labeling scenarios</h3>
+<p>The comprehensive cold scenario can:</p>
+<ul>
+<li>label a worker node,</li>
+<li>use <code>target_node_selector</code>,</li>
+<li>apply <code>target_labels</code>,</li>
+<li>apply <code>target_affinity</code>,</li>
+<li>create or use a custom <code>vm_target_namespace</code>.</li>
+</ul>
+<p>Those scenarios need:</p>
+<ul>
+<li>at least one worker node,</li>
+<li>permission to patch <code>Node</code> resources,</li>
+<li>permission to create resources in any custom target namespace.</li>
+</ul>
+<p>The node-selection helper prefers Prometheus metrics, but it falls back to the first worker node if monitoring access is not available.</p>
+<h2 id="permission-prerequisites">Permission prerequisites</h2>
+<p>The easiest lab setup is <code>cluster-admin</code>. In shared environments, least-privilege RBAC is possible, but it still needs to cover the resources the suite actually creates, patches, reads, and deletes.</p>
+<p>At minimum, the account running the suite should be able to:</p>
+<ul>
+<li>Create and delete <code>Namespace</code> resources.</li>
+<li>Create, read, update, and delete <code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, <code>Migration</code>, and <code>Hook</code> resources in the test namespace.</li>
+<li>Create, read, and delete <code>Secret</code>, <code>NetworkAttachmentDefinition</code>, <code>Pod</code>, and <code>VirtualMachine</code> resources in the test namespace.</li>
+<li>Read <code>Pod</code> resources in the MTV namespace so the suite can verify <code>forklift-*</code> health.</li>
+<li>Patch <code>ForkliftController</code> in the MTV namespace for warm-migration scenarios.</li>
+<li>Read <code>StorageClass</code> resources and patch <code>StorageProfile</code> if you use the <code>nfs</code> storage path.</li>
+<li>Read <code>ClusterVersion</code>.</li>
+<li>List and patch <code>Node</code> resources if you run the scheduling tests.</li>
+<li>Create resources in any custom <code>vm_target_namespace</code> or <code>multus_namespace</code> you configure.</li>
+</ul>
+<p>Source-side permissions matter too. Depending on the provider and scenario, the suite may also need to:</p>
+<ul>
+<li>read inventory,</li>
+<li>clone source VMs,</li>
+<li>power source VMs on or off,</li>
+<li>delete cloned VMs during cleanup,</li>
+<li>create or delete snapshots,</li>
+<li>attach extra test disks.</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> Cleanup is best-effort, not a guarantee. If the run is interrupted, if you use <code>--skip-teardown</code>, or if the test account cannot clean up provider-side clones or snapshots, test artifacts can remain behind.</p>
+</blockquote>
+<h2 id="secure-configuration-handoff">Secure configuration handoff</h2>
+<p>If you run the suite in-cluster as an OpenShift <code>Job</code>, the project already includes a working secret example that packages the core prerequisites:</p>
+<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>mtv-tests
+
+<span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">&quot;Enter cluster password: &quot;</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
+oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>mtv-test-config<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-file<span class="o">=</span>providers.json<span class="o">=</span>.providers.json<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_host</span><span class="o">=</span>https://api.your-cluster.com:6443<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_username</span><span class="o">=</span>kubeadmin<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_password</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-n<span class="w"> </span>mtv-tests
+<span class="nb">unset</span><span class="w"> </span>CLUSTER_PASSWORD
+</code></pre></div>
+
+<p>That example is useful even if you do not use <code>Job</code>s, because it shows the minimum configuration you need to have ready:</p>
+<ul>
+<li><code>.providers.json</code></li>
+<li><code>cluster_host</code></li>
+<li><code>cluster_username</code></li>
+<li><code>cluster_password</code></li>
+</ul>
+<p>You still need two more runtime values for an actual test run:</p>
+<ul>
+<li><code>source_provider</code></li>
+<li><code>storage_class</code></li>
+</ul>
+<p>If all of the prerequisites above are in place, the suite can create its migration resources, run real MTV workflows, validate the results, and clean up in the way the codebase expects.</p>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <a href="supported-providers-and-scenarios.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Supported Providers And Scenarios</span>
+                </a>
+
+
+                <a href="installation-and-local-setup.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Installation And Local Setup</span>
+                </a>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#minimum-environment">Minimum environment</a></li>
+<li><a href="#source-provider-configuration">Source provider configuration</a></li>
+<li><a href="#storage-prerequisites">Storage prerequisites</a></li>
+<li><a href="#network-prerequisites">Network prerequisites</a></li>
+<li><a href="#optional-scenario-prerequisites">Optional scenario prerequisites</a><ul>
+<li><a href="#warm-migration">Warm migration</a></li>
+<li><a href="#copy-offload">Copy-offload</a></li>
+<li><a href="#remote-scenarios">Remote scenarios</a></li>
+<li><a href="#scheduling-and-labeling-scenarios">Scheduling and labeling scenarios</a></li>
+</ul>
+</li>
+<li><a href="#permission-prerequisites">Permission prerequisites</a></li>
+<li><a href="#secure-configuration-handoff">Secure configuration handoff</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+        </main>
+
+        <footer class="page-footer">
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">·</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+# mtv-api-tests
+
+> Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.
+
+## Overview
+
+- [Introduction](introduction.md): Explain what mtv-api-tests is, who it is for, and how it validates MTV migrations across real providers and OpenShift environments.
+- [Project Structure](project-structure.md): Map the repository layout, including test suites, provider adapters, shared utilities, exceptions, tooling, and automation/configuration files.
+- [Architecture And Workflow](architecture-and-workflow.md): Describe the end-to-end flow from provider setup and Forklift inventory discovery to StorageMap, NetworkMap, Plan, Migration, validation, and teardown.
+- [Supported Providers And Scenarios](supported-providers-and-scenarios.md): Summarize supported source providers, migration modes, pytest markers, and major scenarios such as tier0, warm, remote, comprehensive, and copy-offload tests.
+
+## Getting Started
+
+- [Prerequisites](prerequisites.md): Document the required OpenShift, MTV, OpenShift Virtualization, storage, network, provider, and permission prerequisites for running the suite safely.
+- [Installation And Local Setup](installation-and-local-setup.md): Cover Python and uv requirements, dependency installation, local environment preparation, and how virtctl is discovered or downloaded from the cluster.
+- [Quickstart First Run](quickstart-first-run.md): Show how to create provider config, pass runtime settings with pytest-testconfig, start with collect-only or setup-plan, and launch a first targeted test run.
+- [Container And OpenShift Job Execution](container-and-openshift-job-execution.md): Explain how to run the suite from the project container image or inside an OpenShift Job, including mounted config, credentials, and result collection.
+
+## Configuration
+
+- [Runtime Configuration](runtime-configuration.md): Document global pytest-testconfig values, command-line overrides, and custom pytest options such as data collection, teardown control, debug logging, and AI analysis.
+- [Provider Config File](provider-config-file.md): Reference the .providers.json schema for vSphere, RHV, OpenStack, OpenShift, and OVA sources, including guest credentials, SSL behavior, and provider-specific fields.
+- [Test Plan Configuration](test-plan-configuration.md): Explain the tests_params structure, per-VM settings, cloning and disk options, plan-level flags, and how prepared plans are derived from raw config.
+- [Optional Integrations And Secrets](optional-integrations-and-secrets.md): Cover JIRA integration, AI failure-analysis environment variables, copy-offload credential overrides, and practical guidance for handling sensitive values.
+
+## Guides
+
+- [Cold Migrations](cold-migrations.md): Walk through the standard cold migration test pattern, from map creation to execution and post-migration validation.
+- [Warm Migrations](warm-migrations.md): Explain warm migration behavior, precopy interval tuning, cutover timing, supported providers, and the extra validation path for warm tests.
+- [Copy-Offload Migrations](copy-offload-migrations.md): Document VMware copy-offload prerequisites, storage secrets, offload plugin settings, supported vendors, SSH or VIB clone methods, fallback modes, and advanced copy-offload scenarios.
+- [Remote OpenShift Migrations](remote-openshift-migrations.md): Describe the remote migration path, destination provider handling, remote-specific config, and how remote scenarios differ from the default local destination flow.
+- [Hooks And Expected Failures](hooks-and-expected-failures.md): Show how pre and post hooks are configured, how predefined and custom playbooks work, and how expected-failure tests are validated.
+- [Advanced Plan Features](advanced-plan-features.md): Cover advanced plan options such as target power state, static IP preservation, PVC naming templates, custom VM namespaces, node selectors, labels, affinity, and Multus setup.
+
+## Reference
+
+- [Pytest Options And Markers](pytest-options-and-markers.md): Reference the suite's markers, default pytest settings, xdist behavior, incremental semantics, and supported selection and dry-run modes.
+- [Plan And Resource Reference](plan-and-resource-reference.md): Explain the custom resources and mappings the suite creates, including Provider, StorageMap, NetworkMap, Plan, Migration, Hook, and related naming and readiness rules.
+- [Provider And Inventory Reference](provider-and-inventory-reference.md): Document the BaseProvider abstraction, provider-specific behaviors, Forklift inventory adapters, and how source network and storage mappings are resolved.
+- [Python Module Reference](python-module-reference.md): Provide a module-level reference for shared utilities such as SSH access, virtctl management, resource creation, teardown, diagnostics, and post-migration checks.
+- [Troubleshooting And Diagnostics](troubleshooting-and-diagnostics.md): Describe common failure points, JUnit output, collected resource artifacts, must-gather support, AI enrichment, and the best places to inspect when migrations fail.
+
+## Maintenance
+
+- [Cleanup And Teardown](cleanup-and-teardown.md): Explain automatic cleanup, session teardown behavior, leftover detection, the skip-teardown workflow for debugging, and manual cleanup helpers.
+- [Extending The Suite](extending-the-suite.md): Show how to add new test configs, follow the repository's five-step class pattern, reuse fixtures, and extend provider or validation coverage.
+- [Development Workflow](development-workflow.md): Document the local developer workflow, including dependency sync, linting, typing, pre-commit checks, tox targets, and container builds.
+- [Automation And Release](automation-and-release.md): Explain the repository's automation surface, including pre-commit, release-it, Renovate, container image build inputs, AI review bots, and the fact that CI orchestration is external to this repo.
