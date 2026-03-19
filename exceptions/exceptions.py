@@ -6,6 +6,22 @@ class ForkliftPodsNotRunningError(Exception):
     pass
 
 
+class MtvOperatorNotInstalledError(Exception):
+    """Raised when the MTV operator Subscription is not found in the expected namespace."""
+
+    def __init__(self, namespace: str) -> None:
+        """Initialize MtvOperatorNotInstalledError.
+
+        Args:
+            namespace (str): The namespace where the MTV operator Subscription was expected.
+        """
+        self.namespace = namespace
+        super().__init__(
+            f"MTV operator Subscription not found in namespace '{namespace}'. "
+            f"Ensure MTV is installed or set the correct namespace with --tc=mtv_namespace:<namespace>"
+        )
+
+
 class VmMissingVmxError(Exception):
     def __init__(self, vm: str) -> None:
         self.vm = vm

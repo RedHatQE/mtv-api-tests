@@ -66,6 +66,7 @@ from kubernetes.dynamic import DynamicClient  # Never instantiate directly
 | String annotation `"DynamicClient"`        | Yes                      |
 | Instantiate `DynamicClient(...)` directly  | No - use `get_client()`  |
 | Use in `isinstance()` or runtime checks    | No                       |
+| Import `kubernetes.dynamic.exceptions`     | Yes                      |
 | Import other `kubernetes.*` modules        | No                       |
 
 ### Function Size (SHOULD)
@@ -234,7 +235,11 @@ boot_order: list = firmware_spec.get("bootOrder", [])
 
 ### Docstring Format (MUST)
 
-All new functions must have docstrings with Args, Returns, and Raises sections.
+All new functions must have docstrings with the standard sections as applicable:
+
+- `Args`: include when the function has parameters.
+- `Returns`: include only when returning a meaningful non-`None` value (omit for `__init__` and other void functions).
+- `Raises`: include only when exceptions are actually raised.
 
 ```python
 def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
