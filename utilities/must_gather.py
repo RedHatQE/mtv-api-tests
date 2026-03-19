@@ -11,6 +11,7 @@ from pyhelper_utils.shell import run_command
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 
+from utilities.constants import MTV_OPERATOR_NAME
 from utilities.utils import get_cluster_client
 
 if TYPE_CHECKING:
@@ -155,7 +156,7 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
         ocp_admin_client = get_cluster_client()
         mtv_namespace = py_config["mtv_namespace"]
         mtv_subs = Subscription(
-            client=ocp_admin_client, name="mtv-operator", namespace=mtv_namespace, ensure_exists=True
+            client=ocp_admin_client, name=MTV_OPERATOR_NAME, namespace=mtv_namespace, ensure_exists=True
         )
 
         installed_csv = mtv_subs.instance.status.installedCSV

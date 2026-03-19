@@ -36,6 +36,7 @@ from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from exceptions.exceptions import ProviderEmptyContentError
+from utilities.constants import MTV_OPERATOR_NAME
 from utilities.resources import create_and_store_resource
 
 LOGGER = get_logger(__name__)
@@ -755,7 +756,7 @@ def get_mtv_version(client: DynamicClient) -> str:
     mtv_namespace = py_config["mtv_namespace"]
 
     for csv in ClusterServiceVersion.get(client=client, namespace=mtv_namespace):
-        if csv.name.startswith("mtv-operator"):
+        if csv.name.startswith(MTV_OPERATOR_NAME):
             return csv.instance.spec.version
 
     raise ValueError(f"MTV operator ClusterServiceVersion not found in namespace '{mtv_namespace}'")

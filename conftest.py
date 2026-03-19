@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import filelock
 import pytest
-from kubernetes.dynamic.exceptions import NotFoundError
+from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -28,6 +28,7 @@ from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_profile import StorageProfile
+from ocp_resources.subscription import Subscription
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
@@ -36,6 +37,7 @@ from timeout_sampler import TimeoutSampler
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
     MissingProvidersFileError,
+    MtvOperatorNotInstalledError,
     RemoteClusterAndLocalCluterNamesError,
 )
 from libs.base_provider import BaseProvider
@@ -48,6 +50,7 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.openshift import OCPProvider
+from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
@@ -75,8 +78,8 @@ from utilities.utils import (
     load_source_providers,
     resolve_providers_json_path,
 )
-from utilities.vmware_guest_operations import detect_vmware_ip_origins_via_guest_ops
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
+from utilities.vmware_guest_operations import detect_vmware_ip_origins_via_guest_ops
 from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 
 RESULTS_PATH = Path("./.xdist_results/")
@@ -1277,11 +1280,28 @@ def cleanup_migrated_vms(
 
 @pytest.fixture(scope="session")
 def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
+    mtv_namespace: str = py_config["mtv_namespace"]
+    try:
+        mtv_subscription = Subscription(
+            client=ocp_admin_client,
+            name=MTV_OPERATOR_NAME,
+            namespace=mtv_namespace,
+        )
+        if not mtv_subscription.exists:
+            raise MtvOperatorNotInstalledError(namespace=mtv_namespace)
+    except ForbiddenError:
+        LOGGER.warning(
+            f"Insufficient RBAC permissions to check MTV Subscription in namespace '{mtv_namespace}'. "
+            "Falling back to pod-based readiness check."
+        )
+    except NotFoundError:
+        raise MtvOperatorNotInstalledError(namespace=mtv_namespace)
+
     def _get_not_running_pods(_admin_client: DynamicClient) -> bool:
-        controller_pod: str | None = None
+        controller_pod: Pod | None = None
         not_running_pods: list[str] = []
 
-        for pod in Pod.get(client=_admin_client, namespace=py_config["mtv_namespace"]):
+        for pod in Pod.get(client=_admin_client, namespace=mtv_namespace):
             if pod.name.startswith("forklift-"):
                 if pod.name.startswith("forklift-controller"):
                     controller_pod = pod
