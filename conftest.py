@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import filelock
 import pytest
-from kubernetes.dynamic.exceptions import NotFoundError
+from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -1279,13 +1279,19 @@ def cleanup_migrated_vms(
 @pytest.fixture(scope="session")
 def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
     mtv_namespace: str = py_config["mtv_namespace"]
-    mtv_subscription = Subscription(
-        client=ocp_admin_client,
-        name=MTV_OPERATOR_NAME,
-        namespace=mtv_namespace,
-    )
-    if not mtv_subscription.exists:
-        raise MtvOperatorNotInstalledError(namespace=mtv_namespace)
+    try:
+        mtv_subscription = Subscription(
+            client=ocp_admin_client,
+            name=MTV_OPERATOR_NAME,
+            namespace=mtv_namespace,
+        )
+        if not mtv_subscription.exists:
+            raise MtvOperatorNotInstalledError(namespace=mtv_namespace)
+    except ForbiddenError:
+        LOGGER.warning(
+            f"Insufficient RBAC permissions to check MTV Subscription in namespace '{mtv_namespace}'. "
+            "Falling back to pod-based readiness check."
+        )
 
     def _get_not_running_pods(_admin_client: DynamicClient) -> bool:
         controller_pod: Pod | None = None
