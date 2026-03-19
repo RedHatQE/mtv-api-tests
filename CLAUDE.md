@@ -66,6 +66,7 @@ from kubernetes.dynamic import DynamicClient  # Never instantiate directly
 | String annotation `"DynamicClient"`        | Yes                      |
 | Instantiate `DynamicClient(...)` directly  | No - use `get_client()`  |
 | Use in `isinstance()` or runtime checks    | No                       |
+| Import `kubernetes.dynamic.exceptions`     | Yes                      |
 | Import other `kubernetes.*` modules        | No                       |
 
 ### Function Size (SHOULD)
