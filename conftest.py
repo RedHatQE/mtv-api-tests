@@ -78,8 +78,8 @@ from utilities.utils import (
     load_source_providers,
     resolve_providers_json_path,
 )
-from utilities.vmware_guest_operations import detect_vmware_ip_origins_via_guest_ops
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
+from utilities.vmware_guest_operations import detect_vmware_ip_origins_via_guest_ops
 from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 
 RESULTS_PATH = Path("./.xdist_results/")
@@ -1292,6 +1292,8 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
             f"Insufficient RBAC permissions to check MTV Subscription in namespace '{mtv_namespace}'. "
             "Falling back to pod-based readiness check."
         )
+    except NotFoundError:
+        raise MtvOperatorNotInstalledError(namespace=mtv_namespace)
 
     def _get_not_running_pods(_admin_client: DynamicClient) -> bool:
         controller_pod: Pod | None = None
