@@ -234,7 +234,7 @@ boot_order: list = firmware_spec.get("bootOrder", [])
 
 ### Docstring Format (MUST)
 
-All new functions must have docstrings with Args, Returns, and Raises sections.
+All new functions must have docstrings with Args, Returns, and Raises sections. Omit Returns for `__init__` methods (always None). Omit Raises when the function raises no exceptions.
 
 ```python
 def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
