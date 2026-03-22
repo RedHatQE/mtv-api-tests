@@ -469,7 +469,7 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "mtv-win2019-3disks",
-                "source_vm_power": "off",
+                "source_vm_power": "on",  # VM must be on for guest tools to report static IP info
                 "guest_agent": True,
             },
         ],
