@@ -355,8 +355,10 @@ def check_static_ip_preservation(
     static_interfaces = _extract_static_interfaces(source_vm_data)
 
     if not static_interfaces:
-        LOGGER.info(f"No static IP interfaces found for VM {vm_name} - skipping verification")
-        return
+        raise ValueError(
+            f"preserve_static_ips is enabled but no static IP interfaces found for VM {vm_name}. "
+            "Ensure the source VM is powered on so VMware guest tools can report IP origin information."
+        )
 
     LOGGER.info(f"Found {len(static_interfaces)} static IP interfaces to verify")
 
