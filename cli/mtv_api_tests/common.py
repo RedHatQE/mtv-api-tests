@@ -900,8 +900,8 @@ def _build_pytest_command(
     return (
         f"uv run pytest {marker_flag}{filter_flag}\\\n"
         f"              -v \\\n"
-        f'              --tc=source_provider:{provider_key} \\\n'
-        f'              --tc=storage_class:{storage_class} \\\n'
+        f"              --tc=source_provider:{provider_key} \\\n"
+        f"              --tc=storage_class:{storage_class} \\\n"
         f'              --tc=cluster_host:"$CLUSTER_HOST" \\\n'
         f"              --tc=insecure_verify_skip:{insecure_verify_skip}"
     )
