@@ -103,27 +103,29 @@ def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
     raise VmNotFoundError(f"VM {vm_name} not found in Migration {migration.name} status")
 
 
-def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[str, str | None]:
+def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[str, str]:
     """Map VM names to their failed step names.
 
-    Does NOT validate consistency - returns all results. Caller should validate
-    if all VMs must fail at same step.
+    Does NOT validate consistency - caller should validate if all VMs must fail
+    at same step. Raises on the first VM where the failed step cannot be determined.
 
     Args:
         plan_resource (Plan): The Plan resource to check
         vm_names (list[str]): List of VM names to check
 
     Returns:
-        dict[str, str | None]: Mapping of VM name to failed step name (or None if unknown)
+        dict[str, str]: Mapping of VM name to failed step name
+
+    Raises:
+        MigrationNotFoundError: If migration not found for the plan
+        MigrationStatusError: If migration status is missing or invalid
+        VmPipelineError: If VM pipeline is missing or has no failed step
+        VmNotFoundError: If VM not found in migration status
     """
-    failed_steps: dict[str, str | None] = {}
+    failed_steps: dict[str, str] = {}
 
     for vm_name in vm_names:
-        try:
-            failed_steps[vm_name] = _get_failed_migration_step(plan_resource, vm_name)
-        except (MigrationNotFoundError, MigrationStatusError, VmPipelineError, VmNotFoundError) as e:
-            LOGGER.warning(f"Could not get failed step for VM '{vm_name}': {e}")
-            failed_steps[vm_name] = None
+        failed_steps[vm_name] = _get_failed_migration_step(plan_resource, vm_name)
 
     return failed_steps
 

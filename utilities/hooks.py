@@ -188,13 +188,13 @@ def create_hook_for_plan(
     return hook.name, hook.namespace
 
 
-def validate_all_vms_same_step(plan_name: str, failed_steps: dict[str, str | None]) -> str:
+def validate_all_vms_same_step(plan_name: str, failed_steps: dict[str, str]) -> str:
     """Validate all VMs failed at same step and return the common step.
 
     Args:
         plan_name (str): The name of the migration plan
-        failed_steps (dict[str, str | None]): Dictionary mapping VM names to
-            their failed step names (or None if unknown)
+        failed_steps (dict[str, str]): Dictionary mapping VM names to
+            their failed step names
 
     Returns:
         str: The common failed step name (e.g., "PreHook", "PostHook")
@@ -207,8 +207,9 @@ def validate_all_vms_same_step(plan_name: str, failed_steps: dict[str, str | Non
     if not isinstance(failed_steps, dict):
         raise TypeError(f"failed_steps must be a dict, got {type(failed_steps).__name__}")
 
-    unique_steps = {step for step in failed_steps.values() if step is not None}
+    unique_steps = set(failed_steps.values())
 
+    # Guard: empty dict means no VMs were checked (empty vm_names list)
     if not unique_steps:
         raise VmMigrationStepMismatchError(plan_name, failed_steps)
 
