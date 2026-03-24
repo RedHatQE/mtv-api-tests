@@ -1919,7 +1919,9 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
     indirect=True,
     ids=["MTV-568:copyoffload-independent-nonpersistent"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "nonpersistent_disk_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadIndependentNonpersistentDiskMigration:
     """Copy-offload migration test - independent non-persistent disk."""
 
@@ -2032,6 +2034,20 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+        """
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
