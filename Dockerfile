@@ -24,10 +24,9 @@ RUN microdnf -y install \
   clang \
   git \
   python3-devel \
-  python3-pip \
   && microdnf clean all
 
-RUN python3 -m pip install --no-cache-dir uv==0.10.9
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR ${APP_DIR}
 
