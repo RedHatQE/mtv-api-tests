@@ -354,3 +354,29 @@ def vmware_cloud_init_ready_both_plans(
             source_provider=source_provider,
             source_provider_data=source_provider_data,
         )
+
+
+@pytest.fixture(scope="class")
+def nonpersistent_disk_ready(
+    vmware_cloud_init_ready: None,
+    prepared_plan: dict[str, Any],
+    source_provider: VMWareProvider,
+) -> None:
+    """Change added disk mode to independent_nonpersistent after cloud-init completes.
+
+    independent_nonpersistent disks lose data on power-off, so the disk must be
+    created as regular persistent during clone (for cloud-init), then changed
+    to independent_nonpersistent after the VM is powered off.
+
+    Args:
+        vmware_cloud_init_ready (None): Ensures cloud-init has finished and VM is off.
+        prepared_plan (dict[str, Any]): Processed test plan with VM data.
+        source_provider (VMWareProvider): The VMware source provider instance.
+    """
+    for vm_data in prepared_plan["virtual_machines"]:
+        vm_name = vm_data["name"]
+        provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
+        source_provider.change_disk_mode(
+            vm=provider_vm_api,
+            disk_mode="independent_nonpersistent",
+        )

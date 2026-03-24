@@ -423,7 +423,7 @@ namespace.deploy()
 
 ## Test Structure Pattern
 
-All tests follow a class-based structure with 5 test methods:
+All tests follow a class-based structure with 5 base test methods:
 
 ```python
 from pytest_testconfig import config as py_config
@@ -500,6 +500,11 @@ class TestNameHere:
 - **Shared state**: Store resources on class with `self.__class__.attribute`
 - **Test ordering**: Use `@pytest.mark.incremental` at class level for sequential test dependencies
 - **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
+- **6-step copy-offload pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms -> check_xcopy_used
+  Copy-offload tests extend the base pattern with `test_check_xcopy_used` which calls
+  `verify_xcopy_used()` from `utilities/copyoffload_migration.py`. This is a separate step because it
+  validates the transfer mechanism (infrastructure), not the migrated VM (application), and provides
+  clearer failure diagnostics.
 
 **Test method naming:** Test methods do one step each: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`, `test_migrate_vms`, `test_check_vms`
 
@@ -521,7 +526,7 @@ tests_params: dict = {
 1. Create the test file in the feature subdirectory described in **Test File Location (MUST)** (for example, `tests/<feature>/test_<feature>_migration.py`)
 2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
 3. Add pytest markers at class level (tier0, warm, remote, copyoffload)
-4. Implement the 5 test methods following the pattern in the example above
+4. Implement the 5 test methods following the pattern above (6 for copy-offload tests — add `test_check_xcopy_used`)
 
 **VM Configuration Options:**
 
