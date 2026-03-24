@@ -134,11 +134,11 @@ def _get_cluster_config(ocp_provider: dict[str, Any] | None) -> tuple[list[str],
             raise typer.Exit(code=1)
         else:
             console.print(f"  Using cluster credentials from OCP provider (v{ocp_provider.get('version', '?')})")
-            verify_ssl = str(ocp_provider.get("verify_ssl", "false")).lower() in ("true", "1", "yes")
-            tc_args = [
-                f"--tc=cluster_host:{host}",
-                f"--tc=insecure_verify_skip:{'false' if verify_ssl else 'true'}",
-            ]
+            tc_args = [f"--tc=cluster_host:{host}"]
+            verify_ssl = ocp_provider.get("verify_ssl")
+            if verify_ssl is not None:
+                verify_ssl_bool = str(verify_ssl).lower() in ("true", "1", "yes")
+                tc_args.append(f"--tc=insecure_verify_skip:{'false' if verify_ssl_bool else 'true'}")
             env_vars: dict[str, str] = {
                 "CLUSTER_USERNAME": str(username),
                 "CLUSTER_PASSWORD": str(password),

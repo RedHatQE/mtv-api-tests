@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import typer
 import urllib3
 from ocp_resources.forklift_controller import ForkliftController
-from ocp_resources.resource import get_client
+from ocp_utilities.infra import get_client
 from ocp_resources.storage_class import StorageClass
 from pyVim.connect import Disconnect, SmartConnect
 from pyVmomi import vim
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 console = Console()
 JOB_YAML_PATH = Path("mtv-api-tests-manifests.yaml")
-DEFAULT_TEST_IMAGE = "quay.io/rgolangh/mtv-api-tests:latest"
+DEFAULT_TEST_IMAGE = "ghcr.io/redhatqe/mtv-api-tests:latest"
 
 
 def _generate_namespace_name() -> str:
@@ -814,10 +814,11 @@ def _write_secret_file(path: Path, content: str) -> None:
     try:
         tmp_fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
         os.fchmod(tmp_fd, 0o600)
-        os.write(tmp_fd, content.encode())
-        os.fsync(tmp_fd)
-        os.close(tmp_fd)
-        tmp_fd = None
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_file:
+            tmp_fd = None  # fd is now managed by the file object
+            tmp_file.write(content)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
         os.replace(tmp_path, str(path))
         tmp_path = None
     finally:
@@ -840,6 +841,142 @@ def b64(value: str) -> str:
         Base64 encoded string.
     """
     return base64.b64encode(value.encode()).decode()
+
+
+def _build_job_secret_data(ocp_creds: dict[str, str], providers_json_content: str) -> str:
+    """Build the Secret data section for the Job manifest.
+
+    Args:
+        ocp_creds: OCP credential dict with 'host', 'username', 'password' keys.
+        providers_json_content: Raw JSON content of .providers.json.
+
+    Returns:
+        YAML string for the Secret data section.
+    """
+    verify_ssl = ocp_creds.get("verify_ssl", "false")
+    ca_bundle = ocp_creds.get("ca_bundle", "")
+
+    # ca_bundle may be a file path; read its contents so we encode the PEM data, not the path.
+    ca_bundle_content = ""
+    if ca_bundle:
+        ca_path = Path(ca_bundle)
+        if ca_path.exists():
+            ca_bundle_content = ca_path.read_text()
+        else:
+            ca_bundle_content = ca_bundle  # already PEM content, not a path
+
+    return (
+        f"  providers.json: {b64(providers_json_content)}\n"
+        f"  cluster_host: {b64(ocp_creds['host'])}\n"
+        f"  cluster_username: {b64(ocp_creds['username'])}\n"
+        f"  cluster_password: {b64(ocp_creds['password'])}\n"
+        f"  cluster_verify_ssl: {b64(verify_ssl)}\n"
+        f"  # TODO: ca_bundle is stored here but not yet consumed by the test runner container.\n"
+        f"  # When the test runner supports CA bundle injection, mount this as a file and set\n"
+        f"  # KUBERNETES_CLIENT_CA_BUNDLE or pass via --tc flag.\n"
+        f"  cluster_ca_bundle: {b64(ca_bundle_content)}"
+    )
+
+
+def _build_pytest_command(
+    marker_flag: str,
+    filter_flag: str,
+    provider_key: str,
+    storage_class: str,
+    insecure_verify_skip: str,
+) -> str:
+    """Build the pytest command string for the Job container.
+
+    Args:
+        marker_flag: Pytest marker flag (e.g. '-m tier0 ') or empty string.
+        filter_flag: Pytest filter flag (e.g. "-k 'expr' ") or empty string.
+        provider_key: Provider key from .providers.json.
+        storage_class: OCP storage class name.
+        insecure_verify_skip: Whether to skip SSL verification ('true' or 'false').
+
+    Returns:
+        Shell command string for pytest execution.
+    """
+    return (
+        f"uv run pytest {marker_flag}{filter_flag}\\\n"
+        f"              -v \\\n"
+        f'              --tc=source_provider:{provider_key} \\\n'
+        f'              --tc=storage_class:{storage_class} \\\n'
+        f'              --tc=cluster_host:"$CLUSTER_HOST" \\\n'
+        f"              --tc=insecure_verify_skip:{insecure_verify_skip}"
+    )
+
+
+def _build_job_spec(image: str, secret_name: str, namespace: str, job_name: str, pytest_command: str) -> str:
+    """Build the Job spec YAML section.
+
+    Args:
+        image: Container image URL.
+        secret_name: Name of the Kubernetes Secret.
+        namespace: Kubernetes namespace for the Job.
+        job_name: Name of the Job resource.
+        pytest_command: Shell command to run in the container.
+
+    Returns:
+        YAML string for the Job resource.
+    """
+    return f"""apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {job_name}
+  namespace: {namespace}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: tests
+        image: {image}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        env:
+        - name: CLUSTER_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {secret_name}
+              key: cluster_host
+        - name: CLUSTER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {secret_name}
+              key: cluster_username
+        - name: CLUSTER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {secret_name}
+              key: cluster_password
+        - name: CLUSTER_VERIFY_SSL
+          valueFrom:
+            secretKeyRef:
+              name: {secret_name}
+              key: cluster_verify_ssl
+        command:
+          - /bin/sh
+          - -c
+          - |
+            {pytest_command}
+        volumeMounts:
+        - name: config
+          mountPath: /app/.providers.json
+          subPath: providers.json
+      volumes:
+      - name: config
+        secret:
+          secretName: {secret_name}
+"""
 
 
 def generate_job_yaml(
@@ -889,16 +1026,23 @@ def generate_job_yaml(
     marker_flag = "" if category == "all" else f"-m {category} "
     filter_flag = f"-k {shlex.quote(test_filter)} " if test_filter else ""
     verify_ssl = ocp_creds.get("verify_ssl", "false")
-    ca_bundle = ocp_creds.get("ca_bundle", "")
+    insecure_verify_skip = "false" if verify_ssl == "true" else "true"
 
-    # ca_bundle may be a file path; read its contents so we encode the PEM data, not the path.
-    ca_bundle_content = ""
-    if ca_bundle:
-        ca_path = Path(ca_bundle)
-        if ca_path.exists():
-            ca_bundle_content = ca_path.read_text()
-        else:
-            ca_bundle_content = ca_bundle  # already PEM content, not a path
+    secret_data = _build_job_secret_data(ocp_creds=ocp_creds, providers_json_content=providers_json_content)
+    pytest_command = _build_pytest_command(
+        marker_flag=marker_flag,
+        filter_flag=filter_flag,
+        provider_key=provider_key,
+        storage_class=storage_class,
+        insecure_verify_skip=insecure_verify_skip,
+    )
+    job_spec = _build_job_spec(
+        image=image,
+        secret_name=secret_name,
+        namespace=namespace,
+        job_name=job_name,
+        pytest_command=pytest_command,
+    )
 
     yaml_content = f"""apiVersion: v1
 kind: Namespace
@@ -914,76 +1058,9 @@ metadata:
   namespace: {namespace}
 type: Opaque
 data:
-  providers.json: {b64(providers_json_content)}
-  cluster_host: {b64(ocp_creds["host"])}
-  cluster_username: {b64(ocp_creds["username"])}
-  cluster_password: {b64(ocp_creds["password"])}
-  cluster_verify_ssl: {b64(verify_ssl)}
-  # TODO: ca_bundle is stored here but not yet consumed by the test runner container.
-  # When the test runner supports CA bundle injection, mount this as a file and set
-  # KUBERNETES_CLIENT_CA_BUNDLE or pass via --tc flag.
-  cluster_ca_bundle: {b64(ca_bundle_content)}
+{secret_data}
 
 ---
 
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {job_name}
-  namespace: {namespace}
-spec:
-  backoffLimit: 0
-  template:
-    spec:
-      restartPolicy: Never
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-      - name: tests
-        image: {image}
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
-        env:
-        - name: CLUSTER_HOST
-          valueFrom:
-            secretKeyRef:
-              name: {secret_name}
-              key: cluster_host
-        - name: CLUSTER_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: {secret_name}
-              key: cluster_username
-        - name: CLUSTER_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {secret_name}
-              key: cluster_password
-        - name: CLUSTER_VERIFY_SSL
-          valueFrom:
-            secretKeyRef:
-              name: {secret_name}
-              key: cluster_verify_ssl
-        command:
-          - /bin/sh
-          - -c
-          - |
-            uv run pytest {marker_flag}{filter_flag}\\
-              -v \\
-              --tc=source_provider:{provider_key} \\
-              --tc=storage_class:{storage_class}
-        volumeMounts:
-        - name: config
-          mountPath: /app/.providers.json
-          subPath: providers.json
-      volumes:
-      - name: config
-        secret:
-          secretName: {secret_name}
-"""
+{job_spec}"""
     return yaml_content, namespace, job_name

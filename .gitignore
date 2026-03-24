@@ -164,7 +164,7 @@ jira.cfg
 # AI
 .cursor/
 .cursorrules
-.claude/
+.claude/*
 !.claude/commands
 !.claude/settings.json
 !.claude/agents/

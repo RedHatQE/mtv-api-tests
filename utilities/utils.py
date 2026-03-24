@@ -607,11 +607,11 @@ def get_cluster_client() -> DynamicClient:
     This allows the CLI to pass sensitive credentials via env vars instead of
     exposing them in process arguments.
 
-    SSL verification is resolved from ``py_config["insecure_verify_skip"]``
-    first, then from the ``CLUSTER_VERIFY_SSL`` environment variable (note
-    the inverted semantics: ``CLUSTER_VERIFY_SSL=true`` means
-    ``insecure_verify_skip=False``). When neither is set, SSL verification
-    is skipped by default (``insecure_verify_skip=True``).
+    SSL verification is resolved from the ``CLUSTER_VERIFY_SSL`` environment
+    variable first (note the inverted semantics: ``CLUSTER_VERIFY_SSL=true``
+    means ``insecure_verify_skip=False``), then from
+    ``py_config["insecure_verify_skip"]``. When neither is set, SSL
+    verification is skipped by default (``insecure_verify_skip=True``).
 
     Returns:
         DynamicClient: The cluster client.
@@ -630,10 +630,13 @@ def get_cluster_client() -> DynamicClient:
     password = get_value_from_py_config("cluster_password")
     if password is None:
         password = os.environ.get("CLUSTER_PASSWORD")
-    insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
-    if insecure_verify_skip is None:
-        verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL", "").lower()
-        insecure_verify_skip = verify_ssl_env != "true"
+    verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
+    if verify_ssl_env is not None:
+        insecure_verify_skip = verify_ssl_env.lower() != "true"
+    else:
+        insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
+        if insecure_verify_skip is None:
+            insecure_verify_skip = True
     _client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 
     if isinstance(_client, DynamicClient):

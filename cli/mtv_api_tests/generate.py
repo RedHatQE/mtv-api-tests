@@ -68,7 +68,7 @@ def _gather_vsphere_resources(
         si = connect_vsphere(vsphere_host, vsphere_user, vsphere_pass, ssl_config=ssl_config)
     except ConnectionError as exc:
         console.print(f"\n[red]Error: {exc}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     try:
         content = si.RetrieveContent()
@@ -199,7 +199,7 @@ def _gather_ocp_storage_class() -> tuple[dict[str, str], str, str]:
     except ConnectionError as exc:
         console.print(f"\n[red]Error: {exc}[/red]")
         console.print("[yellow]Cannot continue without OCP connection.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     # Cluster version
     ocp_version = get_ocp_version(ocp_client)
@@ -321,9 +321,9 @@ def generate_command(image: str, category: str) -> None:
 
     # Write provider entries (both vSphere and OCP)
     if not write_providers_json(vsphere_key, vsphere_config):
-        console.print("[yellow]Warning: vSphere provider not written. Job manifest may be incomplete.[/yellow]")
+        console.print("[dim]vSphere provider unchanged.[/dim]")
     if not write_providers_json(ocp_key, ocp_config):
-        console.print("[yellow]Warning: OCP provider not written. Job manifest may be incomplete.[/yellow]")
+        console.print("[dim]OCP provider unchanged.[/dim]")
 
     # Read back the full providers.json for the Job manifest
     providers_json_content = get_providers_json_path().read_text()
