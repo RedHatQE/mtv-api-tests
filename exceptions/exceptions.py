@@ -113,7 +113,7 @@ class VmPipelineError(Exception):
 class VmMigrationStepMismatchError(Exception):
     """Raised when VMs in the same plan fail at different migration steps."""
 
-    def __init__(self, plan_name: str, failed_steps: dict[str, str | None]) -> None:
+    def __init__(self, plan_name: str, failed_steps: dict[str, str]) -> None:
         self.plan_name = plan_name
         self.failed_steps = failed_steps
         super().__init__(f"VMs in plan '{plan_name}' failed at different steps: {failed_steps}")

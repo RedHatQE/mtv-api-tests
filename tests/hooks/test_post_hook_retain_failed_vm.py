@@ -195,14 +195,19 @@ class TestPostHookRetainFailedVm:
         expected_result = prepared_plan["expected_migration_result"]
 
         if expected_result == "fail":
-            with pytest.raises(MigrationPlanExecError):
+            with pytest.raises(MigrationPlanExecError) as exc_info:
                 execute_migration(
                     ocp_admin_client=ocp_admin_client,
                     fixture_store=fixture_store,
                     plan=self.plan_resource,
                     target_namespace=target_namespace,
                 )
-            self.__class__.should_check_vms = validate_hook_failure_and_check_vms(self.plan_resource, prepared_plan)
+            try:
+                self.__class__.should_check_vms = validate_hook_failure_and_check_vms(self.plan_resource, prepared_plan)
+            except Exception as e:
+                # Chain with original migration error so the root cause is visible in traceback
+                e.__cause__ = exc_info.value
+                raise
         else:
             execute_migration(
                 ocp_admin_client=ocp_admin_client,
