@@ -807,6 +807,57 @@ class VMWareProvider(BaseProvider):
         self.wait_task(task=task, action_name=f"Adding RDM disk to VM {vm.name}", wait_timeout=120)
         LOGGER.info(f"Successfully added RDM disk to VM '{vm.name}'")
 
+    def change_disk_mode(
+        self,
+        vm: vim.VirtualMachine,
+        disk_mode: str,
+        skip_unit_numbers: tuple[int, ...] = (0,),
+    ) -> None:
+        """Change the disk mode for non-OS disks on a VM via ReconfigVM_Task.
+
+        The VM must be powered off before calling this method.
+
+        Args:
+            vm (vim.VirtualMachine): The vSphere VM object to reconfigure.
+            disk_mode (str): Target disk mode (e.g., "independent_nonpersistent",
+                "independent_persistent", "persistent").
+            skip_unit_numbers (tuple[int, ...]): Unit numbers to skip.
+                Defaults to (0,) to preserve the OS disk.
+
+        Raises:
+            ValueError: If the VM is not powered off or no eligible disks are found.
+        """
+        power_state: str = vm.runtime.powerState
+        if power_state != "poweredOff":
+            raise ValueError(f"VM '{vm.name}' must be powered off to change disk mode, current state: '{power_state}'")
+
+        disks: list[vim.vm.device.VirtualDisk] = [
+            dev
+            for dev in vm.config.hardware.device
+            if isinstance(dev, vim.vm.device.VirtualDisk) and dev.unitNumber not in skip_unit_numbers
+        ]
+
+        if not disks:
+            raise ValueError(f"No eligible disks found on VM '{vm.name}' (skipping units {skip_unit_numbers})")
+
+        device_changes: list[vim.vm.device.VirtualDeviceSpec] = []
+        for disk in disks:
+            spec = vim.vm.device.VirtualDeviceSpec()
+            spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+            spec.device = disk
+            spec.device.backing.diskMode = disk_mode
+            device_changes.append(spec)
+            LOGGER.info(f"VM '{vm.name}': changing disk unit {disk.unitNumber} mode to '{disk_mode}'")
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.deviceChange = device_changes
+
+        task = vm.ReconfigVM_Task(spec=config_spec)
+        self.wait_task(
+            task=task, action_name=f"Changing disk mode to '{disk_mode}' on VM '{vm.name}'", wait_timeout=120
+        )
+        LOGGER.info(f"Successfully changed disk mode to '{disk_mode}' on {len(disks)} disk(s) of VM '{vm.name}'")
+
     def _get_add_disk_device_specs(
         self,
         source_vm: vim.VirtualMachine,
