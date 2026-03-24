@@ -176,9 +176,10 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
             plan_name = plan["name"]
             plan_namespace = plan["namespace"]
             run_command(
-                shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted")
+                shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted"),
+                verify_stderr=False,
             )
         else:
-            run_command(shlex.split(f"{_must_gather_base_cmd} -- -- NS={mtv_namespace}"))
+            run_command(shlex.split(f"{_must_gather_base_cmd} -- NS={mtv_namespace}"), verify_stderr=False)
     except Exception as ex:
         LOGGER.exception(f"Failed to run must-gather. {ex}")

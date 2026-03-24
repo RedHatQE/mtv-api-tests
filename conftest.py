@@ -55,7 +55,7 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.naming import generate_name_with_uuid
+from utilities.naming import generate_name_with_uuid, sanitize_test_name_for_path
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
@@ -355,7 +355,9 @@ def pytest_exception_interact(node, call, report):
 
     if not node.session.config.getoption("skip_data_collector"):
         _session_store = get_fixture_store(node.session)
-        _data_collector_path = Path(f"{node.session.config.getoption('data_collector_path')}/{node.name}")
+        _data_collector_path = Path(
+            f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(node.name)}"
+        )
         # Handle both function-based tests and class-based tests
         test_name = node._pyfuncitem.name if hasattr(node, "_pyfuncitem") else node.name
         plans = _session_store["teardown"].get("Plan", [])
