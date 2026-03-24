@@ -43,3 +43,30 @@ def sanitize_kubernetes_name(name: str, max_length: int = 63) -> str:
             "The name must contain at least one alphanumeric character."
         )
     return sanitized
+
+
+def sanitize_test_name_for_path(test_name: str) -> str:
+    """Sanitize a pytest test name for safe use in file paths.
+
+    Replaces characters that cause issues in file paths or shell commands:
+    - Brackets [ ] → underscores _
+    - Colons : → hyphens -
+    - Other special characters → hyphens -
+
+    Args:
+        test_name (str): The pytest test name (may include parametrization brackets)
+
+    Returns:
+        str: The sanitized test name safe for use in file paths
+
+    Example:
+        >>> sanitize_test_name_for_path("test_migrate_vms[MTV-565:copyoffload-mixed-datastore]")
+        'test_migrate_vms_MTV-565-copyoffload-mixed-datastore_'
+    """
+    # Replace brackets with underscores
+    sanitized = test_name.replace("[", "_").replace("]", "_")
+    # Replace colons with hyphens
+    sanitized = sanitized.replace(":", "-")
+    # Replace any other special characters with hyphens (optional, for extra safety)
+    sanitized = re.sub(r"[^\w\-]", "-", sanitized)
+    return sanitized
