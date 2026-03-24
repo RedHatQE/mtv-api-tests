@@ -235,6 +235,9 @@ podman run --rm \
 >
 > **Windows Users**: Replace `$(pwd)` with `${PWD}` in PowerShell or use absolute paths like
 > `C:\path\to\.providers.json:/app/.providers.json:ro`. Requires Docker Desktop or Podman Desktop.
+>
+> **Non-root Container**: The container runs as UID 1001. Read-only mounts (`:ro`) are unaffected,
+> but writable bind mounts must be accessible to that UID. See the [Test Results and Reports](#test-results-and-reports) section for details.
 
 **Replace**:
 
@@ -670,6 +673,11 @@ podman run --rm \
 # Report will be saved to ./results/junit-report.xml
 ```
 
+> **Non-root Container**: The container runs as UID 1001, so the host `results/` directory must be writable.
+> With **podman rootless** this usually works automatically (user namespace mapping). For **podman/docker rootful**,
+> run `mkdir -p results && chmod 777 results` or use `podman run --userns=keep-id`.
+> On **OpenShift**, the Dockerfile's group-permission pattern (`chgrp -R 0 && chmod -R g=u`) handles this automatically.
+>
 > **Security Note**: Use environment variables to avoid shell-history exposure. Note the expanded value can
 > still appear in process listings inside the container; prefer OpenShift Secrets or other secret injection where
 > possible. Set `export CLUSTER_PASSWORD='your-password'` before running.  # pragma: allowlist secret
