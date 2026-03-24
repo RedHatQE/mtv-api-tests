@@ -48,6 +48,6 @@ USER 1001
 RUN uv sync --locked\
   && if [ -n "${OPENSHIFT_PYTHON_WRAPPER_COMMIT}" ]; then uv pip install "git+https://github.com/RedHatQE/openshift-python-wrapper.git@${OPENSHIFT_PYTHON_WRAPPER_COMMIT}"; fi \
   && if [ -n "${OPENSHIFT_PYTHON_UTILITIES_COMMIT}" ]; then uv pip install "git+https://github.com/RedHatQE/openshift-python-utilities.git@${OPENSHIFT_PYTHON_UTILITIES_COMMIT}"; fi \
-  && find ${APP_DIR}/ -type d -name "__pycache__" -print0 | xargs -0 rm -rfv
+  && find ${APP_DIR}/ -type d -name "__pycache__" -print0 | xargs -0 -r rm -rfv
 
 CMD ["uv", "run", "pytest", "--collect-only"]
