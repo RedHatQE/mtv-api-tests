@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import shlex
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 
 import typer
@@ -42,6 +45,23 @@ from cli.mtv_api_tests.common import (
 )
 
 
+@contextmanager
+def _vsphere_session(host: str, user: str, password: str, ssl_config: dict[str, Any] | None) -> Generator:
+    """Context manager for vSphere connection with automatic cleanup.
+
+    Args:
+        host: vCenter hostname.
+        user: vSphere username.
+        password: vSphere password.
+        ssl_config: SSL configuration dict with 'verify_ssl' and optional 'ca_bundle'.
+    """
+    si = connect_vsphere(host, user, password, ssl_config=ssl_config)
+    try:
+        yield si
+    finally:
+        disconnect_vsphere(si)
+
+
 # ---------------------------------------------------------------------------
 # Generate sub-flows
 # ---------------------------------------------------------------------------
@@ -65,47 +85,43 @@ def _gather_vsphere_resources(
         typer.Exit: If connection fails.
     """
     try:
-        si = connect_vsphere(vsphere_host, vsphere_user, vsphere_pass, ssl_config=ssl_config)
+        with _vsphere_session(vsphere_host, vsphere_user, vsphere_pass, ssl_config=ssl_config) as si:
+            content = si.RetrieveContent()
+            version = get_vsphere_version(content)
+            console.print(f"  [dim]vSphere version:[/dim] {version}")
+
+            # Datastores
+            console.print("\n[bold]Datastore Selection[/bold]")
+            datastores = discover_datastores(content)
+            ds_columns = ["name", "id", "type", "capacity_gb", "free_gb"]
+            primary_ds = select_from_list(datastores, ds_columns, "Available Datastores", "Select PRIMARY datastore")
+
+            secondary_ds: dict[str, Any] | None = None
+            if Confirm.ask("  Add a secondary datastore for multi-datastore tests?", default=False):
+                remaining = [d for d in datastores if d["id"] != primary_ds["id"]]
+                if remaining:
+                    secondary_ds = select_from_list(
+                        remaining, ds_columns, "Available Datastores (excluding primary)", "Select SECONDARY datastore"
+                    )
+                else:
+                    console.print("  [yellow]No other datastores available[/yellow]")
+
+            # VMs
+            console.print("\n[bold]Test VM Selection[/bold]")
+            vms = discover_vms(content)
+            selected_vm = select_from_list(
+                vms, ["name", "power_state", "guest_os"], "Available VMs", "Select default test VM"
+            )
+
+            # ESXi hosts
+            console.print("\n[bold]ESXi Host Selection[/bold]")
+            esxi_hosts = discover_esxi_hosts(content)
+            selected_host = select_from_list(
+                esxi_hosts, ["name", "connection_state", "power_state"], "Available ESXi Hosts", "Select ESXi host"
+            )
     except ConnectionError as exc:
         console.print(f"\n[red]Error: {exc}[/red]")
         raise typer.Exit(code=1) from exc
-
-    try:
-        content = si.RetrieveContent()
-        version = get_vsphere_version(content)
-        console.print(f"  [dim]vSphere version:[/dim] {version}")
-
-        # Datastores
-        console.print("\n[bold]Datastore Selection[/bold]")
-        datastores = discover_datastores(content)
-        ds_columns = ["name", "id", "type", "capacity_gb", "free_gb"]
-        primary_ds = select_from_list(datastores, ds_columns, "Available Datastores", "Select PRIMARY datastore")
-
-        secondary_ds: dict[str, Any] | None = None
-        if Confirm.ask("  Add a secondary datastore for multi-datastore tests?", default=False):
-            remaining = [d for d in datastores if d["id"] != primary_ds["id"]]
-            if remaining:
-                secondary_ds = select_from_list(
-                    remaining, ds_columns, "Available Datastores (excluding primary)", "Select SECONDARY datastore"
-                )
-            else:
-                console.print("  [yellow]No other datastores available[/yellow]")
-
-        # VMs
-        console.print("\n[bold]Test VM Selection[/bold]")
-        vms = discover_vms(content)
-        selected_vm = select_from_list(
-            vms, ["name", "power_state", "guest_os"], "Available VMs", "Select default test VM"
-        )
-
-        # ESXi hosts
-        console.print("\n[bold]ESXi Host Selection[/bold]")
-        esxi_hosts = discover_esxi_hosts(content)
-        selected_host = select_from_list(
-            esxi_hosts, ["name", "connection_state", "power_state"], "Available ESXi Hosts", "Select ESXi host"
-        )
-    finally:
-        disconnect_vsphere(si)
 
     return {
         "version": version,
@@ -340,10 +356,16 @@ def generate_command(image: str, category: str) -> None:
     console.print(f"  [green]Wrote {JOB_YAML_PATH}[/green]")
     console.print(f"  [bold]Namespace:[/bold] {namespace}")
 
+    local_cmd = f"mtv-api-tests run --mode local --source-provider {vsphere_key} --destination-provider {ocp_key} --storage-class {storage_class}"
+    if resolved_category != "all":
+        local_cmd += f" --category {resolved_category}"
+    if test_filter:
+        local_cmd += f" --test-filter {shlex.quote(test_filter)}"
+
     console.print(
         Panel(
             f"[bold]Run tests locally:[/bold]\n"
-            f"  mtv-api-tests run --mode local --source-provider {vsphere_key}\n\n"
+            f"  {local_cmd}\n\n"
             f"[bold]Run tests as OCP Job:[/bold]\n"
             f"  mtv-api-tests run --mode job\n\n"
             f"[bold]Follow Job logs:[/bold]\n"

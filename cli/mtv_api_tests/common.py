@@ -809,6 +809,7 @@ def _write_secret_file(path: Path, content: str) -> None:
         path: File path to write.
         content: File content.
     """
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp_fd = None
     tmp_path: str | None = None
     try:

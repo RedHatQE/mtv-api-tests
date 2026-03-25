@@ -637,11 +637,10 @@ def get_cluster_client() -> DynamicClient:
         insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
         if insecure_verify_skip is None:
             insecure_verify_skip = True
-    _client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
-
-    if isinstance(_client, DynamicClient):
-        return _client
-    raise ValueError("Failed to get client for cluster")
+    client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+    if client is None:
+        raise ValueError("Failed to get client for cluster")
+    return client
 
 
 def get_cluster_version_str(client: DynamicClient) -> str:

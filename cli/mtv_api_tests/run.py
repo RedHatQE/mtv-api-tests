@@ -237,6 +237,16 @@ def _run_job(job_yaml_path: Path) -> None:
         console.print(f"[red]Error: {result.stderr}[/red]")
         raise typer.Exit(code=1)
 
+    # Check if resources were unchanged (Job won't re-run)
+    combined_output = (result.stdout or "") + (result.stderr or "")
+    if "unchanged" in combined_output:
+        console.print(
+            "[yellow]Warning: Job already exists and was not modified. "
+            "A completed Job will not re-run.[/yellow]\n"
+            f"  [dim]Delete first:[/dim] oc delete -f {job_yaml_path}"
+        )
+        raise typer.Exit(code=1)
+
     console.print("  [green]Deployed successfully[/green]")
 
     # Extract namespace and job name from the manifest for user guidance
@@ -293,10 +303,6 @@ def run_command(
         console.print(f"[red]Error: {providers_path} not found. Run 'mtv-api-tests generate' first.[/red]")
         raise typer.Exit(code=1)
 
-    resolved_category = select_category(category)
-
-    test_filter = prompt_test_filter(test_filter)
-
     try:
         providers = json.loads(providers_path.read_text())
     except json.JSONDecodeError as exc:
@@ -320,6 +326,10 @@ def run_command(
         keys_str = ", ".join(sorted(missing_type_keys))
         console.print(f"[red]Error: {providers_path} entries must have a 'type' field. Missing in: {keys_str}[/red]")
         raise typer.Exit(code=1)
+
+    resolved_category = select_category(category)
+
+    test_filter = prompt_test_filter(test_filter)
 
     resolved_source = _resolve_source_provider_key(providers, source_provider)
 
