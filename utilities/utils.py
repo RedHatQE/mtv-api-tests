@@ -632,7 +632,7 @@ def get_cluster_client() -> DynamicClient:
         password = os.environ.get("CLUSTER_PASSWORD")
     verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
     if verify_ssl_env is not None:
-        insecure_verify_skip = verify_ssl_env.lower() != "true"
+        insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
     else:
         insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
         if insecure_verify_skip is None:
