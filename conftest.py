@@ -77,7 +77,7 @@ from utilities.utils import (
     get_value_from_py_config,
     load_source_providers,
 )
-from utilities.virtctl import add_to_path, download_virtctl_from_cluster
+from utilities.virtctl import download_virtctl_from_cluster
 from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 
 RESULTS_PATH = Path("./.xdist_results/")
@@ -503,23 +503,16 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
     os.chmod(shared_dir, 0o700)
 
     lock_file = shared_dir / "virtctl.lock"
-    virtctl_path = shared_dir / "virtctl"
 
     try:
         # File lock ensures only one process downloads
         with filelock.FileLock(lock_file, timeout=600):
-            if not virtctl_path.is_file() or not os.access(virtctl_path, os.X_OK):
-                download_virtctl_from_cluster(client=ocp_admin_client, download_dir=shared_dir)
-                # Validate binary was downloaded successfully
-                if not virtctl_path.is_file() or not os.access(virtctl_path, os.X_OK):
-                    raise ValueError(f"Failed to download or make executable virtctl at {virtctl_path}")
+            virtctl_path = download_virtctl_from_cluster(client=ocp_admin_client, download_dir=shared_dir)
     except filelock.Timeout as err:
         raise TimeoutError(
             f"Timeout (600s) waiting for virtctl lock at {lock_file}. Another process may be stuck."
         ) from err
 
-    # Add to PATH for all workers
-    add_to_path(str(shared_dir))
     return virtctl_path
 
 
