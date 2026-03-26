@@ -539,7 +539,7 @@ def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None
         )
 
     if failed_checks:
-        pytest.fail(f"CPU failed checks: {failed_checks}")
+        raise AssertionError(f"CPU failed checks: {failed_checks}")
 
 
 def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
@@ -890,7 +890,7 @@ def check_snapshots(
             )
 
     if failed_snapshots:
-        pytest.fail(f"Some of the VM snapshots did not match: {failed_snapshots}")
+        raise AssertionError(f"Some of the VM snapshots did not match: {failed_snapshots}")
 
 
 def _format_uuid_to_vmware_serial(uuid: str) -> str:
@@ -995,20 +995,19 @@ def check_vm_node_placement(
         destination_vm: Destination VM information including node_name
         expected_node: Expected node name where VM should be scheduled
 
-    Returns:
-        None: No return value; raises pytest.fail on validation errors
-
     Raises:
-        pytest.fail: If VM not on expected node or no node assignment
+        AssertionError: If VM has no node assignment or is not on the expected node
     """
     vm_name = destination_vm.get("name")
     actual_node = destination_vm.get("node_name")
 
     if not actual_node:
-        pytest.fail(f"VM {vm_name} has no node assignment")
+        raise AssertionError(f"VM {vm_name} has no node assignment")
 
     if actual_node != expected_node:
-        pytest.fail(f"VM {vm_name} not scheduled on expected node. Expected: {expected_node}, Got: {actual_node}")
+        raise AssertionError(
+            f"VM {vm_name} not scheduled on expected node. Expected: {expected_node}, Got: {actual_node}"
+        )
 
     LOGGER.info(f"VM {vm_name} correctly scheduled on node {actual_node}")
 
@@ -1023,11 +1022,8 @@ def check_vm_labels(
         destination_vm: Destination VM information including labels
         expected_labels: Expected labels that should be set on the VM
 
-    Returns:
-        None: No return value; raises pytest.fail on validation errors
-
     Raises:
-        pytest.fail: If labels don't match
+        AssertionError: If VM has no labels or labels don't match expected values
     """
     from ocp_resources.resource import ResourceField  # noqa: PLC0415
 
@@ -1041,7 +1037,7 @@ def check_vm_labels(
 
     # Fail if VM has no labels but we expect some
     if not actual_labels:
-        pytest.fail(f"VM {vm_name} has no labels but expected: {expected_labels}")
+        raise AssertionError(f"VM {vm_name} has no labels but expected: {expected_labels}")
 
     missing_labels = []
     incorrect_labels = []
@@ -1060,7 +1056,7 @@ def check_vm_labels(
             error_msg += f"  Incorrect labels: {', '.join(incorrect_labels)}\n"
         error_msg += f"  Actual labels: {actual_labels}\n"
         error_msg += f"  Expected labels: {expected_labels}"
-        pytest.fail(error_msg)
+        raise AssertionError(error_msg)
 
     LOGGER.info(f"VM {vm_name} labels verified successfully: {actual_labels}")
 
@@ -1075,11 +1071,8 @@ def check_vm_affinity(
         destination_vm: VM info dict from provider
         expected_affinity: Expected affinity configuration dict
 
-    Returns:
-        None: No return value; raises pytest.fail on validation errors
-
     Raises:
-        pytest.fail: If affinity doesn't match
+        AssertionError: If VM has no affinity configuration or affinity doesn't match
     """
     from ocp_resources.resource import ResourceField  # noqa: PLC0415
 
@@ -1092,11 +1085,11 @@ def check_vm_affinity(
     actual_affinity: dict[str, Any] = actual_affinity_raw.to_dict() if actual_affinity_raw else {}
 
     if not actual_affinity:
-        pytest.fail(f"VM {vm_name} has no affinity configuration")
+        raise AssertionError(f"VM {vm_name} has no affinity configuration")
 
     # Deep comparison of affinity configurations
     if actual_affinity != expected_affinity:
-        pytest.fail(
+        raise AssertionError(
             f"VM {vm_name} affinity verification failed:\n"
             f"  Expected affinity: {expected_affinity}\n"
             f"  Actual affinity: {actual_affinity}"
@@ -1168,7 +1161,6 @@ def check_vms(
     target_vm_labels: dict[str, Any] | None = None,
 ) -> None:
     res: dict[str, list[str]] = {}
-    should_fail: bool = False
 
     if source_provider.type == Provider.ProviderType.OVA:
         LOGGER.info("Source OVA VMS do not have any stats")
@@ -1185,7 +1177,7 @@ def check_vms(
     ):
         try:
             check_ssl_configuration(source_provider=source_provider)
-        except (AssertionError, KeyError, AttributeError) as exp:
+        except Exception as exp:
             LOGGER.error(f"SSL configuration check failed: {exp}")
             res.setdefault("_provider", []).append(f"check_ssl_configuration - {str(exp)}")
 
@@ -1362,10 +1354,7 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_false_vm_power_off - {str(exp)}")
 
-    for _vm_name, _errors in res.items():
-        if _errors:
-            should_fail = True
-            LOGGER.error(f"VM {_vm_name} failed checks: {_errors}")
-
-    if should_fail:
-        pytest.fail("Some of the VMs did not match")
+    failed_checks = {vm_name: errors for vm_name, errors in res.items() if errors}
+    if failed_checks:
+        failure_details = "; ".join(f"{vm_name}: [{', '.join(errors)}]" for vm_name, errors in failed_checks.items())
+        pytest.fail(f"VM validation failed — {failure_details}")
