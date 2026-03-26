@@ -363,7 +363,7 @@ def wait_for_migration_complate(plan: Plan) -> None:
             elif sample == Plan.Status.FAILED:
                 raise MigrationPlanExecError()
 
-    except (TimeoutExpiredError, MigrationPlanExecError):
+    except TimeoutExpiredError, MigrationPlanExecError:
         raise MigrationPlanExecError(
             f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
         )
