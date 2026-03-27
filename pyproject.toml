@@ -68,11 +68,11 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["setuptools>=77.0.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-include = ["cli*", "utilities*", "libs*", "exceptions*"]
+[tool.hatch.build.targets.wheel]
+packages = ["cli", "utilities", "libs", "exceptions"]
 
 [project.scripts]
 mtv-api-tests = "cli.mtv_api_tests:app"

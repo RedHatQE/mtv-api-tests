@@ -372,7 +372,7 @@ def get_ocp_credentials() -> dict[str, str]:
     host = _env_or_prompt("CLUSTER_HOST", "Cluster API URL (e.g. https://api.cluster.com:6443)")
     username = _env_or_prompt("CLUSTER_USERNAME", "Username")
     password = _env_or_prompt("CLUSTER_PASSWORD", "Password", password=True)
-    ssl_config = _get_ssl_config("CLUSTER")
+    ssl_config = _get_ssl_config("MTV_API_TESTS_CLUSTER")
     return {"host": host, "username": username, "password": password, **ssl_config}
 
 
