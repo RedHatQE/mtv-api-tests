@@ -1003,14 +1003,11 @@ wheels = [
 
 [[package]]
 name = "marshmallow"
-version = "3.26.2"
+version = "4.2.3"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/55/79/de6c16cc902f4fc372236926b0ce2ab7845268dcc30fb2fbb7f71b418631/marshmallow-3.26.2.tar.gz", hash = "sha256:bbe2adb5a03e6e3571b573f42527c6fe926e17467833660bebd11593ab8dfd57", size = 222095, upload-time = "2025-12-22T06:53:53.309Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7f/ed/ecdd3a8259680dc9626ed5971b110c9be560962e11f7b0319b45ec2092b1/marshmallow-4.2.3.tar.gz", hash = "sha256:3e3fef6b3603721a25a723b8caedfa488369bddaf9bc03b40b9442c90aebd22b", size = 222932, upload-time = "2026-03-25T23:27:18.237Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/2f/5108cb3ee4ba6501748c4908b908e55f42a5b66245b4cfe0c99326e1ef6e/marshmallow-3.26.2-py3-none-any.whl", hash = "sha256:013fa8a3c4c276c24d26d84ce934dc964e2aa794345a0f8c7e5a7191482c8a73", size = 50964, upload-time = "2025-12-22T06:53:51.801Z" },
+    { url = "https://files.pythonhosted.org/packages/58/2e/ce3278954d44903ccf8606c2a16e6b3ad8e10146c21de1b7b9b0f5812b23/marshmallow-4.2.3-py3-none-any.whl", hash = "sha256:c84fd89817ecea690bde1eb925036070e5e9883148217585adc56d5cfbc082b8", size = 48876, upload-time = "2026-03-25T23:27:16.907Z" },
 ]
 
 [[package]]
@@ -1120,7 +1117,7 @@ requires-dist = [
     { name = "filelock", specifier = ">=3.16.0" },
     { name = "humanfriendly", specifier = ">=10.0" },
     { name = "jc", specifier = ">=1.25.0" },
-    { name = "marshmallow", specifier = "==3.26.2" },
+    { name = "marshmallow", specifier = "==4.2.3" },
     { name = "openshift-python-utilities", specifier = ">=6.0.7" },
     { name = "openshift-python-wrapper", specifier = ">=11.0.53" },
     { name = "openstacksdk", specifier = ">=4.0.0" },
