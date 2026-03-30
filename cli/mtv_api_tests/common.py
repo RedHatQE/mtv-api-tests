@@ -277,6 +277,9 @@ def _get_ssl_config(env_prefix: str) -> dict[str, str]:
 
     Returns:
         Dict with 'verify_ssl' ('true'/'false') and optional 'ca_bundle' path.
+
+    Raises:
+        typer.Exit: If verify_ssl is enabled and the specified CA bundle path does not exist.
     """
     verify_env = os.environ.get(f"{env_prefix}_VERIFY_SSL", "").strip().lower()
     if verify_env:
@@ -372,7 +375,7 @@ def get_ocp_credentials() -> dict[str, str]:
     host = _env_or_prompt("CLUSTER_HOST", "Cluster API URL (e.g. https://api.cluster.com:6443)")
     username = _env_or_prompt("CLUSTER_USERNAME", "Username")
     password = _env_or_prompt("CLUSTER_PASSWORD", "Password", password=True)
-    ssl_config = _get_ssl_config("MTV_API_TESTS_CLUSTER")
+    ssl_config = _get_ssl_config("CLUSTER")
     return {"host": host, "username": username, "password": password, **ssl_config}
 
 
@@ -399,7 +402,7 @@ def connect_vsphere(
         ConnectionError: If connection fails.
     """
     ssl_config = ssl_config or {}
-    verify_ssl = ssl_config.get("verify_ssl", "false") == "true"
+    verify_ssl = ssl_config.get("verify_ssl", "true") == "true"
     ca_bundle = ssl_config.get("ca_bundle", "")
 
     connect_kwargs: dict[str, Any] = {"host": host, "user": username, "pwd": password, "port": 443}
@@ -556,7 +559,7 @@ def connect_ocp(creds: dict[str, str]) -> DynamicClient:
     Raises:
         ConnectionError: If connection fails.
     """
-    verify_ssl = creds.get("verify_ssl", "false") == "true"
+    verify_ssl = creds.get("verify_ssl", "true") == "true"
     ca_bundle = creds.get("ca_bundle", "")
 
     if not verify_ssl:
@@ -854,7 +857,7 @@ def _build_job_secret_data(ocp_creds: dict[str, str], providers_json_content: st
     Returns:
         YAML string for the Secret data section.
     """
-    verify_ssl = ocp_creds.get("verify_ssl", "false")
+    verify_ssl = ocp_creds.get("verify_ssl", "true")
     ca_bundle = ocp_creds.get("ca_bundle", "")
 
     # ca_bundle may be a file path; read its contents so we encode the PEM data, not the path.
@@ -1026,7 +1029,7 @@ def generate_job_yaml(
     job_name = "mtv-tests" if category == "all" else f"mtv-{category}-tests"
     marker_flag = "" if category == "all" else f"-m {category} "
     filter_flag = f"-k {shlex.quote(test_filter)} " if test_filter else ""
-    verify_ssl = ocp_creds.get("verify_ssl", "false")
+    verify_ssl = ocp_creds.get("verify_ssl", "true")
     insecure_verify_skip = "false" if verify_ssl == "true" else "true"
 
     secret_data = _build_job_secret_data(ocp_creds=ocp_creds, providers_json_content=providers_json_content)
