@@ -710,7 +710,20 @@ class VMWareProvider(BaseProvider):
 
         search_spec = vim.host.DatastoreBrowser.SearchSpec()
         search_spec.matchPattern = ["*.vmx"]
-        vm_datastore_info = vm.datastore[0].browser.SearchSubFolders(vm.config.files.vmPathName, search_spec)
+        # SearchSubFolders expects a folder path, not a file path.
+        # vmPathName is a file path like "[datastore] folder/file.vmx"
+        # Extract the folder: "[datastore] folder/"
+        vm_path_name = vm.config.files.vmPathName
+        if "/" in vm_path_name:
+            vm_folder = vm_path_name.rsplit("/", 1)[0] + "/"
+        else:
+            # No subdirectory: "[datastore1] file.vmx" -> "[datastore1] "
+            idx = vm_path_name.find("]")
+            if idx < 0:
+                self.log.error(f"VM {vm.name} has malformed vmPathName (missing ']'): {vm_path_name}")
+                return True
+            vm_folder = vm_path_name[: idx + 1] + " "
+        vm_datastore_info = vm.datastore[0].browser.SearchSubFolders(vm_folder, search_spec)
         if vm_datastore_info.info.state == "error":
             _error = vm_datastore_info.info.error.msg
 
@@ -1350,7 +1363,6 @@ class VMWareProvider(BaseProvider):
                     if non_mac_changes:
                         clone_spec.config.deviceChange = non_mac_changes
                     else:
-                        # Preserve extraConfig (CBT) by clearing only deviceChange
                         clone_spec.config.deviceChange = []
                 task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
                 res = self.wait_task(
