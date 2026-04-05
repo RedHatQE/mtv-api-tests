@@ -358,6 +358,7 @@ def create_source_provider(
         url=source_provider_data_copy["api_url"],
         provider_type=source_provider_data_copy["type"],
         vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
+        sdk_endpoint=source_provider_data_copy.get("endpoint_type"),
         annotations=provider_annotations or None,
     )
     ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600, stop_status="ConnectionFailed")
