@@ -127,7 +127,7 @@ class VMWareProvider(BaseProvider):
             except ApiException as e:
                 LOGGER.exception(f"Kubernetes API error updating provider with esxiCloneMethod: {e.reason}")
                 raise
-            except (ValueError, RuntimeError):
+            except ValueError, RuntimeError:
                 LOGGER.exception("Failed to update provider with esxiCloneMethod")
                 raise
 
@@ -1056,7 +1056,7 @@ class VMWareProvider(BaseProvider):
                         datacenter=datacenter,
                         createParentDirectories=True,
                     )
-                except (vim.fault.FileAlreadyExists, vim.fault.CannotCreateFile):
+                except vim.fault.FileAlreadyExists, vim.fault.CannotCreateFile:
                     LOGGER.debug("Directory '%s' already exists, proceeding.", datastore_path)
                 except Exception as e:
                     LOGGER.warning("Could not automatically create directory '%s': %s", datastore_path, e)

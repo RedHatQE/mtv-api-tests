@@ -156,7 +156,7 @@ def _get_cluster_config(ocp_provider: dict[str, Any] | None) -> tuple[list[str],
         if result.returncode == 0 and result.stdout.strip():
             console.print("  [green]Using existing cluster token from 'oc whoami -t'[/green]")
             return [], {}
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
 
     console.print("\n[yellow]No cluster token found. Provide cluster credentials:[/yellow]")

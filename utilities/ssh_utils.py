@@ -176,7 +176,7 @@ class VMSSHConnection:
                         self.port_forward_process.terminate()
                         try:
                             self.port_forward_process.wait(timeout=5)
-                        except (subprocess.TimeoutExpired, ProcessLookupError, OSError):
+                        except subprocess.TimeoutExpired, ProcessLookupError, OSError:
                             self.port_forward_process.kill()
                         self.port_forward_process = None
                     return False
@@ -186,7 +186,7 @@ class VMSSHConnection:
                     try:
                         self.port_forward_process.terminate()
                         self.port_forward_process.wait(timeout=5)
-                    except (subprocess.TimeoutExpired, ProcessLookupError, OSError):
+                    except subprocess.TimeoutExpired, ProcessLookupError, OSError:
                         self.port_forward_process.kill()
                     self.port_forward_process = None
                 return False
@@ -283,7 +283,7 @@ class VMSSHConnection:
                 LOGGER.warning(f"Error terminating port-forward process: {e}")
                 try:
                     self.port_forward_process.kill()
-                except (ProcessLookupError, OSError):
+                except ProcessLookupError, OSError:
                     # Process already terminated, ignore
                     pass
             finally:
@@ -379,7 +379,7 @@ class SSHConnectionManager:
             api_key = self._ocp_client.configuration.api_key.get("authorization")
             if api_key:
                 return api_key.split()[-1]
-        except (AttributeError, KeyError, IndexError):
+        except AttributeError, KeyError, IndexError:
             pass
         return None
 

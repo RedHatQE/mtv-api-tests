@@ -73,7 +73,7 @@ def parse_prometheus_value(raw_value: object) -> int:
     ):
         try:
             return int(float(raw_value[1]))
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return 0
     return 0
 
