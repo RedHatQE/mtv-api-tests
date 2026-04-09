@@ -229,7 +229,7 @@ class OCPProvider(BaseProvider):
         # Node name - where the VM is scheduled (collected after VM start)
         try:
             result_vm_info["node_name"] = cnv_vm.vmi.instance.status.nodeName
-        except (AttributeError, NotFoundError):
+        except AttributeError, NotFoundError:
             LOGGER.debug("Could not retrieve node name for VM %s", cnv_vm_name)
             result_vm_info["node_name"] = None
 
