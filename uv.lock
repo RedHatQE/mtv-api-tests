@@ -1003,14 +1003,11 @@ wheels = [
 
 [[package]]
 name = "marshmallow"
-version = "3.26.2"
+version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/55/79/de6c16cc902f4fc372236926b0ce2ab7845268dcc30fb2fbb7f71b418631/marshmallow-3.26.2.tar.gz", hash = "sha256:bbe2adb5a03e6e3571b573f42527c6fe926e17467833660bebd11593ab8dfd57", size = 222095, upload-time = "2025-12-22T06:53:53.309Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/25/7e/1dbd4096eb7c148cd2841841916f78820bb85a4d80a0c25c02d30815a7fb/marshmallow-4.3.0.tar.gz", hash = "sha256:fb43c53b3fe240b8f6af37223d6ef1636f927ad9bea8ab323afad95dff090880", size = 224485, upload-time = "2026-04-03T21:46:32.72Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/2f/5108cb3ee4ba6501748c4908b908e55f42a5b66245b4cfe0c99326e1ef6e/marshmallow-3.26.2-py3-none-any.whl", hash = "sha256:013fa8a3c4c276c24d26d84ce934dc964e2aa794345a0f8c7e5a7191482c8a73", size = 50964, upload-time = "2025-12-22T06:53:51.801Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/e0/ff24e25218bb59eb6290a530cea40651b14068b6e3659b20f9c175179632/marshmallow-4.3.0-py3-none-any.whl", hash = "sha256:46c4fe6984707e3cbd485dfebbf0a59874f58d695aad05c1668d15e8c6e13b46", size = 49148, upload-time = "2026-04-03T21:46:31.241Z" },
 ]
 
 [[package]]
@@ -1077,7 +1074,6 @@ dependencies = [
     { name = "filelock" },
     { name = "humanfriendly" },
     { name = "jc" },
-    { name = "marshmallow" },
     { name = "openshift-python-utilities" },
     { name = "openshift-python-wrapper" },
     { name = "openstacksdk" },
@@ -1120,7 +1116,6 @@ requires-dist = [
     { name = "filelock", specifier = ">=3.16.0" },
     { name = "humanfriendly", specifier = ">=10.0" },
     { name = "jc", specifier = ">=1.25.0" },
-    { name = "marshmallow", specifier = "==3.26.2" },
     { name = "openshift-python-utilities", specifier = ">=6.0.7" },
     { name = "openshift-python-wrapper", specifier = ">=11.0.53" },
     { name = "openstacksdk", specifier = ">=4.0.0" },
@@ -1131,7 +1126,7 @@ requires-dist = [
     { name = "pyhelper-utils", specifier = ">=1.0.9" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-harvest", specifier = ">=1.10.5" },
-    { name = "pytest-jira", specifier = ">=0.3.22" },
+    { name = "pytest-jira", specifier = ">=0.3.23" },
     { name = "pytest-profiling", specifier = ">=1.8.1" },
     { name = "pytest-progress", specifier = ">=1.3.0" },
     { name = "pytest-testconfig", specifier = ">=0.2.0" },
@@ -1854,7 +1849,7 @@ wheels = [
 
 [[package]]
 name = "pytest-jira"
-version = "0.3.22"
+version = "0.3.24"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "marshmallow" },
@@ -1864,7 +1859,10 @@ dependencies = [
     { name = "retry2" },
     { name = "six" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3a/88/238f28f46dd237ee32f2c232b08a4bed8c8b430f3b900e34a43e0b344105/pytest-jira-0.3.22.zip", hash = "sha256:f1649cd1823a57c2663f60150beb964ae109d560572dc67e6ebb243e6352260b", size = 34684, upload-time = "2025-04-15T15:08:38.207Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/cc/58100f57c741683a88423537b03873653bb7e16205ab38b44b53c862dbf2/pytest_jira-0.3.24.tar.gz", hash = "sha256:a9779689a31daa8aa668a555c50fd3b6b1cd05f83cee161623718b2f0736fcc8", size = 57047, upload-time = "2026-03-19T09:28:09.04Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/81/6cab10dec2d22ebf4c335351a062d85108d5b031d9070755db0f4c88a762/pytest_jira-0.3.24-py3-none-any.whl", hash = "sha256:d1eb35c7c6dafbb9024534bbf66d741ea3da790367d2bafd5c1f5e8f237ad82e", size = 17950, upload-time = "2026-03-19T09:28:09.933Z" },
+]
 
 [[package]]
 name = "pytest-profiling"
