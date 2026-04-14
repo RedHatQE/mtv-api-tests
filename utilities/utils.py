@@ -102,17 +102,18 @@ def load_source_providers(providers_json_path: str | None = None) -> dict[str, d
         return providers
 
 
-def generate_class_hash_prefix(nodeid: str, length: int = 6) -> str:
+def generate_class_hash_prefix(nodeid: str, session_uuid: str, length: int = 6) -> str:
     """Generate a FIPS-compliant hash prefix for class-based resource naming.
 
     Args:
         nodeid (str): The pytest node ID (e.g., request.node.nodeid).
+        session_uuid (str): Unique session identifier for parallel execution safety.
         length (int): Length of the hash prefix (default: 6).
 
     Returns:
         str: A hex prefix of the specified length (e.g., "a1b2c3").
     """
-    return hashlib.sha256(nodeid.encode()).hexdigest()[:length]
+    return hashlib.sha256(f"{nodeid}\x00{session_uuid}".encode()).hexdigest()[:length]
 
 
 def vmware_provider(provider_data: dict[str, Any]) -> bool:
