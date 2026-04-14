@@ -14,7 +14,6 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from exceptions.exceptions import (
     MigrationNotFoundError,
     MigrationPlanExecError,
-    MigrationStatusError,
     VmNotFoundError,
     VmPipelineError,
 )
@@ -55,30 +54,22 @@ def _find_migration_for_plan(plan: Plan) -> Migration:
 def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
     """Get step where VM migration failed.
 
-    Examines the Migration status (not Plan) to find which pipeline step failed.
-    The Migration CR contains the detailed VM pipeline execution status.
+    Reads pipeline data from the Plan CR status, which is the authoritative source.
+    The Plan CR is updated by the forklift controller before the Migration CR syncs,
+    avoiding race conditions where the Migration CR has not yet reflected pipeline errors.
 
     Args:
-        plan (Plan): The Plan resource (used to find the associated Migration)
+        plan (Plan): The Plan resource with migration status
         vm_name (str): Name of the VM to check (matches against status.vms[].name or id)
 
     Returns:
         str: Name of the failed step (e.g., "PreHook", "PostHook", "DiskTransfer")
 
     Raises:
-        MigrationNotFoundError: If Migration CR cannot be found for the Plan
-        MigrationStatusError: If Migration has no status or no vms in status
         VmPipelineError: If VM has no pipeline or no failed step in pipeline
-        VmNotFoundError: If VM not found in Migration status
+        VmNotFoundError: If VM not found in Plan migration status
     """
-    migration = _find_migration_for_plan(plan)
-
-    if not hasattr(migration.instance, "status") or not migration.instance.status:
-        raise MigrationStatusError(migration_name=migration.name)
-
-    vms_status = getattr(migration.instance.status, "vms", None)
-    if not vms_status:
-        raise MigrationStatusError(migration_name=migration.name)
+    vms_status = plan.instance.status.migration.vms
 
     for vm_status in vms_status:
         vm_id = getattr(vm_status, "id", "")
@@ -100,7 +91,7 @@ def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
 
         raise VmPipelineError(vm_name=vm_name)
 
-    raise VmNotFoundError(f"VM {vm_name} not found in Migration {migration.name} status")
+    raise VmNotFoundError(f"VM '{vm_name}' not found in Plan '{plan.name}' migration status")
 
 
 def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[str, str]:
@@ -117,10 +108,8 @@ def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[
         dict[str, str]: Mapping of VM name to failed step name
 
     Raises:
-        MigrationNotFoundError: If migration not found for the plan
-        MigrationStatusError: If migration status is missing or invalid
         VmPipelineError: If VM pipeline is missing or has no failed step
-        VmNotFoundError: If VM not found in migration status
+        VmNotFoundError: If VM not found in Plan migration status
     """
     failed_steps: dict[str, str] = {}
 

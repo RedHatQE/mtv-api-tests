@@ -607,9 +607,16 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
 
 
 @pytest.fixture(scope="session")
-def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
-    """
-    Set the snapshots interval in the forklift-controller ForkliftController
+def precopy_interval_forkliftcontroller(
+    ocp_admin_client: "DynamicClient",
+    mtv_namespace: str,
+) -> Generator[None, None, None]:
+    """Set the precopy interval in ForkliftController if not already configured.
+
+    Uses check-and-set without ResourceEditor context manager to avoid
+    restoring the original value on session teardown. This prevents race
+    conditions during parallel execution where one worker's teardown would
+    clobber the precopy interval for other workers still running warm migrations.
     """
     forklift_controller = ForkliftController(
         client=ocp_admin_client,
@@ -618,33 +625,37 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
         ensure_exists=True,
     )
 
-    snapshots_interval = py_config["snapshots_interval"]
+    snapshots_interval = str(py_config["snapshots_interval"])
+
     forklift_controller.wait_for_condition(
         status=forklift_controller.Condition.Status.TRUE,
         condition=forklift_controller.Condition.Type.RUNNING,
         timeout=300,
     )
 
+    current_interval = getattr(forklift_controller.instance.spec, "controller_precopy_interval", None)
+
+    if str(current_interval) == snapshots_interval:
+        LOGGER.info(
+            f"ForkliftController controller_precopy_interval already set to {snapshots_interval}, skipping update"
+        )
+        yield
+        return
+
     LOGGER.info(
-        f"Updating forklift-controller ForkliftController CR with snapshots interval={snapshots_interval} seconds"
+        f"Setting ForkliftController controller_precopy_interval from {current_interval!r} to {snapshots_interval}"
+    )
+    ResourceEditor(patches={forklift_controller: {"spec": {"controller_precopy_interval": snapshots_interval}}}).update(
+        backup_resources=False
     )
 
-    with ResourceEditor(
-        patches={
-            forklift_controller: {
-                "spec": {
-                    "controller_precopy_interval": str(snapshots_interval),
-                }
-            }
-        }
-    ):
-        forklift_controller.wait_for_condition(
-            status=forklift_controller.Condition.Status.TRUE,
-            condition=forklift_controller.Condition.Type.SUCCESSFUL,
-            timeout=300,
-        )
+    forklift_controller.wait_for_condition(
+        status=forklift_controller.Condition.Status.TRUE,
+        condition=forklift_controller.Condition.Type.SUCCESSFUL,
+        timeout=300,
+    )
 
-        yield
+    yield
 
 
 @pytest.fixture(scope="session")
@@ -762,7 +773,7 @@ def multus_network_name(
     Returns:
         dict[str, str]: Dictionary with "name" (base name) and "namespace" (NAD namespace)
     """
-    hash_prefix = generate_class_hash_prefix(request.node.nodeid)
+    hash_prefix = generate_class_hash_prefix(request.node.nodeid, session_uuid=fixture_store["session_uuid"])
     base_name = f"cb-{hash_prefix}"
 
     class_name = request.node.cls.__name__ if request.node.cls else request.node.name
@@ -972,7 +983,7 @@ def prepared_plan(
 
         if openshift_source_provider:
             # Generate unique network name for class-based tests
-            hash_prefix = generate_class_hash_prefix(request.node.nodeid)
+            hash_prefix = generate_class_hash_prefix(request.node.nodeid, session_uuid=fixture_store["session_uuid"])
             multus_network_name = f"cb-{hash_prefix}"
 
             # Create NAD for OpenShift source provider
@@ -1012,7 +1023,9 @@ def prepared_plan(
                 source_provider.start_vm(provider_vm_api)
                 # Wait for guest info to become available (VMware only)
                 if source_provider.type == Provider.ProviderType.VSPHERE:
-                    source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=120)
+                    source_provider.wait_for_vmware_guest_info(
+                        provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                    )
             elif source_vm_power == "off":
                 source_provider.stop_vm(provider_vm_api)
 
