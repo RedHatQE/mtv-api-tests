@@ -255,7 +255,32 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | ------ | ------------- | ----------- |
 | `tier0` | Smoke tests - critical paths | First run, quick validation |
 | `copyoffload` | Fast migrations via shared storage | Testing storage arrays |
+| `copyoffload_sanity` | Copy-offload sanity subset (see below) | Quick copy-offload validation |
 | `warm` | Warm migrations (VMs stay running) | Specific scenario testing |
+
+### Copy-Offload Sanity Tests
+
+The `copyoffload_sanity` marker selects a curated subset of copy-offload tests that cover the core
+migration scenarios. Use this marker for quick validation of copy-offload functionality without
+running the full suite. The sanity set covers:
+
+| Test ID | Test Class | What It Covers |
+| ------- | ---------- | -------------- |
+| MTV-562 | `TestCopyoffloadRdmVirtualDiskMigration` | RDM (Raw Device Mapping) virtual disk migration |
+| MTV-564 | `TestCopyoffloadMultiDatastoreMigration` | VMs with disks spread across multiple datastores |
+| MTV-565 | `TestCopyoffloadMixedDatastoreMigration` | Mixed environment - XCOPY-capable and non-XCOPY datastores with fallback |
+| MTV-572 | `TestCopyoffloadScaleMigration` | Scale migration (5 VMs concurrently) |
+| MTV-573 | `TestCopyoffload10MixedDisksMigration` | VM with 10 mixed disks (thin and thick provisioned) |
+| MTV-577 | `TestCopyoffloadWarmMigration` | Warm (live) migration with copy-offload |
+
+Together these tests validate: different disk types (thin, thick, RDM), multi-disk and multi-datastore
+layouts, mixed XCOPY/non-XCOPY fallback behavior, concurrent scale migration, and warm migration --
+providing broad coverage of copy-offload functionality in a single run.
+
+```bash
+# Run only the sanity subset
+podman run ... uv run pytest -m copyoffload_sanity -v --tc=source_provider:vsphere-8.0.1 ...
+```
 
 **Examples** - Change `-m tier0` to run different tests:
 
@@ -266,8 +291,11 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 # Warm migration tests
 podman run ... uv run pytest -m warm -v --tc=source_provider:vsphere-8.0.1 ...
 
-# Copy-offload tests
+# Copy-offload tests (full suite)
 podman run ... uv run pytest -m copyoffload -v --tc=source_provider:vsphere-8.0.1 ...
+
+# Copy-offload sanity tests (quick validation)
+podman run ... uv run pytest -m copyoffload_sanity -v --tc=source_provider:vsphere-8.0.1 ...
 
 # Combine markers
 podman run ... uv run pytest -m "tier0 or warm" -v --tc=source_provider:vsphere-8.0.1 ...
@@ -455,6 +483,68 @@ oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 # Replace [JOB_NAME] with your actual job name
 oc delete job [JOB_NAME] -n mtv-tests
 ```
+
+---
+
+## Interactive Setup Tool
+
+The `mtv-api-tests` CLI tool automates configuration and test execution. It discovers
+vSphere and OpenShift resources via their APIs, generates `.providers.json` and a self-contained
+`mtv-api-tests-manifests.yaml` (Namespace + Secret + Job), and can run tests locally or as an OpenShift Job.
+
+### Generate Configuration
+
+```bash
+uv run mtv-api-tests generate
+```
+
+The wizard will:
+
+1. Prompt for vSphere credentials (or read from `VSPHERE_HOST`, `VSPHERE_USERNAME`, `VSPHERE_PASSWORD`)
+2. Connect to vSphere and let you select datastores, a test VM, and an ESXi host
+3. Prompt for storage vendor and credentials
+4. Connect to OpenShift and let you select a storage class
+5. Ask which test category to run (`all`, `copyoffload`, `copyoffload_sanity`, `tier0`, `warm`, `remote`)
+6. Write `.providers.json` and `mtv-api-tests-manifests.yaml`
+
+> **Security Note:** The generated `mtv-api-tests-manifests.yaml` contains embedded credentials
+> (cluster username/password and provider secrets encoded in base64).
+> Do not commit this file to version control or share it.
+> The file is created with `0600` permissions and is listed in `.dockerignore`.
+
+### Run Tests
+
+```bash
+# Run locally
+uv run mtv-api-tests run --mode local
+
+# Run as OpenShift Job (uses the generated mtv-api-tests-manifests.yaml)
+uv run mtv-api-tests run --mode job
+```
+
+When `--category` or `--source-provider` are omitted, the tool prompts interactively.
+
+### Non-Interactive / CI Usage
+
+All interactive prompts can be bypassed with CLI flags, making the tool suitable for CI pipelines
+and repeatable lab scripts:
+
+```bash
+# Generate configuration with a specific category and custom image
+uv run mtv-api-tests generate --category copyoffload --image quay.io/myorg/mtv-api-tests:v2.8.3
+
+# Run locally with all options pre-set (no prompts)
+uv run mtv-api-tests run --mode local \
+  --category tier0 \
+  --source-provider vsphere-8.0.3.00400 \
+  --storage-class ontap-san-block \
+  -k "thin or thick"
+
+# Run as OpenShift Job with a custom manifest path
+uv run mtv-api-tests run --mode job --job-yaml /path/to/mtv-api-tests-manifests.yaml
+```
+
+Use `uv run mtv-api-tests generate --help` or `uv run mtv-api-tests run --help` to see all available flags.
 
 ---
 
