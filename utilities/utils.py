@@ -361,7 +361,10 @@ def create_source_provider(
         vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
         annotations=provider_annotations or None,
     )
-    ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600, stop_status="ConnectionFailed")
+    # OVA (NFS-based) can transiently report ConnectionFailed while NFS initializes;
+    # allow retry until timeout instead of failing immediately.
+    stop_status = None if ova_provider(provider_data=source_provider_data_copy) else "ConnectionFailed"
+    ocp_resource_provider.wait_for_status(Provider.Status.READY, timeout=600, stop_status=stop_status)
 
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:

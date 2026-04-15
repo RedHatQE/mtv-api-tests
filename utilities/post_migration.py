@@ -1167,10 +1167,6 @@ def check_vms(
 ) -> None:
     res: dict[str, list[str]] = {}
 
-    if source_provider.type == Provider.ProviderType.OVA:
-        LOGGER.info("Source OVA VMS do not have any stats")
-        return
-
     # Use custom VM namespace (always set by prepared_plan fixture)
     vm_namespace = plan["_vm_target_namespace"]
 
@@ -1188,6 +1184,7 @@ def check_vms(
 
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
+        destination_vm_name = vm.get("targetName", vm_name)
         res[vm_name] = []
 
         source_vm = source_provider.vm_dict(
@@ -1199,13 +1196,14 @@ def check_vms(
         vm_guest_agent = vm.get("guest_agent")
         vm_kwargs = {
             "wait_for_guest_agent": vm_guest_agent,
-            "name": vm_name,
+            "name": destination_vm_name,
             "namespace": vm_namespace,
         }
         if (guest_agent_timeout := plan.get("guest_agent_timeout")) is not None:
             vm_kwargs["guest_agent_timeout"] = guest_agent_timeout
         destination_vm = destination_provider.vm_dict(**vm_kwargs)
 
+        # Group 1: All providers — destination checks
         try:
             check_vms_power_state(
                 source_vm=source_vm,
@@ -1215,64 +1213,6 @@ def check_vms(
             )
         except Exception as exp:
             res[vm_name].append(f"check_vms_power_state - {str(exp)}")
-
-        try:
-            check_cpu(source_vm=source_vm, destination_vm=destination_vm)
-        except Exception as exp:
-            res[vm_name].append(f"check_cpu - {str(exp)}")
-
-        try:
-            check_memory(source_vm=source_vm, destination_vm=destination_vm)
-        except Exception as exp:
-            res[vm_name].append(f"check_memory - {str(exp)}")
-
-        # TODO: Remove when OCP to OCP migration is done with 2 clusters
-        if source_provider.type != Provider.ProviderType.OPENSHIFT:
-            try:
-                check_network(
-                    source_vm=source_vm,
-                    destination_vm=destination_vm,
-                    network_migration_map=network_map_resource,
-                )
-            except Exception as exp:
-                res[vm_name].append(f"check_network - {str(exp)}")
-
-        try:
-            check_storage(source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource)
-        except Exception as exp:
-            res[vm_name].append(f"check_storage - {str(exp)}")
-
-        # Check PVC names if pvcNameTemplate was specified
-        if plan.get("pvc_name_template"):
-            try:
-                check_pvc_names(
-                    source_vm=plan.get("source_vms_data", {}).get(vm["name"], source_vm),
-                    destination_vm=destination_vm,
-                    pvc_name_template=plan["pvc_name_template"],
-                    use_generate_name=plan.get("pvc_name_template_use_generate_name", False),
-                    source_provider=source_provider,
-                    source_provider_inventory=source_provider_inventory,
-                )
-            except Exception as exp:
-                res[vm_name].append(f"check_pvc_names - {str(exp)}")
-
-        if source_provider.type == Provider.ProviderType.VSPHERE:
-            if snapshots_before_migration := vm.get("snapshots_before_migration"):
-                try:
-                    check_snapshots(
-                        snapshots_before_migration=snapshots_before_migration,
-                        snapshots_after_migration=source_vm["snapshots_data"],
-                    )
-                except Exception as exp:
-                    res[vm_name].append(f"check_snapshots - {str(exp)}")
-
-            # Check serial number preservation (VMware UUID -> OpenShift serial)
-            try:
-                check_serial_preservation(
-                    source_vm=source_vm, destination_vm=destination_vm, destination_provider=destination_provider
-                )
-            except Exception as exp:
-                res[vm_name].append(f"check_serial_preservation - {str(exp)}")
 
         if vm_guest_agent:
             try:
@@ -1284,7 +1224,7 @@ def check_vms(
         if vm_ssh_connections and destination_vm.get("power_state") == "on":
             try:
                 check_ssh_connectivity(
-                    vm_name=vm_name,
+                    vm_name=destination_vm_name,
                     vm_ssh_connections=vm_ssh_connections,
                     source_provider_data=source_provider_data,
                     source_vm_info=source_vm,
@@ -1310,7 +1250,7 @@ def check_vms(
             ):
                 try:
                     check_static_ip_preservation(
-                        vm_name=vm_name,
+                        vm_name=destination_vm_name,
                         vm_ssh_connections=vm_ssh_connections,
                         source_vm_data=source_vm_data,
                         source_provider_data=source_provider_data,
@@ -1323,7 +1263,6 @@ def check_vms(
                 f"(power_state: {destination_vm.get('power_state', 'unknown')})"
             )
 
-        # Check node placement if configured
         if plan.get("target_node_selector") and labeled_worker_node:
             try:
                 check_vm_node_placement(
@@ -1333,7 +1272,6 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_vm_node_placement - {str(exp)}")
 
-        # Check VM labels if configured
         if plan.get("target_labels") and target_vm_labels:
             try:
                 check_vm_labels(
@@ -1343,7 +1281,6 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_vm_labels - {str(exp)}")
 
-        # Check affinity if configured
         if plan.get("target_affinity"):
             try:
                 check_vm_affinity(
@@ -1353,6 +1290,70 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_vm_affinity - {str(exp)}")
 
+        # Group 2: Source-comparison checks — require real source VM data (OVA has none)
+        if source_provider.type != Provider.ProviderType.OVA:
+            try:
+                check_cpu(source_vm=source_vm, destination_vm=destination_vm)
+            except Exception as exp:
+                res[vm_name].append(f"check_cpu - {str(exp)}")
+
+            try:
+                check_memory(source_vm=source_vm, destination_vm=destination_vm)
+            except Exception as exp:
+                res[vm_name].append(f"check_memory - {str(exp)}")
+
+            # TODO: Remove when OCP to OCP migration is done with 2 clusters
+            if source_provider.type != Provider.ProviderType.OPENSHIFT:
+                try:
+                    check_network(
+                        source_vm=source_vm,
+                        destination_vm=destination_vm,
+                        network_migration_map=network_map_resource,
+                    )
+                except Exception as exp:
+                    res[vm_name].append(f"check_network - {str(exp)}")
+
+            try:
+                check_storage(
+                    source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_storage - {str(exp)}")
+
+            if plan.get("pvc_name_template"):
+                try:
+                    check_pvc_names(
+                        source_vm=plan.get("source_vms_data", {}).get(vm["name"], source_vm),
+                        destination_vm=destination_vm,
+                        pvc_name_template=plan["pvc_name_template"],
+                        use_generate_name=plan.get("pvc_name_template_use_generate_name", False),
+                        source_provider=source_provider,
+                        source_provider_inventory=source_provider_inventory,
+                    )
+                except Exception as exp:
+                    res[vm_name].append(f"check_pvc_names - {str(exp)}")
+        else:
+            LOGGER.info(f"Skipping source-comparison checks for OVA VM '{vm_name}' (no source stats)")
+
+        # Group 3: vSphere-specific checks
+        if source_provider.type == Provider.ProviderType.VSPHERE:
+            if snapshots_before_migration := vm.get("snapshots_before_migration"):
+                try:
+                    check_snapshots(
+                        snapshots_before_migration=snapshots_before_migration,
+                        snapshots_after_migration=source_vm["snapshots_data"],
+                    )
+                except Exception as exp:
+                    res[vm_name].append(f"check_snapshots - {str(exp)}")
+
+            try:
+                check_serial_preservation(
+                    source_vm=source_vm, destination_vm=destination_vm, destination_provider=destination_provider
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_serial_preservation - {str(exp)}")
+
+        # Group 4: RHV-specific checks
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):
             try:
                 check_false_vm_power_off(source_provider=source_provider, source_vm=source_vm)
