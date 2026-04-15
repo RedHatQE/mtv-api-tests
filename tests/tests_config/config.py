@@ -518,6 +518,23 @@ tests_params: dict = {
         "post_hook": {"expected_result": "fail"},
         "expected_migration_result": "fail",
     },
+    "test_warm_virt_customize_firstboot": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-rhel9",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+        "configmap": {
+            "name": "forklift-virt-customize",
+            "data": {
+                "01_linux_firstboot_test.sh": ('#!/bin/sh\necho "First boot 1" >> /root/test\n'),
+                "01_linux_run_test.sh": ('#!/bin/sh\necho "Run 1" >> /root/test\n'),
+            },
+        },
+    },
 }
 
 for _dir in dir():
