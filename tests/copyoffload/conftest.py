@@ -369,13 +369,15 @@ def nonpersistent_disk_ready(
     to independent_nonpersistent after the VM is powered off.
 
     Args:
-        vmware_cloud_init_ready (None): Ensures cloud-init has finished and VM is off.
+        vmware_cloud_init_ready (None): Ensures cloud-init has finished (VM may still be on).
         prepared_plan (dict[str, Any]): Processed test plan with VM data.
         source_provider (VMWareProvider): The VMware source provider instance.
     """
     for vm_data in prepared_plan["virtual_machines"]:
         vm_name = vm_data["name"]
         provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
+        if provider_vm_api.runtime.powerState == provider_vm_api.runtime.powerState.poweredOn:
+            source_provider.shutdown_vm_guest(vm=provider_vm_api)
         source_provider.change_disk_mode(
             vm=provider_vm_api,
             disk_mode="independent_nonpersistent",

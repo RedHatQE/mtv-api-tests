@@ -330,6 +330,46 @@ class VMWareProvider(BaseProvider):
         if vm.runtime.powerState == vm.runtime.powerState.poweredOn:
             self.wait_task(task=vm.PowerOff(), action_name=f"Stopping VM {vm.name}")
 
+    def shutdown_vm_guest(self, vm: vim.VirtualMachine, timeout: int = 120) -> None:
+        """Gracefully shut down a VM's guest OS via VMware Tools.
+
+        Requests a clean OS shutdown (ShutdownGuest) which flushes filesystem
+        buffers and unmounts filesystems before powering off. Falls back to hard
+        PowerOff if VMware Tools is unavailable or the guest doesn't shut down
+        within the timeout.
+
+        Args:
+            vm (vim.VirtualMachine): VMware VM object to stop.
+            timeout (int): Seconds to wait for graceful shutdown before falling back to PowerOff.
+        """
+        if vm.runtime.powerState != vm.runtime.powerState.poweredOn:
+            return
+
+        try:
+            vm.ShutdownGuest()
+            LOGGER.info(f"Requested graceful shutdown for VM {vm.name}, waiting up to {timeout}s")
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=5,
+                func=lambda: vm.runtime.powerState,
+            ):
+                if sample != vm.runtime.powerState.poweredOn:
+                    LOGGER.info(f"VM {vm.name} gracefully shut down")
+                    return
+        except (vim.fault.ToolsUnavailable, vim.fault.InvalidPowerState):
+            LOGGER.warning(f"VMware Tools unavailable on VM {vm.name}, falling back to hard PowerOff")
+        except TimeoutExpiredError:
+            LOGGER.warning(f"Graceful shutdown timed out for VM {vm.name} after {timeout}s, falling back to PowerOff")
+
+        if vm.runtime.powerState != vm.runtime.powerState.poweredOn:
+            LOGGER.info(f"VM {vm.name} already powered off, skipping hard PowerOff")
+            return
+
+        try:
+            self.wait_task(task=vm.PowerOff(), action_name=f"Stopping VM {vm.name}")
+        except vim.fault.InvalidPowerState:
+            LOGGER.info(f"VM {vm.name} powered off during fallback attempt")
+
     @staticmethod
     def list_snapshots(vm):
         snapshots = []

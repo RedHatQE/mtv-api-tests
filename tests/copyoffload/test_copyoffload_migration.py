@@ -20,6 +20,7 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
+from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
@@ -38,7 +39,8 @@ from utilities.mtv_migration import (
     wait_for_migration_complate,
 )
 from utilities.naming import sanitize_kubernetes_name
-from utilities.post_migration import check_vms
+from utilities.post_migration import check_vms, verify_data_integrity
+from utilities.vmware_guest_operations import create_data_integrity_marker
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager
 
@@ -220,11 +222,12 @@ class TestCopyoffloadThinMigration:
 
 
 class CopyoffloadSnapshotBase:
-    """Base class for copy-offload migration tests with snapshots."""
+    """Base class for copy-offload snapshot migration tests with data integrity validation."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
+    data_integrity_marker: str
 
     def test_create_storagemap(
         self,
@@ -267,8 +270,14 @@ class CopyoffloadSnapshotBase:
             f"Expected at least {snapshots_to_create} snapshots, got {len(vm_cfg['snapshots_before_migration'])}"
         )
 
-        # Cold migration expects VM powered off
-        source_provider.stop_vm(provider_vm_api)
+        marker_content = f"mtv-data-integrity-{fixture_store['session_uuid']}"
+        create_data_integrity_marker(
+            source_provider=source_provider,
+            vm=provider_vm_api,
+            source_provider_data=source_provider_data,
+            marker_content=marker_content,
+        )
+        self.__class__.data_integrity_marker = marker_content
 
         copyoffload_config_data = source_provider_data["copyoffload"]
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
@@ -405,6 +414,55 @@ class CopyoffloadSnapshotBase:
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
         )
 
+    def test_check_data_integrity(
+        self,
+        prepared_plan: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider_data: dict[str, Any],
+        source_provider: BaseProvider,
+        vm_ssh_connections: SSHConnectionManager,
+    ) -> None:
+        """Verify data written before migration survived on the migrated VM.
+
+        Starts the migrated VM, reads the marker file via SSH, and confirms
+        the content matches what was written pre-migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): Processed test plan configuration.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider_data (dict[str, Any]): Provider configuration data.
+            source_provider (BaseProvider): Source provider for VM metadata.
+            vm_ssh_connections (SSHConnectionManager): SSH connection manager.
+        """
+        vm_cfg = prepared_plan["virtual_machines"][0]
+        vm_name = vm_cfg["name"]
+        vm_namespace = prepared_plan["_vm_target_namespace"]
+
+        vm = VirtualMachine(
+            client=ocp_admin_client,
+            name=vm_name,
+            namespace=vm_namespace,
+        )
+
+        source_vm = source_provider.vm_dict(name=vm_name)
+
+        try:
+            if not vm.ready:
+                LOGGER.info(f"Starting migrated VM {vm_name} for data integrity check")
+                vm.start(wait=True, timeout=300)
+            else:
+                LOGGER.info(f"Migrated VM {vm_name} is already running, skipping start")
+            verify_data_integrity(
+                vm_name=vm_name,
+                vm_ssh_connections=vm_ssh_connections,
+                source_provider_data=source_provider_data,
+                source_vm_info=source_vm,
+                expected_marker_content=self.data_integrity_marker,
+            )
+        finally:
+            LOGGER.info(f"Stopping VM {vm_name} after data integrity check")
+            vm.stop(wait=True, timeout=300)
+
 
 @pytest.mark.copyoffload
 @pytest.mark.incremental
@@ -412,7 +470,7 @@ class CopyoffloadSnapshotBase:
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"])],
     indirect=True,
-    ids=["copyoffload-thin-snapshots"],
+    ids=["MTV-560:copyoffload-thin-snapshots"],
 )
 @pytest.mark.copyoffload_snapshots
 @pytest.mark.usefixtures(
