@@ -34,6 +34,16 @@ class OVAProvider(BaseProvider):
         result_vm_info = copy.deepcopy(self.VIRTUAL_MACHINE_TEMPLATE)
         result_vm_info["provider_type"] = self.type
         result_vm_info["power_state"] = "off"
+        result_vm_info["win_os"] = False
+
+        # Detect Windows OS from Forklift inventory's OVF metadata
+        source_provider_inventory: ForkliftInventory | None = kwargs.get("source_provider_inventory")
+        vm_name: str | None = kwargs.get("name")
+        if source_provider_inventory and vm_name:
+            vm_data = source_provider_inventory.get_vm(name=vm_name)
+            raw_os_type: str = vm_data.get("osType", "")
+            result_vm_info["win_os"] = "win" in raw_os_type.lower()
+            LOGGER.info(f"OVA VM '{vm_name}' OS type: '{raw_os_type}', win_os={result_vm_info['win_os']}")
 
         return result_vm_info
 

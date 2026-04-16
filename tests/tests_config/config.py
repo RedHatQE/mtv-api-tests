@@ -1,3 +1,5 @@
+import uuid
+
 global config
 
 insecure_verify_skip: str = "true"  # SSL verification for OCP API connections
@@ -442,7 +444,7 @@ tests_params: dict = {
         "warm_migration": True,
         "target_power_state": "on",
         "preserve_static_ips": True,
-        "vm_target_namespace": "custom-vm-namespace",
+        "vm_target_namespace": f"mtv-vms-warm-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": "default",  # Cross-namespace NAD access
         "pvc_name_template": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": True,
@@ -463,6 +465,7 @@ tests_params: dict = {
                 ]
             }
         },
+        "guest_agent_timeout": 600,
     },
     "test_cold_migration_comprehensive": {
         "virtual_machines": [
@@ -497,8 +500,9 @@ tests_params: dict = {
                 ]
             }
         },
-        "vm_target_namespace": "mtv-comprehensive-vms",
+        "vm_target_namespace": f"mtv-vms-cold-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": "default",  # Cross-namespace NAD access
+        "guest_agent_timeout": 600,
     },
     "test_post_hook_retain_failed_vm": {
         "virtual_machines": [

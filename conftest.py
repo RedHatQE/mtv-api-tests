@@ -57,7 +57,7 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.naming import generate_name_with_uuid, sanitize_test_name_for_path
+from utilities.naming import generate_name_with_uuid, sanitize_kubernetes_name, sanitize_test_name_for_path
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
@@ -608,9 +608,16 @@ def virtctl_binary(ocp_admin_client: "DynamicClient") -> Path:
 
 
 @pytest.fixture(scope="session")
-def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
-    """
-    Set the snapshots interval in the forklift-controller ForkliftController
+def precopy_interval_forkliftcontroller(
+    ocp_admin_client: "DynamicClient",
+    mtv_namespace: str,
+) -> Generator[None, None, None]:
+    """Set the precopy interval in ForkliftController if not already configured.
+
+    Uses check-and-set without ResourceEditor context manager to avoid
+    restoring the original value on session teardown. This prevents race
+    conditions during parallel execution where one worker's teardown would
+    clobber the precopy interval for other workers still running warm migrations.
     """
     forklift_controller = ForkliftController(
         client=ocp_admin_client,
@@ -619,33 +626,37 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
         ensure_exists=True,
     )
 
-    snapshots_interval = py_config["snapshots_interval"]
+    snapshots_interval = str(py_config["snapshots_interval"])
+
     forklift_controller.wait_for_condition(
         status=forklift_controller.Condition.Status.TRUE,
         condition=forklift_controller.Condition.Type.RUNNING,
         timeout=300,
     )
 
+    current_interval = getattr(forklift_controller.instance.spec, "controller_precopy_interval", None)
+
+    if str(current_interval) == snapshots_interval:
+        LOGGER.info(
+            f"ForkliftController controller_precopy_interval already set to {snapshots_interval}, skipping update"
+        )
+        yield
+        return
+
     LOGGER.info(
-        f"Updating forklift-controller ForkliftController CR with snapshots interval={snapshots_interval} seconds"
+        f"Setting ForkliftController controller_precopy_interval from {current_interval!r} to {snapshots_interval}"
+    )
+    ResourceEditor(patches={forklift_controller: {"spec": {"controller_precopy_interval": snapshots_interval}}}).update(
+        backup_resources=False
     )
 
-    with ResourceEditor(
-        patches={
-            forklift_controller: {
-                "spec": {
-                    "controller_precopy_interval": str(snapshots_interval),
-                }
-            }
-        }
-    ):
-        forklift_controller.wait_for_condition(
-            status=forklift_controller.Condition.Status.TRUE,
-            condition=forklift_controller.Condition.Type.SUCCESSFUL,
-            timeout=300,
-        )
+    forklift_controller.wait_for_condition(
+        status=forklift_controller.Condition.Status.TRUE,
+        condition=forklift_controller.Condition.Type.SUCCESSFUL,
+        timeout=300,
+    )
 
-        yield
+    yield
 
 
 @pytest.fixture(scope="session")
@@ -818,7 +829,7 @@ def multus_network_name(
     Returns:
         dict[str, str]: Dictionary with "name" (base name) and "namespace" (NAD namespace)
     """
-    hash_prefix = generate_class_hash_prefix(request.node.nodeid)
+    hash_prefix = generate_class_hash_prefix(request.node.nodeid, session_uuid=fixture_store["session_uuid"])
     base_name = f"cb-{hash_prefix}"
 
     class_name = request.node.cls.__name__ if request.node.cls else request.node.name
@@ -1019,10 +1030,6 @@ def prepared_plan(
                     LOGGER.info(f"Overriding VM name '{vm['name']}' with '{default_vm_override}' from provider config")
                     vm["name"] = default_vm_override
 
-    # OVA provider uses a fixed VM from the OVA file
-    if source_provider.type == Provider.ProviderType.OVA:
-        plan["virtual_machines"] = [{"name": "1nisim-rhel9-efi"}]
-
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
@@ -1030,7 +1037,7 @@ def prepared_plan(
 
         if openshift_source_provider:
             # Generate unique network name for class-based tests
-            hash_prefix = generate_class_hash_prefix(request.node.nodeid)
+            hash_prefix = generate_class_hash_prefix(request.node.nodeid, session_uuid=fixture_store["session_uuid"])
             multus_network_name = f"cb-{hash_prefix}"
 
             # Create NAD for OpenShift source provider
@@ -1071,7 +1078,9 @@ def prepared_plan(
                 source_provider.start_vm(provider_vm_api)
                 # Wait for guest info to become available (VMware only)
                 if source_provider.type == Provider.ProviderType.VSPHERE:
-                    source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=120)
+                    source_provider.wait_for_vmware_guest_info(
+                        provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                    )
             elif source_vm_power == "off":
                 source_provider.stop_vm(provider_vm_api)
 
@@ -1121,6 +1130,12 @@ def prepared_plan(
                         f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
                         "Static IP verification may not work for this VM."
                     )
+    else:
+        # OVA VMs aren't cloned — add unique targetName to prevent destination VM name conflicts
+        # across parallel test sessions. The source VM name stays unchanged (must match OVA file).
+        session_uuid = fixture_store["session_uuid"]
+        for vm in virtual_machines:
+            vm["targetName"] = sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")
 
     # Create Hooks if configured
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
@@ -1337,7 +1352,7 @@ def cleanup_migrated_vms(
     vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
     for vm in prepared_plan["virtual_machines"]:
-        vm_name = vm["name"]
+        vm_name = vm.get("targetName", vm["name"])
         vm_obj = VirtualMachine(
             client=ocp_admin_client,
             name=vm_name,
