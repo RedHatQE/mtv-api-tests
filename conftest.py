@@ -56,7 +56,7 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.naming import generate_name_with_uuid, sanitize_test_name_for_path
+from utilities.naming import generate_name_with_uuid, sanitize_kubernetes_name, sanitize_test_name_for_path
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
@@ -972,10 +972,6 @@ def prepared_plan(
                     LOGGER.info(f"Overriding VM name '{vm['name']}' with '{default_vm_override}' from provider config")
                     vm["name"] = default_vm_override
 
-    # OVA provider uses a fixed VM from the OVA file
-    if source_provider.type == Provider.ProviderType.OVA:
-        plan["virtual_machines"] = [{"name": "1nisim-rhel9-efi"}]
-
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
@@ -1075,6 +1071,12 @@ def prepared_plan(
                         f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
                         "Static IP verification may not work for this VM."
                     )
+    else:
+        # OVA VMs aren't cloned — add unique targetName to prevent destination VM name conflicts
+        # across parallel test sessions. The source VM name stays unchanged (must match OVA file).
+        session_uuid = fixture_store["session_uuid"]
+        for vm in virtual_machines:
+            vm["targetName"] = sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")
 
     # Create Hooks if configured
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
@@ -1291,7 +1293,7 @@ def cleanup_migrated_vms(
     vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
     for vm in prepared_plan["virtual_machines"]:
-        vm_name = vm["name"]
+        vm_name = vm.get("targetName", vm["name"])
         vm_obj = VirtualMachine(
             client=ocp_admin_client,
             name=vm_name,
