@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 LOGGER = get_logger(__name__)
 
 _FILE_TRANSFER_TIMEOUT: int = 30
+DATA_INTEGRITY_DIR: str = "/opt/mtv_data_integrity"
+DATA_INTEGRITY_FILE: str = f"{DATA_INTEGRITY_DIR}/marker.txt"
 
 
 def run_command_in_vmware_guest(
@@ -247,3 +249,80 @@ def detect_vmware_ip_origins_via_guest_ops(
         return
 
     _apply_ip_origins_to_vm_details(vm_details=vm_details, origins=origins, vm_name=vm.name)
+
+
+def create_data_integrity_marker(
+    source_provider: VMWareProvider,
+    vm: vim.VirtualMachine,
+    source_provider_data: dict[str, Any],
+    marker_content: str,
+) -> None:
+    """Create a test directory and marker file inside a VMware guest for post-migration data integrity validation.
+
+    Writes a known marker string to a file on the guest filesystem so that
+    after migration the same file can be read back to confirm disk data was preserved.
+
+    Uses echo piped to tee so that run_command_in_vmware_guest()'s outer stdout
+    redirect (> output 2>&1) does not clobber the marker file. The marker content
+    must contain only shell-safe characters (alphanumeric, hyphens, underscores).
+
+    Args:
+        source_provider (VMWareProvider): VMware provider instance.
+        vm (vim.VirtualMachine): VMware VM object (must be powered on with VMware Tools running).
+        source_provider_data (dict[str, Any]): Provider config containing guest credentials.
+        marker_content (str): String to write into the marker file.
+
+    Raises:
+        ValueError: If guest credentials are not found or marker content has unsafe characters.
+        GuestCommandError: If the guest command exits with a non-zero exit code.
+    """
+    if not all(c.isalnum() or c in "-_." for c in marker_content):
+        raise ValueError(f"Marker content contains shell-unsafe characters: {marker_content!r}")
+
+    try:
+        guest_username = source_provider_data["guest_vm_linux_user"]
+        guest_password = source_provider_data["guest_vm_linux_password"]
+    except KeyError as e:
+        raise ValueError(
+            f"Linux VM credentials not found in provider config: {e}. "
+            "Required: guest_vm_linux_user, guest_vm_linux_password"
+        ) from e
+
+    guest_family = getattr(vm.guest, "guestFamily", None)
+    if guest_family != "linuxGuest":
+        raise ValueError(
+            f"Data integrity marker requires a Linux guest, but VM {vm.name} has guestFamily={guest_family!r}"
+        )
+
+    auth = vim.vm.guest.NamePasswordAuthentication(
+        username=guest_username, password=guest_password, interactiveSession=False
+    )
+
+    vcenter_host = source_provider.host
+    if vcenter_host is None:
+        raise ValueError(f"vCenter host not available for provider used by VM {vm.name}")
+
+    command = f"mkdir -p {DATA_INTEGRITY_DIR} && echo {marker_content} | tee {DATA_INTEGRITY_FILE}"
+
+    LOGGER.info(f"Creating data integrity marker on VM {vm.name} at {DATA_INTEGRITY_FILE}")
+    run_command_in_vmware_guest(
+        content=source_provider.content,
+        vm=vm,
+        auth=auth,
+        command=command,
+        vcenter_host=vcenter_host,
+    )
+
+    readback = run_command_in_vmware_guest(
+        content=source_provider.content,
+        vm=vm,
+        auth=auth,
+        command=f"cat {DATA_INTEGRITY_FILE}",
+        vcenter_host=vcenter_host,
+    )
+    LOGGER.info(f"Marker read-back on source VM {vm.name}: {readback.strip()!r}")
+
+    if readback.strip() != marker_content:
+        raise GuestCommandError(
+            f"Marker verification failed on source VM {vm.name}: expected {marker_content!r}, got {readback.strip()!r}"
+        )

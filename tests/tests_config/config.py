@@ -65,7 +65,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -78,7 +77,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
@@ -91,7 +89,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "add_disks": [
@@ -106,7 +103,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "add_disks": [
@@ -126,7 +122,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "add_disks": [
@@ -141,7 +136,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -155,7 +149,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -176,7 +169,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -196,7 +188,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -215,7 +206,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -240,7 +230,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -273,7 +262,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -294,7 +282,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -314,14 +301,12 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
             },
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -336,7 +321,6 @@ tests_params: dict = {
                 "name": "xcopy-template-test",
                 "clone_name": "XCopy_Test_VM_CAPS",  # Non-conforming name for cloned VM
                 "preserve_name_format": True,  # Don't sanitize the name (keep capitals and underscores)
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
@@ -349,7 +333,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "target_datastore_id": "non_xcopy_datastore_id",
@@ -370,7 +353,6 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
@@ -378,7 +360,6 @@ tests_params: dict = {
             },
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
@@ -386,7 +367,6 @@ tests_params: dict = {
             },
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
@@ -394,7 +374,6 @@ tests_params: dict = {
             },
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
@@ -402,7 +381,6 @@ tests_params: dict = {
             },
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
@@ -417,14 +395,12 @@ tests_params: dict = {
         "virtual_machines": [
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
             },
             {
                 "name": "xcopy-template-test",
-                "source_vm_power": "off",
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",

@@ -140,7 +140,8 @@ def wait_for_cloud_init(
         provider_vm_api: Provider VM object
         file_name: Full path to the file to check for (e.g., "/cloud-init.finish")
         timeout: Timeout in seconds (default: 2000)
-        target_power_state: Desired power state after check ("on" or "off", default: "off")
+        target_power_state: Expected source VM power state for downstream validation ("on" or "off",
+            default: "off"). When "off", logs that MTV will handle shutdown. Does not change VM power.
 
     Raises:
         TimeoutExpiredError: If cloud-init does not finish within timeout
@@ -205,11 +206,7 @@ def wait_for_cloud_init(
 
     finally:
         if target_power_state == "off":
-            LOGGER.info(f"Powering off VM - {vm_name}")
-            try:
-                source_provider.stop_vm(provider_vm_api)
-            except Exception as e:
-                LOGGER.warning(f"Failed to power off VM '{vm_name}': {type(e).__name__}: {e}")
+            LOGGER.info(f"VM {vm_name} left powered on — MTV will handle shutdown for cold migration")
         else:
             LOGGER.info(f"Leaving VM {vm_name} powered on")
 

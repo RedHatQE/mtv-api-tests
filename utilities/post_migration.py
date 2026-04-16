@@ -25,6 +25,7 @@ from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
+from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
 
 LOGGER = get_logger(name=__name__)
 
@@ -134,6 +135,82 @@ def check_ssh_connectivity(
                 return
     except TimeoutExpiredError as e:
         raise TimeoutExpiredError(f"SSH connectivity to VM {vm_name} could not be established after {timeout}s") from e
+
+
+def verify_data_integrity(
+    vm_name: str,
+    vm_ssh_connections: SSHConnectionManager,
+    source_provider_data: dict[str, Any],
+    source_vm_info: dict[str, Any],
+    expected_marker_content: str,
+    timeout: int = 300,
+    retry_delay: int = 15,
+) -> None:
+    """Verify that data written before migration survived on the migrated VM.
+
+    Reads a marker file created pre-migration and asserts its content matches
+    the expected value, confirming disk data integrity through the migration process.
+
+    Args:
+        vm_name (str): Name of the migrated VM.
+        vm_ssh_connections (SSHConnectionManager): SSH connection manager.
+        source_provider_data (dict[str, Any]): Provider configuration with guest credentials.
+        source_vm_info (dict[str, Any]): VM information including OS type.
+        expected_marker_content (str): The exact string expected in the marker file.
+        timeout (int): Maximum seconds to wait for SSH connectivity.
+        retry_delay (int): Seconds between SSH retry attempts.
+
+    Raises:
+        AssertionError: If marker file content does not match expected value.
+        TimeoutExpiredError: If SSH connectivity cannot be established.
+        ValueError: If the guest is a Windows VM (Linux-only feature).
+    """
+    if source_vm_info.get("win_os", False):
+        raise ValueError(
+            f"Data integrity verification is only supported on Linux guests. "
+            f"VM '{vm_name}' is a Windows guest and {DATA_INTEGRITY_FILE!r} is a Linux path."
+        )
+
+    LOGGER.info(f"Verifying data integrity on migrated VM {vm_name}")
+
+    ssh_username, ssh_password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_info)
+    ssh_conn = vm_ssh_connections.create(vm_name=vm_name, username=ssh_username, password=ssh_password)
+
+    def _read_marker() -> str | None:
+        try:
+            with ssh_conn:
+                if not ssh_conn.rrmngmnt_host:
+                    LOGGER.warning(f"SSH connection not established for VM {vm_name} - retrying...")
+                    return None
+                executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)
+                executor.port = ssh_conn.local_port
+
+                rc, stdout, err = executor.run_cmd(["cat", DATA_INTEGRITY_FILE])
+                if rc != 0:
+                    LOGGER.warning(f"Failed to read marker file on VM {vm_name}: {err} - retrying...")
+                    return None
+                return stdout.strip()
+        except (SSHException, AuthenticationException, NoValidConnectionsError, ChannelException) as e:
+            LOGGER.warning(f"SSH failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
+            return None
+
+    marker_content: str | None = None
+    try:
+        for sample in TimeoutSampler(wait_timeout=timeout, sleep=retry_delay, func=_read_marker):
+            if sample is not None:
+                marker_content = sample
+                break
+    except TimeoutExpiredError as e:
+        raise TimeoutExpiredError(f"Could not read data integrity marker from VM {vm_name} after {timeout}s") from e
+
+    assert marker_content == expected_marker_content, (
+        f"Data integrity check failed on VM {vm_name}: expected {expected_marker_content!r}, got {marker_content!r}"
+    )
+    LOGGER.info(
+        f"Data integrity verified on VM {vm_name}: "
+        f"marker file {DATA_INTEGRITY_FILE} exists with expected content {marker_content!r}. "
+        f"Pre-migration data survived the migration process."
+    )
 
 
 def _parse_windows_network_config(ipconfig_output: str) -> dict[str, dict[str, Any]]:
