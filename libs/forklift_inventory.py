@@ -380,8 +380,8 @@ class VsphereForkliftInventory(ForkliftInventory):
 
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
-            for _network in _vm.get("networks", []):
-                if _network_id := _network.get("id"):
+            for _nic in _vm.get("nics", []):
+                if _network_id := (_nic.get("network") or {}).get("id"):
                     if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
                         if [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
                             continue

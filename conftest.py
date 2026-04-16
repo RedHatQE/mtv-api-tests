@@ -51,6 +51,7 @@ from libs.forklift_inventory import (
     VsphereForkliftInventory,
 )
 from libs.providers.openshift import OCPProvider
+from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
@@ -741,6 +742,61 @@ def source_provider(
 
 
 @pytest.fixture(scope="class")
+def vcenter_clone_provider(
+    source_provider_data: dict[str, Any],
+    source_providers: dict[str, dict[str, Any]],
+    fixture_store: dict[str, Any],
+) -> Generator[VMWareProvider | None, None, None]:
+    """Create a VMWareProvider for VM cloning when source provider can't clone directly.
+
+    Used for ESXi providers that reference a vCenter via 'clone_provider' config field.
+    The vCenter handles CloneVM_Task operations that ESXi doesn't support.
+
+    Args:
+        source_provider_data: Source provider configuration.
+        source_providers: All provider configurations from providers JSON.
+        fixture_store: Session fixture store for resource tracking.
+
+    Yields:
+        VMWareProvider | None: vCenter provider for cloning, or None if not configured.
+
+    Raises:
+        ValueError: If clone_provider references a non-existent or non-vSphere provider.
+    """
+    clone_provider_name = source_provider_data.get("clone_provider")
+    if not clone_provider_name:
+        yield None
+        return
+
+    if clone_provider_name not in source_providers:
+        raise ValueError(
+            f"clone_provider '{clone_provider_name}' not found in providers JSON. "
+            f"Available providers: {sorted(source_providers.keys())}"
+        )
+
+    clone_provider_data = source_providers[clone_provider_name]
+    if clone_provider_data["type"] != "vsphere":
+        raise ValueError(
+            f"clone_provider '{clone_provider_name}' must be type 'vsphere', got '{clone_provider_data['type']}'"
+        )
+
+    fixture_store["clone_provider_data"] = clone_provider_data
+
+    LOGGER.info(f"Creating vCenter clone provider '{clone_provider_name}' for VM cloning")
+    provider = VMWareProvider(
+        host=clone_provider_data["fqdn"],
+        username=clone_provider_data["username"],
+        password=clone_provider_data["password"],
+        fixture_store=fixture_store,
+    )
+    provider.connect()
+    try:
+        yield provider
+    finally:
+        provider.disconnect()
+
+
+@pytest.fixture(scope="class")
 def multus_network_name(
     fixture_store: dict[str, Any],
     target_namespace: str,
@@ -920,6 +976,7 @@ def prepared_plan(
     multus_cni_config: str,
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
+    vcenter_clone_provider: VMWareProvider | None,
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -937,6 +994,7 @@ def prepared_plan(
         multus_cni_config (str): Multus CNI configuration
         source_provider_inventory (ForkliftInventory): Source provider inventory
         target_namespace (str): Default target namespace for VMs
+        vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1005,11 +1063,12 @@ def prepared_plan(
                 vm_name_suffix=vm_name_suffix,
             )
 
+        # Use vCenter clone provider if configured (e.g., for ESXi sources that can't clone directly)
+        clone_provider = vcenter_clone_provider or source_provider
+
         for vm in virtual_machines:
-            # Get VM object first (without full vm_dict analysis)
-            # Add enable_ctk flag for warm migrations
             clone_options = {**vm, "enable_ctk": warm_migration}
-            provider_vm_api = source_provider.get_vm_by_name(
+            provider_vm_api = clone_provider.get_vm_by_name(
                 query=vm["name"],
                 vm_name_suffix=vm_name_suffix,
                 clone_vm=True,
