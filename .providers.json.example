@@ -10,7 +10,8 @@
     "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
     "guest_vm_win_user": "WINDOWS VMS USERNAME",
     "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
-    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>"
+    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>",
+    "endpoint_type": "vcenter"
   },
 
   "vsphere-copy-offload": {
@@ -99,6 +100,18 @@
       # Note: datastore_id must be a VMFS datastore for RDM disk support
       "rdm_lun_uuid": "naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     }
+  },
+
+  "vsphere-esxi": {
+    "type": "vsphere",
+    "version": "<SERVER VERSION>",
+    "fqdn": "ESXI HOST FQDN/IP",
+    "api_url": "<ESXI HOST FQDN/IP>/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",  # pragma: allowlist secret
+    "endpoint_type": "esxi",
+    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>",
+    "clone_provider": "vsphere"  # Name of vCenter provider to use for VM cloning operations
   },
 
   "ovirt": {
