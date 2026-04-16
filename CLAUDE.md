@@ -618,6 +618,7 @@ Class-scoped teardown fixture that cleans up migrated VMs after each test class 
 | `warm`                  | Warm migration tests                  |
 | `remote`                | Remote cluster tests                  |
 | `copyoffload`           | Copy-offload (XCOPY) tests            |
+| `copyoffload_sanity`    | Copy-offload sanity subset            |
 | `copyoffload_snapshots` | Copy-offload snapshot tests (vSphere) |
 
 **Marker requirements for collection-time skipping (MUST):**
