@@ -957,6 +957,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
@@ -1126,6 +1127,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
@@ -1302,6 +1304,7 @@ class TestCopyoffloadMultiDatastoreMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
@@ -2079,6 +2082,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
@@ -2644,6 +2648,7 @@ class TestCopyoffloadNonconformingNameMigration:
 
 @pytest.mark.copyoffload
 @pytest.mark.warm
+@pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
@@ -2820,6 +2825,7 @@ class TestCopyoffloadWarmMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
