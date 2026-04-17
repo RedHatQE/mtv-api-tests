@@ -322,12 +322,21 @@ def teardown_resources(
 
     if vmware_cloned_vms:
         try:
-            source_provider_data = session_store["source_provider_data"]
+            # Use clone provider (vCenter) for cleanup when configured, to avoid
+            # stale vCenter inventory records when source provider is ESXi
+            cleanup_provider_data = session_store.get("clone_provider_data")
+            if cleanup_provider_data is None:
+                cleanup_provider_data = session_store["source_provider_data"]
+                LOGGER.info(f"Using source provider '{cleanup_provider_data['fqdn']}' for VMware clone cleanup")
+            else:
+                LOGGER.info(
+                    f"Using clone provider (vCenter) '{cleanup_provider_data['fqdn']}' for VMware clone cleanup"
+                )
 
             with VMWareProvider(
-                host=source_provider_data["fqdn"],
-                username=source_provider_data["username"],
-                password=source_provider_data["password"],
+                host=cleanup_provider_data["fqdn"],
+                username=cleanup_provider_data["username"],
+                password=cleanup_provider_data["password"],
             ) as vmware_provider:
                 for _vm in vmware_cloned_vms:
                     _cloned_vm_name = _vm["name"]
