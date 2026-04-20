@@ -15,6 +15,8 @@ import pytest
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
+    from libs.providers.vmware import VMWareProvider
+
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -229,23 +231,24 @@ class CopyoffloadSnapshotBase:
     plan_resource: Plan
     data_integrity_marker: str
 
-    def test_create_storagemap(
+    def test_create_snapshots_and_data_marker(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        source_provider_data,
-        copyoffload_storage_secret,
-    ):
-        """Create StorageMap with copy-offload configuration after creating snapshots."""
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
+        """Create snapshots and write data integrity marker on the source VM.
+
+        Args:
+            prepared_plan: Processed test plan configuration.
+            fixture_store: Session-scoped fixture store.
+            source_provider: Source provider for VM operations.
+            source_provider_data: Provider configuration data.
+        """
         vm_cfg = prepared_plan["virtual_machines"][0]
         provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
 
-        # Ensure VM is powered on for snapshot creation
         source_provider.start_vm(provider_vm_api)
         source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=60)
 
@@ -262,7 +265,6 @@ class CopyoffloadSnapshotBase:
                 wait_timeout=60 * 10,
             )
 
-        # Refresh and store snapshots list for post-migration snapshot checks
         vm_cfg["snapshots_before_migration"] = source_provider.vm_dict(provider_vm_api=provider_vm_api)[
             "snapshots_data"
         ]
@@ -279,6 +281,19 @@ class CopyoffloadSnapshotBase:
         )
         self.__class__.data_integrity_marker = marker_content
 
+    def test_create_storagemap(
+        self,
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+        source_provider_data,
+        copyoffload_storage_secret,
+    ):
+        """Create StorageMap with copy-offload configuration."""
         copyoffload_config_data = source_provider_data["copyoffload"]
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
         datastore_id = copyoffload_config_data["datastore_id"]
@@ -462,6 +477,26 @@ class CopyoffloadSnapshotBase:
         finally:
             LOGGER.info(f"Stopping VM {vm_name} after data integrity check")
             vm.stop(wait=True, timeout=300)
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_thick_lazy_snapshots_migration"])],
+    indirect=True,
+    ids=["MTV-581:copyoffload-thick-lazy-snapshots"],
+)
+@pytest.mark.copyoffload_snapshots
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadThickLazySnapshotsMigration(CopyoffloadSnapshotBase):
+    """Copy-offload migration test - thick lazy disk with snapshots."""
 
 
 @pytest.mark.copyoffload
