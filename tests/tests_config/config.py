@@ -132,6 +132,19 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_thick_lazy_snapshots_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thick-lazy",
+                "snapshots": 2,
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
     "test_copyoffload_thin_snapshots_migration": {
         "virtual_machines": [
             {
