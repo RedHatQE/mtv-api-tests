@@ -325,18 +325,19 @@ def get_vsphere_credentials() -> tuple[str, str, str, dict[str, str]]:
     return host, username, password, ssl_config
 
 
-def get_storage_credentials() -> tuple[str, str, str]:
-    """Gather storage array credentials from env vars or interactive prompts.
+def get_storage_credentials() -> tuple[str, str, str, dict[str, str]]:
+    """Gather storage array credentials and SSL config from env vars or interactive prompts.
 
     Returns:
-        Tuple of (hostname, username, password).
+        Tuple of (hostname, username, password, ssl_config).
     """
     console.print("\n[bold]Storage Array Credentials[/bold]")
     console.print("  [dim]Tip: set STORAGE_HOSTNAME, STORAGE_USERNAME, STORAGE_PASSWORD env vars to skip prompts[/dim]")
     hostname = _env_or_prompt("STORAGE_HOSTNAME", "Storage hostname/IP")
     username = _env_or_prompt("STORAGE_USERNAME", "Storage username")
     password = _env_or_prompt("STORAGE_PASSWORD", "Storage password", password=True)
-    return hostname, username, password
+    ssl_config = _get_ssl_config("STORAGE")
+    return hostname, username, password, ssl_config
 
 
 def get_ocp_credentials() -> dict[str, str]:

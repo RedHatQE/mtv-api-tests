@@ -158,7 +158,7 @@ def _gather_copyoffload_config(
     vendor_fields = gather_vendor_fields(vendor)
 
     # Storage credentials
-    storage_host, storage_user, storage_pass = get_storage_credentials()
+    storage_host, storage_user, storage_pass, storage_ssl = get_storage_credentials()
 
     # Guest VM credentials
     console.print("\n[bold]Guest VM Credentials[/bold]")
@@ -186,6 +186,8 @@ def _gather_copyoffload_config(
         **esxi_config,
         **vendor_fields,
     }
+    if storage_ssl.get("verify_ssl") == "false":
+        config["storage_skip_ssl_verification"] = "true"
     if vsphere_resources["secondary_ds"]:
         config["secondary_datastore_id"] = vsphere_resources["secondary_ds"]["id"]
     if rdm_lun_uuid:

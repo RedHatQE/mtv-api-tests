@@ -57,6 +57,7 @@
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
       "storage_password": "your-password-here",  # pragma: allowlist secret
+      # "storage_skip_ssl_verification": "true",  # Optional: skip SSL cert verification for storage array
 
       # Vendor-specific fields (configure based on your storage_vendor_product):
       # IMPORTANT: Only configure the fields for your selected storage_vendor_product.
