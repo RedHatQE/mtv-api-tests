@@ -362,15 +362,14 @@ def pytest_exception_interact(node, call, report):
         return
 
     if not node.session.config.getoption("skip_data_collector"):
-        _session_store = get_fixture_store(node.session)
         _data_collector_path = Path(
             f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(node.name)}"
         )
-        # Handle both function-based tests and class-based tests
-        test_name = node._pyfuncitem.name if hasattr(node, "_pyfuncitem") else node.name
-        plans = _session_store["teardown"].get("Plan", [])
-        plan = [plan for plan in plans if plan.get("test_name", "") == test_name]
-        plan = plan[0] if plan else None
+        plan = None
+        if hasattr(node, "cls") and node.cls and hasattr(node.cls, "plan_resource"):
+            plan_obj = node.cls.plan_resource
+            if plan_obj:
+                plan = {"name": plan_obj.name, "namespace": plan_obj.namespace}
 
         run_must_gather(data_collector_path=_data_collector_path, plan=plan)
 
