@@ -1032,3 +1032,12 @@ uv run pytest -v \
 
 # For debug options (--skip-teardown, -s -vv, etc.), see "Useful Test Options" section above
 ```
+
+---
+
+## AI Qualification Workflow (Optional)
+
+The `/qualify` command provides an AI-driven qualification workflow:
+test plan → write tests → verify on cluster → PR with proof.
+
+See [llm/qualify/README.md](llm/qualify/README.md) for setup and usage.
