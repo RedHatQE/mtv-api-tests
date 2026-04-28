@@ -23,6 +23,10 @@ if TYPE_CHECKING:
     from utilities.ssh_utils import SSHConnectionManager
 
 
+@pytest.mark.vsphere
+@pytest.mark.rhv
+@pytest.mark.openstack
+@pytest.mark.openshift
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_cold_migration_comprehensive"])],

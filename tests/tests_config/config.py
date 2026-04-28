@@ -61,6 +61,30 @@ tests_params: dict = {
         ],
         "warm_migration": False,
     },
+    "test_ova_cold_migration": {
+        "virtual_machines": [
+            {"name": "mtv-win2019-3disks", "guest_agent": True},
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
+        "target_labels": {
+            "mtv-comprehensive-label": None,  # None = auto-generate with session_uuid
+            "test-type": "comprehensive",  # Static value
+        },
+        "target_affinity": {
+            "podAffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [
+                    {
+                        "podAffinityTerm": {
+                            "labelSelector": {"matchLabels": {"app": "test"}},
+                            "topologyKey": "kubernetes.io/hostname",
+                        },
+                        "weight": 50,
+                    }
+                ]
+            }
+        },
+    },
     "test_copyoffload_thin_migration": {
         "virtual_machines": [
             {
@@ -80,6 +104,18 @@ tests_params: dict = {
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thick-lazy",
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
+    "test_copyoffload_thick_eager_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thick-eager",
             },
         ],
         "warm_migration": False,

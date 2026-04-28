@@ -1,10 +1,3 @@
-"""Shared disk migration tests for RHEL VMs (MTV-676).
-
-Tests VM-level migrateSharedDisks overrides in a single migration plan.
-The owner VM (migrateSharedDisks=true) migrates the shared disk PVC, while
-the consumer VM (migrateSharedDisks=false) skips it.
-"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -22,7 +15,6 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
 )
 from utilities.post_migration import check_vms
-from utilities.shared_disk import verify_shared_disk_data
 from utilities.utils import populate_vm_ids
 
 if TYPE_CHECKING:
@@ -34,23 +26,22 @@ if TYPE_CHECKING:
     from utilities.ssh_utils import SSHConnectionManager
 
 
-@pytest.mark.vsphere
-@pytest.mark.shared_disk
 @pytest.mark.tier0
+@pytest.mark.ova
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [
         pytest.param(
-            py_config["tests_params"]["test_shared_disk_rhel_migration"],
+            py_config["tests_params"]["test_ova_cold_migration"],
         )
     ],
     indirect=True,
-    ids=["shared-disk-rhel"],
+    ids=["ova-cold"],
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
-class TestSharedDiskRhelMigration:
-    """MTV-676: Cold migrate RHEL VMs with VM-level migrateSharedDisks overrides."""
+class TestOvaColdMigration:
+    """OVA cold migration test with destination-side validation."""
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -58,15 +49,15 @@ class TestSharedDiskRhelMigration:
 
     def test_create_storagemap(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        source_provider: "BaseProvider",
-        destination_provider: "OCPProvider",
-        source_provider_inventory: "ForkliftInventory",
-        target_namespace: str,
-    ) -> None:
-        """Create StorageMap resource for both VMs."""
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+    ):
+        """Create StorageMap resource for migration."""
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.storage_map = get_storage_migration_map(
             fixture_store=fixture_store,
@@ -81,16 +72,16 @@ class TestSharedDiskRhelMigration:
 
     def test_create_networkmap(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        source_provider: "BaseProvider",
-        destination_provider: "OCPProvider",
-        source_provider_inventory: "ForkliftInventory",
-        target_namespace: str,
-        multus_network_name: dict[str, str],
-    ) -> None:
-        """Create NetworkMap resource for both VMs."""
+        prepared_plan,
+        fixture_store,
+        ocp_admin_client,
+        source_provider,
+        destination_provider,
+        source_provider_inventory,
+        target_namespace,
+        multus_network_name,
+    ):
+        """Create NetworkMap resource for migration."""
         vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
             fixture_store=fixture_store,
@@ -108,13 +99,14 @@ class TestSharedDiskRhelMigration:
         self,
         prepared_plan: dict[str, Any],
         fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        source_provider: "BaseProvider",
-        destination_provider: "OCPProvider",
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
         target_namespace: str,
-        source_provider_inventory: "ForkliftInventory",
+        source_provider_inventory: ForkliftInventory,
+        target_vm_labels: dict[str, Any],
     ) -> None:
-        """Create MTV Plan CR with VM-level migrateSharedDisks overrides."""
+        """Create MTV Plan CR resource."""
         populate_vm_ids(prepared_plan, source_provider_inventory)
 
         self.__class__.plan_resource = create_plan_resource(
@@ -127,18 +119,19 @@ class TestSharedDiskRhelMigration:
             virtual_machines_list=prepared_plan["virtual_machines"],
             target_namespace=target_namespace,
             warm_migration=prepared_plan["warm_migration"],
-            migrate_shared_disks=prepared_plan["migrate_shared_disks"],
             target_power_state=prepared_plan["target_power_state"],
+            target_labels=target_vm_labels["vm_labels"],
+            target_affinity=prepared_plan["target_affinity"],
         )
         assert self.plan_resource, "Plan creation failed"
 
     def test_migrate_vms(
         self,
-        fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        target_namespace: str,
-    ) -> None:
-        """Execute migration for both VMs in a single plan."""
+        fixture_store,
+        ocp_admin_client,
+        target_namespace,
+    ):
+        """Execute migration."""
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
@@ -146,30 +139,18 @@ class TestSharedDiskRhelMigration:
             target_namespace=target_namespace,
         )
 
-    def test_verify_shared_disk_data(
-        self,
-        prepared_plan: dict[str, Any],
-        vm_ssh_connections: "SSHConnectionManager",
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Verify shared disk read/write access from both VMs."""
-        verify_shared_disk_data(
-            prepared_plan=prepared_plan,
-            vm_ssh_connections=vm_ssh_connections,
-            source_provider_data=source_provider_data,
-        )
-
     def test_check_vms(
         self,
         prepared_plan: dict[str, Any],
-        source_provider: "BaseProvider",
-        destination_provider: "OCPProvider",
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
         source_provider_data: dict[str, Any],
         source_vms_namespace: str,
-        source_provider_inventory: "ForkliftInventory",
-        vm_ssh_connections: "SSHConnectionManager",
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+        target_vm_labels: dict[str, Any],
     ) -> None:
-        """Validate both migrated VMs."""
+        """Validate migrated VMs."""
         check_vms(
             plan=prepared_plan,
             source_provider=source_provider,
@@ -180,4 +161,5 @@ class TestSharedDiskRhelMigration:
             source_vms_namespace=source_vms_namespace,
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
+            target_vm_labels=target_vm_labels,
         )

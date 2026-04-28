@@ -23,6 +23,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
+from utilities.naming import resolve_destination_vm_name
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
 from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
@@ -1261,7 +1262,7 @@ def check_vms(
 
     for vm in plan["virtual_machines"]:
         vm_name = vm["name"]
-        destination_vm_name = vm.get("targetName", vm_name)
+        destination_vm_name = resolve_destination_vm_name(vm)
         res[vm_name] = []
 
         source_vm = source_provider.vm_dict(

@@ -14,6 +14,11 @@ from utilities.post_migration import check_vms
 from utilities.utils import get_value_from_py_config, populate_vm_ids
 
 
+@pytest.mark.vsphere
+@pytest.mark.rhv
+@pytest.mark.openstack
+@pytest.mark.openshift
+@pytest.mark.esxi
 @pytest.mark.tier0
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -147,6 +152,10 @@ class TestSanityColdMtvMigration:
         )
 
 
+@pytest.mark.vsphere
+@pytest.mark.rhv
+@pytest.mark.openstack
+@pytest.mark.openshift
 @pytest.mark.remote
 @pytest.mark.incremental
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")

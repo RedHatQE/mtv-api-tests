@@ -57,7 +57,12 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.naming import generate_name_with_uuid, sanitize_kubernetes_name, sanitize_test_name_for_path
+from utilities.naming import (
+    generate_name_with_uuid,
+    resolve_destination_vm_name,
+    sanitize_kubernetes_name,
+    sanitize_test_name_for_path,
+)
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
@@ -1396,7 +1401,7 @@ def cleanup_migrated_vms(
     vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
     for vm in prepared_plan["virtual_machines"]:
-        vm_name = vm.get("targetName", vm["name"])
+        vm_name = resolve_destination_vm_name(vm)
         vm_obj = VirtualMachine(
             client=ocp_admin_client,
             name=vm_name,
