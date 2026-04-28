@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from libs.base_provider import BaseProvider
 
 
+@pytest.mark.vsphere
+@pytest.mark.rhv
+@pytest.mark.openstack
+@pytest.mark.openshift
 @pytest.mark.tier0
 @pytest.mark.incremental
 @pytest.mark.parametrize(
