@@ -11,7 +11,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.secret import Secret
 from pyVim.connect import Disconnect, SmartConnect
-from pyVmomi import vim
+from pyVmomi import vim, vmodl
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -77,7 +77,7 @@ class VMWareProvider(BaseProvider):
     DISK_TYPE_MAP = {
         "thin": ("sparse", "Setting disk provisioning to 'thin' (sparse)."),
         "thick-lazy": ("flat", "Setting disk provisioning to 'thick-lazy' (flat)."),
-        "thick-eager": ("eagerZeroedThick", "Setting disk provisioning to 'thick-eager' (eagerZeroedThick)."),
+        "thick-eager": ("flat", "Setting disk provisioning to 'thick-eager' (flat + eagerlyScrub)."),
     }
     DISK_PROVISION_TYPE_MAP = {
         "thin": {"thinProvisioned": True, "eagerlyScrub": False},
@@ -786,12 +786,16 @@ class VMWareProvider(BaseProvider):
             # Access the view property which contains the managed objects
             managed_objects = getattr(container, "view", [])
             for obj in managed_objects:
-                # Check by name first
-                if obj.name == name:
-                    return obj
-                # For datastores, also check by MoRef ID
-                if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
-                    return obj
+                try:
+                    # Check by name first
+                    if obj.name == name:
+                        return obj
+                    # For datastores, also check by MoRef ID
+                    if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
+                        return obj
+                except vmodl.fault.ManagedObjectNotFound:
+                    LOGGER.debug(f"Skipping stale managed object reference while searching for '{name}'")
+                    continue
 
             raise ValueError(f"Object of type {vimtype} with name '{name}' not found.")
 
@@ -1267,6 +1271,32 @@ class VMWareProvider(BaseProvider):
                 LOGGER.info(log_message)
             else:
                 LOGGER.warning("Disk type '%s' not recognized. Using vSphere default.", disk_type)
+
+            if disk_type.lower() == "thick-eager":
+                disk_locators: list[vim.vm.RelocateSpec.DiskLocator] = []
+                for device in source_vm.config.hardware.device:
+                    if not isinstance(device, vim.vm.device.VirtualDisk):
+                        continue
+                    if not isinstance(device.backing, vim.vm.device.VirtualDisk.FlatVer2BackingInfo):
+                        LOGGER.debug(
+                            f"Skipping non-flat disk '{device.deviceInfo.label}' for eager scrub configuration."
+                        )
+                        continue
+                    locator = vim.vm.RelocateSpec.DiskLocator()
+                    locator.diskId = device.key
+                    locator.datastore = target_datastore
+                    locator.diskBackingInfo = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
+                    locator.diskBackingInfo.eagerlyScrub = True
+                    locator.diskBackingInfo.thinProvisioned = False
+                    disk_locators.append(locator)
+                relocate_spec.disk = disk_locators
+                if not disk_locators:
+                    LOGGER.warning(
+                        f"thick-eager requested but no FlatVer2BackingInfo disks found on '{source_vm.name}'; "
+                        f"clone will not be eager-zeroed."
+                    )
+                else:
+                    LOGGER.info(f"Set eagerlyScrub=True on {len(disk_locators)} disk(s) for thick-eager provisioning.")
 
         # Handle adding new disks - RDM disks are filtered out and added post-clone
         disks_to_add = kwargs.get("add_disks", [])
