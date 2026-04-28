@@ -11,7 +11,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.secret import Secret
 from pyVim.connect import Disconnect, SmartConnect
-from pyVmomi import vim
+from pyVmomi import vim, vmodl
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -786,12 +786,16 @@ class VMWareProvider(BaseProvider):
             # Access the view property which contains the managed objects
             managed_objects = getattr(container, "view", [])
             for obj in managed_objects:
-                # Check by name first
-                if obj.name == name:
-                    return obj
-                # For datastores, also check by MoRef ID
-                if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
-                    return obj
+                try:
+                    # Check by name first
+                    if obj.name == name:
+                        return obj
+                    # For datastores, also check by MoRef ID
+                    if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
+                        return obj
+                except vmodl.fault.ManagedObjectNotFound:
+                    LOGGER.debug(f"Skipping stale managed object reference while searching for '{name}'")
+                    continue
 
             raise ValueError(f"Object of type {vimtype} with name '{name}' not found.")
 
