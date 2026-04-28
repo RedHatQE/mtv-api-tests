@@ -1,4 +1,6 @@
 import re
+from typing import Any
+
 import shortuuid
 
 from exceptions.exceptions import InvalidVMNameError
@@ -43,6 +45,25 @@ def sanitize_kubernetes_name(name: str, max_length: int = 63) -> str:
             "The name must contain at least one alphanumeric character."
         )
     return sanitized
+
+
+def resolve_destination_vm_name(vm: dict[str, Any]) -> str:
+    """Resolve the expected Kubernetes destination VM name.
+
+    Uses the explicit targetName if set, otherwise predicts the name Forklift
+    will produce by sanitizing the source VM name to DNS-1123 conventions.
+
+    Args:
+        vm (dict[str, Any]): VM configuration dict from prepared_plan["virtual_machines"].
+
+    Returns:
+        str: The resolved destination VM name.
+
+    Raises:
+        InvalidVMNameError: If the VM name cannot be sanitized to a valid DNS-1123 name.
+        KeyError: If the VM dict does not contain a "name" key.
+    """
+    return vm.get("targetName") or sanitize_kubernetes_name(vm["name"])
 
 
 def sanitize_test_name_for_path(test_name: str) -> str:
