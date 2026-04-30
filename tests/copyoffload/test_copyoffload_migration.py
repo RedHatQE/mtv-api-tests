@@ -55,6 +55,7 @@ EARLY_COMPLETION_MSG = (
 )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -479,6 +480,7 @@ class CopyoffloadSnapshotBase:
             vm.stop(wait=True, timeout=300)
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -519,6 +521,7 @@ class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - thin disk with snapshots."""
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -539,6 +542,7 @@ class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - 2TB VM with snapshots."""
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -707,6 +711,7 @@ class TestCopyoffloadThickLazyMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -1046,6 +1051,7 @@ class TestCopyoffloadMultiDiskMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -1217,6 +1223,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
@@ -1387,6 +1394,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
@@ -1564,6 +1572,7 @@ class TestCopyoffloadMultiDatastoreMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
@@ -1735,6 +1744,7 @@ class TestCopyoffloadMixedDatastoreMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -2010,6 +2020,7 @@ class TestCopyoffloadFallbackLargeMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -2175,6 +2186,7 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -2342,6 +2354,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
@@ -2508,6 +2521,7 @@ class TestCopyoffload10MixedDisksMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -2673,6 +2687,7 @@ class TestCopyoffloadLargeVmMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -2907,6 +2922,7 @@ class TestCopyoffloadNonconformingNameMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.warm
 @pytest.mark.copyoffload_sanity
@@ -3085,6 +3101,7 @@ class TestCopyoffloadWarmMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
@@ -3257,6 +3274,7 @@ class TestCopyoffloadScaleMigration:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -3754,6 +3772,7 @@ class TestSimultaneousCopyoffloadMigrations:
         )
 
 
+@pytest.mark.vsphere
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(

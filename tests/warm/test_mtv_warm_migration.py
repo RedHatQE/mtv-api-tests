@@ -15,6 +15,8 @@ from utilities.post_migration import check_vms
 from utilities.utils import get_value_from_py_config, populate_vm_ids
 
 
+@pytest.mark.vsphere
+@pytest.mark.rhv
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.incremental
@@ -223,6 +225,8 @@ class TestSanityWarmMtvMigration:
         )
 
 
+@pytest.mark.vsphere
+@pytest.mark.rhv
 @pytest.mark.warm
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -429,6 +433,8 @@ class TestMtvMigrationWarm2disks2nics:
         )
 
 
+@pytest.mark.vsphere
+@pytest.mark.rhv
 @pytest.mark.warm
 @pytest.mark.remote
 @pytest.mark.incremental
