@@ -116,7 +116,6 @@ class TestCopyoffloadThinMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -320,7 +319,6 @@ class CopyoffloadSnapshotBase:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -625,7 +623,6 @@ class TestCopyoffloadThickLazyMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -794,7 +791,6 @@ class TestCopyoffloadThickEagerMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -962,7 +958,6 @@ class TestCopyoffloadMultiDiskMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -1305,7 +1300,6 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -1476,7 +1470,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -1654,7 +1647,6 @@ class TestCopyoffloadMultiDatastoreMigration:
             datastore_id=datastore_id,
             secondary_datastore_id=secondary_datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -1840,7 +1832,6 @@ class TestCopyoffloadMixedDatastoreMigration:
             datastore_id=datastore_id,
             non_xcopy_datastore_id=non_xcopy_datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -2035,7 +2026,6 @@ class TestCopyoffloadFallbackLargeMigration:
             datastore_id=datastore_id,
             non_xcopy_datastore_id=non_xcopy_datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -2268,7 +2258,6 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -2436,7 +2425,6 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -2603,7 +2591,6 @@ class TestCopyoffload10MixedDisksMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -2769,7 +2756,6 @@ class TestCopyoffloadLargeVmMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -2967,7 +2953,6 @@ class TestCopyoffloadNonconformingNameMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -3181,7 +3166,6 @@ class TestCopyoffloadWarmMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -3356,7 +3340,6 @@ class TestCopyoffloadScaleMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map, "StorageMap creation failed"
@@ -3546,7 +3529,6 @@ class TestSimultaneousCopyoffloadMigrations:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map_1, "StorageMap creation failed for plan 1"
@@ -3607,7 +3589,6 @@ class TestSimultaneousCopyoffloadMigrations:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map_2, "StorageMap creation failed for plan 2"
@@ -4045,7 +4026,6 @@ class TestConcurrentXcopyVddkMigration:
             storage_class=storage_class,
             datastore_id=datastore_id,
             offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
             volume_mode="Block",
         )
         assert self.storage_map_xcopy, "StorageMap creation failed for XCOPY plan"

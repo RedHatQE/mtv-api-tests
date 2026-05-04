@@ -660,7 +660,7 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
             for mapping in storage_map_resource.instance.spec.map:
                 if mapping.source.name in source_vm_disks_storage:
                     # The following condition is for a customer case (BZ#2064936)
-                    if mapping.destination.get("accessMode"):
+                    if mapping.destination.get("accessMode") == "ReadWriteOnce":
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWO
                     else:
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
