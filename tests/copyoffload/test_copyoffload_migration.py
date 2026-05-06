@@ -501,6 +501,28 @@ class TestCopyoffloadThickLazySnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - thick lazy disk with snapshots."""
 
 
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.copyoffload_sanity
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_thick_eager_snapshots_migration"])],
+    indirect=True,
+    ids=["MTV-583:copyoffload-thick-eager-snapshots"],
+)
+@pytest.mark.copyoffload_snapshots
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadThickEagerSnapshotsMigration(CopyoffloadSnapshotBase):
+    """Copy-offload migration test - thick eager disk with snapshots."""
+
+
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
