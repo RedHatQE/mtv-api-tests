@@ -7,184 +7,230 @@ This document visualizes the workflow's phases, component relationships, and int
 
 ---
 
-## 1. Main Workflow Flowchart
+## 1. High-Level Overview
 
-Four phases from setup to proof, showing the feature vs. bug split, human checkpoints, agent delegations, decision points, and generated artifacts.
+Five phases from setup to proof, showing the bug verify-only shortcut and human checkpoints.
 
 ```mermaid
 flowchart TD
     classDef human fill:#ff9f43,stroke:#e17055,color:#2d3436,font-weight:bold
-    classDef agent fill:#74b9ff,stroke:#0984e3,color:#2d3436
-    classDef decision fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436,font-weight:bold
-    classDef artifact fill:#dfe6e9,stroke:#b2bec3,color:#2d3436,font-style:italic
     classDef phase fill:#a29bfe,stroke:#6c5ce7,color:#fff,font-weight:bold
-    classDef fail fill:#ff7675,stroke:#d63031,color:#fff,font-weight:bold
     classDef success fill:#55efc4,stroke:#00b894,color:#2d3436,font-weight:bold
+    classDef decision fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436,font-weight:bold
 
-    START(["/qualify --type --source --cluster --name"]):::success
+    START(["▶ /qualify"]):::success
+    P0["⚙️ Phase 0\nSetup"]:::phase
+    P1["📋 Phase 1\nTest Plan"]:::phase
+    P2["🧪 Phase 2\nWrite & Verify"]:::phase
+    P3["🔍 Phase 3\nReview & PR"]:::phase
+    P4["📜 Phase 4\nGenerate Proof"]:::phase
+    DONE(["🏁 Complete"]):::success
 
-    subgraph P0["Phase 0 — Parse Arguments & Setup"]
-        direction TB
-        P0_TITLE["⚙️ PHASE 0: SETUP"]:::phase
-        PARSE["Parse CLI arguments\n--type, --source, --cluster, --name"]:::agent
-        VALIDATE_ARGS{{"Required args\npresent?"}}:::decision
-        ASK_ARGS{{{"🛑 Ask user\nfor missing args"}}}:::human
-        CLUSTER_CHECK["Validate cluster connectivity\noc whoami · oc cluster-info"]:::agent
-        CLUSTER_OK{{"Cluster\nreachable?"}}:::decision
-        CLUSTER_FAIL{{{"🛑 Ask user\nto fix cluster"}}}:::human
-        VERSIONS["Collect environment versions\nOCP · MTV · CNV"]:::agent
-        MKDIR["Create output directory\n.qualify/‹type›/‹name›/"]:::agent
-        IS_BUG{{"--type\n== bug?"}}:::decision
-        BUG_ASK{{{"🛑 Permanent test\nor verify-only?"}}}:::human
-        SET_PERM["Set mode:\npermanent-test"]:::agent
-        SET_VERIFY["Set mode:\nverify-only"]:::agent
+    H1{{"🛑 Human\nPlan Review"}}:::human
+    H2{{"🛑 Human\nPR Review"}}:::human
+    MODE{{"Bug\nverify-only?"}}:::decision
 
-        P0_TITLE ~~~ PARSE
-        PARSE --> VALIDATE_ARGS
-        VALIDATE_ARGS -- "No" --> ASK_ARGS --> PARSE
-        VALIDATE_ARGS -- "Yes" --> CLUSTER_CHECK
-        CLUSTER_CHECK --> CLUSTER_OK
-        CLUSTER_OK -- "No" --> CLUSTER_FAIL --> CLUSTER_CHECK
-        CLUSTER_OK -- "Yes" --> VERSIONS --> MKDIR --> IS_BUG
-        IS_BUG -- "Yes" --> BUG_ASK
-        IS_BUG -- "No (feature)" --> P0_END
-        BUG_ASK -- "Permanent test" --> SET_PERM --> P0_END
-        BUG_ASK -- "Verify-only" --> SET_VERIFY --> P0_END
-    end
-
-    P0_END((" "))
-
-    subgraph P1["Phase 1 — Test Plan"]
-        direction TB
-        P1_TITLE["📋 PHASE 1: TEST PLAN"]:::phase
-        FETCH["Fetch source material\nfetch_content (URL) · read (file)"]:::agent
-        DELEGATE_TP["Delegate to\ntest-planner agent"]:::agent
-        TP_READ["test-planner reads:\nAGENTS.md · tests/ · config.py\nutilities/ · templates"]:::agent
-        TP_PRODUCE["Produce structured\ntest-plan.md"]:::agent
-        TP_ARTIFACT[/"💾 .qualify/‹type›/‹name›/test-plan.md"/]:::artifact
-        HUMAN_REVIEW{{{"🛑 HUMAN CHECKPOINT\nReview test plan"}}}:::human
-        PLAN_OK{{"Plan\napproved?"}}:::decision
-        PLAN_FEEDBACK["Incorporate feedback\nupdate test-plan.md"]:::agent
-
-        P1_TITLE ~~~ FETCH
-        FETCH --> DELEGATE_TP --> TP_READ --> TP_PRODUCE --> TP_ARTIFACT --> HUMAN_REVIEW
-        HUMAN_REVIEW --> PLAN_OK
-        PLAN_OK -- "Feedback" --> PLAN_FEEDBACK --> TP_PRODUCE
-        PLAN_OK -- "Approved ✅" --> P1_END
-    end
-
-    P1_END((" "))
-
-    subgraph P2["Phase 2 — Write & Verify Tests"]
-        direction TB
-        P2_TITLE["🧪 PHASE 2: WRITE & VERIFY (Autonomous)"]:::phase
-        MODE_CHECK{{"Test\nmode?"}}:::decision
-
-        subgraph PERM["Feature / Bug-Permanent-Test Path"]
-            direction TB
-            GIT_BRANCH["Create branch\nqualify/‹name›"]:::agent
-            WRITE_TESTS["Delegate to python-expert\nWrite tests (5/6-step pattern)\nConfig + fixtures + test file"]:::agent
-            RUN_TESTS["Run tests on real cluster\nuv run pytest … 2>&1 | tee test-output.log"]:::agent
-            TEST_LOG[/"💾 .qualify/‹type›/‹name›/test-output.log"/]:::artifact
-            DELEGATE_CV["Delegate to\ncluster-verifier agent"]:::agent
-            CV_CHECK["cluster-verifier independently\nchecks cluster state\nVM · PVC · Plan · Migration · Network"]:::agent
-            EVAL{{"Tests passed\nAND verification\npassed?"}}:::decision
-            ATTEMPT_COUNT{{"Attempt\n≤ 3?"}}:::decision
-            FIX_TESTS["python-expert\nfixes tests"]:::agent
-            STUCK_ASK{{{"🛑 AI stuck\nAsk user for guidance"}}}:::human
-        end
-
-        subgraph VONLY["Bug Verify-Only Path"]
-            direction TB
-            WRITE_TEMP["Write temp test\nin /tmp/qualify-‹name›/"]:::agent
-            RUN_TEMP["Run temp test on cluster\nuv run pytest …"]:::agent
-            TEMP_LOG[/"💾 .qualify/bugs/‹name›/test-output.log"/]:::artifact
-            CV_TEMP["Delegate to\ncluster-verifier agent"]:::agent
-            EVAL_TEMP{{"Passed?"}}:::decision
-            ATTEMPT_TEMP{{"Attempt\n≤ 3?"}}:::decision
-            FIX_TEMP["Fix temp test"]:::agent
-            STUCK_TEMP{{{"🛑 AI stuck\nAsk user"}}}:::human
-        end
-
-        P2_TITLE ~~~ MODE_CHECK
-        MODE_CHECK -- "feature / permanent" --> GIT_BRANCH
-        MODE_CHECK -- "verify-only" --> WRITE_TEMP
-
-        GIT_BRANCH --> WRITE_TESTS --> RUN_TESTS --> TEST_LOG --> DELEGATE_CV --> CV_CHECK --> EVAL
-        EVAL -- "Yes ✅" --> P2_PASS_PERM
-        EVAL -- "No ❌" --> ATTEMPT_COUNT
-        ATTEMPT_COUNT -- "Yes" --> FIX_TESTS --> RUN_TESTS
-        ATTEMPT_COUNT -- "No (3 failures)" --> STUCK_ASK --> FIX_TESTS
-
-        WRITE_TEMP --> RUN_TEMP --> TEMP_LOG --> CV_TEMP --> EVAL_TEMP
-        EVAL_TEMP -- "Yes ✅" --> P2_PASS_VONLY
-        EVAL_TEMP -- "No ❌" --> ATTEMPT_TEMP
-        ATTEMPT_TEMP -- "Yes" --> FIX_TEMP --> RUN_TEMP
-        ATTEMPT_TEMP -- "No (3 failures)" --> STUCK_TEMP --> FIX_TEMP
-    end
-
-    P2_PASS_PERM((" "))
-    P2_PASS_VONLY((" "))
-
-    subgraph P3["Phase 3 — Code Review & PR"]
-        direction TB
-        P3_TITLE["🔍 PHASE 3: CODE REVIEW & PR"]:::phase
-        REVIEW_PARALLEL["Run 3 parallel code reviewers\n quality · guidelines · security"]:::agent
-        REVIEW_ISSUES{{"Issues\nfound?"}}:::decision
-        FIX_ISSUES["Fix review findings"]:::agent
-        PRECOMMIT["Run pre-commit\npre-commit run --all-files"]:::agent
-        PRECOMMIT_OK{{"Pre-commit\npassed?"}}:::decision
-        FIX_PRECOMMIT["Fix formatting/linting"]:::agent
-        CREATE_PR["Delegate to github-expert\nCreate PR: [qualify] ‹type›: ‹name›"]:::agent
-        PR_ARTIFACT[/"💾 GitHub PR with proof link"/]:::artifact
-        PR_REVIEW{{{"🛑 HUMAN CHECKPOINT\nPR review"}}}:::human
-
-        P3_TITLE ~~~ REVIEW_PARALLEL
-        REVIEW_PARALLEL --> REVIEW_ISSUES
-        REVIEW_ISSUES -- "Yes" --> FIX_ISSUES --> REVIEW_PARALLEL
-        REVIEW_ISSUES -- "No ✅" --> PRECOMMIT
-        PRECOMMIT --> PRECOMMIT_OK
-        PRECOMMIT_OK -- "No" --> FIX_PRECOMMIT --> PRECOMMIT
-        PRECOMMIT_OK -- "Yes ✅" --> CREATE_PR --> PR_ARTIFACT --> PR_REVIEW
-    end
-
-    subgraph P4["Phase 4 — Generate Proof"]
-        direction TB
-        P4_TITLE["📜 PHASE 4: GENERATE PROOF"]:::phase
-        INVOKE_SKILL["Invoke proof-generator skill\nRead SKILL.md + proof-template.md"]:::agent
-        ASSEMBLE["Assemble proof.md\nTest results · Cluster evidence\nVersions · Raw YAML"]:::agent
-        PROOF_ARTIFACT[/"💾 .qualify/‹type›/‹name›/proof.md"/]:::artifact
-        VERDICT{{"Determine\nverdict"}}:::decision
-        V_QUAL["✅ QUALIFIED"]:::success
-        V_NOTQUAL["❌ NOT QUALIFIED"]:::fail
-        V_FIXED["🐛 BUG FIXED"]:::success
-        V_NOTFIXED["🐛 BUG NOT FIXED"]:::fail
-        SUMMARY["Print final summary\nType · Name · Result · Artifacts · Versions"]:::agent
-
-        P4_TITLE ~~~ INVOKE_SKILL
-        INVOKE_SKILL --> ASSEMBLE --> PROOF_ARTIFACT --> VERDICT
-        VERDICT -- "Feature pass" --> V_QUAL --> SUMMARY
-        VERDICT -- "Feature fail" --> V_NOTQUAL --> SUMMARY
-        VERDICT -- "Bug pass" --> V_FIXED --> SUMMARY
-        VERDICT -- "Bug fail" --> V_NOTFIXED --> SUMMARY
-    end
-
-    DONE(["🏁 Qualification Complete"]):::success
-
-    START --> P0
-    P0_END --> P1
-    P1_END --> P2
-    P2_PASS_PERM --> P3
-    P2_PASS_VONLY --> P4
-    PR_REVIEW --> P4
-    SUMMARY --> DONE
+    START --> P0 --> P1 --> H1 --> P2 --> MODE
+    MODE -- "No" --> P3 --> H2 --> P4
+    MODE -- "Yes\n(skip PR)" --> P4
+    P4 --> DONE
 ```
 
 ---
 
-## 2. Component Relationship Diagram
+## 2. Phase 0 — Setup
 
-How the prompt template, agents, skill, templates, and output artifacts relate to each other.
+Parse arguments, validate cluster, collect versions, determine bug mode.
+
+```mermaid
+flowchart TD
+    classDef agent fill:#74b9ff,stroke:#0984e3,color:#2d3436
+    classDef human fill:#ff9f43,stroke:#e17055,color:#2d3436,font-weight:bold
+    classDef decision fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436,font-weight:bold
+    classDef phase fill:#a29bfe,stroke:#6c5ce7,color:#fff,font-weight:bold
+
+    TITLE["⚙️ PHASE 0: SETUP"]:::phase
+    PARSE["Parse CLI args"]:::agent
+    VALID{{"Args OK?"}}:::decision
+    ASK_ARGS{{"🛑 Ask user\nfor missing args"}}:::human
+    CLUSTER["Validate cluster"]:::agent
+    C_OK{{"Cluster\nreachable?"}}:::decision
+    C_FIX{{"🛑 Ask user\nto fix cluster"}}:::human
+    VERSIONS["Collect versions\nOCP · MTV · CNV"]:::agent
+    MKDIR["Create output dir"]:::agent
+    IS_BUG{{"--type\n== bug?"}}:::decision
+    BUG_ASK{{"🛑 Permanent\nor verify-only?"}}:::human
+    DONE((" "))
+
+    TITLE ~~~ PARSE
+    PARSE --> VALID
+    VALID -- "No" --> ASK_ARGS --> PARSE
+    VALID -- "Yes" --> CLUSTER --> C_OK
+    C_OK -- "No" --> C_FIX --> CLUSTER
+    C_OK -- "Yes" --> VERSIONS --> MKDIR --> IS_BUG
+    IS_BUG -- "No (feature)" --> DONE
+    IS_BUG -- "Yes" --> BUG_ASK --> DONE
+```
+
+---
+
+## 3. Phase 1 — Test Plan
+
+Fetch source, delegate to test-planner, human review loop.
+
+```mermaid
+flowchart TD
+    classDef agent fill:#74b9ff,stroke:#0984e3,color:#2d3436
+    classDef human fill:#ff9f43,stroke:#e17055,color:#2d3436,font-weight:bold
+    classDef decision fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436,font-weight:bold
+    classDef artifact fill:#dfe6e9,stroke:#b2bec3,color:#2d3436,font-style:italic
+    classDef phase fill:#a29bfe,stroke:#6c5ce7,color:#fff,font-weight:bold
+
+    TITLE["📋 PHASE 1: TEST PLAN"]:::phase
+    FETCH["Fetch source\nmaterial"]:::agent
+    DELEGATE["Delegate to\ntest-planner"]:::agent
+    PRODUCE["Produce\ntest-plan.md"]:::agent
+    SAVE[/"💾 test-plan.md"/]:::artifact
+    REVIEW{{"🛑 Human\nReview plan"}}:::human
+    OK{{"Approved?"}}:::decision
+    FEEDBACK["Incorporate\nfeedback"]:::agent
+    DONE((" "))
+
+    TITLE ~~~ FETCH
+    FETCH --> DELEGATE --> PRODUCE --> SAVE --> REVIEW --> OK
+    OK -- "Feedback" --> FEEDBACK --> PRODUCE
+    OK -- "Approved ✅" --> DONE
+```
+
+---
+
+## 4. Phase 2 — Write & Verify Tests
+
+Two paths: feature/permanent-test (creates branch) vs. bug verify-only (temp test). Both run on a real cluster with cluster-verifier validation.
+
+```mermaid
+flowchart TD
+    classDef agent fill:#74b9ff,stroke:#0984e3,color:#2d3436
+    classDef human fill:#ff9f43,stroke:#e17055,color:#2d3436,font-weight:bold
+    classDef decision fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436,font-weight:bold
+    classDef artifact fill:#dfe6e9,stroke:#b2bec3,color:#2d3436,font-style:italic
+    classDef phase fill:#a29bfe,stroke:#6c5ce7,color:#fff,font-weight:bold
+    classDef success fill:#55efc4,stroke:#00b894,color:#2d3436,font-weight:bold
+
+    TITLE["🧪 PHASE 2: WRITE & VERIFY"]:::phase
+    MODE{{"Test mode?"}}:::decision
+
+    TITLE ~~~ MODE
+
+    %% Feature / permanent path
+    BRANCH["Create branch\nqualify/‹name›"]:::agent
+    WRITE["python-expert\nwrites tests"]:::agent
+    RUN["Run pytest\non cluster"]:::agent
+    LOG1[/"💾 test-output.log"/]:::artifact
+    CV1["cluster-verifier\nchecks state"]:::agent
+    PASS1{{"Passed?"}}:::decision
+    RETRY1{{"Attempt\n≤ 3?"}}:::decision
+    FIX1["Fix tests"]:::agent
+    STUCK1{{"🛑 Ask user\nfor guidance"}}:::human
+    DONE1(["→ Phase 3"]):::success
+
+    MODE -- "Feature /\npermanent" --> BRANCH --> WRITE --> RUN --> LOG1 --> CV1 --> PASS1
+    PASS1 -- "Yes ✅" --> DONE1
+    PASS1 -- "No ❌" --> RETRY1
+    RETRY1 -- "Yes" --> FIX1 --> RUN
+    RETRY1 -- "No" --> STUCK1 --> FIX1
+
+    %% Verify-only path
+    WTEMP["Write temp test\nin /tmp/"]:::agent
+    RTEMP["Run temp test\non cluster"]:::agent
+    LOG2[/"💾 test-output.log"/]:::artifact
+    CV2["cluster-verifier\nchecks state"]:::agent
+    PASS2{{"Passed?"}}:::decision
+    RETRY2{{"Attempt\n≤ 3?"}}:::decision
+    FIX2["Fix temp test"]:::agent
+    STUCK2{{"🛑 Ask user\nfor guidance"}}:::human
+    DONE2(["→ Phase 4\n(skip PR)"]):::success
+
+    MODE -- "Verify-only" --> WTEMP --> RTEMP --> LOG2 --> CV2 --> PASS2
+    PASS2 -- "Yes ✅" --> DONE2
+    PASS2 -- "No ❌" --> RETRY2
+    RETRY2 -- "Yes" --> FIX2 --> RTEMP
+    RETRY2 -- "No" --> STUCK2 --> FIX2
+```
+
+---
+
+## 5. Phase 3 — Code Review & PR
+
+Three parallel reviewers, fix loop, pre-commit, then PR creation.
+
+```mermaid
+flowchart TD
+    classDef agent fill:#74b9ff,stroke:#0984e3,color:#2d3436
+    classDef human fill:#ff9f43,stroke:#e17055,color:#2d3436,font-weight:bold
+    classDef decision fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436,font-weight:bold
+    classDef artifact fill:#dfe6e9,stroke:#b2bec3,color:#2d3436,font-style:italic
+    classDef phase fill:#a29bfe,stroke:#6c5ce7,color:#fff,font-weight:bold
+
+    TITLE["🔍 PHASE 3: REVIEW & PR"]:::phase
+    REVIEW["3 parallel reviewers\nquality · guidelines\n· security"]:::agent
+    ISSUES{{"Issues\nfound?"}}:::decision
+    FIX["Fix findings"]:::agent
+    PRECOMMIT["pre-commit\nrun --all-files"]:::agent
+    PC_OK{{"Passed?"}}:::decision
+    FIX_PC["Fix lint/format"]:::agent
+    PR["github-expert\ncreates PR"]:::agent
+    PR_ART[/"💾 GitHub PR"/]:::artifact
+    HUMAN{{"🛑 Human\nPR review"}}:::human
+    DONE((" "))
+
+    TITLE ~~~ REVIEW
+    REVIEW --> ISSUES
+    ISSUES -- "Yes" --> FIX --> REVIEW
+    ISSUES -- "No ✅" --> PRECOMMIT --> PC_OK
+    PC_OK -- "No" --> FIX_PC --> PRECOMMIT
+    PC_OK -- "Yes ✅" --> PR --> PR_ART --> HUMAN --> DONE
+```
+
+---
+
+## 6. Phase 4 — Generate Proof
+
+Assemble proof report, determine verdict, print summary.
+
+```mermaid
+flowchart TD
+    classDef agent fill:#74b9ff,stroke:#0984e3,color:#2d3436
+    classDef decision fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436,font-weight:bold
+    classDef artifact fill:#dfe6e9,stroke:#b2bec3,color:#2d3436,font-style:italic
+    classDef phase fill:#a29bfe,stroke:#6c5ce7,color:#fff,font-weight:bold
+    classDef success fill:#55efc4,stroke:#00b894,color:#2d3436,font-weight:bold
+    classDef fail fill:#ff7675,stroke:#d63031,color:#fff,font-weight:bold
+
+    TITLE["📜 PHASE 4: PROOF"]:::phase
+    INVOKE["Invoke\nproof-generator"]:::agent
+    ASSEMBLE["Assemble\nproof.md"]:::agent
+    PROOF[/"💾 proof.md"/]:::artifact
+    VERDICT{{"Verdict?"}}:::decision
+    QUAL["✅ QUALIFIED"]:::success
+    NOTQUAL["❌ NOT QUALIFIED"]:::fail
+    FIXED["🐛 BUG FIXED"]:::success
+    NOTFIXED["🐛 NOT FIXED"]:::fail
+    SUMMARY["Print summary"]:::agent
+
+    TITLE ~~~ INVOKE
+    INVOKE --> ASSEMBLE --> PROOF --> VERDICT
+    VERDICT -- "Feature pass" --> QUAL --> SUMMARY
+    VERDICT -- "Feature fail" --> NOTQUAL --> SUMMARY
+    VERDICT -- "Bug pass" --> FIXED --> SUMMARY
+    VERDICT -- "Bug fail" --> NOTFIXED --> SUMMARY
+```
+
+---
+
+## 7. Component Relationship Diagram
+
+How the orchestrator, agents, skills, templates, and artifacts relate to each other.
 
 ```mermaid
 flowchart LR
@@ -194,254 +240,114 @@ flowchart LR
     classDef template fill:#ffeaa7,stroke:#fdcb6e,color:#2d3436
     classDef artifact fill:#dfe6e9,stroke:#b2bec3,color:#2d3436,font-style:italic
     classDef external fill:#fab1a0,stroke:#e17055,color:#2d3436
-    classDef codebase fill:#fd79a8,stroke:#e84393,color:#fff
 
-    subgraph ORCHESTRATOR["llm/qualify/prompts/"]
-        QUALIFY["qualify.md\n(Main Prompt Template)\nOrchestrates all 4 phases"]:::prompt
+    subgraph ORCH["Orchestrator"]
+        Q["qualify.md"]:::prompt
     end
 
-    subgraph AGENTS["llm/qualify/agents/"]
-        TP["test-planner.md\nReads docs → test plans"]:::agent
-        CV["cluster-verifier.md\nIndependent cluster verification"]:::agent
+    subgraph AGENTS["Qualify Agents"]
+        TP["test-planner"]:::agent
+        CV["cluster-verifier"]:::agent
     end
 
-    subgraph SKILLS["llm/qualify/skills/"]
-        PG["proof-generator\nSKILL.md\nAssembles proof.md"]:::skill
+    subgraph EXT["External Agents"]
+        PE["python-expert"]:::external
+        CR["code-reviewers ×3"]:::external
+        GE["github-expert"]:::external
     end
 
-    subgraph TEMPLATES["llm/qualify/templates/"]
-        TPL_PLAN["test-plan-template.md\nTest plan skeleton"]:::template
-        TPL_PROOF["proof-template.md\nProof report skeleton"]:::template
+    subgraph SKILL["Qualify Skills"]
+        PG["proof-generator"]:::skill
     end
 
-    subgraph OUTPUT[".qualify/‹type›/‹name›/"]
-        OUT_PLAN[/"test-plan.md"/]:::artifact
-        OUT_LOG[/"test-output.log"/]:::artifact
-        OUT_PROOF[/"proof.md"/]:::artifact
+    subgraph TPL["Templates"]
+        T1["test-plan-\ntemplate.md"]:::template
+        T2["proof-\ntemplate.md"]:::template
     end
 
-    subgraph EXTERNAL_AGENTS["External Agents\n(from pi-config / project)"]
-        PE["python-expert\nWrites test code"]:::external
-        GE["github-expert\nCreates PR"]:::external
-        CR["code-reviewers ×3\nquality · guidelines · security"]:::external
-        GITE["git-expert\nBranch management"]:::external
+    subgraph OUT["Output Artifacts"]
+        O1[/"test-plan.md"/]:::artifact
+        O2[/"test-output.log"/]:::artifact
+        O3[/"proof.md"/]:::artifact
     end
 
-    subgraph CODEBASE["Project Codebase"]
-        AGENTS_MD["AGENTS.md"]:::codebase
-        TESTS["tests/‹feature›/"]:::codebase
-        CONFIG["tests/tests_config/config.py"]:::codebase
-        UTILS["utilities/"]:::codebase
-    end
+    Q -- "Phase 1" --> TP
+    Q -- "Phase 2" --> PE
+    Q -- "Phase 2" --> CV
+    Q -- "Phase 3" --> CR
+    Q -- "Phase 3" --> GE
+    Q -- "Phase 4" --> PG
 
-    %% Orchestrator delegates to agents & skill
-    QUALIFY -- "delegates\n(Phase 1)" --> TP
-    QUALIFY -- "delegates\n(Phase 2)" --> CV
-    QUALIFY -- "invokes\n(Phase 4)" --> PG
-    QUALIFY -- "delegates\n(Phase 2)" --> PE
-    QUALIFY -- "delegates\n(Phase 3)" --> CR
-    QUALIFY -- "delegates\n(Phase 3)" --> GE
-    QUALIFY -- "delegates\n(Phase 2)" --> GITE
+    TP --> T1
+    PG --> T2
 
-    %% Agents use templates
-    TP -- "uses as\noutput format" --> TPL_PLAN
-    PG -- "uses as\noutput format" --> TPL_PROOF
+    TP --> O1
+    PE --> O2
+    PG --> O3
 
-    %% Agents read codebase
-    TP -. "reads" .-> AGENTS_MD
-    TP -. "reads" .-> TESTS
-    TP -. "reads" .-> CONFIG
-    TP -. "reads" .-> UTILS
-    PE -. "reads" .-> AGENTS_MD
-    PE -. "reads" .-> TESTS
-
-    %% Agents produce artifacts
-    TP -- "produces" --> OUT_PLAN
-    CV -- "feeds into" --> PG
-    PG -- "produces" --> OUT_PROOF
-
-    %% Test run produces log
-    PE -- "test run\nproduces" --> OUT_LOG
-
-    %% Data flows
-    OUT_PLAN -. "input to" .-> PE
-    OUT_LOG -. "input to" .-> PG
-    OUT_LOG -. "input to" .-> CV
+    O1 --> PE
+    O2 --> CV
+    O2 --> PG
 ```
 
 ---
 
-## 3. Sequence Diagram
+## 8. Sequence Diagrams
 
-Interaction timeline between the User, Orchestrator (`qualify.md`), and all agents/skills across the four phases.
+Happy-path interaction split into two diagrams for readability.
+
+### 8a. Setup, Plan & Write (Phases 0–2)
 
 ```mermaid
 sequenceDiagram
-    box rgb(255, 245, 235) Human
-        actor User
-    end
-    box rgb(230, 240, 255) Orchestrator
-        participant Orch as qualify.md<br/>(Orchestrator)
-    end
-    box rgb(220, 245, 255) Agents
-        participant TP as test-planner
-        participant PE as python-expert
-        participant CV as cluster-verifier
-        participant CR as code-reviewers<br/>(×3 parallel)
-        participant GE as github-expert
-    end
-    box rgb(220, 255, 235) Skills
-        participant PG as proof-generator
-    end
-    box rgb(255, 230, 230) Cluster
-        participant K8s as OpenShift<br/>Cluster
-    end
+    actor User
+    participant Orch as Orchestrator
+    participant TP as test-planner
+    participant PE as python-expert
+    participant CV as cluster-verifier
 
-    Note over User,K8s: Phase 0 — Parse Arguments & Setup
+    Note over User,CV: Phase 0 — Setup
+    User ->> Orch: /qualify --type --source
+    Orch ->> Orch: Validate cluster + collect versions
 
-    User ->>+ Orch: /qualify --type feature --source <url> --cluster <path>
-    Orch ->> Orch: Parse CLI arguments
-    alt Missing required args
-        Orch -->> User: Ask for missing arguments
-        User -->> Orch: Provide arguments
-    end
-    Orch ->>+ K8s: oc whoami · oc cluster-info
-    K8s -->>- Orch: Cluster identity & status
-    alt Cluster unreachable
-        Orch -->> User: 🛑 Cluster unreachable — please fix
-        User -->> Orch: Cluster fixed
-        Orch ->> K8s: Retry connectivity
-    end
-    Orch ->>+ K8s: Collect versions (OCP, MTV, CNV)
-    K8s -->>- Orch: Version strings
-    Orch ->> Orch: Create .qualify/‹type›/‹name›/
-    opt type == bug
-        Orch -->> User: 🛑 Permanent test or verify-only?
-        User -->> Orch: Decision (permanent / verify-only)
-    end
+    Note over User,CV: Phase 1 — Test Plan
+    Orch ->> TP: Produce test plan
+    TP -->> Orch: test-plan.md
+    Orch -->> User: 🛑 Review plan
+    User -->> Orch: ✅ Approved
 
-    Note over User,K8s: Phase 1 — Test Plan
+    Note over User,CV: Phase 2 — Write & Verify
+    Orch ->> PE: Write tests
+    PE -->> Orch: Tests ready
+    Orch ->> Orch: Run pytest on cluster
+    Orch ->> CV: Verify cluster state
+    CV -->> Orch: Verification ✅
+    Note right of Orch: Retry up to 3× on failure
+```
 
-    Orch ->> Orch: Fetch source material (URL or file)
-    Orch ->>+ TP: Delegate: produce test plan
-    TP ->> TP: Read AGENTS.md, tests/, config.py,<br/>utilities/, test-plan-template.md
-    TP ->> TP: Analyze source material
-    TP -->>- Orch: test-plan.md
+### 8b. Review, PR & Proof (Phases 3–4)
 
-    Orch ->> Orch: Save .qualify/‹type›/‹name›/test-plan.md
-    Orch -->> User: 🛑 HUMAN CHECKPOINT: Review test plan
+```mermaid
+sequenceDiagram
+    actor User
+    participant Orch as Orchestrator
+    participant CR as code-reviewers
+    participant GE as github-expert
+    participant PG as proof-generator
 
-    loop Until approved
-        User -->> Orch: Feedback or Approved
-        alt Feedback provided
-            Orch ->> TP: Update plan with feedback
-            TP -->> Orch: Revised test-plan.md
-            Orch -->> User: Updated plan — please re-review
-        end
-    end
+    Note over User,PG: Phase 3 — Review & PR
+    Orch ->> CR: 3 parallel reviews
+    CR -->> Orch: Findings
+    Note right of Orch: Fix & re-review until clean
+    Orch ->> Orch: pre-commit
+    Orch ->> GE: Create PR
+    GE -->> Orch: PR URL
+    Orch -->> User: 🛑 PR ready
 
-    User -->> Orch: ✅ Plan approved
-
-    Note over User,K8s: Phase 2 — Write & Verify Tests (Autonomous)
-
-    alt Feature or Bug-Permanent-Test
-        Orch ->> Orch: git checkout -b qualify/‹name›
-        Orch ->>+ PE: Delegate: write tests per approved plan
-        PE ->> PE: Read AGENTS.md, follow 5/6-step pattern
-        PE ->> PE: Create config entry, fixtures, test file
-        PE -->>- Orch: Test code ready
-
-        loop Until pass or stuck (max 3 retries)
-            Orch ->>+ K8s: uv run pytest … | tee test-output.log
-            K8s -->>- Orch: Test results + output
-
-            Orch ->>+ CV: Delegate: verify cluster state
-            CV ->>+ K8s: oc get vm, pvc, plan, migration …
-            K8s -->>- CV: Resource states + YAML
-            CV ->> CV: Compare against test plan expectations
-            CV -->>- Orch: Verification report (PASS/FAIL per check)
-
-            alt Tests PASS + Verification PASS
-                Note over Orch: ✅ Proceed to Phase 3
-            else Tests FAIL or Verification FAIL
-                alt Attempt ≤ 3
-                    Orch ->>+ PE: Fix failing tests
-                    PE -->>- Orch: Updated test code
-                else Attempt > 3
-                    Orch -->> User: 🛑 Stuck on: ‹problem›
-                    User -->> Orch: Guidance
-                    Orch ->> PE: Apply user guidance
-                end
-            end
-        end
-
-    else Bug Verify-Only
-        Orch ->>+ PE: Write temp test in /tmp/qualify-‹name›/
-        PE -->>- Orch: Temp test ready
-
-        loop Until pass or stuck
-            Orch ->>+ K8s: Run temp test on cluster
-            K8s -->>- Orch: Test results
-            Orch ->>+ CV: Verify cluster state
-            CV ->>+ K8s: oc get …
-            K8s -->>- CV: Resource states
-            CV -->>- Orch: Verification report
-            alt FAIL & retries remain
-                Orch ->> PE: Fix temp test
-            else FAIL & stuck
-                Orch -->> User: 🛑 Stuck — need guidance
-                User -->> Orch: Guidance
-            end
-        end
-        Note over Orch: Skip Phase 3 → go to Phase 4
-    end
-
-    Note over User,K8s: Phase 3 — Code Review & PR (permanent tests only)
-
-    alt Feature or Bug-Permanent-Test
-        par Quality Review
-            Orch ->>+ CR: code-reviewer-quality
-            CR -->>- Orch: Quality findings
-        and Guidelines Review
-            Orch ->>+ CR: code-reviewer-guidelines
-            CR -->>- Orch: Guidelines findings
-        and Security Review
-            Orch ->>+ CR: code-reviewer-security
-            CR -->>- Orch: Security findings
-        end
-
-        loop Until no findings
-            alt Issues found
-                Orch ->> PE: Fix review issues
-                PE -->> Orch: Fixes applied
-                Orch ->> CR: Re-review
-                CR -->> Orch: Updated findings
-            end
-        end
-
-        Orch ->> Orch: pre-commit run --all-files
-        loop Until pre-commit passes
-            alt Failures
-                Orch ->> Orch: Fix formatting/linting
-            end
-        end
-
-        Orch ->>+ GE: Create PR: [qualify] ‹type›: ‹name›
-        GE -->>- Orch: PR URL
-        Orch -->> User: 🛑 PR ready for review
-    end
-
-    Note over User,K8s: Phase 4 — Generate Proof
-
-    Orch ->>+ PG: Assemble proof report
-    Note right of PG: Inputs:<br/>• test-output.log<br/>• cluster verification report<br/>• OCP/MTV/CNV versions<br/>• test-plan.md reference
-    PG ->> PG: Apply proof-template.md structure
-    PG ->> PG: Determine verdict:<br/>QUALIFIED / NOT QUALIFIED /<br/>BUG FIXED / BUG NOT FIXED
-    PG -->>- Orch: proof.md
-
-    Orch ->> Orch: Write .qualify/‹type›/‹name›/proof.md
-
-    Orch -->>- User: 🏁 Qualification Complete<br/>Result + Artifacts + Versions
+    Note over User,PG: Phase 4 — Proof
+    Orch ->> PG: Assemble proof
+    PG -->> Orch: proof.md + verdict
+    Orch -->> User: 🏁 Complete
 ```
 
 ---
@@ -457,7 +363,6 @@ sequenceDiagram
 | ⬜ Gray parallelogram | Output artifact (file) |
 | 🟩 Green rounded | Start / success outcome |
 | 🟥 Red rounded | Failure outcome |
-| 🟤 Pink | Codebase reference |
 | 🔴 Coral | External agent (not in qualify/) |
 
 ## Key Takeaways
