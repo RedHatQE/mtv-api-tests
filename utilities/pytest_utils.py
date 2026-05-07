@@ -62,7 +62,7 @@ def setup_ai_analysis(session: pytest.Session) -> None:
     """Configure AI analysis for test failure reporting.
 
     Loads environment variables, validates prerequisites, and sets defaults
-    for AI provider and model. Disables AI analysis if JJI_SERVER_URL is missing
+    for AI provider and model. Disables AI analysis if ROOTCOZ_SERVER_URL is missing
     or if pytest was invoked with --collectonly or --setupplan.
 
     Args:
@@ -76,16 +76,16 @@ def setup_ai_analysis(session: pytest.Session) -> None:
 
     LOGGER.info("Setting up AI-powered test failure analysis")
 
-    if not os.environ.get("JJI_SERVER_URL"):
-        LOGGER.warning("JJI_SERVER_URL is not set. Analyze with AI features will be disabled.")
+    if not os.environ.get("ROOTCOZ_SERVER_URL"):
+        LOGGER.warning("ROOTCOZ_SERVER_URL is not set. Analyze with AI features will be disabled.")
         session.config.option.analyze_with_ai = False
 
     else:
-        if not os.environ.get("JJI_AI_PROVIDER"):
-            os.environ["JJI_AI_PROVIDER"] = "claude"
+        if not os.environ.get("ROOTCOZ_AI_PROVIDER"):
+            os.environ["ROOTCOZ_AI_PROVIDER"] = "claude"
 
-        if not os.environ.get("JJI_AI_MODEL"):
-            os.environ["JJI_AI_MODEL"] = "claude-opus-4-6[1m]"
+        if not os.environ.get("ROOTCOZ_AI_MODEL"):
+            os.environ["ROOTCOZ_AI_MODEL"] = "claude-opus-4-6[1m]"
 
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
@@ -434,7 +434,7 @@ def enrich_junit_xml(session: pytest.Session) -> None:
     """Read JUnit XML, send to server for analysis, write enriched XML back.
 
     Reads the JUnit XML that pytest generated, POSTs the raw content to the
-    JJI server's /analyze-failures endpoint, and writes the enriched XML
+    rootcoz server's /analyze-failures endpoint, and writes the enriched XML
     (with analysis results) back to the same file.
 
     Args:
@@ -453,19 +453,19 @@ def enrich_junit_xml(session: pytest.Session) -> None:
         )
         return
 
-    ai_provider = os.environ.get("JJI_AI_PROVIDER")
-    ai_model = os.environ.get("JJI_AI_MODEL")
+    ai_provider = os.environ.get("ROOTCOZ_AI_PROVIDER")
+    ai_model = os.environ.get("ROOTCOZ_AI_MODEL")
     if not ai_provider or not ai_model:
-        LOGGER.warning("JJI_AI_PROVIDER and JJI_AI_MODEL must be set, skipping AI analysis enrichment")
+        LOGGER.warning("ROOTCOZ_AI_PROVIDER and ROOTCOZ_AI_MODEL must be set, skipping AI analysis enrichment")
         return
 
-    server_url = os.environ["JJI_SERVER_URL"]
+    server_url = os.environ["ROOTCOZ_SERVER_URL"]
     raw_xml = xml_path.read_text()
 
     try:
-        timeout_value = int(os.environ.get("JJI_TIMEOUT", "600"))
+        timeout_value = int(os.environ.get("ROOTCOZ_TIMEOUT", "600"))
     except ValueError:
-        LOGGER.warning("Invalid JJI_TIMEOUT value, using default 600 seconds")
+        LOGGER.warning("Invalid ROOTCOZ_TIMEOUT value, using default 600 seconds")
         timeout_value = 600
 
     try:
