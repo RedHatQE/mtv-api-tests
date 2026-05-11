@@ -10,6 +10,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from subprocess import STDOUT, check_output
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 import pytest
 from kubernetes.dynamic import DynamicClient
@@ -187,6 +188,30 @@ def _fetch_and_store_cacert(
     return cert_file
 
 
+def _normalize_vmware_url_for_tls(api_url: str, fqdn: str) -> str:
+    """Replace the host in a VMware API URL with the FQDN for TLS verification.
+
+    When TLS verification is enabled (insecure=False), the URL host must match
+    the certificate's hostname SANs. VMware provider data may contain an IP
+    address in ``api_url`` while the certificate is issued for the FQDN.
+
+    Args:
+        api_url (str): Original API URL (e.g., "https://10.6.46.250/sdk").
+        fqdn (str): Fully qualified domain name matching the certificate.
+
+    Returns:
+        str: URL with host replaced by FQDN (e.g., "https://vcenter.example.com/sdk").
+    """
+    parsed = urlparse(api_url)
+    # Preserve port from original URL if fqdn doesn't include one
+    if ":" not in fqdn and parsed.port:
+        netloc = f"{fqdn}:{parsed.port}"
+    else:
+        netloc = fqdn
+    normalized = parsed._replace(netloc=netloc)
+    return urlunparse(normalized)
+
+
 def background(func):
     """Use @background above the function you want to run in the background"""
 
@@ -286,6 +311,15 @@ def create_source_provider(
             provider_args["copyoffload"] = source_provider_data_copy["copyoffload"]
 
         if not insecure:
+            original_url = source_provider_data_copy["api_url"]
+            normalized_url = _normalize_vmware_url_for_tls(
+                api_url=original_url,
+                fqdn=source_provider_data_copy["fqdn"],
+            )
+            if normalized_url != original_url:
+                LOGGER.info(f"Normalized VMware API URL for TLS: '{original_url}' -> '{normalized_url}'")
+            source_provider_data_copy["api_url"] = normalized_url
+            secret_string_data["url"] = normalized_url
             _fetch_and_store_cacert(source_provider_data_copy, secret_string_data, tmp_dir, session_uuid)
 
     elif rhv_provider(provider_data=source_provider_data_copy):
