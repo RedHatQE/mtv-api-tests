@@ -164,6 +164,6 @@ When the verdict is NOT QUALIFIED or BUG NOT FIXED, add a `### Failure Details` 
 Write the generated proof report to:
 
 - **Features**: `.qualify/features/<feature-name>/proof.md`
-- **Bugs**: `.qualify/bugs/<bug-name-or-id>/proof.md`
+- **Bugs**: `.qualify/bugs/<id>/proof.md`
 
 The directory must match the directory used by the test plan. If the test plan lives at `.qualify/features/cold-migration/test-plan.md`, then the proof goes to `.qualify/features/cold-migration/proof.md`.

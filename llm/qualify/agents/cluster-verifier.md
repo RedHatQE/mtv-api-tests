@@ -43,10 +43,14 @@ Collect environment versions at the start of every verification run:
 oc get clusterversion version -o jsonpath='{.status.desired.version}'
 
 # MTV version (from CSV in openshift-mtv namespace)
-oc get csv -n openshift-mtv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep mtv || true
+MTV_VERSION_RAW="$(oc get csv -n openshift-mtv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' 2>&1)"
+MTV_VERSION="$(printf '%s\n' "$MTV_VERSION_RAW" | grep mtv || true)"
+# if empty -> record: UNKNOWN: <MTV_VERSION_RAW or "no CSV match">
 
 # CNV version (from CSV in openshift-cnv namespace)
-oc get csv -n openshift-cnv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep kubevirt || true
+CNV_VERSION_RAW="$(oc get csv -n openshift-cnv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' 2>&1)"
+CNV_VERSION="$(printf '%s\n' "$CNV_VERSION_RAW" | grep kubevirt || true)"
+# if empty -> record: UNKNOWN: <CNV_VERSION_RAW or "no CSV match">
 ```
 
 If a version cannot be retrieved, record it as `UNKNOWN` with the error message.

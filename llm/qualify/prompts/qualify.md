@@ -1,6 +1,6 @@
 ---
 description: "Full qualification workflow: test plan → write tests → verify on cluster → PR with proof"
-argument-hint: "<--type feature|bug> <--source URL|file> [--cluster kubeconfig-path] [--name identifier]"
+argument-hint: "<--type feature|bug> <--source URL|file> <--cluster kubeconfig-path> [--name identifier]"
 ---
 
 # /qualify — Full Qualification Workflow
@@ -21,7 +21,7 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
 1. **Parse arguments** from the raw text above:
    - `--type`: `feature` or `bug` (REQUIRED)
    - `--source`: URL (Jira, GitHub issue, design doc) or local file path (REQUIRED)
-   - `--cluster`: Path to kubeconfig file. If not provided, assume current context (`oc whoami` must work)
+   - `--cluster`: Path to kubeconfig file (REQUIRED). Do not use implicit current context.
    - `--name`: Short identifier for this qualification (e.g., `warm-migration-rhv`, `JIRA-12345`). If not provided, derive from source.
 
 - Normalize `name` to a safe slug before any use:
@@ -53,17 +53,17 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
    oc get clusterversion version -o jsonpath='{.status.desired.version}'
 
    # MTV version (from CSV)
-   oc get csv -n openshift-mtv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep mtv
+   oc get csv -n openshift-mtv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep mtv || true
 
    # CNV version (from CSV)
-   oc get csv -n openshift-cnv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep kubevirt
+   oc get csv -n openshift-cnv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep kubevirt || true
    ```
 
    If any version cannot be retrieved, record it as `UNKNOWN` with the error message. The final proof report will reflect missing versions.
 
 3. **Create output directory**:
    - Feature: `.qualify/features/<name>/`
-   - Bug: `.qualify/bugs/<name>/`
+   - Bug: `.qualify/bugs/<id>/`
 
 4. **For bugs only** — ask the user:
    > "Should this bug get a permanent test in the test suite? (Yes = full PR flow, No = verify-only with proof.md)"

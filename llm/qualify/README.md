@@ -43,7 +43,7 @@ Full qualification workflow for MTV API tests: from feature design or bug report
 ### Verify a Bug Fix
 
 ```bash
-/qualify --type bug --source https://issues.redhat.com/browse/MTV-5678 --name MTV-5678
+/qualify --type bug --source https://issues.redhat.com/browse/MTV-5678 --cluster ~/kubeconfigs/test-cluster --name MTV-5678
 ```
 
 The AI will ask: "Should this bug get a permanent test in the test suite?"
