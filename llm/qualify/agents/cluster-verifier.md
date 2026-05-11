@@ -2,6 +2,7 @@
 name: cluster-verifier
 description: Independently verifies OpenShift cluster state after test execution. Checks that resources exist, VMs are running, migrations completed, and collects evidence.
 tools: read, bash
+<!-- Tool name mapping: Cursor/Claude use "bash", pi uses "execute"/"run_command". Adapt to your AI CLI's shell execution tool. -->
 ---
 
 # Cluster Verifier Agent
