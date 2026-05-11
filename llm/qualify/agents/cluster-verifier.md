@@ -43,10 +43,10 @@ Collect environment versions at the start of every verification run:
 oc get clusterversion version -o jsonpath='{.status.desired.version}'
 
 # MTV version (from CSV in openshift-mtv namespace)
-oc get csv -n openshift-mtv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep mtv
+oc get csv -n openshift-mtv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep mtv || true
 
 # CNV version (from CSV in openshift-cnv namespace)
-oc get csv -n openshift-cnv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep kubevirt
+oc get csv -n openshift-cnv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep kubevirt || true
 ```
 
 If a version cannot be retrieved, record it as `UNKNOWN` with the error message.

@@ -138,7 +138,7 @@ flowchart TD
     PASS1 -- "Yes ✅" --> DONE1
     PASS1 -- "No ❌" --> RETRY1
     RETRY1 -- "Yes" --> FIX1 --> RUN
-    RETRY1 -- "No" --> STUCK1 --> FIX1
+    RETRY1 -- "No" --> STUCK1 --> ESCALATE1["⛔ Escalate / stop autonomous run"]:::human
 
     %% Verify-only path
     WTEMP["Write temp test\nin /tmp/"]:::agent
@@ -155,7 +155,7 @@ flowchart TD
     PASS2 -- "Yes ✅" --> DONE2
     PASS2 -- "No ❌" --> RETRY2
     RETRY2 -- "Yes" --> FIX2 --> RTEMP
-    RETRY2 -- "No" --> STUCK2 --> FIX2
+    RETRY2 -- "No" --> STUCK2 --> ESCALATE2["⛔ Escalate / stop autonomous run"]:::human
 ```
 
 ---
@@ -367,7 +367,7 @@ sequenceDiagram
 
 ## Key Takeaways
 
-1. **Four distinct phases** with clear handoff boundaries.
+1. **Five distinct phases** with clear handoff boundaries.
 2. **Human stays in the loop** at test-plan review, bug-mode decision, stuck escalation, and PR review — everything else is autonomous.
 3. **Dual verification** — pytest execution alone is never sufficient; the `cluster-verifier` agent independently confirms cluster state.
 4. **Bug workflows fork early** (Phase 0) into permanent-test vs. verify-only, rejoining at proof generation (Phase 4).

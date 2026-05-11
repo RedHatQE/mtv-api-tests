@@ -29,7 +29,7 @@ Full qualification workflow for MTV API tests: from feature design or bug report
 | ----------- | -------- | ---------------------------------------------------------------------- |
 | `--type`    | Yes      | `feature` or `bug`                                                     |
 | `--source`  | Yes      | URL to Jira ticket, GitHub issue, design doc, or local file path       |
-| `--cluster` | No       | Path to kubeconfig. If omitted, uses current `oc` context              |
+| `--cluster` | Yes      | Path to kubeconfig for qualification (explicit target required)        |
 | `--name`    | No       | Short identifier (e.g., `warm-migration-rhv`). Auto-derived if omitted |
 
 ## Usage Examples
@@ -152,7 +152,7 @@ Output (gitignored):
 │       ├── test-output.log
 │       └── proof.md
 └── bugs/
-    └── <name>/
+    └── <id>/
         ├── test-plan.md
         ├── test-output.log
         └── proof.md

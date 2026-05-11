@@ -24,9 +24,16 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
    - `--cluster`: Path to kubeconfig file. If not provided, assume current context (`oc whoami` must work)
    - `--name`: Short identifier for this qualification (e.g., `warm-migration-rhv`, `JIRA-12345`). If not provided, derive from source.
 
+- Normalize `name` to a safe slug before any use:
+  - allowed chars: `a-z`, `0-9`, `-`
+  - replace all other chars with `-`
+  - collapse repeated `-`, trim leading/trailing `-`
+  - max length 63
+  - reject values containing `..`, `/`, `\`
+
    If required arguments are missing, ask the user to provide them using the ask_user tool.
 
-2. **Validate cluster connectivity**:
+1. **Validate cluster connectivity**:
 
    ```bash
    # If --cluster provided:
@@ -39,7 +46,7 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
 
    If cluster is unreachable, STOP and ask the user to fix it.
 
-3. **Collect environment versions** (save for proof.md):
+2. **Collect environment versions** (save for proof.md):
 
    ```bash
    # OCP version
@@ -54,11 +61,11 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
 
    If any version cannot be retrieved, record it as `UNKNOWN` with the error message. The final proof report will reflect missing versions.
 
-4. **Create output directory**:
+3. **Create output directory**:
    - Feature: `.qualify/features/<name>/`
    - Bug: `.qualify/bugs/<name>/`
 
-5. **For bugs only** — ask the user:
+4. **For bugs only** — ask the user:
    > "Should this bug get a permanent test in the test suite? (Yes = full PR flow, No = verify-only with proof.md)"
 
 ## Phase 1: Test Plan
@@ -131,7 +138,10 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
    - Cluster verification failed (tests said pass but cluster state wrong) → investigate and fix
    - **AI stuck** → ask the user: "I'm stuck on: `<specific problem>`. How should I proceed?"
 
-6. **Loop** steps 3-5 until tests pass with proof.
+6. **Loop with bounded retries**:
+   - Track `attempt_count` for the current failing error signature.
+   - If the same failure persists for 3 attempts, STOP autonomous retries and ask the user for guidance.
+   - Resume only after user guidance; reset counter when error signature changes.
 
 ### For bugs-verify-only (no permanent test)
 

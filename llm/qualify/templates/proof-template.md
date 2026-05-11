@@ -44,6 +44,8 @@ Independent verification performed after test execution.
 
 ### Raw Evidence
 
+> Redact sensitive values before pasting evidence (`token`, `password`, `secret`, `Authorization`, kubeconfig credentials, private keys, emails/IPs as required by policy).
+
 <details><summary>Resource details</summary>
 
 ```yaml

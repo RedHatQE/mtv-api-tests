@@ -46,6 +46,7 @@
 3. Create Plan with `<specific configuration>`
 4. Execute migration
 5. Verify migrated VMs
+6. `<For shared-disk: verify shared disk data OR for copy-offload: verify XCOPY usage>`
 
 **Expected Outcomes**:
 

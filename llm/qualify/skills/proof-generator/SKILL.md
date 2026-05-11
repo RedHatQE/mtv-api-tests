@@ -113,6 +113,8 @@ Independent verification performed after test execution.
 
 ### Qualification Logic
 
+Applies to `type=feature`. For `type=bug`, use **Bug Verification Logic** verdict labels.
+
 1. **NEVER** mark as `✅ QUALIFIED` if any test failed (exit code ≠ 0 or any individual test result is not PASSED).
 2. **NEVER** mark as `✅ QUALIFIED` if cluster verification has any `❌ FAIL` check.
 3. If both tests and cluster verification pass → `✅ QUALIFIED`.
