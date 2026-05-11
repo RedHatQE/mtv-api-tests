@@ -52,6 +52,8 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
    oc get csv -n openshift-cnv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' | grep kubevirt
    ```
 
+   If any version cannot be retrieved, record it as `UNKNOWN` with the error message. The final proof report will reflect missing versions.
+
 4. **Create output directory**:
    - Feature: `.qualify/features/<name>/`
    - Bug: `.qualify/bugs/<name>/`
