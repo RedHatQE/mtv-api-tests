@@ -134,7 +134,15 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
 ### For bugs-verify-only (no permanent test)
 
 1. Write a **temporary test file** in `/tmp/qualify-<name>/` (not in the repo)
-2. Run it on the cluster (same as step 3 above)
+2. Run it on the cluster using the temporary path, for example:
+
+   ```bash
+   export KUBECONFIG=<path>
+   uv run pytest /tmp/qualify-<name>/<test_file>.py -v \
+     --tc-file=tests/tests_config/config.py --tc-format=python -p no:xdist \
+     2>&1 | tee .qualify/<type>/<name>/test-output.log
+   ```
+
 3. Verify on cluster (same as step 4 above)
 4. Skip Phase 3 (no PR needed), go directly to Phase 4
 

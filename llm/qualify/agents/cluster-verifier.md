@@ -32,7 +32,7 @@ oc whoami
 oc cluster-info
 ```
 
-If either command fails, stop immediately and report the failure. Do NOT proceed with partial assumptions.
+If either command fails, stop immediately and report the failure. Do NOT proceed with any verification checks.
 
 ### Version Collection
 
@@ -143,11 +143,14 @@ oc get vmi <vm-name> -n <namespace> -o jsonpath='{.status.conditions}'
 For every check, capture and record:
 
 1. **The exact `oc` command run** — copy-paste reproducible.
-2. **The full output** (or a relevant excerpt if output exceeds ~200 lines).
+2. **The full output** (or a relevant excerpt if output exceeds ~200 lines), with sensitive values redacted.
 3. **PASS/FAIL determination** with a one-line reason.
 4. **Timestamp** — use `date -u +"%Y-%m-%dT%H:%M:%SZ"` before each check group.
 
 Do not summarize away raw evidence. Always preserve it for the report.
+Before storing evidence, redact sensitive fields/tokens
+(for example: `token`, `password`, `secret`, `clientSecret`, `Authorization`,
+private keys, kubeconfig credentials). Keep resource names, states, and condition fields intact.
 
 ## Output Format
 
@@ -249,7 +252,7 @@ If the agent cannot connect to the cluster or a verification check fails:
 - **Report exactly what failed** — include the command, exit code, and error output.
 - **Do NOT make assumptions** about cluster state. If `oc get vm` returns an error, do not guess whether the VM exists.
 - **Include error messages verbatim** — do not paraphrase or summarize errors.
-- **Continue checking other items** — one failure does not stop the entire verification. Mark the failed check and proceed.
+- **Continue checking other items** — applies only after connectivity is confirmed. One check failure does not stop the entire verification; mark failed checks and proceed.
 
 ```text
 | VM Exists | `vm/rhel-9` in `ns` | ❌ FAIL | `oc get vm rhel-9 -n ns` returned: error not found |

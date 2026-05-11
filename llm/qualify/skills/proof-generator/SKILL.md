@@ -128,6 +128,9 @@ Independent verification performed after test execution.
 ### Evidence Requirements
 
 - **Always** include raw evidence (YAML, logs) in collapsible `<details>` sections.
+- **Always redact sensitive values** before writing proof artifacts
+  (tokens, passwords, secrets, auth headers, private keys, kubeconfig credentials).
+  Preserve only fields needed to validate behavior.
 - **Versions are MANDATORY.** If any version (OCP, MTV, or CNV) is missing, mark the report as `❌ NOT QUALIFIED` with reason: `"Missing version information"`.
 - The report must be **self-contained**. A reader must understand what was tested, what passed or failed, and what the cluster state looked like — all from the proof.md alone.
 
