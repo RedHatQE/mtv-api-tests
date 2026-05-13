@@ -148,6 +148,21 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_dual_disk_mixed_thin_thick_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "add_disks": [
+                    {"size_gb": 30, "disk_mode": "persistent", "provision_type": "thick-lazy"},
+                ],
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
     "test_copyoffload_multi_disk_different_path_migration": {
         "virtual_machines": [
             {
