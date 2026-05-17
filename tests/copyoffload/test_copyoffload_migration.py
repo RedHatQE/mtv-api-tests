@@ -1770,6 +1770,7 @@ class TestCopyoffloadMultiDatastoreMigration:
     "vmware_cloud_init_ready",
     "multus_network_name",
     "copyoffload_config",
+    "multi_datastore_config",
     "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
@@ -1782,27 +1783,22 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
 
     def test_create_storagemap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        source_provider_data,
-        copyoffload_storage_secret,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
         """Create StorageMap with copy-offload configuration for multiple datastores."""
         copyoffload_config_data = source_provider_data["copyoffload"]
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
         datastore_id = copyoffload_config_data["datastore_id"]
         secondary_datastore_id = copyoffload_config_data["secondary_datastore_id"]
         storage_class = py_config["storage_class"]
-
-        if not secondary_datastore_id:
-            pytest.fail(
-                "Multi-disk different-datastore-path test requires 'secondary_datastore_id' in the copyoffload section."
-            )
 
         LOGGER.info("Primary datastore: %s", datastore_id)
         LOGGER.info("Secondary datastore (custom path disk): %s", secondary_datastore_id)
@@ -1834,15 +1830,15 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
 
     def test_create_networkmap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        multus_network_name,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
         """Create NetworkMap resource."""
         vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
@@ -1859,14 +1855,14 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
 
     def test_create_plan(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        target_namespace,
-        source_provider_inventory,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
         """Create MTV Plan CR resource."""
         for vm in prepared_plan["virtual_machines"]:
             vm_name = vm["name"]
@@ -1887,7 +1883,12 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+    def test_migrate_vms(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+    ) -> None:
         """Execute migration."""
         execute_migration(
             ocp_admin_client=ocp_admin_client,
@@ -1912,15 +1913,15 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
 
     def test_check_vms(
         self,
-        prepared_plan,
-        source_provider,
-        destination_provider,
-        source_provider_data,
-        target_namespace,
-        source_vms_namespace,
-        source_provider_inventory,
-        vm_ssh_connections,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
         """Validate migrated VMs and verify disk count."""
         check_vms(
             plan=prepared_plan,
