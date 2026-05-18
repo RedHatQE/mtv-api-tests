@@ -119,6 +119,31 @@ def mixed_datastore_config(source_provider_data: dict[str, Any]) -> None:
     LOGGER.info(f"✓ Mixed datastore configuration validated: non_xcopy_datastore_id = {non_xcopy_datastore_id}")
 
 
+@pytest.fixture(scope="class")
+def multi_datastore_config(source_provider_data: dict[str, Any]) -> None:
+    """Validate multi-datastore configuration for copy-offload tests using a secondary datastore.
+
+    Args:
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If secondary_datastore_id is missing.
+    """
+    copyoffload_config_data: dict[str, Any] = source_provider_data.get("copyoffload", {})
+    secondary_datastore_id: str | None = copyoffload_config_data.get("secondary_datastore_id")
+
+    if not secondary_datastore_id:
+        raise ValueError(
+            "Multi-datastore copy-offload tests require 'secondary_datastore_id' "
+            "to be configured in the copyoffload section."
+        )
+
+    LOGGER.info("✓ Multi-datastore configuration validated: secondary_datastore_id = %s", secondary_datastore_id)
+
+
 @pytest.fixture(scope="session")
 def copyoffload_storage_secret(
     fixture_store: dict[str, Any],
