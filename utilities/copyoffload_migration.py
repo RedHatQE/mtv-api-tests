@@ -93,7 +93,7 @@ def wait_for_vmware_cloud_init_all_vms(
     """Wait for cloud-init to finish on all VMware VMs in the plan.
 
     Iterates over all VMs in the plan and waits for each to signal
-    cloud-init completion via the presence of ``/cloud-init.finish``.
+    cloud-init completion via the presence of ``/var/lib/cloud/instance/boot-finished``.
 
     Args:
         prepared_plan (dict[str, Any]): Processed plan config with VM data
@@ -113,7 +113,7 @@ def wait_for_vmware_cloud_init_all_vms(
             "source_provider_data": source_provider_data,
             "vm_name": vm_name,
             "provider_vm_api": provider_vm_api,
-            "file_name": "/cloud-init.finish",
+            "file_name": "/var/lib/cloud/instance/boot-finished",
         }
         if "source_vm_power" in vm_data:
             cloud_init_kwargs["target_power_state"] = vm_data["source_vm_power"]
@@ -138,7 +138,7 @@ def wait_for_cloud_init(
         source_provider_data: Source provider configuration data
         vm_name: Name of the VM
         provider_vm_api: Provider VM object
-        file_name: Full path to the file to check for (e.g., "/cloud-init.finish")
+        file_name: Full path to the file to check for (e.g., "/var/lib/cloud/instance/boot-finished")
         timeout: Timeout in seconds (default: 2000)
         target_power_state: Expected source VM power state for downstream validation ("on" or "off",
             default: "off"). When "off", logs that MTV will handle shutdown. Does not change VM power.
