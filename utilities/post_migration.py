@@ -24,7 +24,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
 from utilities.naming import resolve_destination_vm_name
-from utilities.ssh_utils import SSHConnectionManager
+from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
 from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
 from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
 
@@ -399,32 +399,136 @@ def _verify_gateway(interface_name: str, expected_gateway: str, matching_interfa
         )
 
 
+def _load_current_interfaces(
+    ssh_conn: VMSSHConnection,
+    network_cmd: list[str],
+    is_windows: bool,
+    vm_name: str,
+) -> dict[str, dict[str, Any]] | None:
+    """Run a network command over SSH and parse the guest's interface configuration.
+
+    Args:
+        ssh_conn (VMSSHConnection): SSH connection to the destination VM
+        network_cmd (list[str]): Command to run (e.g. ['nmcli', 'device', 'show'])
+        is_windows (bool): True to parse ipconfig output, False for nmcli
+        vm_name (str): VM name used in log messages
+
+    Returns:
+        dict[str, dict[str, Any]] | None: Parsed interfaces keyed by name, or None to signal retry
+
+    Raises:
+        CommandExecFailed: If the network command exits with a non-zero code
+    """
+    if not ssh_conn.rrmngmnt_host:
+        LOGGER.warning(f"SSH connection not established for VM {vm_name} - retrying...")
+        return None
+
+    executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)
+    executor.port = ssh_conn.local_port
+    rc, stdout, err = executor.run_cmd(network_cmd)
+    if rc != 0:
+        raise CommandExecFailed(name=" ".join(network_cmd), err=err)
+
+    if not stdout.strip():
+        LOGGER.warning(f"{' '.join(network_cmd)} returned empty output")
+        return None
+
+    return _parse_windows_network_config(stdout) if is_windows else _parse_linux_network_config(stdout)
+
+
+def _match_expected_static_ips(
+    current_interfaces: dict[str, dict[str, Any]],
+    static_interfaces: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Match expected static-IP interfaces against the guest's current interfaces.
+
+    Uses a phased matching priority: exact MAC match first, then exact name match,
+    then unique substring name match (ambiguous substring matches are skipped).
+
+    Args:
+        current_interfaces (dict[str, dict[str, Any]]): Parsed guest interfaces keyed by name
+        static_interfaces (list[dict[str, Any]]): Expected static-IP entries from source VM data
+
+    Returns:
+        tuple[list[dict[str, Any]], list[str]]: A pair of (matched results, missing descriptions).
+            Each matched result is a shallow copy of the interface config with 'subnet_mask' set.
+    """
+    results: list[dict[str, Any]] = []
+    missing: list[str] = []
+
+    for interface in static_interfaces:
+        interface_name: str = interface["name"]
+        expected_ip: str = interface["ip_address"]
+        source_mac: str = interface.get("macAddress", "").lower().replace("-", ":").replace(".", ":")
+
+        # Phase 1: exact MAC match
+        matched = None
+        if source_mac:
+            for _iface_name, iface_config in current_interfaces.items():
+                if iface_config.get("macAddress", "").lower().replace("-", ":").replace(".", ":") == source_mac:
+                    matched = iface_config
+                    break
+
+        # Phase 2: exact name match
+        if not matched:
+            for iface_name, iface_config in current_interfaces.items():
+                if interface_name.lower() == iface_name.lower():
+                    matched = iface_config
+                    break
+
+        # Phase 3: unique substring name match
+        if not matched:
+            substring_matches = [
+                cfg for name, cfg in current_interfaces.items() if interface_name.lower() in name.lower()
+            ]
+            if len(substring_matches) == 1:
+                matched = substring_matches[0]
+
+        if not matched:
+            missing.append(f"{interface_name} (interface not found)")
+            continue
+
+        ip_found = False
+        for ip_info in matched.get("ip_addresses", []):
+            if ip_info.get("ip_address") == expected_ip:
+                result = dict(matched)
+                result["subnet_mask"] = ip_info.get("subnet_mask", "")
+                results.append(result)
+                ip_found = True
+                break
+
+        if not ip_found:
+            all_ips = [ip.get("ip_address") for ip in matched.get("ip_addresses", [])]
+            missing.append(f"{interface_name}/{expected_ip} (found IPs: {all_ips})")
+
+    return results, missing
+
+
 def check_static_ip_preservation(
     vm_name: str,
     vm_ssh_connections: SSHConnectionManager,
     source_vm_data: dict[str, Any],
     source_provider_data: dict[str, Any],
-    timeout: int = 600,
+    timeout: int = 660,
     retry_delay: int = 30,
 ) -> None:
-    """
-    Verify that static IPs are preserved on the destination VM after migration.
-    This function:
-    1. Gets static IP configuration from source VM data (IP, subnet mask, static flag)
-    2. Connects to destination VM via SSH
-    3. Retrieves current network configuration
-    4. Validates IP address matches source VM
+    """Verify that all static IPs from the source VM are preserved on the destination VM after migration.
+
+    Connects to the destination VM via SSH and polls until every expected static IP appears in the
+    guest network configuration, then validates subnet masks and gateways.
 
     Args:
         vm_name: Name of the VM to check
         vm_ssh_connections: SSH connections fixture manager
         source_vm_data: Source VM data collected during plan setup
         source_provider_data: Provider configuration from .providers.json
-        timeout: Total timeout in seconds for network configuration retrieval (default: 600)
+        timeout: Total timeout in seconds for network configuration retrieval (default: 660)
         retry_delay: Delay in seconds between retry attempts (default: 30)
 
     Raises:
-        Exception: If static IP verification fails
+        ValueError: If no static interfaces found or network command fails.
+        TimeoutError: If not all static IPs appear within the timeout period.
+        AssertionError: If subnet mask or gateway verification fails.
     """
     LOGGER.info(f"Verifying static IP preservation for VM {vm_name}")
 
@@ -448,128 +552,84 @@ def check_static_ip_preservation(
     # Get SSH credentials
     ssh_username, ssh_password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_data)
 
-    # Check each static IP interface
-    for interface in static_interfaces:
-        interface_name = interface.get("name", "unknown")
-        expected_ip = interface.get("ip_address", "")
-        expected_subnet = interface.get("subnet_mask", "")
+    ssh_conn = vm_ssh_connections.create(vm_name=vm_name, username=ssh_username, password=ssh_password)
+    last_missing: list[str] = []
 
-        LOGGER.info(f"Verifying interface {interface_name}: IP={expected_ip}, Subnet={expected_subnet}")
+    LOGGER.info(
+        f"Verifying {len(static_interfaces)} static IPs: "
+        f"{[(iface['name'], iface['ip_address']) for iface in static_interfaces]}"
+    )
 
-        # Get current network configuration via SSH with retry logic It takes time for secondary IPs to appear
-        ssh_conn = vm_ssh_connections.create(vm_name=vm_name, username=ssh_username, password=ssh_password)
+    def verify_all_static_ips() -> list[dict[str, Any]] | None:
+        """Check all expected static IPs in a single SSH call.
 
-        def get_matching_interface_with_ip(expected_ip: str = expected_ip) -> dict[str, Any] | None:
-            """
-            Combined function that:
-            1. Gets network configuration
-            2. Parses it
-            3. Finds matching interface
-            4. Checks if expected IP is present
+        Returns:
+            list[dict[str, Any]]: Matched interface configs (one per static_interfaces entry) when ALL found.
+            None: If any IP is missing (triggers retry).
 
-            Returns:
-                matching_interface dict if successful
-                None if should retry
-                Raises CommandExecFailed if permanent failure
-            """
-            try:
-                with ssh_conn:
-                    LOGGER.info(f"Attempting to get network configuration using {' '.join(network_cmd)}")
-
-                    # Execute command using executor with the correct user
-                    # We need to use the executor with our specific user instead
-                    executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)  # type: ignore[union-attr]
-                    executor.port = ssh_conn.local_port
-
-                    # Run the command directly
-                    rc, stdout, err = executor.run_cmd(network_cmd)
-                    if rc != 0:
-                        raise CommandExecFailed(name=" ".join(network_cmd), err=err)
-
-                    if not stdout.strip():
-                        LOGGER.warning(f"{' '.join(network_cmd)} returned empty output")
-                        return None
-
-                    # Parse network configuration
-                    try:
-                        if is_windows:
-                            current_interfaces = _parse_windows_network_config(stdout)
-                        else:
-                            current_interfaces = _parse_linux_network_config(stdout)
-                        LOGGER.info(f"{' '.join(network_cmd)} command executed successfully")
-                    except Exception:
-                        LOGGER.exception(f"Failed to parse {' '.join(network_cmd)} output")
-                        raise
-
-                    # Find matching interface
-                    matching_interface = None
-                    for iface_name, iface_config in current_interfaces.items():
-                        name_match = interface_name.lower() in iface_name.lower()
-                        source_mac = interface.get("macAddress", "").lower().replace("-", ":").replace(".", ":")
-                        dest_mac = iface_config.get("macAddress", "").lower().replace("-", ":").replace(".", ":")
-                        mac_match = source_mac == dest_mac and source_mac != ""
-
-                        if name_match or mac_match:
-                            matching_interface = iface_config
-                            LOGGER.info(
-                                f"Found matching interface: '{iface_name}' (name_match={name_match}, mac_match={mac_match})"
-                            )
-                            break
-
-                    if not matching_interface:
-                        LOGGER.warning(f"Interface {interface_name} not found yet")
-                        return None  # Retry
-
-                    # Check if expected IP is found and extract its subnet mask
-                    interface_ips = matching_interface.get("ip_addresses", [])
-
-                    for ip_info in interface_ips:
-                        if ip_info.get("ip_address") == expected_ip:
-                            LOGGER.info(f"SUCCESS: Expected IP {expected_ip} found")
-                            matching_interface["subnet_mask"] = ip_info.get("subnet_mask", "")
-                            return matching_interface
-
-                    all_ips = [ip_info.get("ip_address") for ip_info in interface_ips]
-                    LOGGER.warning(f"Expected IP {expected_ip} not found yet. Found IPs: {all_ips}")
-                    return None
-
-            except CommandExecFailed as e:
-                # Permanent failure - don't retry
-                LOGGER.warning(f"{' '.join(network_cmd)} command failed: {e}")
-                raise
-            except (SSHException, ChannelException, NoValidConnectionsError, AuthenticationException) as e:
-                # Connection issue - retry
-                LOGGER.warning(f"SSH connection failed: {e}")
-                return None
-            except Exception as e:
-                # Unexpected error - should not be retried
-                LOGGER.error(f"Unexpected error during network config retrieval: {type(e).__name__}: {e}")
-                raise
-
-        # Use TimeoutSampler to retry until success
+        Raises:
+            CommandExecFailed: If the network command fails.
+        """
+        nonlocal last_missing
         try:
-            matching_interface = None
-            for sample in TimeoutSampler(wait_timeout=timeout, sleep=retry_delay, func=get_matching_interface_with_ip):
-                if sample:  # Got matching interface with expected IP
-                    matching_interface = sample
-                    break
-        except TimeoutExpiredError as e:
-            raise TimeoutError(
-                f"Expected IP {expected_ip} not found after {timeout} seconds for interface {interface_name}"
-            ) from e
-        except CommandExecFailed as e:
-            # Re-raise command failures (don't retry)
-            raise ValueError(f"Network configuration command failed: {' '.join(network_cmd)} - {e}") from e
+            with ssh_conn:
+                current_interfaces = _load_current_interfaces(
+                    ssh_conn=ssh_conn,
+                    network_cmd=network_cmd,
+                    is_windows=is_windows,
+                    vm_name=vm_name,
+                )
+            if current_interfaces is None:
+                return None
 
-        # Verify subnet mask
-        if expected_subnet and matching_interface:
-            _verify_subnet_mask(interface_name, expected_subnet, matching_interface)
+            results, missing = _match_expected_static_ips(
+                current_interfaces=current_interfaces,
+                static_interfaces=static_interfaces,
+            )
 
-        # Verify gateway
+            if missing:
+                last_missing = missing
+                LOGGER.warning(f"Not all static IPs found yet, missing: {missing}")
+                return None
+
+            LOGGER.info(f"All {len(static_interfaces)} static IPs found")
+            return results
+
+        except CommandExecFailed:
+            raise
+        except (SSHException, ChannelException, NoValidConnectionsError, AuthenticationException) as e:
+            LOGGER.warning(f"SSH connection failed: {e}")
+            return None
+        except Exception as e:
+            LOGGER.error(f"Unexpected error during network config retrieval: {type(e).__name__}: {e}")
+            raise
+
+    try:
+        matched_interfaces: list[dict[str, Any]] | None = None
+        for sample in TimeoutSampler(wait_timeout=timeout, sleep=retry_delay, func=verify_all_static_ips):
+            if sample:
+                matched_interfaces = sample
+                break
+    except TimeoutExpiredError as e:
+        raise TimeoutError(
+            f"Static IP verification timed out after {timeout}s for VM {vm_name}. Last missing: {last_missing}"
+        ) from e
+    except CommandExecFailed as e:
+        raise ValueError(f"Network configuration command failed: {' '.join(network_cmd)} - {e}") from e
+
+    assert matched_interfaces is not None
+
+    for interface, matched in zip(static_interfaces, matched_interfaces, strict=True):
+        interface_name = interface["name"]
+        expected_subnet = interface.get("subnet_mask", "")
         expected_gateway = interface.get("gateway", "")
-        _verify_gateway(interface_name, expected_gateway, matching_interface)
 
-        LOGGER.info(f"Static IP {expected_ip} verified for interface {interface_name}")
+        if expected_subnet:
+            _verify_subnet_mask(interface_name, expected_subnet, matched)
+
+        _verify_gateway(interface_name, expected_gateway, matched)
+
+        LOGGER.info(f"Static IP {interface['ip_address']} verified for interface {interface_name}")
 
     LOGGER.info(f"Static IP preservation verification completed for VM {vm_name}")
 
