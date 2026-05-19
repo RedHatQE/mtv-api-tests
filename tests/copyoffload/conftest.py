@@ -144,6 +144,28 @@ def multi_datastore_config(source_provider_data: dict[str, Any]) -> None:
     LOGGER.info("✓ Multi-datastore configuration validated: secondary_datastore_id = %s", secondary_datastore_id)
 
 
+@pytest.fixture(scope="class")
+def rdm_config(source_provider_data: dict[str, Any]) -> None:
+    """Validate RDM configuration for copy-offload RDM disk tests.
+
+    Args:
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If rdm_lun_uuid is missing.
+    """
+    copyoffload_config_data: dict[str, Any] = source_provider_data.get("copyoffload", {})
+    rdm_lun_uuid: str | None = copyoffload_config_data.get("rdm_lun_uuid")
+
+    if not rdm_lun_uuid:
+        raise ValueError("RDM copy-offload tests require 'rdm_lun_uuid' to be configured in the copyoffload section.")
+
+    LOGGER.info("✓ RDM configuration validated: rdm_lun_uuid = %s", rdm_lun_uuid)
+
+
 @pytest.fixture(scope="session")
 def copyoffload_storage_secret(
     fixture_store: dict[str, Any],
