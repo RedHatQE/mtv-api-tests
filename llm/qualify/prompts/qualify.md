@@ -69,7 +69,14 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
    - Feature: `.qualify/features/<name>/`
    - Bug: `.qualify/bugs/<id>/`
 
-4. **For bugs only** — ask the user:
+4. **For bugs only — extract bug ID**:
+   - Extract bug ID from `--source` URL (e.g., Jira ticket key from `https://issues.redhat.com/browse/MTV-1234`, GitHub issue number from `https://github.com/org/repo/issues/42`)
+   - If `--name` was provided, use it as the bug ID (user override)
+   - If extraction fails and `--name` was not provided, ask the user: "Could not extract bug ID from source. Please provide bug ID using --name (e.g., `MTV-1234`, `BZ-67890`, `42`)"
+   - Normalize the extracted/provided bug ID using the same slug rules from step 1 (lowercase, safe chars, max 63)
+   - Use the normalized bug ID as `<id>` for directory creation in step 3
+
+5. **For bugs only** — ask the user:
    > "Should this bug get a permanent test in the test suite? (Yes = full PR flow, No = verify-only with proof.md)"
 
 ## Phase 1: Test Plan
