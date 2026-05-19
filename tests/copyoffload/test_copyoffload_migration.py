@@ -1420,7 +1420,13 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
     indirect=True,
     ids=["MTV-562:copyoffload-rdm-virtual"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "rdm_config",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadRdmVirtualDiskMigration:
     """Copy-offload migration test - RDM virtual disk."""
 
@@ -1445,10 +1451,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
         datastore_id = copyoffload_config_data["datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # Validate RDM LUN is configured
-        if "rdm_lun_uuid" not in copyoffload_config_data or not copyoffload_config_data["rdm_lun_uuid"]:
-            pytest.fail("rdm_lun_uuid is required in copyoffload configuration for RDM disk tests")
 
         vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
 
