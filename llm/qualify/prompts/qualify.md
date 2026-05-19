@@ -50,7 +50,9 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
 
    ```bash
    # OCP version
-   oc get clusterversion version -o jsonpath='{.status.desired.version}'
+   OCP_VERSION_RAW="$(oc get clusterversion version -o jsonpath='{.status.desired.version}' 2>&1)"
+   OCP_VERSION="$(printf '%s\n' "$OCP_VERSION_RAW")"
+   # if empty or command error -> record: UNKNOWN: <OCP_VERSION_RAW or "no clusterversion match">
 
    # MTV version (from CSV)
    MTV_VERSION_RAW="$(oc get csv -n openshift-mtv -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.version}{"\n"}{end}' 2>&1)"
@@ -65,9 +67,9 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
 
    If any version cannot be retrieved, record it as `UNKNOWN` with the error message. The final proof report will reflect missing versions.
 
-3. **Create output directory**:
-   - Feature: `.qualify/features/<name>/`
-   - Bug: `.qualify/bugs/<id>/`
+3. **Create output directory** and define `artifact_key` for all later paths:
+   - Feature: `.qualify/features/<name>/` — `artifact_key` = `<name>`
+   - Bug: `.qualify/bugs/<id>/` — `artifact_key` = `<id>`
 
 4. **For bugs only — extract bug ID**:
    - Extract bug ID from `--source` URL (e.g., Jira ticket key from `https://issues.redhat.com/browse/MTV-1234`, GitHub issue number from `https://github.com/org/repo/issues/42`)
@@ -93,10 +95,10 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
    - To read `llm/qualify/templates/test-plan-template.md` for the output template
    - To produce `test-plan.md`
 
-3. **Save** the test plan to `.qualify/<type>/<name>/test-plan.md`
+3. **Save** the test plan to `.qualify/<type>/<artifact_key>/test-plan.md`
 
 4. **🛑 HUMAN CHECKPOINT**: Ask the user:
-   > "Test plan ready for review. Please review `.qualify/<type>/<name>/test-plan.md`.
+   > "Test plan ready for review. Please review `.qualify/<type>/<artifact_key>/test-plan.md`.
    > Approve or provide feedback?"
 
    Options: ["Approved — proceed to implementation", "I have feedback"]
@@ -133,7 +135,7 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
    export KUBECONFIG=<path>
 
    # Run the specific test
-   uv run pytest tests/<path>::<TestClass> -v --tc-file=tests/tests_config/config.py --tc-format=python -p no:xdist 2>&1 | tee .qualify/<type>/<name>/test-output.log
+   uv run pytest tests/<path>::<TestClass> -v --tc-file=tests/tests_config/config.py --tc-format=python -p no:xdist 2>&1 | tee .qualify/<type>/<artifact_key>/test-output.log
    ```
 
    Capture the full output.
@@ -163,7 +165,7 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
    export KUBECONFIG=<path>
    uv run pytest /tmp/qualify-<name>/<test_file>.py -v \
      --tc-file=tests/tests_config/config.py --tc-format=python -p no:xdist \
-     2>&1 | tee .qualify/<type>/<name>/test-output.log
+     2>&1 | tee .qualify/<type>/<artifact_key>/test-output.log
    ```
 
 3. Verify on cluster (same as step 4 above)
@@ -205,7 +207,7 @@ Only for features and bugs-with-permanent-tests.
    - Test plan reference
    - The template from `llm/qualify/templates/proof-template.md`
 
-2. **Write proof.md** to `.qualify/<type>/<name>/proof.md`
+2. **Write proof.md** to `.qualify/<type>/<artifact_key>/proof.md`
 
 3. **Final summary** to the user:
 
@@ -217,8 +219,8 @@ Only for features and bugs-with-permanent-tests.
    Result: QUALIFIED / NOT QUALIFIED / BUG FIXED / BUG NOT FIXED
 
    Artifacts:
-   - Test Plan: .qualify/<type>/<name>/test-plan.md
-   - Proof: .qualify/<type>/<name>/proof.md
+   - Test Plan: .qualify/<type>/<artifact_key>/test-plan.md
+   - Proof: .qualify/<type>/<artifact_key>/proof.md
    - PR: <URL> (if applicable)
 
    Environment:
