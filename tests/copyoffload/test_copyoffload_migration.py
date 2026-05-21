@@ -1420,7 +1420,14 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
     indirect=True,
     ids=["MTV-562:copyoffload-rdm-virtual"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "rdm_config",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadRdmVirtualDiskMigration:
     """Copy-offload migration test - RDM virtual disk."""
 
@@ -1445,10 +1452,6 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
         datastore_id = copyoffload_config_data["datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # Validate RDM LUN is configured
-        if "rdm_lun_uuid" not in copyoffload_config_data or not copyoffload_config_data["rdm_lun_uuid"]:
-            pytest.fail("rdm_lun_uuid is required in copyoffload configuration for RDM disk tests")
 
         vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
 
@@ -1582,6 +1585,183 @@ class TestCopyoffloadRdmVirtualDiskMigration:
 
 @pytest.mark.vsphere
 @pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_rdm_physical_disk_migration"])],
+    indirect=True,
+    ids=["MTV-596:copyoffload-rdm-physical"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "rdm_config",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadRdmPhysicalDiskMigration:
+    """Copy-offload migration (MTV-596): compatibility-mode physical RDM disk (independent persistent)."""
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    def test_create_storagemap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with copy-offload configuration."""
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource."""
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource."""
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan.get("copyoffload", False),
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    def test_migrate_vms(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+    ) -> None:
+        """Execute migration."""
+        execute_migration(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+        """
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
+    def test_check_vms(
+        self,
+        prepared_plan: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs and verify disk count."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
 @pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -1590,7 +1770,13 @@ class TestCopyoffloadRdmVirtualDiskMigration:
     indirect=True,
     ids=["MTV-564:copyoffload-multi-datastore"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadMultiDatastoreMigration:
     """Copy-offload migration test - multiple datastores."""
 
@@ -1954,6 +2140,7 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
     "multus_network_name",
     "copyoffload_config",
     "mixed_datastore_config",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMixedDatastoreMigration:
@@ -2394,7 +2581,13 @@ class TestCopyoffloadFallbackLargeMigration:
     indirect=True,
     ids=["MTV-567:copyoffload-independent-persistent"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadIndependentPersistentDiskMigration:
     """Copy-offload migration test - independent persistent disk."""
 
@@ -2560,7 +2753,11 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
     ids=["MTV-568:copyoffload-independent-nonpersistent"],
 )
 @pytest.mark.usefixtures(
-    "nonpersistent_disk_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+    "nonpersistent_disk_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
 )
 class TestCopyoffloadIndependentNonpersistentDiskMigration:
     """Copy-offload migration test - independent non-persistent disk."""
@@ -2727,7 +2924,13 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
     indirect=True,
     ids=["MTV-573:copyoffload-10-mixed-disks"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffload10MixedDisksMigration:
     """Copy-offload migration test - 10 mixed disks (thin/thick)."""
 
@@ -2892,7 +3095,13 @@ class TestCopyoffload10MixedDisksMigration:
     indirect=True,
     ids=["MTV-600:copyoffload-large-vm"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadLargeVmMigration:
     """Copy-offload migration test - large VM (1TB)."""
 
@@ -3298,6 +3507,7 @@ class TestCopyoffloadNonconformingNameMigration:
     "multus_network_name",
     "precopy_interval_forkliftcontroller",
     "copyoffload_config",
+    "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadWarmMigration:
