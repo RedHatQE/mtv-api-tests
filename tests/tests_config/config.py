@@ -209,6 +209,21 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_warm_rdm_virtual_disk_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "source_vm_power": "on",
+                "guest_agent": True,
+                "clone": True,
+                "add_disks": [
+                    {"rdm_type": "virtual"},  # virtualMode + persistent; LUN from copyoffload.rdm_lun_uuid
+                ],
+            },
+        ],
+        "warm_migration": True,
+        "copyoffload": True,
+    },
     "test_copyoffload_thick_lazy_snapshots_migration": {
         "virtual_machines": [
             {
