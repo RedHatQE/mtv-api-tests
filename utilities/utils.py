@@ -640,6 +640,12 @@ class VirtualMachineFromInstanceType(VirtualMachine):
 def get_cluster_client() -> DynamicClient:
     """Get a DynamicClient for the cluster.
 
+    Authentication is attempted in the following order:
+    1. Kubeconfig file (from KUBECONFIG env var or ~/.kube/config) - preferred method
+       This works with 'oc login' and token-based authentication.
+    2. Username/password credentials - fallback for legacy compatibility
+       Note: May not work with modern Kubernetes clusters that don't support HTTP basic auth.
+
     Credentials are resolved from pytest-testconfig (``py_config``) first,
     then from environment variables (``CLUSTER_HOST``,
     ``CLUSTER_USERNAME``, ``CLUSTER_PASSWORD``).
@@ -659,6 +665,23 @@ def get_cluster_client() -> DynamicClient:
     Raises:
         ValueError: If the client cannot be created.
     """
+    # Try to use kubeconfig first (works with oc login and token-based auth)
+    # This is the preferred method as it supports modern Kubernetes authentication
+    kubeconfig_path = os.environ.get("KUBECONFIG", os.path.expanduser("~/.kube/config"))
+    if os.path.exists(kubeconfig_path):
+        try:
+            LOGGER.info(f"Attempting to use kubeconfig from {kubeconfig_path}")
+            # Call get_client without parameters to use kubeconfig
+            client = get_client()
+            if isinstance(client, DynamicClient):
+                LOGGER.info("Successfully created client from kubeconfig")
+                return client
+        except Exception as e:
+            LOGGER.warning(f"Failed to load kubeconfig from {kubeconfig_path}: {e}")
+            LOGGER.warning("Falling back to username/password authentication")
+
+    # Fall back to username/password authentication (legacy behavior)
+    # Note: This may not work with modern Kubernetes clusters that don't support HTTP basic auth
     host = get_value_from_py_config("cluster_host")
     if host is None:
         host = os.environ.get("CLUSTER_HOST")
@@ -677,6 +700,12 @@ def get_cluster_client() -> DynamicClient:
         insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
         if insecure_verify_skip is None:
             insecure_verify_skip = True
+
+    LOGGER.info(
+        "Using username/password authentication. "
+        "Note: This may fail with modern Kubernetes clusters. "
+        "Consider using 'oc login' before running tests to create a valid kubeconfig."
+    )
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
     if not isinstance(client, DynamicClient):
         raise ValueError("Failed to get client for cluster")
