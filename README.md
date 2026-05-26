@@ -249,6 +249,56 @@ podman run --rm \
 
 ---
 
+### Cluster Authentication
+
+The test framework supports two authentication methods with automatic precedence:
+
+#### Authentication Methods (in order of precedence)
+
+1. **Kubeconfig File** (Preferred - Token-based)
+   - Location: `~/.kube/config` or path from `KUBECONFIG` environment variable
+   - Created automatically by `oc login`
+   - Works with modern Kubernetes/OpenShift clusters
+   - **Recommended for all workflows**
+
+2. **Username/Password** (Legacy fallback)
+   - Specified via `--tc=cluster_username` and `--tc=cluster_password`
+   - Used only when kubeconfig is not available
+   - May not work with clusters that don't support HTTP basic authentication
+
+#### How It Works
+
+```bash
+# Method 1: Use oc login (creates kubeconfig) - RECOMMENDED
+oc login https://api.your-cluster.com:6443 -u kubeadmin -p your-password
+
+# Then run tests WITHOUT passing credentials (uses kubeconfig automatically)
+podman run --rm \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  -v ${HOME}/.kube/config:/app/.kube/config:ro \
+  ghcr.io/redhatqe/mtv-api-tests:latest \
+  uv run pytest -m tier0 -v \
+    --tc=source_provider:vsphere-8.0.1 \
+    --tc=storage_class:YOUR-STORAGE-CLASS
+
+# Method 2: Pass credentials directly (legacy fallback)
+# Only used if kubeconfig doesn't exist
+podman run --rm \
+  -v $(pwd)/.providers.json:/app/.providers.json:ro \
+  ghcr.io/redhatqe/mtv-api-tests:latest \
+  uv run pytest -m tier0 -v \
+    --tc=cluster_host:https://api.your-cluster.com:6443 \
+    --tc=cluster_username:kubeadmin \
+    --tc=cluster_password:your-password \
+    --tc=source_provider:vsphere-8.0.1 \
+    --tc=storage_class:YOUR-STORAGE-CLASS
+```
+
+> **Note**: If both kubeconfig and username/password are provided, kubeconfig takes precedence.
+> This ensures compatibility with modern Kubernetes authentication while maintaining backward compatibility.
+
+---
+
 ## Running Different Test Categories
 
 The Quick Start runs **tier0** tests (smoke tests). You can run other test categories by changing the `-m` marker:

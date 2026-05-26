@@ -674,8 +674,13 @@ def get_cluster_client() -> DynamicClient:
             # Call get_client without parameters to use kubeconfig
             client = get_client()
             if isinstance(client, DynamicClient):
-                LOGGER.info("Successfully created client from kubeconfig")
+                LOGGER.info(f"Successfully created client from kubeconfig (cluster: {client.configuration.host})")
                 return client
+            else:
+                LOGGER.warning(
+                    f"Kubeconfig client returned unexpected type {type(client).__name__}, "
+                    f"falling back to username/password authentication"
+                )
         except Exception as e:
             LOGGER.warning(f"Failed to load kubeconfig from {kubeconfig_path}: {e}")
             LOGGER.warning("Falling back to username/password authentication")
