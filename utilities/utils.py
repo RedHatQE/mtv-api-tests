@@ -667,23 +667,29 @@ def get_cluster_client() -> DynamicClient:
     """
     # Try to use kubeconfig first (works with oc login and token-based auth)
     # This is the preferred method as it supports modern Kubernetes authentication
-    kubeconfig_path = os.environ.get("KUBECONFIG", os.path.expanduser("~/.kube/config"))
-    if os.path.exists(kubeconfig_path):
-        try:
-            LOGGER.info(f"Attempting to use kubeconfig from {kubeconfig_path}")
-            # Call get_client without parameters to use kubeconfig
-            client = get_client()
-            if isinstance(client, DynamicClient):
-                LOGGER.info(f"Successfully created client from kubeconfig (cluster: {client.configuration.host})")
-                return client
-            else:
-                LOGGER.warning(
-                    f"Kubeconfig client returned unexpected type {type(client).__name__}, "
-                    f"falling back to username/password authentication"
-                )
-        except Exception as e:
-            LOGGER.warning(f"Failed to load kubeconfig from {kubeconfig_path}: {e}")
-            LOGGER.warning("Falling back to username/password authentication")
+    # Build list of kubeconfig paths to try: KUBECONFIG env var first, then default
+    kubeconfig_candidates = []
+    if os.environ.get("KUBECONFIG"):
+        kubeconfig_candidates.append(os.environ.get("KUBECONFIG"))
+    kubeconfig_candidates.append(os.path.expanduser("~/.kube/config"))
+
+    for kubeconfig_path in kubeconfig_candidates:
+        if os.path.exists(kubeconfig_path):
+            try:
+                LOGGER.info(f"Attempting to use kubeconfig from {kubeconfig_path}")
+                # Call get_client without parameters to use kubeconfig
+                client = get_client()
+                if isinstance(client, DynamicClient):
+                    LOGGER.info(f"Successfully created client from kubeconfig (cluster: {client.configuration.host})")
+                    return client
+                else:
+                    LOGGER.warning(
+                        f"Kubeconfig client returned unexpected type {type(client).__name__}, "
+                        f"falling back to username/password authentication"
+                    )
+            except Exception:
+                LOGGER.exception(f"Failed to load kubeconfig from {kubeconfig_path}, trying next candidate")
+                # Continue to next candidate or fall through to username/password
 
     # Fall back to username/password authentication (legacy behavior)
     # Note: This may not work with modern Kubernetes clusters that don't support HTTP basic auth

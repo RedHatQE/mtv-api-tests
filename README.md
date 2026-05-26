@@ -276,6 +276,7 @@ oc login https://api.your-cluster.com:6443 -u kubeadmin -p your-password
 podman run --rm \
   -v $(pwd)/.providers.json:/app/.providers.json:ro \
   -v ${HOME}/.kube/config:/app/.kube/config:ro \
+  -e KUBECONFIG=/app/.kube/config \
   ghcr.io/redhatqe/mtv-api-tests:latest \
   uv run pytest -m tier0 -v \
     --tc=source_provider:vsphere-8.0.1 \
