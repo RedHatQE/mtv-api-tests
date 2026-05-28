@@ -293,6 +293,37 @@ def _parse_xcopy_used_from_log(pod: Pod) -> int:
     return int(matches[-1])
 
 
+_SOURCE_DATASTORE_FROM_LOG_RE = re.compile(
+    r'(?:source_vmdk|source)="\[([^\]]+)\]',
+)
+
+
+def _parse_source_datastore_name_from_log(pod: Pod) -> str:
+    """Parse the source vSphere datastore display name from a populate pod's logs.
+
+    Populator logs reference datastores by display name (not MoRef ID), e.g.
+    ``source_vmdk="[<datastore-name>] vm-folder/disk.vmdk"``. Callers correlate this
+    name to ``datastore_id`` / ``non_xcopy_datastore_id`` from provider configuration.
+
+    Args:
+        pod (Pod): The populate pod to read logs from.
+
+    Returns:
+        str: Datastore display name from the log.
+
+    Raises:
+        ValueError: If no source datastore pattern is found in the pod logs.
+    """
+    log_content: str = pod.log()
+    match = _SOURCE_DATASTORE_FROM_LOG_RE.search(log_content)
+    if not match:
+        raise ValueError(
+            f"Source datastore not found in populate pod '{pod.name}' logs "
+            '(expected source_vmdk="[<datastore>]..." or source="[<datastore>]...")'
+        )
+    return match.group(1)
+
+
 def verify_xcopy_used(
     ocp_admin_client: DynamicClient,
     plan: Plan,
@@ -332,4 +363,89 @@ def verify_xcopy_used(
 
         assert xcopy_used == expected_value, (
             f"Pod '{pod.name}' (PVC '{pvc_name}'): expected xcopyUsed={expected_value}, got xcopyUsed={xcopy_used}"
+        )
+
+
+def verify_mixed_datastore_xcopy_used(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    xcopy_datastore_id: str,
+    non_xcopy_datastore_id: str,
+    datastore_names_by_id: dict[str, str],
+) -> None:
+    """Verify per-disk xcopyUsed for mixed XCOPY and non-XCOPY datastore migrations.
+
+    Expected XCOPY behavior is determined from provider configuration (MoRef IDs in
+    ``copyoffload.datastore_id`` and ``copyoffload.non_xcopy_datastore_id``). Populate
+    pod logs use vSphere datastore display names, so ``datastore_names_by_id`` maps each
+    configured ID to its display name for log correlation.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods exist.
+        xcopy_datastore_id (str): MoRef ID of the XCOPY-capable datastore from provider config.
+        non_xcopy_datastore_id (str): MoRef ID of the non-XCOPY datastore from provider config.
+        datastore_names_by_id (dict[str, str]): Maps each MoRef ID to its vSphere display name.
+
+    Raises:
+        ValueError: If populate pods, datastore mapping, or source datastore cannot be determined.
+        AssertionError: If any disk's xcopyUsed value does not match its datastore type.
+    """
+    required_ids = {xcopy_datastore_id, non_xcopy_datastore_id}
+    if set(datastore_names_by_id.keys()) != required_ids:
+        raise ValueError(
+            "datastore_names_by_id must map exactly the XCOPY and non-XCOPY datastore IDs; "
+            f"expected {sorted(required_ids)}, got {sorted(datastore_names_by_id.keys())}"
+        )
+
+    migration_uid: str = _get_migration_uid(plan=plan)
+    LOGGER.info(
+        f"Checking mixed-datastore xcopyUsed for migration '{migration_uid}' "
+        f"(xcopy datastore '{xcopy_datastore_id}', non-xcopy datastore '{non_xcopy_datastore_id}')"
+    )
+
+    populate_pods: list[Pod] = _find_populate_pods(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        migration_uid=migration_uid,
+    )
+    LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
+
+    verified_datastore_ids: set[str] = set()
+
+    for pod in populate_pods:
+        pvc_name: str = pod.instance.metadata.labels.get("pvcName", pod.name)
+        source_datastore_name: str = _parse_source_datastore_name_from_log(pod=pod)
+        xcopy_used: int = _parse_xcopy_used_from_log(pod=pod)
+
+        if source_datastore_name == datastore_names_by_id[xcopy_datastore_id]:
+            source_datastore_id = xcopy_datastore_id
+            expected_value = 1
+        elif source_datastore_name == datastore_names_by_id[non_xcopy_datastore_id]:
+            source_datastore_id = non_xcopy_datastore_id
+            expected_value = 0
+        else:
+            expected_names = {datastore_id: name for datastore_id, name in datastore_names_by_id.items()}
+            raise ValueError(
+                f"Pod '{pod.name}' (PVC '{pvc_name}'): source datastore '{source_datastore_name}' "
+                f"does not match provider-configured datastores {expected_names}"
+            )
+
+        verified_datastore_ids.add(source_datastore_id)
+        LOGGER.info(
+            f"Pod '{pod.name}' (PVC '{pvc_name}', datastore '{source_datastore_id}' / "
+            f"'{source_datastore_name}'): xcopyUsed={xcopy_used}"
+        )
+
+        assert xcopy_used == expected_value, (
+            f"Pod '{pod.name}' (PVC '{pvc_name}', datastore '{source_datastore_id}' / "
+            f"'{source_datastore_name}'): expected xcopyUsed={expected_value}, got xcopyUsed={xcopy_used}"
+        )
+
+    if verified_datastore_ids != required_ids:
+        raise ValueError(
+            "Mixed datastore migration must include one disk per configured datastore; "
+            f"verified datastore IDs: {sorted(verified_datastore_ids)}"
         )
