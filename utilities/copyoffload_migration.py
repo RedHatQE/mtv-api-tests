@@ -273,40 +273,23 @@ def _find_populate_pods(ocp_admin_client: DynamicClient, namespace: str, migrati
     return populate_pods
 
 
-def _parse_xcopy_used_from_log(pod: Pod) -> int:
-    """Parse the last xcopyUsed value from a populate pod's logs.
-
-    Args:
-        pod (Pod): The populate pod to read logs from.
-
-    Returns:
-        int: The last xcopyUsed value (0 or 1).
-
-    Raises:
-        ValueError: If xcopyUsed is not found in the pod logs.
-    """
-    log_content: str = pod.log()
-    matches: list[str] = re.findall(r"xcopyUsed=(\d+)", log_content)
-    if not matches:
-        raise ValueError(f"xcopyUsed not found in populate pod '{pod.name}' logs")
-
-    return int(matches[-1])
-
-
 _SOURCE_DATASTORE_FROM_LOG_RE = re.compile(
     r'(?:source_vmdk|source)="\[([^\]]+)\]',
 )
+_XCOPY_USED_LOG_RE = re.compile(r"xcopyUsed=(\d+)")
+_COPY_OFFLOAD_FAILED_ERR_RE = re.compile(r'"copy-offload failed" err="([^"]+)"')
 
 
-def _parse_source_datastore_name_from_log(pod: Pod) -> str:
-    """Parse the source vSphere datastore display name from a populate pod's logs.
+def _parse_source_datastore_name_from_log_content(pod_name: str, log_content: str) -> str:
+    """Parse the source vSphere datastore display name from populate pod log text.
 
     Populator logs reference datastores by display name (not MoRef ID), e.g.
     ``source_vmdk="[<datastore-name>] vm-folder/disk.vmdk"``. Callers correlate this
     name to MoRef IDs from provider configuration via ``datastore_names_by_id``.
 
     Args:
-        pod (Pod): The populate pod to read logs from.
+        pod_name (str): Populate pod name (for error messages).
+        log_content (str): Full populate pod log text.
 
     Returns:
         str: Datastore display name from the log.
@@ -314,14 +297,50 @@ def _parse_source_datastore_name_from_log(pod: Pod) -> str:
     Raises:
         ValueError: If no source datastore pattern is found in the pod logs.
     """
-    log_content: str = pod.log()
     match = _SOURCE_DATASTORE_FROM_LOG_RE.search(log_content)
     if not match:
         raise ValueError(
-            f"Source datastore not found in populate pod '{pod.name}' logs "
+            f"Source datastore not found in populate pod '{pod_name}' logs "
             '(expected source_vmdk="[<datastore>]..." or source="[<datastore>]...")'
         )
     return match.group(1)
+
+
+def _parse_xcopy_used_from_log_content(pod_name: str, log_content: str) -> tuple[int, str]:
+    """Parse the last xcopyUsed value and its log line from populate pod log text.
+
+    Args:
+        pod_name (str): Populate pod name (for error messages).
+        log_content (str): Full populate pod log text.
+
+    Returns:
+        tuple[int, str]: Last xcopyUsed value (0 or 1) and the log line it appeared on.
+
+    Raises:
+        ValueError: If the populator failed before logging xcopyUsed, or xcopyUsed is missing.
+    """
+    matches: list[re.Match[str]] = list(_XCOPY_USED_LOG_RE.finditer(log_content))
+    if not matches:
+        failure_match = _COPY_OFFLOAD_FAILED_ERR_RE.search(log_content)
+        if failure_match is not None:
+            raise ValueError(
+                f"Populate pod '{pod_name}' copy-offload failed before xcopyUsed was logged: {failure_match.group(1)}"
+            )
+        if '"copy-offload failed"' in log_content:
+            raise ValueError(
+                f"Populate pod '{pod_name}' copy-offload failed before xcopyUsed was logged; "
+                "see populate pod logs for details"
+            )
+        raise ValueError(f"xcopyUsed not found in populate pod '{pod_name}' logs")
+
+    last_match = matches[-1]
+    line_start = log_content.rfind("\n", 0, last_match.start()) + 1
+    line_end = log_content.find("\n", last_match.end())
+    if line_end == -1:
+        line_end = len(log_content)
+    last_log_line: str = log_content[line_start:line_end].strip()
+
+    return int(last_match.group(1)), last_log_line
 
 
 def verify_xcopy_used(
@@ -358,11 +377,16 @@ def verify_xcopy_used(
 
     for pod in populate_pods:
         pvc_name: str = pod.instance.metadata.labels.get("pvcName", pod.name)
-        xcopy_used: int = _parse_xcopy_used_from_log(pod=pod)
-        LOGGER.info(f"Pod '{pod.name}' (PVC '{pvc_name}'): xcopyUsed={xcopy_used}")
+        log_content: str = pod.log()
+        xcopy_used, xcopy_log_line = _parse_xcopy_used_from_log_content(
+            pod_name=pod.name,
+            log_content=log_content,
+        )
+        LOGGER.info(f"Pod '{pod.name}' (PVC '{pvc_name}'): xcopyUsed={xcopy_used}; log: {xcopy_log_line}")
 
         assert xcopy_used == expected_value, (
-            f"Pod '{pod.name}' (PVC '{pvc_name}'): expected xcopyUsed={expected_value}, got xcopyUsed={xcopy_used}"
+            f"Pod '{pod.name}' (PVC '{pvc_name}'): expected xcopyUsed={expected_value}, "
+            f"got xcopyUsed={xcopy_used}; log: {xcopy_log_line}"
         )
 
 
@@ -456,24 +480,32 @@ def verify_xcopy_used_per_datastore(
 
     for pod in populate_pods:
         pvc_name: str = pod.instance.metadata.labels.get("pvcName", pod.name)
-        source_datastore_name: str = _parse_source_datastore_name_from_log(pod=pod)
+        log_content: str = pod.log()
+        source_datastore_name: str = _parse_source_datastore_name_from_log_content(
+            pod_name=pod.name,
+            log_content=log_content,
+        )
         source_datastore_id: str = _resolve_datastore_id_from_display_name(
             source_datastore_name=source_datastore_name,
             datastore_names_by_id=datastore_names_by_id,
         )
         expected_xcopy_used: bool = expected_xcopy_by_datastore_id[source_datastore_id]
         expected_value: int = 1 if expected_xcopy_used else 0
-        xcopy_used: int = _parse_xcopy_used_from_log(pod=pod)
+        xcopy_used, xcopy_log_line = _parse_xcopy_used_from_log_content(
+            pod_name=pod.name,
+            log_content=log_content,
+        )
 
         verified_datastore_ids.add(source_datastore_id)
         LOGGER.info(
             f"Pod '{pod.name}' (PVC '{pvc_name}', datastore '{source_datastore_id}' / "
-            f"'{source_datastore_name}'): xcopyUsed={xcopy_used}"
+            f"'{source_datastore_name}'): xcopyUsed={xcopy_used}; log: {xcopy_log_line}"
         )
 
         assert xcopy_used == expected_value, (
             f"Pod '{pod.name}' (PVC '{pvc_name}', datastore '{source_datastore_id}' / "
-            f"'{source_datastore_name}'): expected xcopyUsed={expected_value}, got xcopyUsed={xcopy_used}"
+            f"'{source_datastore_name}'): expected xcopyUsed={expected_value}, got xcopyUsed={xcopy_used}; "
+            f"log: {xcopy_log_line}"
         )
 
     if require_all_datastores_seen and verified_datastore_ids != set(expected_xcopy_by_datastore_id.keys()):
