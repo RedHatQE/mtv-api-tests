@@ -343,6 +343,39 @@ def _parse_xcopy_used_from_log_content(pod_name: str, log_content: str) -> tuple
     return int(last_match.group(1)), last_log_line
 
 
+def _log_xcopy_verification_result(
+    pod_name: str,
+    pvc_name: str,
+    expected_value: int,
+    actual_value: int,
+    xcopy_log_line: str,
+    *,
+    datastore_id: str | None = None,
+    datastore_display_name: str | None = None,
+) -> None:
+    """Log expected vs actual xcopyUsed for a populate pod verification.
+
+    Args:
+        pod_name (str): Populate pod name.
+        pvc_name (str): PVC label from the pod.
+        expected_value (int): Expected xcopyUsed (0 or 1).
+        actual_value (int): Actual xcopyUsed parsed from logs.
+        xcopy_log_line (str): Log line containing the last xcopyUsed value.
+        datastore_id (str | None): Optional MoRef ID when verifying per-datastore.
+        datastore_display_name (str | None): Optional vSphere datastore display name.
+    """
+    pod_context = f"Pod '{pod_name}' (PVC '{pvc_name}'"
+    if datastore_id is not None and datastore_display_name is not None:
+        pod_context += f", datastore '{datastore_id}' / '{datastore_display_name}'"
+    pod_context += ")"
+
+    result_label = "PASS" if expected_value == actual_value else "FAIL"
+    LOGGER.info(
+        f"{pod_context}: xcopyUsed expected={expected_value} actual={actual_value} "
+        f"({result_label}); log: {xcopy_log_line}"
+    )
+
+
 def verify_xcopy_used(
     ocp_admin_client: DynamicClient,
     plan: Plan,
@@ -382,7 +415,13 @@ def verify_xcopy_used(
             pod_name=pod.name,
             log_content=log_content,
         )
-        LOGGER.info(f"Pod '{pod.name}' (PVC '{pvc_name}'): xcopyUsed={xcopy_used}; log: {xcopy_log_line}")
+        _log_xcopy_verification_result(
+            pod_name=pod.name,
+            pvc_name=pvc_name,
+            expected_value=expected_value,
+            actual_value=xcopy_used,
+            xcopy_log_line=xcopy_log_line,
+        )
 
         assert xcopy_used == expected_value, (
             f"Pod '{pod.name}' (PVC '{pvc_name}'): expected xcopyUsed={expected_value}, "
@@ -497,9 +536,14 @@ def verify_xcopy_used_per_datastore(
         )
 
         verified_datastore_ids.add(source_datastore_id)
-        LOGGER.info(
-            f"Pod '{pod.name}' (PVC '{pvc_name}', datastore '{source_datastore_id}' / "
-            f"'{source_datastore_name}'): xcopyUsed={xcopy_used}; log: {xcopy_log_line}"
+        _log_xcopy_verification_result(
+            pod_name=pod.name,
+            pvc_name=pvc_name,
+            expected_value=expected_value,
+            actual_value=xcopy_used,
+            xcopy_log_line=xcopy_log_line,
+            datastore_id=source_datastore_id,
+            datastore_display_name=source_datastore_name,
         )
 
         assert xcopy_used == expected_value, (
