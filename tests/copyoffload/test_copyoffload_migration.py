@@ -29,7 +29,7 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_migration import verify_mixed_datastore_xcopy_used, verify_xcopy_used
+from utilities.copyoffload_migration import verify_xcopy_used, verify_xcopy_used_per_datastore
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -2473,12 +2473,14 @@ class TestCopyoffloadMixedDatastoreMigration:
             non_xcopy_datastore_id: source_provider.get_datastore_name_by_id(non_xcopy_datastore_id),
         }
 
-        verify_mixed_datastore_xcopy_used(
+        verify_xcopy_used_per_datastore(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
-            xcopy_datastore_id=xcopy_datastore_id,
-            non_xcopy_datastore_id=non_xcopy_datastore_id,
+            expected_xcopy_by_datastore_id={
+                xcopy_datastore_id: True,
+                non_xcopy_datastore_id: False,
+            },
             datastore_names_by_id=datastore_names_by_id,
         )
 
