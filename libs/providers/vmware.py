@@ -813,7 +813,9 @@ class VMWareProvider(BaseProvider):
         Args:
             vm: The target VM object.
             rdm_type: "virtual" or "physical" compatibility mode.
-            enable_cbt: When True, enable per-disk CBT for the new RDM in the same reconfigure.
+            enable_cbt: When True (warm migration), enable per-disk CBT for the new RDM via
+                extraConfig only. VM-level CBT is already set during clone; RDM is attached
+                post-clone so its scsi bus:unit key must be added here.
 
         """
         lun_uuid = self.copyoffload_config["rdm_lun_uuid"]
@@ -867,8 +869,7 @@ class VMWareProvider(BaseProvider):
         config_spec.deviceChange = [spec]
 
         if enable_cbt:
-            # CBT is VM-level; make it explicit when adding an RDM disk for warm migrations.
-            config_spec.changeTrackingEnabled = True
+            # Match clone_vm: per-disk extraConfig only (VM-level ctkEnabled was set at clone).
             cbt_key = f"scsi{scsi_controller.busNumber}:{unit_number}.ctkEnabled"
             existing_extra_config: dict[str, str] = {
                 option.key: str(option.value) for option in (vm.config.extraConfig or [])
