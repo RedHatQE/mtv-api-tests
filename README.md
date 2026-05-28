@@ -257,6 +257,7 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | `copyoffload` | Fast migrations via shared storage | Testing storage arrays |
 | `copyoffload_sanity` | Copy-offload sanity subset (see below) | Quick copy-offload validation |
 | `warm` | Warm migrations (VMs stay running) | Specific scenario testing |
+| `upgrade` | Migration across MTV operator upgrades | Validating upgrade compatibility |
 
 ### Copy-Offload Sanity Tests
 
@@ -626,6 +627,49 @@ Configure pod affinity/anti-affinity and node affinity rules.
 
 **Auto-generation:** Setting a value to `None` replaces it with the session UUID (e.g., `"test-id": None` becomes
 `"test-id": "mtv-api-tests-abc123"`). This ensures uniqueness for parallel test execution and prevents conflicts.
+
+---
+
+## Upgrade Tests
+
+Upgrade tests validate that migration resources created on a pre-upgrade MTV version survive the
+operator upgrade and that migrations execute successfully afterward. The test flow is:
+
+1. Create migration resources (StorageMap, NetworkMap, Plan) on the current MTV version
+2. Upgrade the MTV operator to the target version using an external upgrade script
+3. Verify the upgraded operator version and that existing Plan CRs remain in Ready state
+4. Execute the migration on the upgraded operator
+5. Validate the migrated VMs
+
+### Required `--tc` Parameters
+
+Upgrade tests require additional `--tc` parameters beyond the standard cluster and provider options:
+
+| Parameter | Required | Description |
+| --------- | -------- | ----------- |
+| `upgrade_repo_url` | Yes | URL of the Git repository containing the upgrade script |
+| `upgrade_repo_ref` | Yes | Git ref (branch or tag) to checkout |
+| `upgrade_script_path` | Yes | Relative path to the upgrade script within the repository |
+| `mtv_upgrade_to_version` | Yes | Target MTV version to upgrade to (e.g., `2.7.0`) |
+| `mtv_upgrade_to_source` | Yes | MTV source identifier (e.g., `brew`, `released`) |
+| `mtv_upgrade_image_index` | No | Image index override (pass empty string `""` to skip) |
+
+### Example
+
+```bash
+uv run pytest -m upgrade -v \
+  --tc=cluster_host:https://api.your-cluster.com:6443 \
+  --tc=cluster_username:kubeadmin \
+  --tc=cluster_password:${CLUSTER_PASSWORD} \
+  --tc=source_provider:vsphere-8.0.1 \
+  --tc=storage_class:YOUR-STORAGE-CLASS \
+  --tc=upgrade_repo_url:https://github.com/org/mtv-autodeploy.git \
+  --tc=upgrade_repo_ref:main \
+  --tc=upgrade_script_path:scripts/upgrade.sh \
+  --tc=mtv_upgrade_to_version:2.7.0 \
+  --tc=mtv_upgrade_to_source:released \
+  --tc=mtv_upgrade_image_index:""
+```
 
 ---
 

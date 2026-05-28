@@ -125,3 +125,7 @@ class InvalidVMNameError(Exception):
 
 class GuestCommandError(Exception):
     """Raised when a command executed via VMware Guest Operations exits with non-zero code."""
+
+
+class MtvUpgradeError(Exception):
+    """Raised when MTV operator upgrade fails."""
