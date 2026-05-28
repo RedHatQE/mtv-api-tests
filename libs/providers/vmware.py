@@ -806,6 +806,7 @@ class VMWareProvider(BaseProvider):
         self,
         vm: vim.VirtualMachine,
         rdm_type: Literal["virtual", "physical"],
+        *,
         enable_cbt: bool = False,
     ) -> None:
         """Add an RDM disk to an existing VM. Must be called post-clone since RDM requires VMFS datastore.
