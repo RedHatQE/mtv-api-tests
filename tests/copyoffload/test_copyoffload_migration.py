@@ -1772,7 +1772,6 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
 )
 @pytest.mark.usefixtures(
     "vmware_cloud_init_ready",
-    "multus_network_name",
     "precopy_interval_forkliftcontroller",
     "copyoffload_config",
     "copyoffload_ssh_key",
@@ -1780,7 +1779,13 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadWarmRdmVirtualDiskMigration:
-    """Copy-offload warm migration (MTV-597): virtual/dependent RDM disk."""
+    """Copy-offload warm migration (MTV-597): virtual/dependent RDM disk.
+
+    Note:
+        This scenario is currently affected by [MTV-5622]: warm copy-offload migration
+        may fail preflight when a virtual RDM disk is attached (parent VMDK not found
+        on eco-iscsi-ds3).
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -1788,16 +1793,16 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
 
     def test_create_storagemap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        source_provider_data,
-        copyoffload_storage_secret,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: BaseProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
         """Create StorageMap with copy-offload configuration."""
         copyoffload_config_data = source_provider_data["copyoffload"]
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
@@ -1830,15 +1835,15 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
 
     def test_create_networkmap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        multus_network_name,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: BaseProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
         """Create NetworkMap resource."""
         vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
@@ -1855,14 +1860,14 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
 
     def test_create_plan(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        target_namespace,
-        source_provider_inventory,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
         """Create MTV Plan CR resource."""
         for vm in prepared_plan["virtual_machines"]:
             vm_name = vm["name"]
@@ -1883,7 +1888,12 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
         )
         assert self.plan_resource, "Plan creation failed"
 
-    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+    def test_migrate_vms(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+    ) -> None:
         """Execute warm migration with cutover."""
         LOGGER.info("Executing warm copy-offload migration with virtual RDM disk")
         execute_migration(
@@ -1905,15 +1915,15 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
 
     def test_check_vms(
         self,
-        prepared_plan,
-        source_provider,
-        destination_provider,
-        source_provider_data,
-        target_namespace,
-        source_vms_namespace,
-        source_provider_inventory,
-        vm_ssh_connections,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
         """Validate migrated VMs and verify disk count."""
         check_vms(
             plan=prepared_plan,

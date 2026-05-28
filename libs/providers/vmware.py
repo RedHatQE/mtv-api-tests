@@ -831,13 +831,13 @@ class VMWareProvider(BaseProvider):
             None,
         )
         if not scsi_controller:
-            raise RuntimeError(f"No SCSI controller found on VM '{vm.name}'")
+            raise ValueError(f"No SCSI controller found on VM '{vm.name}'")
 
         used_units = {dev.unitNumber for dev in vm.config.hardware.device if dev.controllerKey == scsi_controller.key}
         # Unit 7 reserved for SCSI controller
         unit_number = next((i for i in range(16) if i != 7 and i not in used_units), None)
         if unit_number is None:
-            raise RuntimeError(f"No available unit number on VM '{vm.name}'")
+            raise ValueError(f"No available unit number on VM '{vm.name}'")
 
         # Create RDM disk spec
         spec = vim.vm.device.VirtualDeviceSpec()
@@ -867,6 +867,8 @@ class VMWareProvider(BaseProvider):
         config_spec.deviceChange = [spec]
 
         if enable_cbt:
+            # CBT is VM-level; make it explicit when adding an RDM disk for warm migrations.
+            config_spec.changeTrackingEnabled = True
             cbt_key = f"scsi{scsi_controller.busNumber}:{unit_number}.ctkEnabled"
             existing_extra_config: dict[str, str] = {
                 option.key: str(option.value) for option in (vm.config.extraConfig or [])
