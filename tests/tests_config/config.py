@@ -13,7 +13,6 @@ remote_ocp_cluster: str = ""
 snapshots_interval: int = 2
 mins_before_cutover: int = 5
 plan_wait_timeout: int = 3600
-
 tests_params: dict = {
     "test_sanity_warm_mtv_migration": {
         "virtual_machines": [
@@ -605,6 +604,32 @@ tests_params: dict = {
         "pre_hook": {"expected_result": "succeed"},
         "post_hook": {"expected_result": "fail"},
         "expected_migration_result": "fail",
+    },
+    "test_shared_disk_rhel_migration": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-shared-rhel1",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "migrate_shared_disks": True,
+            },
+            {
+                "name": "mtv-feature-shared-rhel2",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "migrate_shared_disks": False,
+            },
+        ],
+        "warm_migration": False,
+        "migrate_shared_disks": True,
+        "shared_disk_device": "/dev/vdc",
+        "target_power_state": "on",
+    },
+    "test_upgrade_cold_migration": {
+        "virtual_machines": [
+            {"name": "mtv-tests-rhel8", "guest_agent": True},
+        ],
+        "warm_migration": False,
     },
 }
 

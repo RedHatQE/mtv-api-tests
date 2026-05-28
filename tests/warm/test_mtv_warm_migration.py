@@ -19,6 +19,7 @@ from utilities.utils import get_value_from_py_config, populate_vm_ids
 @pytest.mark.rhv
 @pytest.mark.tier0
 @pytest.mark.warm
+@pytest.mark.upgrade
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
