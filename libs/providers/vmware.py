@@ -802,12 +802,21 @@ class VMWareProvider(BaseProvider):
         finally:
             container.Destroy()
 
-    def add_rdm_disk_to_vm(self, vm: vim.VirtualMachine, rdm_type: Literal["virtual", "physical"]) -> None:
+    def add_rdm_disk_to_vm(
+        self,
+        vm: vim.VirtualMachine,
+        rdm_type: Literal["virtual", "physical"],
+        *,
+        enable_cbt: bool = False,
+    ) -> None:
         """Add an RDM disk to an existing VM. Must be called post-clone since RDM requires VMFS datastore.
 
         Args:
             vm: The target VM object.
             rdm_type: "virtual" or "physical" compatibility mode.
+            enable_cbt: When True (warm migration), enable per-disk CBT for the new RDM via
+                extraConfig only. VM-level CBT is already set during clone; RDM is attached
+                post-clone so its scsi bus:unit key must be added here.
 
         """
         lun_uuid = self.copyoffload_config["rdm_lun_uuid"]
@@ -825,13 +834,13 @@ class VMWareProvider(BaseProvider):
             None,
         )
         if not scsi_controller:
-            raise RuntimeError(f"No SCSI controller found on VM '{vm.name}'")
+            raise ValueError(f"No SCSI controller found on VM '{vm.name}'")
 
         used_units = {dev.unitNumber for dev in vm.config.hardware.device if dev.controllerKey == scsi_controller.key}
         # Unit 7 reserved for SCSI controller
         unit_number = next((i for i in range(16) if i != 7 and i not in used_units), None)
         if unit_number is None:
-            raise RuntimeError(f"No available unit number on VM '{vm.name}'")
+            raise ValueError(f"No available unit number on VM '{vm.name}'")
 
         # Create RDM disk spec
         spec = vim.vm.device.VirtualDeviceSpec()
@@ -859,6 +868,21 @@ class VMWareProvider(BaseProvider):
 
         config_spec = vim.vm.ConfigSpec()
         config_spec.deviceChange = [spec]
+
+        if enable_cbt:
+            # Match clone_vm: per-disk extraConfig only (VM-level ctkEnabled was set at clone).
+            cbt_key = f"scsi{scsi_controller.busNumber}:{unit_number}.ctkEnabled"
+            existing_extra_config: dict[str, str] = {
+                option.key: str(option.value) for option in (vm.config.extraConfig or [])
+            }
+            if existing_extra_config.get(cbt_key, "").lower() != "true":
+                disk_cbt_option = vim.option.OptionValue()
+                disk_cbt_option.key = cbt_key
+                disk_cbt_option.value = "true"
+                config_spec.extraConfig = [disk_cbt_option]
+                LOGGER.info(f"Enabling CTK for RDM disk {cbt_key} on VM '{vm.name}'")
+            else:
+                LOGGER.info(f"CBT already enabled for RDM disk {cbt_key} on VM '{vm.name}'")
 
         task = vm.ReconfigVM_Task(spec=config_spec)
         self.wait_task(task=task, action_name=f"Adding RDM disk to VM {vm.name}", wait_timeout=120)
@@ -1449,7 +1473,7 @@ class VMWareProvider(BaseProvider):
 
         # Add RDM disks post-clone (RDM requires VMFS datastore, can't be added during clone on NFS)
         for rdm_config in rdm_disks:
-            self.add_rdm_disk_to_vm(vm=res, rdm_type=rdm_config["rdm_type"])
+            self.add_rdm_disk_to_vm(vm=res, rdm_type=rdm_config["rdm_type"], enable_cbt=enable_ctk)
 
         return res
 
