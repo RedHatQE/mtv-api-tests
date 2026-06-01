@@ -61,6 +61,12 @@ def _storage_secret_extra_value_as_string(value: Any) -> str:
     """Convert a config/env value to Kubernetes Secret stringData text.
 
     JSON booleans must become lowercase ``true``/``false``, not Python ``True``/``False``.
+
+    Args:
+        value: Raw value from JSON config or environment.
+
+    Returns:
+        str: Normalized Secret ``stringData`` text.
     """
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -129,6 +135,10 @@ def get_storage_secret_extra(copyoffload_config: dict[str, Any]) -> dict[str, st
 
     Returns:
         dict[str, str]: Kubernetes Secret ``stringData`` keys and values to merge.
+
+    Raises:
+        ValueError: If ``storage_secret_extra`` contains empty keys or invalid env JSON.
+        TypeError: If ``storage_secret_extra`` is not a JSON object mapping.
     """
     extra: dict[str, str] = {}
     if "storage_secret_extra" not in copyoffload_config:
@@ -140,7 +150,7 @@ def get_storage_secret_extra(copyoffload_config: dict[str, Any]) -> dict[str, st
         extra.update(parse_storage_secret_extra_env())
         return extra
     if not isinstance(config_extra, dict):
-        raise ValueError("storage_secret_extra must be a JSON object mapping Secret keys to values")
+        raise TypeError("storage_secret_extra must be a JSON object mapping Secret keys to values")
 
     extra.update(_secret_extra_entries_from_mapping(config_extra))
     extra.update(parse_storage_secret_extra_env())
@@ -162,6 +172,10 @@ def merge_storage_secret_extra(
 
     Returns:
         dict[str, str]: Updated secret data including extra entries.
+
+    Raises:
+        ValueError: If extra entries from config or environment are invalid.
+        TypeError: If ``storage_secret_extra`` is not a JSON object mapping.
     """
     extra = get_storage_secret_extra(copyoffload_config)
     if not extra:

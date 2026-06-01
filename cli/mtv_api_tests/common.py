@@ -259,7 +259,7 @@ def gather_storage_secret_extra() -> dict[str, str]:
         secret_key = Prompt.ask("  Secret key (empty to finish)")
         if not secret_key.strip():
             break
-        value = Prompt.ask(f"  Value for {secret_key.strip()}")
+        value = Prompt.ask(f"  Value for {secret_key.strip()}", password=True)
         if not value.strip():
             console.print("  [yellow]Skipping empty value[/yellow]")
             continue
@@ -775,7 +775,9 @@ def mask_passwords(config: dict[str, Any]) -> dict[str, Any]:
     """
     masked: dict[str, Any] = {}
     for key, value in config.items():
-        if isinstance(value, dict):
+        if key == "storage_secret_extra" and isinstance(value, dict):
+            masked[key] = {secret_key: "***" for secret_key in value}
+        elif isinstance(value, dict):
             masked[key] = mask_passwords(value)
         elif "password" in key.lower() or "pwd" in key.lower():
             masked[key] = "***"
