@@ -27,6 +27,7 @@ from cli.mtv_api_tests.common import (
     discover_storage_classes,
     discover_vms,
     disconnect_vsphere,
+    gather_storage_secret_extra,
     gather_vendor_fields,
     generate_job_yaml,
     get_ocp_credentials,
@@ -156,6 +157,7 @@ def _gather_copyoffload_config(
     # Storage vendor and fields
     vendor = select_vendor()
     vendor_fields = gather_vendor_fields(vendor)
+    storage_secret_extra = gather_storage_secret_extra()
 
     # Storage credentials
     storage_host, storage_user, storage_pass = get_storage_credentials()
@@ -192,6 +194,8 @@ def _gather_copyoffload_config(
         config["rdm_lun_uuid"] = rdm_lun_uuid
     if non_xcopy_ds_id:
         config["non_xcopy_datastore_id"] = non_xcopy_ds_id
+    if storage_secret_extra:
+        config["storage_secret_extra"] = storage_secret_extra
 
     return config, guest_linux_user, guest_linux_pass
 

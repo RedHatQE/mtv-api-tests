@@ -563,6 +563,9 @@ troubleshooting, see:
 
 📖 **[Copy-Offload Testing Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)**
 
+For array-specific Secret keys not covered by built-in vendor fields, use `storage_secret_extra` in the
+`copyoffload` section of `.providers.json` (or `COPYOFFLOAD_STORAGE_SECRET_EXTRA`); see the guide.
+
 For technical implementation details, see the
 [vsphere-xcopy-volume-populator documentation](https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator).
 
