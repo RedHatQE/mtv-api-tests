@@ -29,7 +29,7 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_migration import verify_xcopy_used
+from utilities.copyoffload_migration import verify_xcopy_used, verify_xcopy_used_per_datastore
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -2448,6 +2448,40 @@ class TestCopyoffloadMixedDatastoreMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
+        """Verify XCOPY per disk: XCOPY-capable datastore uses XCOPY, non-XCOPY uses fallback.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            source_provider (VMWareProvider): Source VMware provider for datastore name lookup.
+            source_provider_data (dict[str, Any]): Source provider configuration.
+        """
+        copyoffload_config_data: dict[str, Any] = source_provider_data["copyoffload"]
+        xcopy_datastore_id: str = copyoffload_config_data["datastore_id"]
+        non_xcopy_datastore_id: str = copyoffload_config_data["non_xcopy_datastore_id"]
+        datastore_names_by_id: dict[str, str] = {
+            xcopy_datastore_id: source_provider.get_datastore_name_by_id(xcopy_datastore_id),
+            non_xcopy_datastore_id: source_provider.get_datastore_name_by_id(non_xcopy_datastore_id),
+        }
+
+        verify_xcopy_used_per_datastore(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_by_datastore_id={
+                xcopy_datastore_id: True,
+                non_xcopy_datastore_id: False,
+            },
+            datastore_names_by_id=datastore_names_by_id,
         )
 
     def test_check_vms(
