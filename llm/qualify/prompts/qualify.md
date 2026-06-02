@@ -142,16 +142,17 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
    PYTEST_EXIT=${PIPESTATUS[0]}
    ```
 
-   Capture the full output.
+   **Tests passed** is defined as `PYTEST_EXIT == 0`. If `PYTEST_EXIT != 0`, tests failed — do NOT
+   proceed to cluster verification. Instead, go to step 5 (evaluate results) with a failed status.
 
 4. **Verify on cluster**: Delegate to cluster-verifier agent (from `llm/qualify/agents/cluster-verifier.md`):
    - Provide the test plan (what to verify)
    - Provide the namespace used by the test
    - The agent checks cluster state independently
 
-5. **Evaluate results**:
-   - Tests passed AND cluster verification passed → proceed to Phase 3
-   - Tests failed → delegate to python-expert to fix, then re-run (go to step 3)
+5. **Evaluate results** (based on `PYTEST_EXIT` from step 3, NOT log parsing):
+   - `PYTEST_EXIT == 0` AND cluster verification passed → proceed to Phase 3
+   - `PYTEST_EXIT != 0` → tests failed, delegate to python-expert to fix, then re-run (go to step 3)
    - Cluster verification failed (tests said pass but cluster state wrong) → investigate and fix
    - **AI stuck** → ask the user: "I'm stuck on: `<specific problem>`. How should I proceed?"
 

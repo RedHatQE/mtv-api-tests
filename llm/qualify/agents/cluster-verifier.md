@@ -4,7 +4,8 @@ description: Independently verifies OpenShift cluster state after test execution
 tools: read, bash
 ---
 
-<!-- Tool name mapping: Cursor/Claude use "bash", pi uses "execute"/"run_command". Adapt to your AI CLI's shell execution tool. -->
+<!-- Tool name mapping: The frontmatter uses "bash" (Cursor/Claude convention). -->
+<!-- If your CLI uses different tool names (e.g., pi uses "execute"/"run_command"), update the tools: line above. -->
 
 # Cluster Verifier Agent
 
