@@ -1,16 +1,25 @@
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Generator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import filelock
 import pytest
+from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.provider import Provider
+from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
 from libs.providers.vmware import VMWareProvider
-from utilities.copyoffload_constants import SUPPORTED_VENDORS
+from utilities.copyoffload_constants import (
+    DEFAULT_POPULATOR_INFLIGHT,
+    POPULATOR_INFLIGHT_LIMIT,
+    SUPPORTED_VENDORS,
+)
 from utilities.copyoffload_migration import (
     get_copyoffload_credential,
     merge_storage_secret_extra,
@@ -146,6 +155,93 @@ def multi_datastore_config(source_provider_data: dict[str, Any]) -> None:
         )
 
     LOGGER.info("✓ Multi-datastore configuration validated: secondary_datastore_id = %s", secondary_datastore_id)
+
+
+def _forkliftcontroller_populator_inflight_lock_path() -> Path:
+    """Return the cross-worker lock path for ForkliftController populator limit changes."""
+    lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-forklift"
+    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return lock_dir / "populator-inflight.lock"
+
+
+@pytest.fixture(scope="class")
+def populator_inflight_forkliftcontroller(
+    ocp_admin_client: "DynamicClient",
+    mtv_namespace: str,
+) -> Generator[None, None, None]:
+    """Set ForkliftController populator in-flight limit for the test class and restore default after.
+
+    Patches controller_max_populator_inflight to POPULATOR_INFLIGHT_LIMIT (2) for the class,
+    then restores DEFAULT_POPULATOR_INFLIGHT (20) on teardown. A file lock serializes
+    ForkliftController changes across pytest-xdist workers.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        mtv_namespace (str): Namespace where ForkliftController is installed.
+
+    Yields:
+        None
+    """
+    lock_path = _forkliftcontroller_populator_inflight_lock_path()
+    try:
+        with filelock.FileLock(lock_path, timeout=3600):
+            forklift_controller = ForkliftController(
+                client=ocp_admin_client,
+                name="forklift-controller",
+                namespace=mtv_namespace,
+                ensure_exists=True,
+            )
+            forklift_controller.wait_for_condition(
+                status=forklift_controller.Condition.Status.TRUE,
+                condition=forklift_controller.Condition.Type.RUNNING,
+                timeout=300,
+            )
+
+            current_limit = getattr(forklift_controller.instance.spec, "controller_max_populator_inflight", None)
+            if current_limit != POPULATOR_INFLIGHT_LIMIT:
+                LOGGER.info(
+                    f"Setting ForkliftController controller_max_populator_inflight from {current_limit!r} "
+                    f"to {POPULATOR_INFLIGHT_LIMIT}"
+                )
+                ResourceEditor(
+                    patches={
+                        forklift_controller: {"spec": {"controller_max_populator_inflight": POPULATOR_INFLIGHT_LIMIT}}
+                    }
+                ).update(backup_resources=False)
+                forklift_controller.wait_for_condition(
+                    status=forklift_controller.Condition.Status.TRUE,
+                    condition=forklift_controller.Condition.Type.SUCCESSFUL,
+                    timeout=300,
+                )
+            else:
+                LOGGER.info(f"ForkliftController controller_max_populator_inflight already {POPULATOR_INFLIGHT_LIMIT}")
+
+            try:
+                yield
+            finally:
+                restored_limit = getattr(forklift_controller.instance.spec, "controller_max_populator_inflight", None)
+                if restored_limit != DEFAULT_POPULATOR_INFLIGHT:
+                    LOGGER.info(
+                        f"Restoring ForkliftController controller_max_populator_inflight "
+                        f"from {restored_limit!r} to default {DEFAULT_POPULATOR_INFLIGHT}"
+                    )
+                    ResourceEditor(
+                        patches={
+                            forklift_controller: {
+                                "spec": {"controller_max_populator_inflight": DEFAULT_POPULATOR_INFLIGHT}
+                            }
+                        }
+                    ).update(backup_resources=False)
+                    forklift_controller.wait_for_condition(
+                        status=forklift_controller.Condition.Status.TRUE,
+                        condition=forklift_controller.Condition.Type.SUCCESSFUL,
+                        timeout=300,
+                    )
+    except filelock.Timeout as err:
+        raise TimeoutError(
+            f"Timeout (3600s) waiting for ForkliftController populator-inflight lock at {lock_path}. "
+            "Another worker may be running the populator throttling test."
+        ) from err
 
 
 @pytest.fixture(scope="class")

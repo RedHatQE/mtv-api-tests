@@ -10,20 +10,33 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections import defaultdict
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ocp_resources.event import Event
+from ocp_resources.migration import Migration
 from ocp_resources.pod import Pod
 from ocp_resources.secret import Secret
+from ocp_resources.plan import Plan
+from pytest_testconfig import config as py_config
 from rrmngmnt import Host, RootUser, User
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from exceptions.exceptions import MigrationPlanExecError
+from utilities.copyoffload_constants import (
+    POPULATOR_INFLIGHT_LIMIT,
+    POPULATOR_THROTTLED_EVENT_REASON,
+    SOURCE_HOST_LABEL,
+)
+from utilities.mtv_migration import get_plan_migration_status
 from utilities.post_migration import get_ssh_credentials_from_provider_config
+from utilities.resources import create_and_store_resource
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
     from libs.providers.vmware import VMWareProvider
-    from ocp_resources.plan import Plan
 
 LOGGER = get_logger(__name__)
 
@@ -377,19 +390,26 @@ def _get_migration_uid(plan: Plan) -> str:
     return migration_ref.uid
 
 
-def _find_populate_pods(ocp_admin_client: DynamicClient, namespace: str, migration_uid: str) -> list[Pod]:
+def _find_populate_pods(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    migration_uid: str,
+    *,
+    require_pods: bool = True,
+) -> list[Pod]:
     """Find populate pods for a given migration.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         namespace (str): Namespace where populate pods exist.
         migration_uid (str): Migration UID to filter pods by.
+        require_pods (bool): When True, raise if no populate pods are found.
 
     Returns:
         list[Pod]: List of populate pods.
 
     Raises:
-        ValueError: If no populate pods are found.
+        ValueError: If require_pods is True and no populate pods are found.
     """
     populate_pods: list[Pod] = [
         pod
@@ -401,7 +421,7 @@ def _find_populate_pods(ocp_admin_client: DynamicClient, namespace: str, migrati
         if pod.name.startswith("populate-")
     ]
 
-    if not populate_pods:
+    if not populate_pods and require_pods:
         raise ValueError(f"No populate pods found for migration '{migration_uid}' in namespace '{namespace}'")
 
     return populate_pods
@@ -691,3 +711,230 @@ def verify_xcopy_used_per_datastore(
             "Migration must include at least one disk from each configured datastore; "
             f"verified datastore IDs: {sorted(verified_datastore_ids)}"
         )
+
+
+_ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
+
+
+def _count_active_populator_pods_by_host(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    migration_uid: str,
+) -> dict[str, int]:
+    """Count active populate pods for a migration grouped by sourceHost label.
+
+    Matches the populator controller's per-host throttling logic: only Running and Pending
+    pods with a sourceHost label are counted.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where populate pods exist.
+        migration_uid (str): Migration UID to filter populate pods by.
+
+    Returns:
+        dict[str, int]: Active populator pod count per ESXi source host.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    for pod in _find_populate_pods(
+        ocp_admin_client=ocp_admin_client,
+        namespace=namespace,
+        migration_uid=migration_uid,
+        require_pods=False,
+    ):
+        if pod.instance.status.phase not in _ACTIVE_POPULATOR_POD_PHASES:
+            continue
+        labels: dict[str, str] = pod.instance.metadata.labels or {}
+        source_host: str | None = labels.get(SOURCE_HOST_LABEL)
+        if source_host:
+            counts[source_host] += 1
+    return dict(counts)
+
+
+def execute_migration_monitoring_populator_inflight(
+    ocp_admin_client: DynamicClient,
+    fixture_store: dict[str, Any],
+    plan: Plan,
+    target_namespace: str,
+    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+    cut_over: datetime | None = None,
+) -> dict[str, int]:
+    """Execute a copy-offload migration while tracking peak populator concurrency per host.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        fixture_store (dict[str, Any]): Fixture store for resource tracking and cleanup.
+        plan (Plan): The Plan CR resource defining the migration configuration.
+        target_namespace (str): Target namespace for the Migration CR.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+
+    Returns:
+        dict[str, int]: Peak concurrent active populate pods observed per sourceHost label.
+
+    Raises:
+        MigrationPlanExecError: If migration fails or times out.
+        ValueError: If active populator count exceeds max_populator_inflight during migration.
+    """
+    create_and_store_resource(
+        client=ocp_admin_client,
+        fixture_store=fixture_store,
+        resource=Migration,
+        namespace=target_namespace,
+        plan_name=plan.name,
+        plan_namespace=plan.namespace,
+        cut_over=cut_over,
+    )
+
+    max_concurrent_by_host: dict[str, int] = defaultdict(int)
+    migration_uid: str | None = None
+    last_status: str = ""
+
+    try:
+        for sample in TimeoutSampler(
+            func=get_plan_migration_status,
+            sleep=1,
+            wait_timeout=py_config.get("plan_wait_timeout", 600),
+            plan=plan,
+        ):
+            if sample != last_status:
+                LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
+                last_status = sample
+
+            if migration_uid is None and sample == Plan.Status.EXECUTING:
+                try:
+                    migration_uid = _get_migration_uid(plan=plan)
+                except ValueError:
+                    pass
+
+            if migration_uid is not None:
+                active_by_host = _count_active_populator_pods_by_host(
+                    ocp_admin_client=ocp_admin_client,
+                    namespace=target_namespace,
+                    migration_uid=migration_uid,
+                )
+                for source_host, active_count in active_by_host.items():
+                    max_concurrent_by_host[source_host] = max(max_concurrent_by_host[source_host], active_count)
+                    if active_count > max_populator_inflight:
+                        raise ValueError(
+                            f"Populator concurrency exceeded limit for host '{source_host}': "
+                            f"{active_count} active pods (limit={max_populator_inflight})"
+                        )
+
+            if sample == Plan.Status.SUCCEEDED:
+                return dict(max_concurrent_by_host)
+
+            if sample == Plan.Status.FAILED:
+                raise MigrationPlanExecError()
+
+    except (TimeoutExpiredError, MigrationPlanExecError):
+        raise MigrationPlanExecError(
+            f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
+        )
+
+    raise MigrationPlanExecError(
+        f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
+    )
+
+
+def verify_populator_source_host_labels(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+) -> str:
+    """Verify sourceHost labels are present and consistent on all populate pods.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods exist.
+
+    Returns:
+        str: The shared sourceHost label value from all populate pods.
+
+    Raises:
+        ValueError: If populate pods are missing or sourceHost labels are absent or inconsistent.
+    """
+    migration_uid: str = _get_migration_uid(plan=plan)
+    populate_pods: list[Pod] = _find_populate_pods(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        migration_uid=migration_uid,
+    )
+
+    source_hosts: set[str] = set()
+    for pod in populate_pods:
+        labels: dict[str, str] = pod.instance.metadata.labels or {}
+        source_host: str | None = labels.get(SOURCE_HOST_LABEL)
+        if not source_host:
+            raise ValueError(f"Populate pod '{pod.name}' is missing required label '{SOURCE_HOST_LABEL}'")
+        source_hosts.add(source_host)
+        LOGGER.info(f"Populate pod '{pod.name}' has {SOURCE_HOST_LABEL}={source_host!r}")
+
+    if len(source_hosts) != 1:
+        raise ValueError(f"Expected a single ESXi sourceHost across populate pods, found: {sorted(source_hosts)}")
+
+    return source_hosts.pop()
+
+
+def verify_populator_throttled_events(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+) -> None:
+    """Verify PopulatorThrottled events were recorded on PVCs when the in-flight limit was reached.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods and PVCs exist.
+
+    Raises:
+        ValueError: If no PopulatorThrottled events are found on migration PVCs.
+    """
+    migration_uid: str = _get_migration_uid(plan=plan)
+    populate_pods: list[Pod] = _find_populate_pods(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        migration_uid=migration_uid,
+    )
+
+    throttled_pvc_names: list[str] = []
+    for pod in populate_pods:
+        labels: dict[str, str] = pod.instance.metadata.labels or {}
+        pvc_name: str = labels.get("pvcName", pod.name)
+        field_selector = f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim"
+        for event in Event.get(
+            client=ocp_admin_client,
+            namespace=target_namespace,
+            field_selector=field_selector,
+        ):
+            if event.instance.reason == POPULATOR_THROTTLED_EVENT_REASON:
+                throttled_pvc_names.append(pvc_name)
+                LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
+                break
+
+    if not throttled_pvc_names:
+        raise ValueError(f"No {POPULATOR_THROTTLED_EVENT_REASON} events found on PVCs for migration '{migration_uid}'")
+
+
+def verify_populator_inflight_observed(
+    max_concurrent_by_host: dict[str, int],
+    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+) -> None:
+    """Verify observed peak populator concurrency respects the configured in-flight limit.
+
+    Args:
+        max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per sourceHost.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+
+    Raises:
+        AssertionError: If peak concurrency exceeds the limit or no activity was observed.
+    """
+    assert max_concurrent_by_host, "No populator activity observed during migration monitoring"
+
+    for source_host, peak_count in max_concurrent_by_host.items():
+        assert peak_count <= max_populator_inflight, (
+            f"Peak populator concurrency for host '{source_host}' was {peak_count}, "
+            f"exceeding limit {max_populator_inflight}"
+        )
+        LOGGER.info(f"Host '{source_host}': peak populator concurrency {peak_count}/{max_populator_inflight} (PASS)")
