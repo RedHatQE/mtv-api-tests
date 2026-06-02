@@ -307,7 +307,7 @@ sequenceDiagram
     participant CV as cluster-verifier
 
     Note over User,CV: Phase 0 — Setup
-    User ->> Orch: /qualify --type --source
+    User ->> Orch: /qualify --type --source --cluster ~/kubeconfig
     Orch ->> Orch: Validate cluster + collect versions
 
     Note over User,CV: Phase 1 — Test Plan

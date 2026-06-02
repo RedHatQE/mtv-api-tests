@@ -46,7 +46,7 @@
 3. Create Plan with `<specific configuration>`
 4. Execute migration
 5. Verify migrated VMs
-6. `<For shared-disk: verify shared disk data OR for copy-offload: verify XCOPY usage>`
+6. `<Only for 6-step patterns: shared-disk → verify shared disk data; copy-offload → verify XCOPY usage>`
 
 **Expected Outcomes**:
 
@@ -80,6 +80,7 @@
         },
     ],
     "warm_migration": False,
+    "preserve_static_ips": False,
 },
 ```
 

@@ -64,6 +64,12 @@ Independent verification performed after test execution.
 - [ ] Evidence collected for all verification points
 - [ ] Versions recorded
 
+### Failure Details (required when result is ❌ NOT QUALIFIED or 🐛 BUG NOT FIXED)
+
+| Failed Item              | Type                 | Details                        |
+|--------------------------|----------------------|--------------------------------|
+| `<test_or_check_name>`   | Test / Cluster Check | `<error, status, or reason>`   |
+
 ### Verdict
 
 <QUALIFIED/NOT QUALIFIED with explanation>

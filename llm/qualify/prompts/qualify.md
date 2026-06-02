@@ -31,7 +31,7 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
   - max length 63
   - reject values containing `..`, `/`, `\`
 
-   If required arguments are missing, ask the user to provide them using the ask_user tool.
+   If required arguments are missing, ask the user to provide them (use `ask_user` if available, otherwise ask in chat).
 
 1. **Validate cluster connectivity**:
 
@@ -65,7 +65,9 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
    # if empty -> record: UNKNOWN: <CNV_VERSION_RAW or "no CSV match">
    ```
 
-   If any version cannot be retrieved, record it as `UNKNOWN` with the error message. The final proof report will reflect missing versions.
+   If any version cannot be retrieved, record it as `UNKNOWN` with the error message and continue the workflow.
+   **Note:** `UNKNOWN` versions will force the final verdict to `❌ NOT QUALIFIED` or `🐛 BUG NOT FIXED`
+   per proof-generator rules (versions are mandatory). The workflow still proceeds to collect all other evidence.
 
 3. **Create output directory** and define `artifact_key` for all later paths:
    - Feature: `.qualify/features/<name>/` — `artifact_key` = `<name>`
@@ -90,7 +92,7 @@ It overrides the normal "AI must NEVER run tests" rule — tests ARE executed on
    Tell the agent:
    - The source material content
    - The type (feature or bug)
-   - To read `AGENTS.md` for project patterns
+   - To read `AGENTS.md` for project standards (includes coding patterns, test structure, and the `/qualify` exception to the test execution prohibition)
    - To read existing tests in `tests/` for examples
    - To read `llm/qualify/templates/test-plan-template.md` for the output template
    - To produce `test-plan.md`
@@ -122,7 +124,7 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
 
 2. **Write tests**: Delegate to python-expert:
    - Provide the approved test plan
-   - Provide AGENTS.md for coding standards
+   - Provide `AGENTS.md` for coding standards (all project constraints are in this file)
    - Tell it to follow the 5/6-step test pattern
    - Tell it to create the test config in `tests/tests_config/config.py`
    - Tell it to create the test file in the appropriate `tests/<feature>/` directory
@@ -134,8 +136,10 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
    # Set KUBECONFIG if provided
    export KUBECONFIG=<path>
 
-   # Run the specific test
+   # Run the specific test (pipefail preserves pytest exit code through tee)
+   set -o pipefail
    uv run pytest tests/<path>::<TestClass> -v --tc-file=tests/tests_config/config.py --tc-format=python -p no:xdist 2>&1 | tee .qualify/<type>/<artifact_key>/test-output.log
+   PYTEST_EXIT=${PIPESTATUS[0]}
    ```
 
    Capture the full output.
@@ -163,9 +167,11 @@ This phase is **fully autonomous** — no human intervention unless the AI gets 
 
    ```bash
    export KUBECONFIG=<path>
+   set -o pipefail
    uv run pytest /tmp/qualify-<name>/<test_file>.py -v \
      --tc-file=tests/tests_config/config.py --tc-format=python -p no:xdist \
      2>&1 | tee .qualify/<type>/<artifact_key>/test-output.log
+   PYTEST_EXIT=${PIPESTATUS[0]}
    ```
 
 3. Verify on cluster (same as step 4 above)
