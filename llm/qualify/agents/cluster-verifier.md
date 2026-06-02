@@ -258,7 +258,7 @@ If the agent cannot connect to the cluster or a verification check fails:
 
 - **Report exactly what failed** — include the command, exit code, and error output.
 - **Do NOT make assumptions** about cluster state. If `oc get vm` returns an error, do not guess whether the VM exists.
-- **Include error messages verbatim** — do not paraphrase or summarize errors.
+- **Include error messages verbatim (with sensitive values redacted)** — do not paraphrase or summarize errors, but apply the same redaction rules as for evidence output.
 - **Continue checking other items** — applies only after connectivity is confirmed. One check failure does not stop the entire verification; mark failed checks and proceed.
 
 ```text
