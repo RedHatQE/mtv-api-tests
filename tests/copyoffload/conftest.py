@@ -11,7 +11,11 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.copyoffload_constants import SUPPORTED_VENDORS
-from utilities.copyoffload_migration import get_copyoffload_credential, wait_for_vmware_cloud_init_all_vms
+from utilities.copyoffload_migration import (
+    get_copyoffload_credential,
+    merge_storage_secret_extra,
+    wait_for_vmware_cloud_init_all_vms,
+)
 from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
 from utilities.resources import create_and_store_resource
 from utilities.utils import resolve_providers_json_path
@@ -208,6 +212,10 @@ def copyoffload_storage_secret(
             f"and COPYOFFLOAD_STORAGE_PASSWORD environment variables or include them in {providers_path}"
         )
 
+    assert storage_hostname is not None
+    assert storage_username is not None
+    assert storage_password is not None
+
     # Validate storage vendor product
     storage_vendor = copyoffload_cfg.get("storage_vendor_product")
     if not storage_vendor:
@@ -221,7 +229,7 @@ def copyoffload_storage_secret(
         )
 
     # Base secret data (required for all vendors)
-    secret_data = {
+    secret_data: dict[str, str] = {
         "STORAGE_HOSTNAME": storage_hostname,
         "STORAGE_USERNAME": storage_username,
         "STORAGE_PASSWORD": storage_password,
@@ -269,6 +277,8 @@ def copyoffload_storage_secret(
                     f"Required vendor-specific field '{config_key}' not found for vendor '{storage_vendor}'. "
                     f"Add it to {providers_path} copyoffload section or set environment variable: {env_var_name}"
                 )
+
+    secret_data = merge_storage_secret_extra(secret_data, copyoffload_cfg)
 
     LOGGER.info(f"Creating storage secret for copy-offload with vendor: {storage_vendor}")
 

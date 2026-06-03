@@ -217,6 +217,37 @@ Add the `copyoffload` section to your `.providers.json` file:
 
 - No vendor-specific fields required beyond the base storage configuration
 
+### Extra storage secret keys (`storage_secret_extra`)
+
+Use `storage_secret_extra` when the populator needs additional Kubernetes Secret keys that are not
+mapped by the built-in vendor fields (for example Dell PowerMax `POWERMAX_PORT_GROUP_NAME`).
+
+Keys in `storage_secret_extra` must match Forklift **Secret `stringData` names** (uppercase). Values are
+merged into the storage secret the test suite creates for copy-offload. They override vendor-mapped keys
+when the same Secret key is specified.
+
+Use quoted strings for values (for example `"true"`). If you use JSON booleans in
+`COPYOFFLOAD_STORAGE_SECRET_EXTRA` or in `.providers.json`, they are normalized to lowercase `"true"` /
+`"false"` for Secret `stringData`. An empty object or `null` for `storage_secret_extra` is allowed; env-only
+configuration still works.
+
+**Example (PowerMax):**
+
+```json
+"storage_secret_extra": {
+  "POWERMAX_PORT_GROUP_NAME": "mtv_group_pg",
+  "STORAGE_SKIP_SSL_VERIFICATION": "true"
+}
+```
+
+**Environment override** (takes precedence over `.providers.json`):
+
+```bash
+export COPYOFFLOAD_STORAGE_SECRET_EXTRA='{"POWERMAX_PORT_GROUP_NAME":"mtv_group_pg","STORAGE_SKIP_SSL_VERIFICATION":"true"}'
+```
+
+The `mtv-api-tests generate` wizard can prompt for these keys interactively after vendor-specific fields.
+
 ### Multi-Datastore Support (Advanced)
 
 Configuration for VMs with disks distributed across multiple datastores:

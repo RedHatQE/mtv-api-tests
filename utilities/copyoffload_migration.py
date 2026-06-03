@@ -7,6 +7,7 @@ including credential management, cloud-init readiness checks, and XCOPY validati
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from ocp_resources.plan import Plan
 
 LOGGER = get_logger(__name__)
+
+STORAGE_SECRET_EXTRA_ENV = "COPYOFFLOAD_STORAGE_SECRET_EXTRA"  # pragma: allowlist secret
 
 
 def get_copyoffload_credential(
@@ -52,6 +55,137 @@ def get_copyoffload_credential(
     """
     env_var_name = f"COPYOFFLOAD_{credential_name.upper()}"
     return os.getenv(env_var_name) or copyoffload_config.get(credential_name)
+
+
+def _storage_secret_extra_value_as_string(value: Any) -> str:
+    """Convert a config/env value to Kubernetes Secret stringData text.
+
+    JSON booleans must become lowercase ``true``/``false``, not Python ``True``/``False``.
+
+    Args:
+        value: Raw value from JSON config or environment.
+
+    Returns:
+        str: Normalized Secret ``stringData`` text.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value).strip()
+
+
+def _secret_extra_entries_from_mapping(mapping: dict[Any, Any]) -> dict[str, str]:
+    """Normalize a mapping to non-empty Secret stringData key/value pairs.
+
+    Args:
+        mapping: Raw key/value mapping from JSON config or environment.
+
+    Returns:
+        dict[str, str]: Normalized Secret keys and values.
+
+    Raises:
+        ValueError: If any key is empty after stripping.
+    """
+    result: dict[str, str] = {}
+    for secret_key, value in mapping.items():
+        if value is None:
+            continue
+        text = _storage_secret_extra_value_as_string(value)
+        if not text:
+            continue
+        key = str(secret_key).strip()
+        if not key:
+            raise ValueError("storage_secret_extra keys must be non-empty strings")
+        result[key] = text
+    return result
+
+
+def parse_storage_secret_extra_env() -> dict[str, str]:
+    """Parse COPYOFFLOAD_STORAGE_SECRET_EXTRA as a JSON object of secret key/value pairs.
+
+    Returns:
+        dict[str, str]: Secret keys and values from the environment variable.
+
+    Raises:
+        ValueError: If the variable is set but not valid JSON object, or keys are empty.
+        TypeError: If the parsed JSON value is not an object.
+    """
+    raw = os.getenv(STORAGE_SECRET_EXTRA_ENV, "").strip()
+    if not raw:
+        return {}
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{STORAGE_SECRET_EXTRA_ENV} must be a valid JSON object") from exc
+
+    if not isinstance(parsed, dict):
+        raise TypeError(f"{STORAGE_SECRET_EXTRA_ENV} must be a JSON object")
+
+    return _secret_extra_entries_from_mapping(parsed)
+
+
+def get_storage_secret_extra(copyoffload_config: dict[str, Any]) -> dict[str, str]:
+    """Resolve extra storage secret entries from providers JSON and environment.
+
+    Values from ``storage_secret_extra`` in ``.providers.json`` are applied first.
+    ``COPYOFFLOAD_STORAGE_SECRET_EXTRA`` (JSON object) overrides matching keys.
+
+    Args:
+        copyoffload_config: The provider ``copyoffload`` configuration dictionary.
+
+    Returns:
+        dict[str, str]: Kubernetes Secret ``stringData`` keys and values to merge.
+
+    Raises:
+        ValueError: If ``storage_secret_extra`` contains empty keys or invalid env JSON.
+        TypeError: If ``storage_secret_extra`` is not a JSON object mapping.
+    """
+    extra: dict[str, str] = {}
+    if "storage_secret_extra" not in copyoffload_config:
+        extra.update(parse_storage_secret_extra_env())
+        return extra
+
+    config_extra = copyoffload_config["storage_secret_extra"]
+    if config_extra is None:
+        extra.update(parse_storage_secret_extra_env())
+        return extra
+    if not isinstance(config_extra, dict):
+        raise TypeError("storage_secret_extra must be a JSON object mapping Secret keys to values")
+
+    extra.update(_secret_extra_entries_from_mapping(config_extra))
+    extra.update(parse_storage_secret_extra_env())
+    return extra
+
+
+def merge_storage_secret_extra(
+    secret_data: dict[str, str],
+    copyoffload_config: dict[str, Any],
+) -> dict[str, str]:
+    """Merge ``storage_secret_extra`` entries into copy-offload storage secret data.
+
+    Extra entries override existing keys (for example vendor-mapped fields) when the
+    same Secret key is specified.
+
+    Args:
+        secret_data: Base and vendor-specific secret ``stringData`` built so far.
+        copyoffload_config: The provider ``copyoffload`` configuration dictionary.
+
+    Returns:
+        dict[str, str]: Updated secret data including extra entries.
+
+    Raises:
+        ValueError: If extra entries from config or environment are invalid.
+        TypeError: If ``storage_secret_extra`` is not a JSON object mapping.
+    """
+    extra = get_storage_secret_extra(copyoffload_config)
+    if not extra:
+        return secret_data
+
+    merged = dict(secret_data)
+    for secret_key, value in extra.items():
+        merged[secret_key] = value
+        LOGGER.info(f"✓ Added extra secret field from storage_secret_extra: {secret_key}")
+    return merged
 
 
 def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_name: str) -> None:

@@ -86,6 +86,14 @@
       # Get from ConfigMap in powermax namespace used by CSI driver
       "powermax_symmetrix_id": "000123456789",
 
+      # Optional: extra Kubernetes Secret stringData keys not covered by vendor fields above.
+      # Keys must match Forklift Secret names (uppercase). Example below is for PowerMax only.
+      # Overridden by COPYOFFLOAD_STORAGE_SECRET_EXTRA env var (JSON object).
+      # "storage_secret_extra": {
+      #   "POWERMAX_PORT_GROUP_NAME": "mtv_group_pg",
+      #   "STORAGE_SKIP_SSL_VERIFICATION": "true"
+      # },
+
       # HPE Primera/3PAR, Dell PowerStore, Infinidat InfiniBox, IBM FlashSystem:
       # No additional vendor-specific fields required - use only the common fields above
 
