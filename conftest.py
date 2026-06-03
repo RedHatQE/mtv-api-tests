@@ -1066,6 +1066,30 @@ def prepared_plan(
         # Use vCenter clone provider if configured (e.g., for ESXi sources that can't clone directly)
         clone_provider = vcenter_clone_provider or source_provider
 
+        # Track original VM names and cloned objects for shared disk relinking.
+        # Check for `is not None` because the field can be True (owner) or False (consumer),
+        # and both need relinking. We only skip VMs without this field at all.
+        plan_level_shared_disks = bool(plan.get("migrate_shared_disks"))
+        has_shared_disk_config = plan_level_shared_disks or any(
+            vm.get("migrate_shared_disks") is not None for vm in virtual_machines
+        )
+        # Fail early before cloning if shared-disk relinking is requested on an unsupported provider.
+        if has_shared_disk_config and not isinstance(source_provider, VMWareProvider):
+            raise ValueError(
+                f"Shared-disk migration requested, but provider '{source_provider.type}' "
+                "does not implement relink_shared_disks"
+            )
+
+        if plan.get("preserve_static_ips"):
+            for vm in virtual_machines:
+                if vm.get("source_vm_power") != "on":
+                    raise ValueError(
+                        f"preserve_static_ips requires source_vm_power='on' for VM '{vm['name']}'. "
+                        "Guest tools must be running to collect static IP and NIC name data."
+                    )
+
+        original_source_vm_names: list[str] = [vm["name"] for vm in virtual_machines] if has_shared_disk_config else []
+        cloned_vm_objects: list[Any] = []
         for vm in virtual_machines:
             clone_options = {**vm, "enable_ctk": warm_migration}
             provider_vm_api = clone_provider.get_vm_by_name(
