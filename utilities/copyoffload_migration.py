@@ -773,7 +773,6 @@ def execute_migration_monitoring_populator_inflight(
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
-        ValueError: If active populator count exceeds max_populator_inflight during migration.
     """
     create_and_store_resource(
         client=ocp_admin_client,
@@ -815,9 +814,9 @@ def execute_migration_monitoring_populator_inflight(
                 for source_host, active_count in active_by_host.items():
                     max_concurrent_by_host[source_host] = max(max_concurrent_by_host[source_host], active_count)
                     if active_count > max_populator_inflight:
-                        raise ValueError(
-                            f"Populator concurrency exceeded limit for host '{source_host}': "
-                            f"{active_count} active pods (limit={max_populator_inflight})"
+                        LOGGER.warning(
+                            f"Populator concurrency for host '{source_host}' is {active_count} "
+                            f"(limit={max_populator_inflight})"
                         )
 
             if sample == Plan.Status.SUCCEEDED:
@@ -880,16 +879,22 @@ def verify_populator_throttled_events(
     ocp_admin_client: DynamicClient,
     plan: Plan,
     target_namespace: str,
+    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
 ) -> None:
     """Verify PopulatorThrottled events were recorded on PVCs when the in-flight limit was reached.
+
+    For a single-ESXi-host migration with more disks than the per-host limit, at least
+    ``disk_count - max_populator_inflight`` PVCs must report PopulatorThrottled events.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         plan (Plan): The Plan CR resource (used to find the migration UID).
         target_namespace (str): Namespace where populate pods and PVCs exist.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
 
     Raises:
-        ValueError: If no PopulatorThrottled events are found on migration PVCs.
+        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
+            PopulatorThrottled events.
     """
     migration_uid: str = _get_migration_uid(plan=plan)
     populate_pods: list[Pod] = _find_populate_pods(
@@ -898,23 +903,39 @@ def verify_populator_throttled_events(
         migration_uid=migration_uid,
     )
 
+    min_expected_throttled = len(populate_pods) - max_populator_inflight
+    if min_expected_throttled <= 0:
+        raise ValueError(
+            f"Expected more populate pods ({len(populate_pods)}) than in-flight limit "
+            f"({max_populator_inflight}) to verify throttling for migration '{migration_uid}'"
+        )
+
     throttled_pvc_names: list[str] = []
     for pod in populate_pods:
         labels: dict[str, str] = pod.instance.metadata.labels or {}
         pvc_name: str = labels.get("pvcName", pod.name)
         field_selector = f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim"
-        for event in Event.get(
+        for event in Event.list(
             client=ocp_admin_client,
             namespace=target_namespace,
             field_selector=field_selector,
+            since_seconds=py_config["plan_wait_timeout"],
         ):
-            if event.instance.reason == POPULATOR_THROTTLED_EVENT_REASON:
+            if event.get("reason") == POPULATOR_THROTTLED_EVENT_REASON:
                 throttled_pvc_names.append(pvc_name)
                 LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
                 break
 
-    if not throttled_pvc_names:
-        raise ValueError(f"No {POPULATOR_THROTTLED_EVENT_REASON} events found on PVCs for migration '{migration_uid}'")
+    if len(throttled_pvc_names) < min_expected_throttled:
+        raise ValueError(
+            f"Expected at least {min_expected_throttled} PVC(s) with {POPULATOR_THROTTLED_EVENT_REASON} "
+            f"events for migration '{migration_uid}' ({len(populate_pods)} disks, "
+            f"limit={max_populator_inflight}); found {len(throttled_pvc_names)}: {throttled_pvc_names}"
+        )
+    LOGGER.info(
+        f"{len(throttled_pvc_names)}/{len(populate_pods)} PVC(s) reported {POPULATOR_THROTTLED_EVENT_REASON} "
+        f"(minimum expected: {min_expected_throttled})"
+    )
 
 
 def verify_populator_inflight_observed(

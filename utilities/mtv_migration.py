@@ -20,7 +20,6 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_migration import wait_for_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 
@@ -260,6 +259,8 @@ def create_plan_resource(
 
     # Wait for Forklift to create plan-specific secret for copy-offload (race condition)
     if copyoffload:
+        from utilities.copyoffload_migration import wait_for_plan_secret  # noqa: PLC0415
+
         wait_for_plan_secret(ocp_admin_client, target_namespace, plan.name)
 
     return plan
