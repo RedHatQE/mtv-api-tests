@@ -289,9 +289,10 @@ running the full suite. The sanity set covers:
 | MTV-577 | `TestCopyoffloadWarmMigration` | Warm (live) migration with copy-offload |
 
 > **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) mutates cluster-wide
-> `ForkliftController` populator limits. See the
-> [Copy-Offload Guide](guides/copyoffload/how-to-run-copyoffload-tests.md#populator-throttling-test-mtv-696)
-> before running it.
+> `ForkliftController` populator settings. Do not run it in parallel with other copy-offload tests on the
+> same cluster — the test temporarily sets `controller_max_populator_inflight` (and the populator
+> deployment `MAX_POPULATOR_INFLIGHT` env) to **2**, which caps in-flight populate pods cluster-wide for
+> every other migration running at the same time.
 
 Together these tests validate: different disk types (thin, thick, RDM), multi-disk and multi-datastore
 layouts, mixed XCOPY/non-XCOPY fallback behavior, concurrent scale migration, and warm migration --

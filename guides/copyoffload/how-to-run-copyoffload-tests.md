@@ -402,34 +402,11 @@ The Job automatically reads cluster credentials from the Secret created in Step 
 - `test_copyoffload_multi_disk_migration` - Multi-disk VM migration
 - `test_copyoffload_multi_disk_different_path_migration` - Multi-disk with different paths
 - `test_copyoffload_rdm_virtual_disk_migration` - RDM virtual disk migration
-- `TestCopyoffloadPopulatorThrottlingMigration` - Per-ESXi-host populator throttling (MTV-696)
 
 > **Note**: Additional copy-offload tests are being developed and automated. Use `pytest --collect-only -m copyoffload`
-> to see the full list of available tests.
-
-### Populator Throttling Test (MTV-696)
-
-`TestCopyoffloadPopulatorThrottlingMigration` validates per-ESXi-host populator concurrency limits and
-`sourceHost` labels on populate pods. It requires a VM with **more disks than the test limit** (5 disks:
-1 boot + 4 added; limit is 2).
-
-**Cluster impact:**
-
-- Temporarily sets `ForkliftController.spec.controller_max_populator_inflight` to **2** and waits for the
-  `forklift-volume-populator-controller` deployment to apply `MAX_POPULATOR_INFLIGHT=2`.
-- Restores the **pre-test** CR and deployment values on teardown (success or failure).
-- Holds a cross-worker file lock for the **entire test class** (~20 minutes). Other pytest-xdist workers
-  block for up to 3600s if they also request this fixture.
-
-**Do not** run this test in parallel with other tests that depend on the default populator limit on the
-same cluster. Run it explicitly:
-
-```bash
-uv run pytest -m copyoffload -k TestCopyoffloadPopulatorThrottlingMigration -v \
-  --providers-json .providers.json \
-  --tc=source_provider:<your-vsphere-provider-key> \
-  --tc=storage_class:<your-block-storage-class>
-```
+> to see the full list of available tests. `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) temporarily
+> sets `ForkliftController.spec.controller_max_populator_inflight` to **2** — do not run it in parallel with other
+> copy-offload tests on the same cluster, or those migrations will also be capped at 2 in-flight populate pods.
 
 ### Step 3: Monitor Test Execution
 
