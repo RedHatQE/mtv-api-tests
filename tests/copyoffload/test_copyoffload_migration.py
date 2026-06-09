@@ -32,9 +32,7 @@ from libs.providers.openshift import OCPProvider
 from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT
 from utilities.copyoffload_migration import (
     execute_migration_monitoring_populator_inflight,
-    verify_populator_inflight_observed,
-    verify_populator_source_host_labels,
-    verify_populator_throttled_events,
+    verify_populator_throttling,
     verify_xcopy_used,
     verify_xcopy_used_per_datastore,
 )
@@ -3503,7 +3501,7 @@ class TestCopyoffloadPopulatorThrottlingMigration:
     Test 1 + Test 3 from MTV-5654:
     - Set controller_max_populator_inflight to a low value (2) on ForkliftController
     - Migrate a VM with 4+ disks from a single ESXi host
-    - Verify peak populator concurrency per host respects the limit
+    - Verify peak populator concurrency per host respects the limit and reaches min(limit, disk_count)
     - Verify PopulatorThrottled events on at least (disk_count − limit) PVCs and sourceHost labels on populate pods
     - Restore controller_max_populator_inflight to its pre-test value after the class completes
     """
@@ -3631,23 +3629,14 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         target_namespace: str,
     ) -> None:
         """Verify sourceHost labels, PopulatorThrottled events, and observed concurrency."""
-        source_host = verify_populator_source_host_labels(
+        source_host = verify_populator_throttling(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
-        )
-        LOGGER.info(f"All populate pods share sourceHost={source_host!r}")
-
-        verify_populator_throttled_events(
-            ocp_admin_client=ocp_admin_client,
-            plan=self.plan_resource,
-            target_namespace=target_namespace,
-            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
-        )
-        verify_populator_inflight_observed(
             max_concurrent_by_host=self.max_concurrent_by_host,
             max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
         )
+        LOGGER.info(f"All populate pods share sourceHost={source_host!r}")
 
     def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
         """Verify XCOPY acceleration was used for all disks."""

@@ -24,13 +24,13 @@ from rrmngmnt import Host, RootUser, User
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import MigrationPlanExecError
+from exceptions.exceptions import MigrationNotFoundError, MigrationPlanExecError
 from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
     POPULATOR_THROTTLED_EVENT_REASON,
     SOURCE_HOST_LABEL,
 )
-from utilities.mtv_migration import get_plan_migration_status
+from utilities.mtv_migration import get_migration_for_plan, wait_for_migration_complate
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 from utilities.resources import create_and_store_resource
 
@@ -390,6 +390,62 @@ def _get_migration_uid(plan: Plan) -> str:
     return migration_ref.uid
 
 
+def _resolve_migration_uid(plan: Plan) -> str | None:
+    """Resolve migration UID from Plan status or the Migration CR.
+
+    Plan status history may lag behind Migration CR creation. Checking both sources
+    lets populator monitoring start as soon as either is available.
+
+    Args:
+        plan (Plan): The Plan CR resource.
+
+    Returns:
+        str | None: Migration UID when found, otherwise None.
+    """
+    try:
+        return _get_migration_uid(plan=plan)
+    except ValueError:
+        pass
+
+    try:
+        migration = get_migration_for_plan(plan=plan)
+    except MigrationNotFoundError:
+        return None
+
+    return migration.instance.metadata.uid
+
+
+def _get_populate_pods_for_plan(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    *,
+    require_pods: bool = True,
+) -> tuple[str, list[Pod]]:
+    """Resolve migration UID and fetch populate pods for a completed migration.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource.
+        target_namespace (str): Namespace where populate pods exist.
+        require_pods (bool): When True, raise if no populate pods are found.
+
+    Returns:
+        tuple[str, list[Pod]]: Migration UID and matching populate pods.
+
+    Raises:
+        ValueError: If migration UID or populate pods cannot be resolved.
+    """
+    migration_uid = _get_migration_uid(plan=plan)
+    populate_pods = _find_populate_pods(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        migration_uid=migration_uid,
+        require_pods=require_pods,
+    )
+    return migration_uid, populate_pods
+
+
 def _find_populate_pods(
     ocp_admin_client: DynamicClient,
     namespace: str,
@@ -741,7 +797,8 @@ def _count_active_populator_pods_by_host(
         migration_uid=migration_uid,
         require_pods=False,
     ):
-        if pod.instance.status.phase not in _ACTIVE_POPULATOR_POD_PHASES:
+        pod_status = pod.instance.status
+        if not pod_status or pod_status.phase not in _ACTIVE_POPULATOR_POD_PHASES:
             continue
         labels: dict[str, str] = pod.instance.metadata.labels or {}
         source_host: str | None = labels.get(SOURCE_HOST_LABEL)
@@ -786,80 +843,43 @@ def execute_migration_monitoring_populator_inflight(
 
     max_concurrent_by_host: dict[str, int] = defaultdict(int)
     migration_uid: str | None = None
-    last_status: str = ""
 
-    try:
-        for sample in TimeoutSampler(
-            func=get_plan_migration_status,
-            sleep=1,
-            wait_timeout=py_config.get("plan_wait_timeout", 600),
-            plan=plan,
-        ):
-            if sample != last_status:
-                LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
-                last_status = sample
+    def _poll_populator_concurrency(_status: str) -> None:
+        nonlocal migration_uid
+        if migration_uid is None:
+            migration_uid = _resolve_migration_uid(plan=plan)
 
-            if migration_uid is None and sample == Plan.Status.EXECUTING:
-                try:
-                    migration_uid = _get_migration_uid(plan=plan)
-                except ValueError:
-                    pass
+        if migration_uid is None:
+            return
 
-            if migration_uid is not None:
-                active_by_host = _count_active_populator_pods_by_host(
-                    ocp_admin_client=ocp_admin_client,
-                    namespace=target_namespace,
-                    migration_uid=migration_uid,
-                )
-                for source_host, active_count in active_by_host.items():
-                    max_concurrent_by_host[source_host] = max(max_concurrent_by_host[source_host], active_count)
-                    if active_count > max_populator_inflight:
-                        LOGGER.warning(
-                            f"Populator concurrency for host '{source_host}' is {active_count} "
-                            f"(limit={max_populator_inflight})"
-                        )
-
-            if sample == Plan.Status.SUCCEEDED:
-                return dict(max_concurrent_by_host)
-
-            if sample == Plan.Status.FAILED:
-                raise MigrationPlanExecError()
-
-    except (TimeoutExpiredError, MigrationPlanExecError):
-        raise MigrationPlanExecError(
-            f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
+        active_by_host = _count_active_populator_pods_by_host(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            migration_uid=migration_uid,
         )
+        for source_host, active_count in active_by_host.items():
+            max_concurrent_by_host[source_host] = max(max_concurrent_by_host[source_host], active_count)
+            if active_count > max_populator_inflight:
+                LOGGER.warning(
+                    f"Populator concurrency for host '{source_host}' is {active_count} (limit={max_populator_inflight})"
+                )
 
-    raise MigrationPlanExecError(
-        f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
-    )
+    wait_for_migration_complate(plan=plan, on_status_poll=_poll_populator_concurrency)
+    return dict(max_concurrent_by_host)
 
 
-def verify_populator_source_host_labels(
-    ocp_admin_client: DynamicClient,
-    plan: Plan,
-    target_namespace: str,
-) -> str:
-    """Verify sourceHost labels are present and consistent on all populate pods.
+def _verify_source_host_labels_on_pods(populate_pods: list[Pod]) -> str:
+    """Verify sourceHost labels on populate pods and return the shared host value.
 
     Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        plan (Plan): The Plan CR resource (used to find the migration UID).
-        target_namespace (str): Namespace where populate pods exist.
+        populate_pods (list[Pod]): Populate pods for the migration.
 
     Returns:
-        str: The shared sourceHost label value from all populate pods.
+        str: The shared sourceHost label value.
 
     Raises:
-        ValueError: If populate pods are missing or sourceHost labels are absent or inconsistent.
+        ValueError: If labels are missing or inconsistent across pods.
     """
-    migration_uid: str = _get_migration_uid(plan=plan)
-    populate_pods: list[Pod] = _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=target_namespace,
-        migration_uid=migration_uid,
-    )
-
     source_hosts: set[str] = set()
     for pod in populate_pods:
         labels: dict[str, str] = pod.instance.metadata.labels or {}
@@ -875,34 +895,26 @@ def verify_populator_source_host_labels(
     return source_hosts.pop()
 
 
-def verify_populator_throttled_events(
+def _verify_throttled_events_on_pods(
     ocp_admin_client: DynamicClient,
-    plan: Plan,
     target_namespace: str,
-    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+    migration_uid: str,
+    populate_pods: list[Pod],
+    max_populator_inflight: int,
 ) -> None:
-    """Verify PopulatorThrottled events were recorded on PVCs when the in-flight limit was reached.
-
-    For a single-ESXi-host migration with more disks than the per-host limit, at least
-    ``disk_count - max_populator_inflight`` PVCs must report PopulatorThrottled events.
+    """Verify PopulatorThrottled events on PVCs when the in-flight limit was reached.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
-        plan (Plan): The Plan CR resource (used to find the migration UID).
-        target_namespace (str): Namespace where populate pods and PVCs exist.
+        target_namespace (str): Namespace where PVC events exist.
+        migration_uid (str): Migration UID for error messages.
+        populate_pods (list[Pod]): Populate pods for the migration.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
 
     Raises:
         ValueError: If populate pod count does not exceed the limit, or too few PVCs have
             PopulatorThrottled events.
     """
-    migration_uid: str = _get_migration_uid(plan=plan)
-    populate_pods: list[Pod] = _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=target_namespace,
-        migration_uid=migration_uid,
-    )
-
     min_expected_throttled = len(populate_pods) - max_populator_inflight
     if min_expected_throttled <= 0:
         raise ValueError(
@@ -938,24 +950,152 @@ def verify_populator_throttled_events(
     )
 
 
+def verify_populator_throttling(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    max_concurrent_by_host: dict[str, int],
+    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+) -> str:
+    """Verify MTV-5654 populator throttling: labels, events, and peak concurrency.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods and PVCs exist.
+        max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per sourceHost
+            observed during migration.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+
+    Returns:
+        str: The shared sourceHost label value from all populate pods.
+
+    Raises:
+        ValueError: If any throttling verification check fails.
+    """
+    migration_uid, populate_pods = _get_populate_pods_for_plan(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        target_namespace=target_namespace,
+    )
+    source_host = _verify_source_host_labels_on_pods(populate_pods=populate_pods)
+    _verify_throttled_events_on_pods(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        populate_pods=populate_pods,
+        max_populator_inflight=max_populator_inflight,
+    )
+    if source_host not in max_concurrent_by_host:
+        raise ValueError(
+            f"No populator monitoring data for sourceHost {source_host!r}; "
+            f"observed during migration: {sorted(max_concurrent_by_host)}"
+        )
+    verify_populator_inflight_observed(
+        max_concurrent_by_host={source_host: max_concurrent_by_host[source_host]},
+        max_populator_inflight=max_populator_inflight,
+        disk_count=len(populate_pods),
+    )
+    return source_host
+
+
+def verify_populator_source_host_labels(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+) -> str:
+    """Verify sourceHost labels are present and consistent on all populate pods.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods exist.
+
+    Returns:
+        str: The shared sourceHost label value from all populate pods.
+
+    Raises:
+        ValueError: If populate pods are missing or sourceHost labels are absent or inconsistent.
+    """
+    _, populate_pods = _get_populate_pods_for_plan(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        target_namespace=target_namespace,
+    )
+    return _verify_source_host_labels_on_pods(populate_pods=populate_pods)
+
+
+def verify_populator_throttled_events(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+) -> None:
+    """Verify PopulatorThrottled events were recorded on PVCs when the in-flight limit was reached.
+
+    For a single-ESXi-host migration with more disks than the per-host limit, at least
+    ``disk_count - max_populator_inflight`` PVCs must report PopulatorThrottled events.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods and PVCs exist.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+
+    Raises:
+        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
+            PopulatorThrottled events.
+    """
+    migration_uid, populate_pods = _get_populate_pods_for_plan(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        target_namespace=target_namespace,
+    )
+    _verify_throttled_events_on_pods(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        populate_pods=populate_pods,
+        max_populator_inflight=max_populator_inflight,
+    )
+
+
 def verify_populator_inflight_observed(
     max_concurrent_by_host: dict[str, int],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+    disk_count: int | None = None,
 ) -> None:
     """Verify observed peak populator concurrency respects the configured in-flight limit.
+
+    When ``disk_count`` is provided, also verifies the limit was exercised: peak concurrency
+    must reach ``min(max_populator_inflight, disk_count)``. For example, 5 disks with limit 2
+    requires peak >= 2, proving two populate pods ran concurrently before others were throttled.
 
     Args:
         max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per sourceHost.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        disk_count (int | None): Total disk/populate-pod count for a single-ESXi-host migration;
+            enables minimum peak assertion. Not valid for multi-host migrations.
 
     Raises:
-        AssertionError: If peak concurrency exceeds the limit or no activity was observed.
+        ValueError: If no activity was observed, peak exceeds the limit, or peak is below the
+            expected minimum when disk_count is set.
     """
-    assert max_concurrent_by_host, "No populator activity observed during migration monitoring"
+    if not max_concurrent_by_host:
+        raise ValueError("No populator activity observed during migration monitoring")
+
+    min_expected_peak = min(max_populator_inflight, disk_count) if disk_count is not None else None
 
     for source_host, peak_count in max_concurrent_by_host.items():
-        assert peak_count <= max_populator_inflight, (
-            f"Peak populator concurrency for host '{source_host}' was {peak_count}, "
-            f"exceeding limit {max_populator_inflight}"
-        )
+        if peak_count > max_populator_inflight:
+            raise ValueError(
+                f"Peak populator concurrency for host '{source_host}' was {peak_count}, "
+                f"exceeding limit {max_populator_inflight}"
+            )
+        if min_expected_peak is not None and peak_count < min_expected_peak:
+            raise ValueError(
+                f"Peak populator concurrency for host '{source_host}' was {peak_count}, "
+                f"expected at least {min_expected_peak} "
+                f"(limit={max_populator_inflight}, disks={disk_count})"
+            )
         LOGGER.info(f"Host '{source_host}': peak populator concurrency {peak_count}/{max_populator_inflight} (PASS)")

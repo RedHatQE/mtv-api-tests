@@ -20,7 +20,6 @@ SUPPORTED_VENDORS = (
 
 # MTV-5654: per-ESXi-host populator throttling (ForkliftController controller_max_populator_inflight)
 POPULATOR_INFLIGHT_LIMIT = 2
-DEFAULT_POPULATOR_INFLIGHT = 20
 
 SOURCE_HOST_LABEL = "sourceHost"
 POPULATOR_THROTTLED_EVENT_REASON = "PopulatorThrottled"

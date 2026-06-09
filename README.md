@@ -288,6 +288,11 @@ running the full suite. The sanity set covers:
 | MTV-573 | `TestCopyoffload10MixedDisksMigration` | VM with 10 mixed disks (thin and thick provisioned) |
 | MTV-577 | `TestCopyoffloadWarmMigration` | Warm (live) migration with copy-offload |
 
+> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-5654) mutates cluster-wide
+> `ForkliftController` populator limits. See the
+> [Copy-Offload Guide](guides/copyoffload/how-to-run-copyoffload-tests.md#populator-throttling-test-mtv-5654)
+> before running it.
+
 Together these tests validate: different disk types (thin, thick, RDM), multi-disk and multi-datastore
 layouts, mixed XCOPY/non-XCOPY fallback behavior, concurrent scale migration, and warm migration --
 providing broad coverage of copy-offload functionality in a single run.

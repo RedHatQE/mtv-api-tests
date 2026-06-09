@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -48,6 +49,21 @@ def _find_migration_for_plan(plan: Plan) -> Migration:
                     return migration
 
     raise MigrationNotFoundError(f"Migration CR not found for Plan '{plan.name}' in namespace '{plan.namespace}'")
+
+
+def get_migration_for_plan(plan: Plan) -> Migration:
+    """Find Migration CR for Plan.
+
+    Args:
+        plan (Plan): The Plan resource.
+
+    Returns:
+        Migration: The Migration CR owned by the Plan.
+
+    Raises:
+        MigrationNotFoundError: If Migration CR cannot be found.
+    """
+    return _find_migration_for_plan(plan=plan)
 
 
 def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
@@ -348,7 +364,18 @@ def get_plan_migration_status(plan: Plan) -> str:
         return ""
 
 
-def wait_for_migration_complate(plan: Plan) -> None:
+def wait_for_migration_complate(
+    plan: Plan,
+    *,
+    on_status_poll: Callable[[str], None] | None = None,
+) -> None:
+    """Wait for a Plan migration to reach Succeeded or Failed.
+
+    Args:
+        plan (Plan): The Plan resource to monitor.
+        on_status_poll (Callable[[str], None] | None): Optional callback invoked on each poll
+            with the current migration status string.
+    """
     try:
         last_status: str = ""
 
@@ -361,6 +388,9 @@ def wait_for_migration_complate(plan: Plan) -> None:
             if sample != last_status:
                 LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
                 last_status = sample
+
+            if on_status_poll is not None:
+                on_status_poll(sample)
 
             if sample == Plan.Status.SUCCEEDED:
                 return

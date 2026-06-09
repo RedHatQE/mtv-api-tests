@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -159,10 +160,36 @@ def multi_datastore_config(source_provider_data: dict[str, Any]) -> None:
     LOGGER.info("✓ Multi-datastore configuration validated: secondary_datastore_id = %s", secondary_datastore_id)
 
 
+def _ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
+    """Validate permissions on a cross-worker shared lock directory.
+
+    Args:
+        lock_dir (Path): Directory used for pytest-xdist file locks.
+
+    Raises:
+        PermissionError: If the directory is a symlink or owned by another user.
+    """
+    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+    if lock_dir.is_symlink():
+        raise PermissionError(
+            f"Security error: shared directory {lock_dir} is a symlink. This may indicate a hijack attempt."
+        )
+
+    current_uid = os.getuid()
+    dir_stat = lock_dir.lstat()
+    if dir_stat.st_uid != current_uid:
+        raise PermissionError(
+            f"Security error: shared directory {lock_dir} is owned by uid {dir_stat.st_uid}, "
+            f"expected current user uid {current_uid}. This may indicate a hijack attempt."
+        )
+    os.chmod(lock_dir, 0o700)
+
+
 def _forkliftcontroller_populator_inflight_lock_path() -> Path:
     """Return the cross-worker lock path for ForkliftController populator limit changes."""
     lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-forklift"
-    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _ensure_secure_shared_lock_dir(lock_dir=lock_dir)
     return lock_dir / "populator-inflight.lock"
 
 
@@ -302,7 +329,11 @@ def populator_inflight_forkliftcontroller(
 
     Patches controller_max_populator_inflight to POPULATOR_INFLIGHT_LIMIT (2) for the class,
     then restores the CR and deployment limits observed before setup on teardown. A file lock
-    serializes ForkliftController changes across pytest-xdist workers.
+    serializes ForkliftController changes across pytest-xdist workers for the entire class
+    duration (setup through check_vms), including migration and post-migration verification.
+
+    This fixture mutates cluster-wide MTV populator settings. Do not run multiple populator
+    throttling test classes against the same cluster in parallel.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
