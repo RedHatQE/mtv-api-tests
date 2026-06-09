@@ -957,7 +957,7 @@ def verify_populator_throttling(
     max_concurrent_by_host: dict[str, int],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
 ) -> str:
-    """Verify MTV-5654 populator throttling: labels, events, and peak concurrency.
+    """Verify MTV-696 populator throttling: labels, events, and peak concurrency.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.

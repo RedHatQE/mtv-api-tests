@@ -18,7 +18,7 @@ SUPPORTED_VENDORS = (
     "flashsystem",
 )
 
-# MTV-5654: per-ESXi-host populator throttling (ForkliftController controller_max_populator_inflight)
+# MTV-696: per-ESXi-host populator throttling (ForkliftController controller_max_populator_inflight)
 POPULATOR_INFLIGHT_LIMIT = 2
 
 SOURCE_HOST_LABEL = "sourceHost"

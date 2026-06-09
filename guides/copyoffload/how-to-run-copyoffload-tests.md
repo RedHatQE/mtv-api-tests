@@ -402,12 +402,12 @@ The Job automatically reads cluster credentials from the Secret created in Step 
 - `test_copyoffload_multi_disk_migration` - Multi-disk VM migration
 - `test_copyoffload_multi_disk_different_path_migration` - Multi-disk with different paths
 - `test_copyoffload_rdm_virtual_disk_migration` - RDM virtual disk migration
-- `TestCopyoffloadPopulatorThrottlingMigration` - Per-ESXi-host populator throttling (MTV-5654)
+- `TestCopyoffloadPopulatorThrottlingMigration` - Per-ESXi-host populator throttling (MTV-696)
 
 > **Note**: Additional copy-offload tests are being developed and automated. Use `pytest --collect-only -m copyoffload`
 > to see the full list of available tests.
 
-### Populator Throttling Test (MTV-5654)
+### Populator Throttling Test (MTV-696)
 
 `TestCopyoffloadPopulatorThrottlingMigration` validates per-ESXi-host populator concurrency limits and
 `sourceHost` labels on populate pods. It requires a VM with **more disks than the test limit** (5 disks:

@@ -3485,7 +3485,7 @@ class TestCopyoffloadLargeVmMigration:
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_populator_throttling_migration"])],
     indirect=True,
-    ids=["MTV-5654:copyoffload-populator-throttling"],
+    ids=["MTV-696:copyoffload-populator-throttling"],
 )
 @pytest.mark.usefixtures(
     "vmware_cloud_init_ready",
@@ -3496,9 +3496,9 @@ class TestCopyoffloadLargeVmMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadPopulatorThrottlingMigration:
-    """Copy-offload migration (MTV-5654): per-ESXi-host populator throttling and sourceHost labels.
+    """Copy-offload migration (MTV-696): per-ESXi-host populator throttling and sourceHost labels.
 
-    Test 1 + Test 3 from MTV-5654:
+    Covers MTV-5654 Test 1 + Test 3:
     - Set controller_max_populator_inflight to a low value (2) on ForkliftController
     - Migrate a VM with 4+ disks from a single ESXi host
     - Verify peak populator concurrency per host respects the limit and reaches min(limit, disk_count)
