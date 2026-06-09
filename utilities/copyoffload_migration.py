@@ -999,67 +999,6 @@ def verify_populator_throttling(
     return source_host
 
 
-def verify_populator_source_host_labels(
-    ocp_admin_client: DynamicClient,
-    plan: Plan,
-    target_namespace: str,
-) -> str:
-    """Verify sourceHost labels are present and consistent on all populate pods.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        plan (Plan): The Plan CR resource (used to find the migration UID).
-        target_namespace (str): Namespace where populate pods exist.
-
-    Returns:
-        str: The shared sourceHost label value from all populate pods.
-
-    Raises:
-        ValueError: If populate pods are missing or sourceHost labels are absent or inconsistent.
-    """
-    _, populate_pods = _get_populate_pods_for_plan(
-        ocp_admin_client=ocp_admin_client,
-        plan=plan,
-        target_namespace=target_namespace,
-    )
-    return _verify_source_host_labels_on_pods(populate_pods=populate_pods)
-
-
-def verify_populator_throttled_events(
-    ocp_admin_client: DynamicClient,
-    plan: Plan,
-    target_namespace: str,
-    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
-) -> None:
-    """Verify PopulatorThrottled events were recorded on PVCs when the in-flight limit was reached.
-
-    For a single-ESXi-host migration with more disks than the per-host limit, at least
-    ``disk_count - max_populator_inflight`` PVCs must report PopulatorThrottled events.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        plan (Plan): The Plan CR resource (used to find the migration UID).
-        target_namespace (str): Namespace where populate pods and PVCs exist.
-        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
-
-    Raises:
-        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
-            PopulatorThrottled events.
-    """
-    migration_uid, populate_pods = _get_populate_pods_for_plan(
-        ocp_admin_client=ocp_admin_client,
-        plan=plan,
-        target_namespace=target_namespace,
-    )
-    _verify_throttled_events_on_pods(
-        ocp_admin_client=ocp_admin_client,
-        target_namespace=target_namespace,
-        migration_uid=migration_uid,
-        populate_pods=populate_pods,
-        max_populator_inflight=max_populator_inflight,
-    )
-
-
 def verify_populator_inflight_observed(
     max_concurrent_by_host: dict[str, int],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
