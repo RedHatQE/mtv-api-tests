@@ -1066,6 +1066,14 @@ def prepared_plan(
         # Use vCenter clone provider if configured (e.g., for ESXi sources that can't clone directly)
         clone_provider = vcenter_clone_provider or source_provider
 
+        if plan.get("preserve_static_ips"):
+            for vm in virtual_machines:
+                if vm.get("source_vm_power") != "on":
+                    raise ValueError(
+                        f"preserve_static_ips requires source_vm_power='on' for VM '{vm['name']}'. "
+                        "Guest tools must be running to collect static IP and NIC name data."
+                    )
+
         for vm in virtual_machines:
             clone_options = {**vm, "enable_ctk": warm_migration}
             provider_vm_api = clone_provider.get_vm_by_name(
