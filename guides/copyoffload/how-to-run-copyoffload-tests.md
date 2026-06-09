@@ -404,9 +404,7 @@ The Job automatically reads cluster credentials from the Secret created in Step 
 - `test_copyoffload_rdm_virtual_disk_migration` - RDM virtual disk migration
 
 > **Note**: Additional copy-offload tests are being developed and automated. Use `pytest --collect-only -m copyoffload`
-> to see the full list of available tests. `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) temporarily
-> sets `ForkliftController.spec.controller_max_populator_inflight` to **2** — do not run it in parallel with other
-> copy-offload tests on the same cluster, or those migrations will also be capped at 2 in-flight populate pods.
+> to see the full list of available tests.
 
 ### Step 3: Monitor Test Execution
 

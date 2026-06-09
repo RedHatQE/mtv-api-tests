@@ -3513,16 +3513,16 @@ class TestCopyoffloadPopulatorThrottlingMigration:
 
     def test_create_storagemap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        source_provider_data,
-        copyoffload_storage_secret,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
         """Create StorageMap with copy-offload configuration."""
         copyoffload_config_data = source_provider_data["copyoffload"]
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
@@ -3555,15 +3555,15 @@ class TestCopyoffloadPopulatorThrottlingMigration:
 
     def test_create_networkmap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        multus_network_name,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
         """Create NetworkMap resource."""
         vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
@@ -3580,14 +3580,14 @@ class TestCopyoffloadPopulatorThrottlingMigration:
 
     def test_create_plan(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        target_namespace,
-        source_provider_inventory,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
         """Create MTV Plan CR resource."""
         for vm in prepared_plan["virtual_machines"]:
             vm_name = vm["name"]
@@ -3649,15 +3649,15 @@ class TestCopyoffloadPopulatorThrottlingMigration:
 
     def test_check_vms(
         self,
-        prepared_plan,
-        source_provider,
-        destination_provider,
-        source_provider_data,
-        target_namespace,
-        source_vms_namespace,
-        source_provider_inventory,
-        vm_ssh_connections,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
         """Validate migrated VMs and verify disk count."""
         check_vms(
             plan=prepared_plan,
