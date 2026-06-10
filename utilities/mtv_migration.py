@@ -373,6 +373,52 @@ def wait_for_migration_complate(plan: Plan) -> None:
         )
 
 
+def wait_for_vm_networks_in_inventory(
+    source_provider_inventory: ForkliftInventory,
+    vm_names: list[str],
+    timeout: int = 300,
+) -> None:
+    """Wait for VMs to appear in Forklift inventory with network data.
+
+    After cloning VMs, the Forklift provider inventory must sync the VM metadata
+    including network interface information. This function polls the inventory
+    until all specified VMs have NIC data populated.
+
+    Args:
+        source_provider_inventory: Forklift inventory instance for the source provider
+        vm_names: List of VM names to wait for
+        timeout: Maximum wait time in seconds (default: 300)
+
+    Raises:
+        TimeoutExpiredError: If any VM doesn't appear with NICs within timeout period
+    """
+    LOGGER.info(f"Waiting for {len(vm_names)} VM(s) to sync to Forklift inventory with NIC data...")
+
+    for vm_name in vm_names:
+        sampler = TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=lambda name=vm_name: source_provider_inventory.get_vm(name=name),
+        )
+
+        try:
+            for vm in sampler:
+                if vm and vm.get("nics"):
+                    LOGGER.info(f"VM '{vm_name}' synced to inventory with {len(vm['nics'])} NIC(s)")
+                    break
+                LOGGER.debug(
+                    f"Waiting for VM '{vm_name}' NIC data in inventory... "
+                    f"(NICs: {vm.get('nics', []) if vm else 'VM not found'})"
+                )
+        except TimeoutExpiredError:
+            vm_data = source_provider_inventory.get_vm(name=vm_name)
+            nics = vm_data.get("nics", []) if vm_data else []
+            raise TimeoutExpiredError(
+                f"Timed Out: VM '{vm_name}' found in Forklift inventory but NIC/network data "
+                f"did not sync after {timeout}s. NICs: {nics}"
+            )
+
+
 def get_storage_migration_map(
     fixture_store: dict[str, Any],
     target_namespace: str,

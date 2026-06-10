@@ -9,6 +9,7 @@ from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
+from libs.forklift_inventory import ForkliftInventory
 from libs.providers.vmware import VMWareProvider
 from utilities.copyoffload_constants import SUPPORTED_VENDORS
 from utilities.copyoffload_migration import (
@@ -17,6 +18,7 @@ from utilities.copyoffload_migration import (
     wait_for_vmware_cloud_init_all_vms,
 )
 from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
+from utilities.mtv_migration import wait_for_vm_networks_in_inventory
 from utilities.resources import create_and_store_resource
 from utilities.utils import resolve_providers_json_path
 
@@ -369,21 +371,41 @@ def vmware_cloud_init_ready(
     prepared_plan: dict[str, Any],
     source_provider: VMWareProvider,
     source_provider_data: dict[str, Any],
+    source_provider_inventory: ForkliftInventory,
 ) -> None:
-    """Ensure cloud-init has finished on all VMs before migration tests run.
+    """Ensure cloud-init has finished and Forklift inventory synced for all VMs.
+
+    This fixture performs two critical wait operations:
+    1. Waits for cloud-init completion on all cloned VMs (via VMware Guest Operations)
+    2. Waits for Forklift provider inventory to sync VM network data
+
+    The second wait is essential because tests query the Forklift inventory for
+    network mappings, not the vCenter API directly. Without this wait, network
+    map creation fails with empty NIC data even though VMs are running.
 
     Args:
         prepared_plan (dict[str, Any]): Processed test plan configuration.
         source_provider (VMWareProvider): The VMware source provider instance.
         source_provider_data (dict[str, Any]): Source provider configuration data.
+        source_provider_inventory (ForkliftInventory): Forklift inventory for source provider.
 
     Returns:
         None
     """
+    vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+    # Wait for cloud-init to complete on all VMs
     wait_for_vmware_cloud_init_all_vms(
         prepared_plan=prepared_plan,
         source_provider=source_provider,
         source_provider_data=source_provider_data,
+    )
+
+    # Wait for Forklift inventory to sync VM network data
+    wait_for_vm_networks_in_inventory(
+        source_provider_inventory=source_provider_inventory,
+        vm_names=vms_names,
+        timeout=300,
     )
 
 
@@ -393,24 +415,45 @@ def vmware_cloud_init_ready_both_plans(
     prepared_plan_2: dict[str, Any],
     source_provider: VMWareProvider,
     source_provider_data: dict[str, Any],
+    source_provider_inventory: ForkliftInventory,
 ) -> None:
-    """Ensure cloud-init has finished on all VMs from both plans before migration tests run.
+    """Ensure cloud-init has finished and Forklift inventory synced for all VMs from both plans.
+
+    This fixture performs two critical wait operations for both migration plans:
+    1. Waits for cloud-init completion on all cloned VMs (via VMware Guest Operations)
+    2. Waits for Forklift provider inventory to sync VM network data
+
+    The second wait is essential because tests query the Forklift inventory for
+    network mappings, not the vCenter API directly. Without this wait, network
+    map creation fails with empty NIC data even though VMs are running.
 
     Args:
         prepared_plan_1 (dict[str, Any]): First processed test plan configuration.
         prepared_plan_2 (dict[str, Any]): Second processed test plan configuration.
         source_provider (VMWareProvider): The VMware source provider instance.
         source_provider_data (dict[str, Any]): Source provider configuration data.
+        source_provider_inventory (ForkliftInventory): Forklift inventory for source provider.
 
     Returns:
         None
     """
+    # Wait for cloud-init on all VMs from both plans
     for plan in (prepared_plan_1, prepared_plan_2):
         wait_for_vmware_cloud_init_all_vms(
             prepared_plan=plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
         )
+
+    # Wait for Forklift inventory to sync network data for all VMs
+    all_vm_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
+    all_vm_names.extend([vm["name"] for vm in prepared_plan_2["virtual_machines"]])
+
+    wait_for_vm_networks_in_inventory(
+        source_provider_inventory=source_provider_inventory,
+        vm_names=all_vm_names,
+        timeout=300,
+    )
 
 
 @pytest.fixture(scope="class")
