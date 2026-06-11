@@ -32,13 +32,14 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
     """
     LOGGER.info("Copy-offload: waiting for Forklift to create plan-specific secret...")
     try:
-        for _ in TimeoutSampler(
+        for sample in TimeoutSampler(
             wait_timeout=60,
             sleep=2,
             func=lambda: any(
                 s.name.startswith(f"{plan_name}-") for s in Secret.get(client=ocp_admin_client, namespace=namespace)
             ),
         ):
-            break
+            if sample:
+                return
     except TimeoutExpiredError:
         LOGGER.warning(f"Timeout waiting for plan secret '{plan_name}-*' - continuing anyway")
