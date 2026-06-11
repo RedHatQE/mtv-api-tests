@@ -375,13 +375,14 @@ def vmware_cloud_init_ready(
 ) -> None:
     """Ensure cloud-init has finished and Forklift inventory synced for all VMs.
 
-    This fixture performs two critical wait operations in this order:
-    1. Waits for Forklift provider inventory to sync VM network data (while VMs are powered off)
-    2. Powers on VMs and waits for cloud-init completion (via VMware Guest Operations)
+    This fixture performs three critical operations to match successful manual migration workflow:
+    1. Powers on VMs and waits for cloud-init completion (via VMware Guest Operations)
+    2. Powers off all VMs after cloud-init completes
+    3. Waits for Forklift provider inventory to sync VM network data (while VMs are powered off)
 
-    The order is critical: MTV 2.12 Forklift inventory does not sync NIC data for powered-on VMs.
-    Since VMs are powered off after cloning, we must wait for NIC sync before powering them on
-    for cloud-init. Tests query Forklift inventory for network mappings, not vCenter API directly.
+    MTV 2.12 regression: NICs only sync to Forklift inventory AFTER the VM has been powered on
+    at least once (for cloud-init), then powered off, then several minutes pass for sync.
+    This matches the manual migration workflow where users power off VMs before creating plans.
 
     Args:
         prepared_plan (dict[str, Any]): Processed test plan configuration.
@@ -394,19 +395,28 @@ def vmware_cloud_init_ready(
     """
     vm_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
 
-    # FIRST: Wait for Forklift inventory to sync VM network data (VMs are powered off after cloning)
-    # MTV 2.12 regression: NICs only sync to inventory for powered-off VMs
-    wait_for_vm_networks_in_inventory(
-        source_provider_inventory=source_provider_inventory,
-        vm_names=vm_names,
-        timeout=300,
-    )
-
-    # THEN: Power on VMs and wait for cloud-init to complete
+    # STEP 1: Power on VMs and wait for cloud-init to complete
     wait_for_vmware_cloud_init_all_vms(
         prepared_plan=prepared_plan,
         source_provider=source_provider,
         source_provider_data=source_provider_data,
+    )
+
+    # STEP 2: Power off all VMs after cloud-init (required for inventory sync in MTV 2.12)
+    LOGGER.info("Powering off VMs after cloud-init to enable NIC sync to Forklift inventory...")
+    for vm_data in prepared_plan["virtual_machines"]:
+        vm_name = vm_data["name"]
+        provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
+        LOGGER.info(f"Powering off VM {vm_name}")
+        source_provider.stop_vm(provider_vm_api)
+
+    # STEP 3: Wait for Forklift inventory to sync VM network data (VMs now powered off)
+    # MTV 2.12 requires: VM powered on once + cloud-init + powered off + wait for sync
+    LOGGER.info("Waiting for Forklift inventory to sync NICs after VMs powered off...")
+    wait_for_vm_networks_in_inventory(
+        source_provider_inventory=source_provider_inventory,
+        vm_names=vm_names,
+        timeout=600,  # Increased to 10 minutes based on manual migration timing
     )
 
 
@@ -420,13 +430,14 @@ def vmware_cloud_init_ready_both_plans(
 ) -> None:
     """Ensure cloud-init has finished and Forklift inventory synced for all VMs from both plans.
 
-    This fixture performs two critical wait operations in this order:
-    1. Waits for Forklift provider inventory to sync VM network data (while VMs are powered off)
-    2. Powers on VMs and waits for cloud-init completion (via VMware Guest Operations)
+    This fixture performs three critical operations to match successful manual migration workflow:
+    1. Powers on VMs and waits for cloud-init completion (via VMware Guest Operations)
+    2. Powers off all VMs after cloud-init completes
+    3. Waits for Forklift provider inventory to sync VM network data (while VMs are powered off)
 
-    The order is critical: MTV 2.12 Forklift inventory does not sync NIC data for powered-on VMs.
-    Since VMs are powered off after cloning, we must wait for NIC sync before powering them on
-    for cloud-init. Tests query Forklift inventory for network mappings, not vCenter API directly.
+    MTV 2.12 regression: NICs only sync to Forklift inventory AFTER the VM has been powered on
+    at least once (for cloud-init), then powered off, then several minutes pass for sync.
+    This matches the manual migration workflow where users power off VMs before creating plans.
 
     Args:
         prepared_plan_1 (dict[str, Any]): First processed test plan configuration.
@@ -442,21 +453,31 @@ def vmware_cloud_init_ready_both_plans(
     all_vm_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
     all_vm_names.extend([vm["name"] for vm in prepared_plan_2["virtual_machines"]])
 
-    # FIRST: Wait for Forklift inventory to sync VM network data (VMs are powered off after cloning)
-    # MTV 2.12 regression: NICs only sync to inventory for powered-off VMs
-    wait_for_vm_networks_in_inventory(
-        source_provider_inventory=source_provider_inventory,
-        vm_names=all_vm_names,
-        timeout=300,
-    )
-
-    # THEN: Power on VMs and wait for cloud-init to complete for both plans
+    # STEP 1: Power on VMs and wait for cloud-init to complete for both plans
     for plan in (prepared_plan_1, prepared_plan_2):
         wait_for_vmware_cloud_init_all_vms(
             prepared_plan=plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
         )
+
+    # STEP 2: Power off all VMs after cloud-init (required for inventory sync in MTV 2.12)
+    LOGGER.info("Powering off VMs after cloud-init to enable NIC sync to Forklift inventory...")
+    for plan in (prepared_plan_1, prepared_plan_2):
+        for vm_data in plan["virtual_machines"]:
+            vm_name = vm_data["name"]
+            provider_vm_api = plan["source_vms_data"][vm_name]["provider_vm_api"]
+            LOGGER.info(f"Powering off VM {vm_name}")
+            source_provider.stop_vm(provider_vm_api)
+
+    # STEP 3: Wait for Forklift inventory to sync VM network data (VMs now powered off)
+    # MTV 2.12 requires: VM powered on once + cloud-init + powered off + wait for sync
+    LOGGER.info("Waiting for Forklift inventory to sync NICs after VMs powered off...")
+    wait_for_vm_networks_in_inventory(
+        source_provider_inventory=source_provider_inventory,
+        vm_names=all_vm_names,
+        timeout=600,  # Increased to 10 minutes based on manual migration timing
+    )
 
 
 @pytest.fixture(scope="class")
