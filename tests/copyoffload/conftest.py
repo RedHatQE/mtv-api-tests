@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import os
-import tempfile
 from collections.abc import Generator
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import filelock
@@ -11,13 +8,11 @@ import pytest
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.deployment import Deployment
 from ocp_resources.provider import Provider
-from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
 
 from libs.base_provider import BaseProvider
 from libs.providers.vmware import VMWareProvider
-from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
@@ -29,6 +24,13 @@ from utilities.copyoffload_migration import (
     wait_for_vmware_cloud_init_all_vms,
 )
 from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
+from utilities.forklift_controller_populator import (
+    MAX_POPULATOR_INFLIGHT_ENV,
+    POPULATOR_CONTROLLER_DEPLOYMENT,
+    get_forkliftcontroller_populator_inflight_lock_path,
+    get_populator_inflight_from_deployment,
+    populator_inflight_limit,
+)
 from utilities.resources import create_and_store_resource
 from utilities.utils import resolve_providers_json_path
 
@@ -160,166 +162,6 @@ def multi_datastore_config(source_provider_data: dict[str, Any]) -> None:
     LOGGER.info("✓ Multi-datastore configuration validated: secondary_datastore_id = %s", secondary_datastore_id)
 
 
-def _ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
-    """Validate permissions on a cross-worker shared lock directory.
-
-    Args:
-        lock_dir (Path): Directory used for pytest-xdist file locks.
-
-    Raises:
-        PermissionError: If the directory is a symlink or owned by another user.
-    """
-    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-
-    if lock_dir.is_symlink():
-        raise PermissionError(
-            f"Security error: shared directory {lock_dir} is a symlink. This may indicate a hijack attempt."
-        )
-
-    current_uid = os.getuid()
-    dir_stat = lock_dir.lstat()
-    if dir_stat.st_uid != current_uid:
-        raise PermissionError(
-            f"Security error: shared directory {lock_dir} is owned by uid {dir_stat.st_uid}, "
-            f"expected current user uid {current_uid}. This may indicate a hijack attempt."
-        )
-    os.chmod(lock_dir, 0o700)
-
-
-def _forkliftcontroller_populator_inflight_lock_path() -> Path:
-    """Return the cross-worker lock path for ForkliftController populator limit changes."""
-    lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-forklift"
-    _ensure_secure_shared_lock_dir(lock_dir=lock_dir)
-    return lock_dir / "populator-inflight.lock"
-
-
-_POPULATOR_CONTROLLER_DEPLOYMENT = "forklift-volume-populator-controller"
-_MAX_POPULATOR_INFLIGHT_ENV = "MAX_POPULATOR_INFLIGHT"
-
-
-def _get_populator_inflight_from_deployment(deployment: Deployment) -> str | None:
-    """Read MAX_POPULATOR_INFLIGHT from the populator controller deployment.
-
-    Args:
-        deployment (Deployment): Populator controller deployment resource.
-
-    Returns:
-        str | None: Configured in-flight limit, or None if the env var is absent.
-    """
-    containers = deployment.instance.spec.template.spec.containers
-    for container in containers:
-        for env_var in container.env or []:
-            if env_var.name == _MAX_POPULATOR_INFLIGHT_ENV:
-                return env_var.value
-    return None
-
-
-def _wait_for_populator_inflight_deployment(
-    ocp_admin_client: "DynamicClient",
-    mtv_namespace: str,
-    expected_limit: int,
-) -> None:
-    """Wait until the populator controller deployment applies the in-flight limit.
-
-    ForkliftController spec changes propagate to the populator-controller Deployment
-    asynchronously. Migration must not start until MAX_POPULATOR_INFLIGHT is active.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        mtv_namespace (str): Namespace where the populator controller runs.
-        expected_limit (int): Expected MAX_POPULATOR_INFLIGHT value.
-
-    Raises:
-        TimeoutError: If the deployment does not reach the expected limit in time.
-    """
-    expected_value = str(expected_limit)
-
-    def _deployment_ready_with_limit() -> bool:
-        current_deployment = Deployment(
-            client=ocp_admin_client,
-            name=_POPULATOR_CONTROLLER_DEPLOYMENT,
-            namespace=mtv_namespace,
-            ensure_exists=True,
-        )
-        deployment_status = current_deployment.instance.status
-        spec_replicas = current_deployment.instance.spec.replicas or 1
-        available_replicas = deployment_status.availableReplicas or 0 if deployment_status else 0
-        if available_replicas < spec_replicas:
-            return False
-        return _get_populator_inflight_from_deployment(deployment=current_deployment) == expected_value
-
-    try:
-        for _ in TimeoutSampler(
-            wait_timeout=300,
-            sleep=2,
-            func=_deployment_ready_with_limit,
-        ):
-            if _:
-                LOGGER.info(
-                    f"Populator controller deployment has {_MAX_POPULATOR_INFLIGHT_ENV}={expected_value} "
-                    "and is fully available"
-                )
-                return
-    except TimeoutExpiredError as err:
-        final_deployment = Deployment(
-            client=ocp_admin_client,
-            name=_POPULATOR_CONTROLLER_DEPLOYMENT,
-            namespace=mtv_namespace,
-            ensure_exists=True,
-        )
-        current_limit = _get_populator_inflight_from_deployment(deployment=final_deployment)
-        raise TimeoutError(
-            f"Timed out waiting for {_POPULATOR_CONTROLLER_DEPLOYMENT} to apply "
-            f"{_MAX_POPULATOR_INFLIGHT_ENV}={expected_value} (current={current_limit!r})"
-        ) from err
-
-
-def _restore_forkliftcontroller_populator_inflight(
-    ocp_admin_client: "DynamicClient",
-    mtv_namespace: str,
-    original_cr_limit: int | None,
-    original_deployment_limit: int,
-) -> None:
-    """Restore ForkliftController populator in-flight limit to its pre-test value.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        mtv_namespace (str): Namespace where ForkliftController is installed.
-        original_cr_limit (int | None): controller_max_populator_inflight before the test.
-        original_deployment_limit (int): MAX_POPULATOR_INFLIGHT on the deployment before the test.
-    """
-    restore_cr_limit = original_cr_limit if original_cr_limit is not None else original_deployment_limit
-    forklift_controller = ForkliftController(
-        client=ocp_admin_client,
-        name="forklift-controller",
-        namespace=mtv_namespace,
-        ensure_exists=True,
-    )
-    current_limit = getattr(forklift_controller.instance.spec, "controller_max_populator_inflight", None)
-    if current_limit == restore_cr_limit:
-        LOGGER.info(
-            f"ForkliftController controller_max_populator_inflight already {restore_cr_limit!r} (pre-test value)"
-        )
-    else:
-        LOGGER.info(
-            f"Restoring ForkliftController controller_max_populator_inflight "
-            f"from {current_limit!r} to pre-test value {restore_cr_limit!r}"
-        )
-        ResourceEditor(
-            patches={forklift_controller: {"spec": {"controller_max_populator_inflight": restore_cr_limit}}}
-        ).update(backup_resources=False)
-        forklift_controller.wait_for_condition(
-            status=forklift_controller.Condition.Status.TRUE,
-            condition=forklift_controller.Condition.Type.SUCCESSFUL,
-            timeout=300,
-        )
-    _wait_for_populator_inflight_deployment(
-        ocp_admin_client=ocp_admin_client,
-        mtv_namespace=mtv_namespace,
-        expected_limit=original_deployment_limit,
-    )
-
-
 @pytest.fixture(scope="class")
 def populator_inflight_forkliftcontroller(
     ocp_admin_client: "DynamicClient",
@@ -342,7 +184,7 @@ def populator_inflight_forkliftcontroller(
     Yields:
         None
     """
-    lock_path = _forkliftcontroller_populator_inflight_lock_path()
+    lock_path = get_forkliftcontroller_populator_inflight_lock_path()
     try:
         with filelock.FileLock(lock_path, timeout=3600):
             forklift_controller = ForkliftController(
@@ -357,58 +199,28 @@ def populator_inflight_forkliftcontroller(
                 timeout=300,
             )
 
-            original_cr_limit = getattr(forklift_controller.instance.spec, "controller_max_populator_inflight", None)
             initial_deployment = Deployment(
                 client=ocp_admin_client,
-                name=_POPULATOR_CONTROLLER_DEPLOYMENT,
+                name=POPULATOR_CONTROLLER_DEPLOYMENT,
                 namespace=mtv_namespace,
                 ensure_exists=True,
             )
-            original_deployment_limit_str = _get_populator_inflight_from_deployment(deployment=initial_deployment)
+            original_deployment_limit_str = get_populator_inflight_from_deployment(deployment=initial_deployment)
             if original_deployment_limit_str is None:
                 raise ValueError(
-                    f"{_MAX_POPULATOR_INFLIGHT_ENV} not found on {_POPULATOR_CONTROLLER_DEPLOYMENT} "
+                    f"{MAX_POPULATOR_INFLIGHT_ENV} not found on {POPULATOR_CONTROLLER_DEPLOYMENT} "
                     f"before populator throttling test setup"
                 )
             original_deployment_limit = int(original_deployment_limit_str)
 
-            try:
-                if original_cr_limit != POPULATOR_INFLIGHT_LIMIT:
-                    LOGGER.info(
-                        f"Setting ForkliftController controller_max_populator_inflight from {original_cr_limit!r} "
-                        f"to {POPULATOR_INFLIGHT_LIMIT}"
-                    )
-                    ResourceEditor(
-                        patches={
-                            forklift_controller: {
-                                "spec": {"controller_max_populator_inflight": POPULATOR_INFLIGHT_LIMIT}
-                            }
-                        }
-                    ).update(backup_resources=False)
-                    forklift_controller.wait_for_condition(
-                        status=forklift_controller.Condition.Status.TRUE,
-                        condition=forklift_controller.Condition.Type.SUCCESSFUL,
-                        timeout=300,
-                    )
-                else:
-                    LOGGER.info(
-                        f"ForkliftController controller_max_populator_inflight already {POPULATOR_INFLIGHT_LIMIT}"
-                    )
-
-                _wait_for_populator_inflight_deployment(
-                    ocp_admin_client=ocp_admin_client,
-                    mtv_namespace=mtv_namespace,
-                    expected_limit=POPULATOR_INFLIGHT_LIMIT,
-                )
-
+            with populator_inflight_limit(
+                forklift_controller=forklift_controller,
+                ocp_admin_client=ocp_admin_client,
+                mtv_namespace=mtv_namespace,
+                test_limit=POPULATOR_INFLIGHT_LIMIT,
+                original_deployment_limit=original_deployment_limit,
+            ):
                 yield
-            finally:
-                _restore_forkliftcontroller_populator_inflight(
-                    ocp_admin_client=ocp_admin_client,
-                    mtv_namespace=mtv_namespace,
-                    original_cr_limit=original_cr_limit,
-                    original_deployment_limit=original_deployment_limit,
-                )
     except filelock.Timeout as err:
         raise TimeoutError(
             f"Timeout (3600s) waiting for ForkliftController populator-inflight lock at {lock_path}. "

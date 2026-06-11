@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any
 from ocp_resources.event import Event
 from ocp_resources.migration import Migration
 from ocp_resources.pod import Pod
-from ocp_resources.secret import Secret
 from ocp_resources.plan import Plan
 from pytest_testconfig import config as py_config
 from rrmngmnt import Host, RootUser, User
@@ -41,6 +40,7 @@ if TYPE_CHECKING:
 LOGGER = get_logger(__name__)
 
 STORAGE_SECRET_EXTRA_ENV = "COPYOFFLOAD_STORAGE_SECRET_EXTRA"  # pragma: allowlist secret
+_ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
 
 
 def get_copyoffload_credential(
@@ -199,37 +199,6 @@ def merge_storage_secret_extra(
         merged[secret_key] = value
         LOGGER.info(f"✓ Added extra secret field from storage_secret_extra: {secret_key}")
     return merged
-
-
-def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_name: str) -> None:
-    """
-    Wait for Forklift to create plan-specific secret for copy-offload.
-
-    When a Plan is created with copy-offload configuration, ForkliftController
-    should automatically create a plan-specific secret containing storage credentials.
-    This function polls for that secret's existence.
-
-    Args:
-        ocp_admin_client: OpenShift dynamic client
-        namespace: Namespace where the plan and secret exist
-        plan_name: Name of the Plan (secret will be named {plan_name}-*)
-
-    Note:
-        Times out after 60 seconds but continues anyway (logs warning).
-        The migration will fail with clearer error if secret is missing.
-    """
-    LOGGER.info("Copy-offload: waiting for Forklift to create plan-specific secret...")
-    try:
-        for _ in TimeoutSampler(
-            wait_timeout=60,
-            sleep=2,
-            func=lambda: any(
-                s.name.startswith(f"{plan_name}-") for s in Secret.get(client=ocp_admin_client, namespace=namespace)
-            ),
-        ):
-            break
-    except TimeoutExpiredError:
-        LOGGER.warning(f"Timeout waiting for plan secret '{plan_name}-*' - continuing anyway")
 
 
 def wait_for_vmware_cloud_init_all_vms(
@@ -767,9 +736,6 @@ def verify_xcopy_used_per_datastore(
             "Migration must include at least one disk from each configured datastore; "
             f"verified datastore IDs: {sorted(verified_datastore_ids)}"
         )
-
-
-_ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
 
 
 def _count_active_populator_pods_by_host(
