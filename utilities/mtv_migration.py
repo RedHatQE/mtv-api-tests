@@ -395,10 +395,18 @@ def wait_for_vm_networks_in_inventory(
     LOGGER.info(f"Waiting for {len(vm_names)} VM(s) to sync to Forklift inventory with NIC data...")
 
     for vm_name in vm_names:
+
+        def _get_vm_safe(name: str = vm_name) -> dict[str, Any] | None:
+            """Safely get VM from inventory, returning None if not found."""
+            try:
+                return source_provider_inventory.get_vm(name=name)
+            except ValueError:
+                return None
+
         sampler = TimeoutSampler(
             wait_timeout=timeout,
             sleep=10,
-            func=lambda name=vm_name: source_provider_inventory.get_vm(name=name),
+            func=_get_vm_safe,
         )
 
         try:
@@ -411,8 +419,12 @@ def wait_for_vm_networks_in_inventory(
                     f"(NICs: {vm.get('nics', []) if vm else 'VM not found'})"
                 )
         except TimeoutExpiredError:
-            vm_data = source_provider_inventory.get_vm(name=vm_name)
-            nics = vm_data.get("nics", []) if vm_data else []
+            try:
+                vm_data = source_provider_inventory.get_vm(name=vm_name)
+                nics = vm_data.get("nics", [])
+            except ValueError:
+                vm_data = None
+                nics = []
             raise TimeoutExpiredError(
                 f"Timed Out: VM '{vm_name}' found in Forklift inventory but NIC/network data "
                 f"did not sync after {timeout}s. NICs: {nics}"
