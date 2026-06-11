@@ -416,7 +416,7 @@ def wait_for_vm_networks_in_inventory(
             raise TimeoutExpiredError(
                 f"Timed Out: VM '{vm_name}' found in Forklift inventory but NIC/network data "
                 f"did not sync after {timeout}s. NICs: {nics}"
-            )
+            ) from None
 
 
 def get_storage_migration_map(

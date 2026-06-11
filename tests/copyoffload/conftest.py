@@ -392,7 +392,7 @@ def vmware_cloud_init_ready(
     Returns:
         None
     """
-    vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+    vm_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
 
     # Wait for cloud-init to complete on all VMs
     wait_for_vmware_cloud_init_all_vms(
@@ -404,7 +404,7 @@ def vmware_cloud_init_ready(
     # Wait for Forklift inventory to sync VM network data
     wait_for_vm_networks_in_inventory(
         source_provider_inventory=source_provider_inventory,
-        vm_names=vms_names,
+        vm_names=vm_names,
         timeout=300,
     )
 
