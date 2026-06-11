@@ -375,13 +375,13 @@ def vmware_cloud_init_ready(
 ) -> None:
     """Ensure cloud-init has finished and Forklift inventory synced for all VMs.
 
-    This fixture performs two critical wait operations:
-    1. Waits for cloud-init completion on all cloned VMs (via VMware Guest Operations)
-    2. Waits for Forklift provider inventory to sync VM network data
+    This fixture performs two critical wait operations in this order:
+    1. Waits for Forklift provider inventory to sync VM network data (while VMs are powered off)
+    2. Powers on VMs and waits for cloud-init completion (via VMware Guest Operations)
 
-    The second wait is essential because tests query the Forklift inventory for
-    network mappings, not the vCenter API directly. Without this wait, network
-    map creation fails with empty NIC data even though VMs are running.
+    The order is critical: MTV 2.12 Forklift inventory does not sync NIC data for powered-on VMs.
+    Since VMs are powered off after cloning, we must wait for NIC sync before powering them on
+    for cloud-init. Tests query Forklift inventory for network mappings, not vCenter API directly.
 
     Args:
         prepared_plan (dict[str, Any]): Processed test plan configuration.
@@ -394,35 +394,19 @@ def vmware_cloud_init_ready(
     """
     vm_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
 
-    # Wait for cloud-init to complete on all VMs
-    wait_for_vmware_cloud_init_all_vms(
-        prepared_plan=prepared_plan,
-        source_provider=source_provider,
-        source_provider_data=source_provider_data,
-    )
-
-    # Debug: Check inventory state before our wait
-    LOGGER.info("DEBUG: Checking VM inventory state before network data wait...")
-    for vm_name in vm_names:
-        try:
-            vm_data = source_provider_inventory.get_vm(name=vm_name)
-            nics = vm_data.get("nics", [])
-            LOGGER.info(f"DEBUG: VM '{vm_name}' in inventory - NICs count: {len(nics)}, NICs data: {nics}")
-            if nics:
-                for i, nic in enumerate(nics):
-                    network_id = nic.get("network", {}).get("id")
-                    network_name = nic.get("network", {}).get("name")
-                    LOGGER.info(f"DEBUG: NIC[{i}]: network.id={network_id}, network.name={network_name}")
-        except ValueError as e:
-            LOGGER.error(f"DEBUG: VM '{vm_name}' not found in inventory: {e}")
-        except Exception as e:
-            LOGGER.error(f"DEBUG: Unexpected error getting VM '{vm_name}': {e}")
-
-    # Wait for Forklift inventory to sync VM network data
+    # FIRST: Wait for Forklift inventory to sync VM network data (VMs are powered off after cloning)
+    # MTV 2.12 regression: NICs only sync to inventory for powered-off VMs
     wait_for_vm_networks_in_inventory(
         source_provider_inventory=source_provider_inventory,
         vm_names=vm_names,
         timeout=300,
+    )
+
+    # THEN: Power on VMs and wait for cloud-init to complete
+    wait_for_vmware_cloud_init_all_vms(
+        prepared_plan=prepared_plan,
+        source_provider=source_provider,
+        source_provider_data=source_provider_data,
     )
 
 
@@ -436,13 +420,13 @@ def vmware_cloud_init_ready_both_plans(
 ) -> None:
     """Ensure cloud-init has finished and Forklift inventory synced for all VMs from both plans.
 
-    This fixture performs two critical wait operations for both migration plans:
-    1. Waits for cloud-init completion on all cloned VMs (via VMware Guest Operations)
-    2. Waits for Forklift provider inventory to sync VM network data
+    This fixture performs two critical wait operations in this order:
+    1. Waits for Forklift provider inventory to sync VM network data (while VMs are powered off)
+    2. Powers on VMs and waits for cloud-init completion (via VMware Guest Operations)
 
-    The second wait is essential because tests query the Forklift inventory for
-    network mappings, not the vCenter API directly. Without this wait, network
-    map creation fails with empty NIC data even though VMs are running.
+    The order is critical: MTV 2.12 Forklift inventory does not sync NIC data for powered-on VMs.
+    Since VMs are powered off after cloning, we must wait for NIC sync before powering them on
+    for cloud-init. Tests query Forklift inventory for network mappings, not vCenter API directly.
 
     Args:
         prepared_plan_1 (dict[str, Any]): First processed test plan configuration.
@@ -454,40 +438,25 @@ def vmware_cloud_init_ready_both_plans(
     Returns:
         None
     """
-    # Wait for cloud-init on all VMs from both plans
+    # Collect all VM names from both plans
+    all_vm_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
+    all_vm_names.extend([vm["name"] for vm in prepared_plan_2["virtual_machines"]])
+
+    # FIRST: Wait for Forklift inventory to sync VM network data (VMs are powered off after cloning)
+    # MTV 2.12 regression: NICs only sync to inventory for powered-off VMs
+    wait_for_vm_networks_in_inventory(
+        source_provider_inventory=source_provider_inventory,
+        vm_names=all_vm_names,
+        timeout=300,
+    )
+
+    # THEN: Power on VMs and wait for cloud-init to complete for both plans
     for plan in (prepared_plan_1, prepared_plan_2):
         wait_for_vmware_cloud_init_all_vms(
             prepared_plan=plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
         )
-
-    # Wait for Forklift inventory to sync network data for all VMs
-    all_vm_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
-    all_vm_names.extend([vm["name"] for vm in prepared_plan_2["virtual_machines"]])
-
-    # Debug: Check inventory state before our wait
-    LOGGER.info("DEBUG: Checking VM inventory state before network data wait (both plans)...")
-    for vm_name in all_vm_names:
-        try:
-            vm_data = source_provider_inventory.get_vm(name=vm_name)
-            nics = vm_data.get("nics", [])
-            LOGGER.info(f"DEBUG: VM '{vm_name}' in inventory - NICs count: {len(nics)}, NICs data: {nics}")
-            if nics:
-                for i, nic in enumerate(nics):
-                    network_id = nic.get("network", {}).get("id")
-                    network_name = nic.get("network", {}).get("name")
-                    LOGGER.info(f"DEBUG: NIC[{i}]: network.id={network_id}, network.name={network_name}")
-        except ValueError as e:
-            LOGGER.error(f"DEBUG: VM '{vm_name}' not found in inventory: {e}")
-        except Exception as e:
-            LOGGER.error(f"DEBUG: Unexpected error getting VM '{vm_name}': {e}")
-
-    wait_for_vm_networks_in_inventory(
-        source_provider_inventory=source_provider_inventory,
-        vm_names=all_vm_names,
-        timeout=300,
-    )
 
 
 @pytest.fixture(scope="class")
