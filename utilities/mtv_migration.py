@@ -412,22 +412,35 @@ def wait_for_vm_networks_in_inventory(
         try:
             for vm in sampler:
                 if vm and vm.get("nics"):
-                    LOGGER.info(f"VM '{vm_name}' synced to inventory with {len(vm['nics'])} NIC(s)")
-                    break
-                LOGGER.debug(
-                    f"Waiting for VM '{vm_name}' NIC data in inventory... "
-                    f"(NICs: {vm.get('nics', []) if vm else 'VM not found'})"
-                )
+                    # Check if NICs have network data populated
+                    nics_with_network = [nic for nic in vm["nics"] if nic.get("network", {}).get("id")]
+                    if nics_with_network:
+                        LOGGER.info(
+                            f"VM '{vm_name}' synced to inventory with {len(nics_with_network)} NIC(s) "
+                            f"having network data"
+                        )
+                        break
+                    LOGGER.debug(
+                        f"Waiting for VM '{vm_name}' NIC network data in inventory... "
+                        f"(NICs found: {len(vm['nics'])}, with network data: {len(nics_with_network)})"
+                    )
+                else:
+                    LOGGER.debug(
+                        f"Waiting for VM '{vm_name}' NIC data in inventory... "
+                        f"(NICs: {vm.get('nics', []) if vm else 'VM not found'})"
+                    )
         except TimeoutExpiredError:
             try:
                 vm_data = source_provider_inventory.get_vm(name=vm_name)
                 nics = vm_data.get("nics", [])
+                nics_with_network = [nic for nic in nics if nic.get("network", {}).get("id")]
             except ValueError:
                 vm_data = None
                 nics = []
+                nics_with_network = []
             raise TimeoutExpiredError(
-                f"Timed Out: VM '{vm_name}' found in Forklift inventory but NIC/network data "
-                f"did not sync after {timeout}s. NICs: {nics}"
+                f"Timed Out: VM '{vm_name}' NIC network data did not sync after {timeout}s. "
+                f"NICs found: {len(nics)}, NICs with network data: {len(nics_with_network)}"
             ) from None
 
 
