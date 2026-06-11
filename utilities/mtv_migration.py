@@ -396,7 +396,7 @@ def wait_for_vm_networks_in_inventory(
 
     for vm_name in vm_names:
         sampler = TimeoutSampler(
-            timeout=timeout,
+            wait_timeout=timeout,
             sleep=10,
             func=lambda name=vm_name: source_provider_inventory.get_vm(name=name),
         )
