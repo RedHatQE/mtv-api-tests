@@ -373,8 +373,8 @@ def _resolve_migration_uid(plan: Plan) -> str | None:
     """
     try:
         return _get_migration_uid(plan=plan)
-    except ValueError:
-        pass
+    except ValueError as exc:
+        LOGGER.debug("Primary migration UID lookup failed: %s; falling back to Migration CR", exc)
 
     try:
         migration = get_migration_for_plan(plan=plan)
@@ -773,6 +773,66 @@ def _count_active_populator_pods_by_host(
     return dict(counts)
 
 
+class _PopulatorConcurrencyTracker:
+    """Track peak populator pod concurrency per ESXi host during migration polling."""
+
+    def __init__(
+        self,
+        plan: Plan,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        max_populator_inflight: int,
+    ) -> None:
+        """Initialize tracker state for one migration execution.
+
+        Args:
+            plan (Plan): The Plan CR resource defining the migration configuration.
+            ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+            target_namespace (str): Namespace where populate pods exist.
+            max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        """
+        self._plan = plan
+        self._ocp_admin_client = ocp_admin_client
+        self._target_namespace = target_namespace
+        self._max_populator_inflight = max_populator_inflight
+        self._migration_uid: str | None = None
+        self._max_concurrent_by_host: dict[str, int] = defaultdict(int)
+
+    def poll(self, _status: str) -> None:
+        """Update peak concurrency counters for one migration status poll.
+
+        Args:
+            _status (str): Current migration status from ``wait_for_migration_complate``.
+        """
+        if self._migration_uid is None:
+            self._migration_uid = _resolve_migration_uid(plan=self._plan)
+
+        if self._migration_uid is None:
+            return
+
+        active_by_host = _count_active_populator_pods_by_host(
+            ocp_admin_client=self._ocp_admin_client,
+            namespace=self._target_namespace,
+            migration_uid=self._migration_uid,
+        )
+        for source_host, active_count in active_by_host.items():
+            self._max_concurrent_by_host[source_host] = max(self._max_concurrent_by_host[source_host], active_count)
+            if active_count > self._max_populator_inflight:
+                LOGGER.warning(
+                    f"Populator concurrency for host '{source_host}' is {active_count} "
+                    f"(limit={self._max_populator_inflight})"
+                )
+
+    @property
+    def results(self) -> dict[str, int]:
+        """Peak concurrent active populate pods observed per sourceHost label.
+
+        Returns:
+            dict[str, int]: Peak active populator pod count per ESXi source host.
+        """
+        return dict(self._max_concurrent_by_host)
+
+
 def execute_migration_monitoring_populator_inflight(
     ocp_admin_client: DynamicClient,
     fixture_store: dict[str, Any],
@@ -807,31 +867,14 @@ def execute_migration_monitoring_populator_inflight(
         cut_over=cut_over,
     )
 
-    max_concurrent_by_host: dict[str, int] = defaultdict(int)
-    migration_uid: str | None = None
-
-    def _poll_populator_concurrency(_status: str) -> None:
-        nonlocal migration_uid
-        if migration_uid is None:
-            migration_uid = _resolve_migration_uid(plan=plan)
-
-        if migration_uid is None:
-            return
-
-        active_by_host = _count_active_populator_pods_by_host(
-            ocp_admin_client=ocp_admin_client,
-            namespace=target_namespace,
-            migration_uid=migration_uid,
-        )
-        for source_host, active_count in active_by_host.items():
-            max_concurrent_by_host[source_host] = max(max_concurrent_by_host[source_host], active_count)
-            if active_count > max_populator_inflight:
-                LOGGER.warning(
-                    f"Populator concurrency for host '{source_host}' is {active_count} (limit={max_populator_inflight})"
-                )
-
-    wait_for_migration_complate(plan=plan, on_status_poll=_poll_populator_concurrency)
-    return dict(max_concurrent_by_host)
+    tracker = _PopulatorConcurrencyTracker(
+        plan=plan,
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        max_populator_inflight=max_populator_inflight,
+    )
+    wait_for_migration_complate(plan=plan, on_status_poll=tracker.poll)
+    return tracker.results
 
 
 def _verify_source_host_labels_on_pods(populate_pods: list[Pod]) -> str:

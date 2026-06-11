@@ -27,6 +27,12 @@ MAX_POPULATOR_INFLIGHT_ENV = "MAX_POPULATOR_INFLIGHT"
 def ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
     """Validate permissions on a cross-worker shared lock directory.
 
+    Opens the directory with ``O_NOFOLLOW`` and validates ownership via ``fstat`` on
+    the resulting file descriptor, then sets mode with ``fchmod`` on that fd. This
+    avoids acting on a path that was swapped to a symlink after ``mkdir``. A small
+    mkdir-to-open window remains; that is acceptable for this pytest-xdist lock path
+    under the user's temp directory in controlled CI.
+
     Args:
         lock_dir (Path): Directory used for pytest-xdist file locks.
 
@@ -35,19 +41,25 @@ def ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
     """
     lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
-    if lock_dir.is_symlink():
+    try:
+        dir_fd = os.open(str(lock_dir), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as err:
         raise PermissionError(
-            f"Security error: shared directory {lock_dir} is a symlink. This may indicate a hijack attempt."
-        )
+            f"Security error: cannot open shared directory {lock_dir} without following symlinks "
+            f"({err}). This may indicate a hijack attempt."
+        ) from err
 
-    current_uid = os.getuid()
-    dir_stat = lock_dir.lstat()
-    if dir_stat.st_uid != current_uid:
-        raise PermissionError(
-            f"Security error: shared directory {lock_dir} is owned by uid {dir_stat.st_uid}, "
-            f"expected current user uid {current_uid}. This may indicate a hijack attempt."
-        )
-    os.chmod(lock_dir, 0o700)
+    try:
+        dir_stat = os.fstat(dir_fd)
+        current_uid = os.getuid()
+        if dir_stat.st_uid != current_uid:
+            raise PermissionError(
+                f"Security error: shared directory {lock_dir} is owned by uid {dir_stat.st_uid}, "
+                f"expected current user uid {current_uid}. This may indicate a hijack attempt."
+            )
+        os.fchmod(dir_fd, 0o700)
+    finally:
+        os.close(dir_fd)
 
 
 def get_forkliftcontroller_populator_inflight_lock_path() -> Path:
@@ -162,7 +174,7 @@ def populator_inflight_limit(
     """
     current_cr_limit = getattr(forklift_controller.instance.spec, "controller_max_populator_inflight", None)
 
-    if current_cr_limit == test_limit:
+    if current_cr_limit is not None and int(current_cr_limit) == test_limit:
         LOGGER.info(f"ForkliftController controller_max_populator_inflight already {test_limit}")
         wait_for_populator_inflight_deployment(
             ocp_admin_client=ocp_admin_client,
