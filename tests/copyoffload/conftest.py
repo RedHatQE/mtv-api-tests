@@ -401,6 +401,23 @@ def vmware_cloud_init_ready(
         source_provider_data=source_provider_data,
     )
 
+    # Debug: Check inventory state before our wait
+    LOGGER.info("DEBUG: Checking VM inventory state before network data wait...")
+    for vm_name in vm_names:
+        try:
+            vm_data = source_provider_inventory.get_vm(name=vm_name)
+            nics = vm_data.get("nics", [])
+            LOGGER.info(f"DEBUG: VM '{vm_name}' in inventory - NICs count: {len(nics)}, NICs data: {nics}")
+            if nics:
+                for i, nic in enumerate(nics):
+                    network_id = nic.get("network", {}).get("id")
+                    network_name = nic.get("network", {}).get("name")
+                    LOGGER.info(f"DEBUG: NIC[{i}]: network.id={network_id}, network.name={network_name}")
+        except ValueError as e:
+            LOGGER.error(f"DEBUG: VM '{vm_name}' not found in inventory: {e}")
+        except Exception as e:
+            LOGGER.error(f"DEBUG: Unexpected error getting VM '{vm_name}': {e}")
+
     # Wait for Forklift inventory to sync VM network data
     wait_for_vm_networks_in_inventory(
         source_provider_inventory=source_provider_inventory,
@@ -448,6 +465,23 @@ def vmware_cloud_init_ready_both_plans(
     # Wait for Forklift inventory to sync network data for all VMs
     all_vm_names = [vm["name"] for vm in prepared_plan_1["virtual_machines"]]
     all_vm_names.extend([vm["name"] for vm in prepared_plan_2["virtual_machines"]])
+
+    # Debug: Check inventory state before our wait
+    LOGGER.info("DEBUG: Checking VM inventory state before network data wait (both plans)...")
+    for vm_name in all_vm_names:
+        try:
+            vm_data = source_provider_inventory.get_vm(name=vm_name)
+            nics = vm_data.get("nics", [])
+            LOGGER.info(f"DEBUG: VM '{vm_name}' in inventory - NICs count: {len(nics)}, NICs data: {nics}")
+            if nics:
+                for i, nic in enumerate(nics):
+                    network_id = nic.get("network", {}).get("id")
+                    network_name = nic.get("network", {}).get("name")
+                    LOGGER.info(f"DEBUG: NIC[{i}]: network.id={network_id}, network.name={network_name}")
+        except ValueError as e:
+            LOGGER.error(f"DEBUG: VM '{vm_name}' not found in inventory: {e}")
+        except Exception as e:
+            LOGGER.error(f"DEBUG: Unexpected error getting VM '{vm_name}': {e}")
 
     wait_for_vm_networks_in_inventory(
         source_provider_inventory=source_provider_inventory,
