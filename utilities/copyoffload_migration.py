@@ -495,12 +495,12 @@ def capture_populate_pod_logs(
             LOGGER.debug(f"No populate pods found for migration '{migration_uid}' (non-copyoffload or not yet started)")
             return
 
-        # Filter for pods that have completed or are running with logs
+        # Filter for pods that have completed
         pods_with_logs: list[Pod] = []
         for pod in populate_pods:
             phase = pod.instance.status.phase if pod.instance.status else "Unknown"
-            # Capture from Succeeded, Failed, or Running pods (Running pods may have partial logs)
-            if phase in ("Succeeded", "Failed", "Running"):
+            # Only capture from completed pods - Running pods don't have xcopyUsed in logs yet
+            if phase in ("Succeeded", "Failed"):
                 pods_with_logs.append(pod)
 
         if not pods_with_logs:
