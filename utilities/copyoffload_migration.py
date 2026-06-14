@@ -462,12 +462,12 @@ def capture_populate_pod_logs(
 ) -> None:
     """Capture populate pod logs and metadata for later verification.
 
-    Captures logs from populate pods immediately after migration completes, before
-    MTV cleans them up. Stores logs in fixture_store for use by verify_xcopy_used()
+    Captures logs from populate pods during or after migration, before MTV cleanup
+    deletes them. Stores logs in fixture_store for use by verify_xcopy_used()
     when pods are no longer available.
 
-    This function is safe to call for non-copyoffload migrations - it will simply
-    log a message and return without error if no populate pods are found.
+    This function is safe to call multiple times - it only captures logs once per
+    migration_uid and skips if already captured. Safe for non-copyoffload migrations.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
@@ -476,6 +476,11 @@ def capture_populate_pod_logs(
         fixture_store (dict[str, Any]): Fixture store for caching pod logs.
     """
     try:
+        # Skip if already captured for this migration
+        if "populate_pod_logs" in fixture_store and migration_uid in fixture_store["populate_pod_logs"]:
+            LOGGER.debug(f"Populate pod logs already captured for migration '{migration_uid}'")
+            return
+
         populate_pods: list[Pod] = [
             pod
             for pod in Pod.get(
@@ -487,10 +492,28 @@ def capture_populate_pod_logs(
         ]
 
         if not populate_pods:
-            LOGGER.info(f"No populate pods found for migration '{migration_uid}' (non-copyoffload migration)")
+            LOGGER.debug(f"No populate pods found for migration '{migration_uid}' (non-copyoffload or not yet started)")
             return
 
-        LOGGER.info(f"Capturing logs from {len(populate_pods)} populate pod(s) for migration '{migration_uid}'")
+        # Filter for pods that have completed or are running with logs
+        pods_with_logs: list[Pod] = []
+        for pod in populate_pods:
+            phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+            # Capture from Succeeded, Failed, or Running pods (Running pods may have partial logs)
+            if phase in ("Succeeded", "Failed", "Running"):
+                pods_with_logs.append(pod)
+
+        if not pods_with_logs:
+            LOGGER.debug(
+                f"Found {len(populate_pods)} populate pod(s) for migration '{migration_uid}' "
+                f"but none are ready for log capture yet"
+            )
+            return
+
+        LOGGER.info(
+            f"Capturing logs from {len(pods_with_logs)}/{len(populate_pods)} populate pod(s) "
+            f"for migration '{migration_uid}'"
+        )
 
         # Initialize storage if not exists
         if "populate_pod_logs" not in fixture_store:
@@ -498,18 +521,25 @@ def capture_populate_pod_logs(
 
         # Capture logs and metadata for each pod
         captured_logs: list[dict[str, Any]] = []
-        for pod in populate_pods:
-            pod_data: dict[str, Any] = {
-                "pod_name": pod.name,
-                "pvc_name": pod.instance.metadata.labels.get("pvcName", pod.name),
-                "log_content": pod.log(),
-                "labels": dict(pod.instance.metadata.labels),
-            }
-            captured_logs.append(pod_data)
-            LOGGER.debug(f"Captured logs from populate pod '{pod.name}'")
+        for pod in pods_with_logs:
+            try:
+                pod_data: dict[str, Any] = {
+                    "pod_name": pod.name,
+                    "pvc_name": pod.instance.metadata.labels.get("pvcName", pod.name),
+                    "log_content": pod.log(),
+                    "labels": dict(pod.instance.metadata.labels),
+                    "phase": pod.instance.status.phase if pod.instance.status else "Unknown",
+                }
+                captured_logs.append(pod_data)
+                LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {pod_data['phase']})")
+            except Exception as pod_err:
+                LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
 
-        fixture_store["populate_pod_logs"][migration_uid] = captured_logs
-        LOGGER.info(f"Successfully captured logs for migration '{migration_uid}'")
+        if captured_logs:
+            fixture_store["populate_pod_logs"][migration_uid] = captured_logs
+            LOGGER.info(
+                f"Successfully captured {len(captured_logs)} populate pod log(s) for migration '{migration_uid}'"
+            )
 
     except Exception as e:
         LOGGER.warning(f"Failed to capture populate pod logs for migration '{migration_uid}': {e}")
