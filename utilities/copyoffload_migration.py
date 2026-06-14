@@ -454,6 +454,67 @@ def _find_populate_pods(
     return populate_pods
 
 
+def capture_populate_pod_logs(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    migration_uid: str,
+    fixture_store: dict[str, Any],
+) -> None:
+    """Capture populate pod logs and metadata for later verification.
+
+    Captures logs from populate pods immediately after migration completes, before
+    MTV cleans them up. Stores logs in fixture_store for use by verify_xcopy_used()
+    when pods are no longer available.
+
+    This function is safe to call for non-copyoffload migrations - it will simply
+    log a message and return without error if no populate pods are found.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where populate pods exist.
+        migration_uid (str): Migration UID to filter pods by.
+        fixture_store (dict[str, Any]): Fixture store for caching pod logs.
+    """
+    try:
+        populate_pods: list[Pod] = [
+            pod
+            for pod in Pod.get(
+                client=ocp_admin_client,
+                namespace=namespace,
+                label_selector=f"migration={migration_uid}",
+            )
+            if pod.name.startswith("populate-")
+        ]
+
+        if not populate_pods:
+            LOGGER.info(f"No populate pods found for migration '{migration_uid}' (non-copyoffload migration)")
+            return
+
+        LOGGER.info(f"Capturing logs from {len(populate_pods)} populate pod(s) for migration '{migration_uid}'")
+
+        # Initialize storage if not exists
+        if "populate_pod_logs" not in fixture_store:
+            fixture_store["populate_pod_logs"] = {}
+
+        # Capture logs and metadata for each pod
+        captured_logs: list[dict[str, Any]] = []
+        for pod in populate_pods:
+            pod_data: dict[str, Any] = {
+                "pod_name": pod.name,
+                "pvc_name": pod.instance.metadata.labels.get("pvcName", pod.name),
+                "log_content": pod.log(),
+                "labels": dict(pod.instance.metadata.labels),
+            }
+            captured_logs.append(pod_data)
+            LOGGER.debug(f"Captured logs from populate pod '{pod.name}'")
+
+        fixture_store["populate_pod_logs"][migration_uid] = captured_logs
+        LOGGER.info(f"Successfully captured logs for migration '{migration_uid}'")
+
+    except Exception as e:
+        LOGGER.warning(f"Failed to capture populate pod logs for migration '{migration_uid}': {e}")
+
+
 _SOURCE_DATASTORE_FROM_LOG_RE = re.compile(
     r'(?:source_vmdk|source)="\[([^\]]+)\]',
 )
@@ -562,8 +623,12 @@ def verify_xcopy_used(
     plan: Plan,
     target_namespace: str,
     expected_xcopy_used: bool,
+    fixture_store: dict[str, Any],
 ) -> None:
     """Verify xcopyUsed matches expected value for all disks in a copy-offload migration.
+
+    Checks populate pod logs to verify XCOPY usage. Uses cached logs from fixture_store
+    if available (captured during migration), otherwise queries live pods.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
@@ -572,6 +637,7 @@ def verify_xcopy_used(
         expected_xcopy_used (bool): Expected xcopyUsed value.
             True (xcopyUsed=1) for XCOPY-capable datastores.
             False (xcopyUsed=0) for fallback/non-XCOPY datastores.
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
 
     Raises:
         ValueError: If no populate pods found or xcopyUsed not found in pod logs.
@@ -580,32 +646,56 @@ def verify_xcopy_used(
     migration_uid: str = _get_migration_uid(plan=plan)
     LOGGER.info(f"Checking xcopyUsed for migration '{migration_uid}'")
 
-    populate_pods: list[Pod] = _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=target_namespace,
-        migration_uid=migration_uid,
-    )
-    LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
-
     expected_value: int = 1 if expected_xcopy_used else 0
 
-    for pod in populate_pods:
-        pvc_name: str = pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name)
-        log_content: str = pod.log()
+    # Try to use cached logs first (for MTV builds that cleanup pods quickly)
+    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
+    pod_logs: list[dict[str, str]] = []
+
+    if cached_logs:
+        LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
+        pod_logs = [
+            {
+                "pod_name": pod_data["pod_name"],
+                "pvc_name": pod_data["pvc_name"],
+                "log_content": pod_data["log_content"],
+            }
+            for pod_data in cached_logs
+        ]
+    else:
+        # Fall back to querying live pods (for MTV builds that keep pods longer)
+        LOGGER.info("No cached logs found, querying live populate pods")
+        populate_pods: list[Pod] = _find_populate_pods(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            migration_uid=migration_uid,
+        )
+        LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
+        pod_logs = [
+            {
+                "pod_name": pod.name,
+                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+                "log_content": pod.log(),
+            }
+            for pod in populate_pods
+        ]
+
+    # Verify xcopyUsed for each pod
+    for pod_log in pod_logs:
         xcopy_used, xcopy_log_line = _parse_xcopy_used_from_log_content(
-            pod_name=pod.name,
-            log_content=log_content,
+            pod_name=pod_log["pod_name"],
+            log_content=pod_log["log_content"],
         )
         _log_xcopy_verification_result(
-            pod_name=pod.name,
-            pvc_name=pvc_name,
+            pod_name=pod_log["pod_name"],
+            pvc_name=pod_log["pvc_name"],
             expected_value=expected_value,
             actual_value=xcopy_used,
             xcopy_log_line=xcopy_log_line,
         )
 
         assert xcopy_used == expected_value, (
-            f"Pod '{pod.name}' (PVC '{pvc_name}'): expected xcopyUsed={expected_value}, "
+            f"Pod '{pod_log['pod_name']}' (PVC '{pod_log['pvc_name']}'): expected xcopyUsed={expected_value}, "
             f"got xcopyUsed={xcopy_used}; log: {xcopy_log_line}"
         )
 
@@ -649,6 +739,7 @@ def verify_xcopy_used_per_datastore(
     target_namespace: str,
     expected_xcopy_by_datastore_id: dict[str, bool],
     datastore_names_by_id: dict[str, str],
+    fixture_store: dict[str, Any],
     *,
     require_all_datastores_seen: bool = True,
 ) -> None:
@@ -657,6 +748,9 @@ def verify_xcopy_used_per_datastore(
     Use when a migration has disks on multiple datastores with different expected XCOPY
     behavior (e.g. mixed XCOPY-capable and fallback datastores). Provider configuration
     supplies MoRef IDs and expected values; populate pod logs use datastore display names.
+
+    Checks populate pod logs to verify per-datastore XCOPY usage. Uses cached logs from
+    fixture_store if available (captured during migration), otherwise queries live pods.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
@@ -667,6 +761,7 @@ def verify_xcopy_used_per_datastore(
         datastore_names_by_id (dict[str, str]): Maps each MoRef ID to its vSphere display
             name for correlating populate pod logs. Keys must match
             ``expected_xcopy_by_datastore_id`` exactly.
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         require_all_datastores_seen (bool): When True, every configured datastore ID must
             appear in at least one populate pod log. Set False when multiple disks may
             share a datastore and you only need per-pod verification.
@@ -689,21 +784,45 @@ def verify_xcopy_used_per_datastore(
         f"(datastores: {sorted(expected_xcopy_by_datastore_id.keys())})"
     )
 
-    populate_pods: list[Pod] = _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=target_namespace,
-        migration_uid=migration_uid,
-    )
-    LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
-
     verified_datastore_ids: set[str] = set()
 
-    for pod in populate_pods:
-        pvc_name: str = pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name)
-        log_content: str = pod.log()
+    # Try to use cached logs first (for MTV builds that cleanup pods quickly)
+    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
+    pod_logs: list[dict[str, str]] = []
+
+    if cached_logs:
+        LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
+        pod_logs = [
+            {
+                "pod_name": pod_data["pod_name"],
+                "pvc_name": pod_data["pvc_name"],
+                "log_content": pod_data["log_content"],
+            }
+            for pod_data in cached_logs
+        ]
+    else:
+        # Fall back to querying live pods (for MTV builds that keep pods longer)
+        LOGGER.info("No cached logs found, querying live populate pods")
+        populate_pods: list[Pod] = _find_populate_pods(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            migration_uid=migration_uid,
+        )
+        LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
+        pod_logs = [
+            {
+                "pod_name": pod.name,
+                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+                "log_content": pod.log(),
+            }
+            for pod in populate_pods
+        ]
+
+    # Verify xcopyUsed per datastore for each pod
+    for pod_log in pod_logs:
         source_datastore_name: str = _parse_source_datastore_name_from_log_content(
-            pod_name=pod.name,
-            log_content=log_content,
+            pod_name=pod_log["pod_name"],
+            log_content=pod_log["log_content"],
         )
         source_datastore_id: str = _resolve_datastore_id_from_display_name(
             source_datastore_name=source_datastore_name,
@@ -712,14 +831,14 @@ def verify_xcopy_used_per_datastore(
         expected_xcopy_used: bool = expected_xcopy_by_datastore_id[source_datastore_id]
         expected_value: int = 1 if expected_xcopy_used else 0
         xcopy_used, xcopy_log_line = _parse_xcopy_used_from_log_content(
-            pod_name=pod.name,
-            log_content=log_content,
+            pod_name=pod_log["pod_name"],
+            log_content=pod_log["log_content"],
         )
 
         verified_datastore_ids.add(source_datastore_id)
         _log_xcopy_verification_result(
-            pod_name=pod.name,
-            pvc_name=pvc_name,
+            pod_name=pod_log["pod_name"],
+            pvc_name=pod_log["pvc_name"],
             expected_value=expected_value,
             actual_value=xcopy_used,
             xcopy_log_line=xcopy_log_line,
@@ -728,7 +847,7 @@ def verify_xcopy_used_per_datastore(
         )
 
         assert xcopy_used == expected_value, (
-            f"Pod '{pod.name}' (PVC '{pvc_name}', datastore '{source_datastore_id}' / "
+            f"Pod '{pod_log['pod_name']}' (PVC '{pod_log['pvc_name']}', datastore '{source_datastore_id}' / "
             f"'{source_datastore_name}'): expected xcopyUsed={expected_value}, got xcopyUsed={xcopy_used}; "
             f"log: {xcopy_log_line}"
         )

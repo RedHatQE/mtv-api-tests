@@ -191,7 +191,9 @@ class TestCopyoffloadThinMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -203,6 +205,7 @@ class TestCopyoffloadThinMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -394,7 +397,9 @@ class CopyoffloadSnapshotBase:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY fallback was used (no XCOPY acceleration).
 
         Args:
@@ -406,6 +411,7 @@ class CopyoffloadSnapshotBase:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=False,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -698,7 +704,9 @@ class TestCopyoffloadThickLazyMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -710,6 +718,7 @@ class TestCopyoffloadThickLazyMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -866,7 +875,9 @@ class TestCopyoffloadThickEagerMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -878,6 +889,7 @@ class TestCopyoffloadThickEagerMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1033,7 +1045,9 @@ class TestCopyoffloadMultiDiskMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -1045,6 +1059,7 @@ class TestCopyoffloadMultiDiskMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1204,7 +1219,9 @@ class TestCopyoffloadDualDiskMixedThinThickMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -1216,6 +1233,7 @@ class TestCopyoffloadDualDiskMixedThinThickMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1375,7 +1393,9 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -1387,6 +1407,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1548,7 +1569,9 @@ class TestCopyoffloadRdmVirtualDiskMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -1560,6 +1583,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1725,7 +1749,9 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -1737,6 +1763,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1911,13 +1938,16 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
             cut_over=get_cutover_value(),
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks."""
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2089,7 +2119,9 @@ class TestCopyoffloadMultiDatastoreMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -2101,6 +2133,7 @@ class TestCopyoffloadMultiDatastoreMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2271,7 +2304,9 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -2283,6 +2318,7 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2463,6 +2499,7 @@ class TestCopyoffloadMixedDatastoreMigration:
         target_namespace: str,
         source_provider: VMWareProvider,
         source_provider_data: dict[str, Any],
+        fixture_store: dict[str, Any],
     ) -> None:
         """Verify XCOPY per disk: XCOPY-capable datastore uses XCOPY, non-XCOPY uses fallback.
 
@@ -2471,6 +2508,7 @@ class TestCopyoffloadMixedDatastoreMigration:
             target_namespace (str): Namespace where populate pods exist.
             source_provider (VMWareProvider): Source VMware provider for datastore name lookup.
             source_provider_data (dict[str, Any]): Source provider configuration.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         copyoffload_config_data: dict[str, Any] = source_provider_data["copyoffload"]
         xcopy_datastore_id: str = copyoffload_config_data["datastore_id"]
@@ -2489,6 +2527,7 @@ class TestCopyoffloadMixedDatastoreMigration:
                 non_xcopy_datastore_id: False,
             },
             datastore_names_by_id=datastore_names_by_id,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2735,7 +2774,9 @@ class TestCopyoffloadFallbackLargeMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY fallback was used (no XCOPY acceleration).
 
         Args:
@@ -2747,6 +2788,7 @@ class TestCopyoffloadFallbackLargeMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=False,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2923,7 +2965,9 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -2935,6 +2979,7 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3094,7 +3139,9 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -3106,6 +3153,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3266,7 +3314,9 @@ class TestCopyoffload10MixedDisksMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -3278,6 +3328,7 @@ class TestCopyoffload10MixedDisksMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3437,7 +3488,9 @@ class TestCopyoffloadLargeVmMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -3449,6 +3502,7 @@ class TestCopyoffloadLargeVmMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3831,7 +3885,9 @@ class TestCopyoffloadNonconformingNameMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -3843,6 +3899,7 @@ class TestCopyoffloadNonconformingNameMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -4046,7 +4103,9 @@ class TestCopyoffloadWarmMigration:
             cut_over=get_cutover_value(),
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -4058,6 +4117,7 @@ class TestCopyoffloadWarmMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -4218,7 +4278,9 @@ class TestCopyoffloadScaleMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
@@ -4230,6 +4292,7 @@ class TestCopyoffloadScaleMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -4650,18 +4713,22 @@ class TestSimultaneousCopyoffloadMigrations:
         wait_for_migration_complate(plan=self.plan_resource_2)
         LOGGER.info("Copyoffload migration 2 completed")
 
-    def test_check_xcopy_used_plan1(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used_plan1(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for plan 1.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource_1,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms_plan1(
@@ -4708,18 +4775,22 @@ class TestSimultaneousCopyoffloadMigrations:
             destination_provider=destination_provider, plan=prepared_plan_1, target_namespace=target_namespace
         )
 
-    def test_check_xcopy_used_plan2(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used_plan2(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for plan 2.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource_2,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms_plan2(
@@ -5119,7 +5190,9 @@ class TestConcurrentXcopyVddkMigration:
         wait_for_migration_complate(plan=self.plan_vddk)
         LOGGER.info("VDDK migration completed")
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for XCOPY plan.
 
         Args:
@@ -5131,6 +5204,7 @@ class TestConcurrentXcopyVddkMigration:
             plan=self.plan_xcopy,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms_xcopy(

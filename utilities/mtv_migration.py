@@ -21,6 +21,10 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
+from utilities.copyoffload_migration import (
+    get_migration_uid,
+    capture_populate_pod_logs,
+)
 from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
@@ -285,6 +289,10 @@ def execute_migration(
     Creates a Migration Custom Resource that triggers the actual VM migration
     based on the provided Plan, then waits for the migration to complete.
 
+    For copy-offload migrations, populate pod logs are captured immediately after
+    completion to ensure they're available for verification even if MTV cleans up
+    the pods quickly.
+
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
         fixture_store (dict[str, Any]): Fixture store for resource tracking and cleanup.
@@ -312,7 +320,13 @@ def execute_migration(
         namespace=target_namespace,
     )
 
-    wait_for_migration_complate(plan=plan)
+    # Wait for migration and capture populate pod logs during migration (before cleanup)
+    wait_for_migration_complate(
+        plan=plan,
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        fixture_store=fixture_store,
+    )
 
 
 def get_vm_suffix(warm_migration: bool) -> str:
@@ -364,13 +378,22 @@ def get_plan_migration_status(plan: Plan) -> str:
 
 def wait_for_migration_complate(
     plan: Plan,
+    ocp_admin_client: DynamicClient | None = None,
+    target_namespace: str | None = None,
+    fixture_store: dict[str, Any] | None = None,
     *,
     on_status_poll: Callable[[str], None] | None = None,
 ) -> None:
     """Wait for a Plan migration to reach Succeeded or Failed.
 
+    Optionally captures populate pod logs during migration for copy-offload tests.
+    This ensures logs are captured before MTV's cleanup deletes the pods.
+
     Args:
         plan (Plan): The Plan resource to monitor.
+        ocp_admin_client (DynamicClient | None): Client for capturing populate pod logs.
+        target_namespace (str | None): Namespace where populate pods exist.
+        fixture_store (dict[str, Any] | None): Store for caching populate pod logs.
         on_status_poll (Callable[[str], None] | None): Optional callback invoked on each poll
             with the current migration status string.
 
@@ -393,6 +416,26 @@ def wait_for_migration_complate(
 
             if on_status_poll is not None:
                 on_status_poll(sample)
+
+            # Capture populate pod logs during EXECUTING phase (before MTV cleanup deletes them)
+            # Re-scan every iteration to capture pods that complete at different times (multi-pod migrations)
+            if (
+                sample == Plan.Status.EXECUTING
+                and ocp_admin_client is not None
+                and target_namespace is not None
+                and fixture_store is not None
+            ):
+                try:
+                    migration_uid: str = get_migration_uid(plan=plan)
+                    capture_populate_pod_logs(
+                        ocp_admin_client=ocp_admin_client,
+                        namespace=target_namespace,
+                        migration_uid=migration_uid,
+                        fixture_store=fixture_store,
+                    )
+                except (ApiException, ValueError, KeyError) as e:
+                    # ApiException: K8s API failures; ValueError: migration UID extraction; KeyError: missing attributes
+                    LOGGER.debug(f"Could not capture populate pod logs during migration: {e}")
 
             if sample == Plan.Status.SUCCEEDED:
                 return
