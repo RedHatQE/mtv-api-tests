@@ -13,6 +13,47 @@ if TYPE_CHECKING:
 
 LOGGER = get_logger(__name__)
 
+PLAN_SECRET_WAIT_TIMEOUT = 120
+PLAN_NAME_LABEL = "plan-name"
+POPULATOR_LABEL = "isPopulator"
+
+
+def _plan_secret_exists(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    plan_name: str,
+) -> bool:
+    """Return whether Forklift created a plan-specific copy-offload secret.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where secrets are listed.
+        plan_name (str): Name of the Plan CR.
+
+    Returns:
+        bool: True if a matching plan secret exists.
+    """
+    for secret in Secret.get(client=ocp_admin_client, namespace=namespace):
+        if secret.name.startswith(f"{plan_name}-"):
+            return True
+        labels: dict[str, str] = secret.instance.metadata.labels or {}
+        if labels.get(PLAN_NAME_LABEL) == plan_name and labels.get(POPULATOR_LABEL):
+            return True
+    return False
+
+
+def _list_namespace_secret_names(ocp_admin_client: DynamicClient, namespace: str) -> list[str]:
+    """List secret names in a namespace for timeout diagnostics.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where secrets are listed.
+
+    Returns:
+        list[str]: Secret names present in the namespace.
+    """
+    return [secret.name for secret in Secret.get(client=ocp_admin_client, namespace=namespace)]
+
 
 def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_name: str) -> None:
     """Wait for Forklift to create the plan-specific secret for copy-offload.
@@ -27,20 +68,24 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
         plan_name (str): Name of the Plan (secret will be named ``{plan_name}-*``).
 
     Raises:
-        TimeoutExpiredError: If the plan-specific secret is not created within 60 seconds.
+        TimeoutExpiredError: If the plan-specific secret is not created within the wait timeout.
     """
     LOGGER.info("Copy-offload: waiting for Forklift to create plan-specific secret...")
     try:
         for sample in TimeoutSampler(
-            wait_timeout=60,
+            wait_timeout=PLAN_SECRET_WAIT_TIMEOUT,
             sleep=2,
-            func=lambda: any(
-                s.name.startswith(f"{plan_name}-") for s in Secret.get(client=ocp_admin_client, namespace=namespace)
+            func=lambda: _plan_secret_exists(
+                ocp_admin_client=ocp_admin_client,
+                namespace=namespace,
+                plan_name=plan_name,
             ),
         ):
             if sample:
                 return
     except TimeoutExpiredError as exc:
+        secret_names = _list_namespace_secret_names(ocp_admin_client=ocp_admin_client, namespace=namespace)
         raise TimeoutExpiredError(
-            f"Timed out waiting for plan secret '{plan_name}-*' in namespace '{namespace}'"
+            f"Timed out waiting for plan secret '{plan_name}-*' in namespace '{namespace}' "
+            f"after {PLAN_SECRET_WAIT_TIMEOUT}s (secrets present: {secret_names})"
         ) from exc
