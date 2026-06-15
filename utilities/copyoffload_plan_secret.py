@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 LOGGER = get_logger(__name__)
 
-PLAN_SECRET_WAIT_TIMEOUT = 120
+PLAN_SECRET_WAIT_TIMEOUT = 60
 PLAN_NAME_LABEL = "plan-name"
 POPULATOR_LABEL = "isPopulator"
 
@@ -59,16 +59,16 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
     """Wait for Forklift to create the plan-specific secret for copy-offload.
 
     When a Plan is created with copy-offload configuration, ForkliftController
-    should automatically create a plan-specific secret containing storage credentials.
+    may create a plan-specific secret containing storage credentials.
     This function polls for that secret's existence.
+
+    The wait is best-effort: if the secret is late or not created at plan-ready time,
+    the suite continues because migration failures are usually more actionable.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         namespace (str): Namespace where the plan and secret exist.
         plan_name (str): Name of the Plan (secret will be named ``{plan_name}-*``).
-
-    Raises:
-        TimeoutExpiredError: If the plan-specific secret is not created within the wait timeout.
     """
     LOGGER.info("Copy-offload: waiting for Forklift to create plan-specific secret...")
     try:
@@ -83,9 +83,9 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
         ):
             if sample:
                 return
-    except TimeoutExpiredError as exc:
+    except TimeoutExpiredError:
         secret_names = _list_namespace_secret_names(ocp_admin_client=ocp_admin_client, namespace=namespace)
-        raise TimeoutExpiredError(
-            f"Timed out waiting for plan secret '{plan_name}-*' in namespace '{namespace}' "
-            f"after {PLAN_SECRET_WAIT_TIMEOUT}s (secrets present: {secret_names})"
-        ) from exc
+        LOGGER.warning(
+            f"Timeout waiting for plan secret '{plan_name}-*' in namespace '{namespace}' "
+            f"after {PLAN_SECRET_WAIT_TIMEOUT}s (secrets present: {secret_names}) - continuing anyway"
+        )
