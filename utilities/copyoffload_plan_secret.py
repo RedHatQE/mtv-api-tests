@@ -26,9 +26,8 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
         namespace (str): Namespace where the plan and secret exist.
         plan_name (str): Name of the Plan (secret will be named ``{plan_name}-*``).
 
-    Note:
-        Times out after 60 seconds but continues anyway (logs warning).
-        The migration will fail with a clearer error if the secret is missing.
+    Raises:
+        TimeoutExpiredError: If the plan-specific secret is not created within 60 seconds.
     """
     LOGGER.info("Copy-offload: waiting for Forklift to create plan-specific secret...")
     try:
@@ -41,5 +40,7 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
         ):
             if sample:
                 return
-    except TimeoutExpiredError:
-        LOGGER.warning(f"Timeout waiting for plan secret '{plan_name}-*' - continuing anyway")
+    except TimeoutExpiredError as exc:
+        raise TimeoutExpiredError(
+            f"Timed out waiting for plan secret '{plan_name}-*' in namespace '{namespace}'"
+        ) from exc

@@ -288,12 +288,6 @@ running the full suite. The sanity set covers:
 | MTV-573 | `TestCopyoffload10MixedDisksMigration` | VM with 10 mixed disks (thin and thick provisioned) |
 | MTV-577 | `TestCopyoffloadWarmMigration` | Warm (live) migration with copy-offload |
 
-> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) mutates cluster-wide
-> `ForkliftController` populator settings. Do not run it in parallel with other copy-offload tests on the
-> same cluster — the test temporarily sets `controller_max_populator_inflight` (and the populator
-> deployment `MAX_POPULATOR_INFLIGHT` env) to **2**, which caps in-flight populate pods cluster-wide for
-> every other migration running at the same time.
-
 Together these tests validate: different disk types (thin, thick, RDM), multi-disk and multi-datastore
 layouts, mixed XCOPY/non-XCOPY fallback behavior, concurrent scale migration, and warm migration --
 providing broad coverage of copy-offload functionality in a single run.
@@ -580,6 +574,12 @@ and a configured StorageMap with offload plugin settings.
 troubleshooting, see:
 
 📖 **[Copy-Offload Testing Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)**
+
+> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) mutates cluster-wide
+> `ForkliftController` populator settings. Do not run it in parallel with other copy-offload tests on the
+> same cluster — the test temporarily sets `controller_max_populator_inflight` (and the populator
+> deployment `MAX_POPULATOR_INFLIGHT` env) to **2**, which caps in-flight populate pods cluster-wide for
+> every other migration running at the same time.
 
 For array-specific Secret keys not covered by built-in vendor fields, use `storage_secret_extra` in the
 `copyoffload` section of `.providers.json` (or `COPYOFFLOAD_STORAGE_SECRET_EXTRA`); see the guide.

@@ -3502,7 +3502,7 @@ class TestCopyoffloadPopulatorThrottlingMigration:
     - Set controller_max_populator_inflight to a low value (2) on ForkliftController
     - Migrate a VM with 4+ disks from a single ESXi host
     - Verify peak populator concurrency per host respects the limit and reaches min(limit, disk_count)
-    - Verify PopulatorThrottled events on at least (disk_count − limit) PVCs and sourceHost labels on populate pods
+    - Verify PopulatorThrottled events on at least (disk_count - limit) PVCs and sourceHost labels on populate pods
     - Restore controller_max_populator_inflight to its pre-test value after the class completes
     """
 

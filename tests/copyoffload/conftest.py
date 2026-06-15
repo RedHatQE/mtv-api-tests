@@ -183,6 +183,10 @@ def populator_inflight_forkliftcontroller(
 
     Yields:
         None
+
+    Raises:
+        ValueError: If MAX_POPULATOR_INFLIGHT is not set on the populator deployment.
+        TimeoutError: If the cross-worker file lock cannot be acquired within 3600 seconds.
     """
     lock_path = get_forkliftcontroller_populator_inflight_lock_path()
     try:
