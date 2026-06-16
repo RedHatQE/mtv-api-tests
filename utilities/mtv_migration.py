@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from kubernetes.dynamic.exceptions import ApiException
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -39,13 +40,13 @@ def get_migration_for_plan(plan: Plan) -> Migration:
     """Find Migration CR for Plan.
 
     Args:
-        plan (Plan): The Plan resource.
+        plan (Plan): The Plan resource
 
     Returns:
-        Migration: The Migration CR owned by the Plan.
+        Migration: The Migration CR owned by the Plan
 
     Raises:
-        MigrationNotFoundError: If Migration CR cannot be found.
+        MigrationNotFoundError: If Migration CR cannot be found
     """
     for migration in Migration.get(client=plan.client, namespace=plan.namespace):
         if migration.instance.metadata.ownerReferences:
@@ -274,6 +275,10 @@ def create_plan_resource(
         LOGGER.error(f"Destination provider: {destination_provider.ocp_resource.instance}")
         raise
 
+    # Wait for Forklift to create plan-specific secret for copy-offload (race condition)
+    if copyoffload:
+        wait_for_plan_secret(ocp_admin_client, target_namespace, plan.name)
+
     return plan
 
 
@@ -302,7 +307,6 @@ def execute_migration(
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
-        TimeoutError: If a copy-offload plan populator secret is not created in time.
     """
     create_and_store_resource(
         client=ocp_admin_client,
@@ -312,12 +316,6 @@ def execute_migration(
         plan_name=plan.name,
         plan_namespace=plan.namespace,
         cut_over=cut_over,
-    )
-
-    wait_for_copyoffload_plan_secret(
-        ocp_admin_client=ocp_admin_client,
-        plan=plan,
-        namespace=target_namespace,
     )
 
     # Wait for migration and capture populate pod logs during migration (before cleanup)
@@ -370,7 +368,7 @@ def get_plan_migration_status(plan: Plan) -> str:
 
     # Check if Migration CR exists to confirm execution
     try:
-        get_migration_for_plan(plan=plan)
+        get_migration_for_plan(plan)
         return Plan.Status.EXECUTING
     except MigrationNotFoundError:
         return ""
@@ -381,46 +379,37 @@ def wait_for_migration_complate(
     ocp_admin_client: DynamicClient | None = None,
     target_namespace: str | None = None,
     fixture_store: dict[str, Any] | None = None,
-    *,
-    on_status_poll: Callable[[str], None] | None = None,
 ) -> None:
-    """Wait for a Plan migration to reach Succeeded or Failed.
+    """Wait for migration to complete.
 
     Optionally captures populate pod logs during migration for copy-offload tests.
     This ensures logs are captured before MTV's cleanup deletes the pods.
 
     Args:
-        plan (Plan): The Plan resource to monitor.
-        ocp_admin_client (DynamicClient | None): Client for capturing populate pod logs.
-        target_namespace (str | None): Namespace where populate pods exist.
-        fixture_store (dict[str, Any] | None): Store for caching populate pod logs.
-        on_status_poll (Callable[[str], None] | None): Optional callback invoked on each poll
-            with the current migration status string.
-
-    Raises:
-        MigrationPlanExecError: If the migration fails, times out, or does not reach Succeeded.
-            Polling uses ``TimeoutSampler`` with ``py_config['plan_wait_timeout']``.
+        plan (Plan): The Plan resource to monitor
+        ocp_admin_client (DynamicClient | None): Client for capturing populate pod logs
+        target_namespace (str | None): Namespace where populate pods exist
+        fixture_store (dict[str, Any] | None): Store for caching populate pod logs
     """
     try:
         last_status: str = ""
+        logs_captured: bool = False
 
         for sample in TimeoutSampler(
             func=get_plan_migration_status,
             sleep=1,
-            wait_timeout=py_config["plan_wait_timeout"],
+            wait_timeout=py_config.get("plan_wait_timeout", 600),
             plan=plan,
         ):
             if sample != last_status:
                 LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
                 last_status = sample
 
-            if on_status_poll is not None:
-                on_status_poll(sample)
-
-            # Capture populate pod logs during EXECUTING phase (before MTV cleanup deletes them)
-            # Re-scan every iteration to capture pods that complete at different times (multi-pod migrations)
+            # Capture populate pod logs when migration is executing (before cleanup)
+            # Keep trying until we successfully capture logs (pods may not exist yet at start of Executing)
             if (
-                sample == Plan.Status.EXECUTING
+                not logs_captured
+                and sample == Plan.Status.EXECUTING
                 and ocp_admin_client is not None
                 and target_namespace is not None
                 and fixture_store is not None
