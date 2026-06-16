@@ -41,6 +41,7 @@ from exceptions.exceptions import (
     MtvOperatorNotInstalledError,
     RemoteClusterAndLocalCluterNamesError,
 )
+from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
@@ -621,7 +622,7 @@ def precopy_interval_forkliftcontroller(
     """
     forklift_controller = ForkliftController(
         client=ocp_admin_client,
-        name="forklift-controller",
+        name=FORKLIFT_CONTROLLER_NAME,
         namespace=mtv_namespace,
         ensure_exists=True,
     )

@@ -34,10 +34,10 @@ def _plan_secret_exists(
         bool: True if a matching plan secret exists.
     """
     for secret in Secret.get(client=ocp_admin_client, namespace=namespace):
-        if secret.name.startswith(f"{plan_name}-"):
-            return True
         labels: dict[str, str] = secret.instance.metadata.labels or {}
         if labels.get(PLAN_NAME_LABEL) == plan_name and labels.get(POPULATOR_LABEL):
+            return True
+        if secret.name.startswith(f"{plan_name}-"):
             return True
     return False
 

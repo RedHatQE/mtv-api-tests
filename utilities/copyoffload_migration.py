@@ -23,7 +23,7 @@ from rrmngmnt import Host, RootUser, User
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import MigrationNotFoundError, MigrationPlanExecError
+from exceptions.exceptions import MigrationNotFoundError
 from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
     POPULATOR_THROTTLED_EVENT_REASON,

@@ -7,7 +7,7 @@ import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ocp_resources.deployment import Deployment
 from ocp_resources.forklift_controller import ForkliftController
@@ -22,6 +22,28 @@ LOGGER = get_logger(__name__)
 
 POPULATOR_CONTROLLER_DEPLOYMENT = "forklift-volume-populator-controller"
 MAX_POPULATOR_INFLIGHT_ENV = "MAX_POPULATOR_INFLIGHT"
+
+
+def _controller_max_populator_inflight_as_int(raw_value: Any) -> int | None:
+    """Parse ForkliftController controller_max_populator_inflight as an integer.
+
+    Args:
+        raw_value (Any): Value from the ForkliftController CR spec.
+
+    Returns:
+        int | None: Parsed limit, or None when the field is unset.
+
+    Raises:
+        ValueError: If the API returns a non-integer value.
+    """
+    if raw_value is None:
+        return None
+    try:
+        return int(raw_value)
+    except (ValueError, TypeError) as err:
+        raise ValueError(
+            f"controller_max_populator_inflight on ForkliftController has non-integer value {raw_value!r}"
+        ) from err
 
 
 def ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
@@ -152,6 +174,28 @@ def wait_for_populator_inflight_deployment(
         ) from err
 
 
+def _ensure_forklift_controller_populator_limit(
+    forklift_controller: ForkliftController,
+    target_limit: int,
+) -> None:
+    """Patch ForkliftController populator limit when it differs from the target.
+
+    Args:
+        forklift_controller (ForkliftController): ForkliftController resource to patch.
+        target_limit (int): Desired controller_max_populator_inflight value.
+    """
+    current_cr_limit = getattr(forklift_controller.instance.spec, "controller_max_populator_inflight", None)
+    if _controller_max_populator_inflight_as_int(current_cr_limit) == target_limit:
+        return
+
+    with ResourceEditor(patches={forklift_controller: {"spec": {"controller_max_populator_inflight": target_limit}}}):
+        forklift_controller.wait_for_condition(
+            status=forklift_controller.Condition.Status.TRUE,
+            condition=forklift_controller.Condition.Type.SUCCESSFUL,
+            timeout=300,
+        )
+
+
 @contextmanager
 def populator_inflight_limit(
     forklift_controller: ForkliftController,
@@ -163,7 +207,8 @@ def populator_inflight_limit(
     """Temporarily patch ForkliftController populator in-flight limit and restore on exit.
 
     Uses ResourceEditor as a context manager so the CR rolls back automatically.
-    Waits for the populator deployment to apply each limit change.
+    Waits for the populator deployment to apply each limit change, including after
+    test failures.
 
     Args:
         forklift_controller (ForkliftController): ForkliftController resource to patch.
@@ -173,8 +218,9 @@ def populator_inflight_limit(
         original_deployment_limit (int): MAX_POPULATOR_INFLIGHT value before the test.
     """
     current_cr_limit = getattr(forklift_controller.instance.spec, "controller_max_populator_inflight", None)
+    cr_limit_int = _controller_max_populator_inflight_as_int(current_cr_limit)
 
-    if current_cr_limit is not None and int(current_cr_limit) == test_limit:
+    if cr_limit_int == test_limit == original_deployment_limit:
         LOGGER.info(f"ForkliftController controller_max_populator_inflight already {test_limit}")
         wait_for_populator_inflight_deployment(
             ocp_admin_client=ocp_admin_client,
@@ -184,24 +230,37 @@ def populator_inflight_limit(
         yield
         return
 
+    if cr_limit_int == test_limit:
+        LOGGER.warning(
+            "ForkliftController controller_max_populator_inflight already at test limit %s but deployment "
+            "reports %s; this may be leftover from a previous crashed run",
+            test_limit,
+            original_deployment_limit,
+        )
+
     LOGGER.info(
         f"Setting ForkliftController controller_max_populator_inflight from {current_cr_limit!r} to {test_limit}"
     )
-    with ResourceEditor(patches={forklift_controller: {"spec": {"controller_max_populator_inflight": test_limit}}}):
-        forklift_controller.wait_for_condition(
-            status=forklift_controller.Condition.Status.TRUE,
-            condition=forklift_controller.Condition.Type.SUCCESSFUL,
-            timeout=300,
+    try:
+        with ResourceEditor(patches={forklift_controller: {"spec": {"controller_max_populator_inflight": test_limit}}}):
+            forklift_controller.wait_for_condition(
+                status=forklift_controller.Condition.Status.TRUE,
+                condition=forklift_controller.Condition.Type.SUCCESSFUL,
+                timeout=300,
+            )
+            wait_for_populator_inflight_deployment(
+                ocp_admin_client=ocp_admin_client,
+                mtv_namespace=mtv_namespace,
+                expected_limit=test_limit,
+            )
+            yield
+    finally:
+        _ensure_forklift_controller_populator_limit(
+            forklift_controller=forklift_controller,
+            target_limit=original_deployment_limit,
         )
         wait_for_populator_inflight_deployment(
             ocp_admin_client=ocp_admin_client,
             mtv_namespace=mtv_namespace,
-            expected_limit=test_limit,
+            expected_limit=original_deployment_limit,
         )
-        yield
-
-    wait_for_populator_inflight_deployment(
-        ocp_admin_client=ocp_admin_client,
-        mtv_namespace=mtv_namespace,
-        expected_limit=original_deployment_limit,
-    )
