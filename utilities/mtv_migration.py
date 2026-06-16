@@ -377,7 +377,7 @@ def wait_for_migration_complate(
 
     Raises:
         MigrationPlanExecError: If the migration fails, times out, or does not reach Succeeded.
-            Polling uses ``TimeoutSampler`` with ``py_config['plan_wait_timeout']`` (default 600s).
+            Polling uses ``TimeoutSampler`` with ``py_config['plan_wait_timeout']``.
     """
     try:
         last_status: str = ""
@@ -385,7 +385,7 @@ def wait_for_migration_complate(
         for sample in TimeoutSampler(
             func=get_plan_migration_status,
             sleep=1,
-            wait_timeout=py_config.get("plan_wait_timeout", 600),
+            wait_timeout=py_config["plan_wait_timeout"],
             plan=plan,
         ):
             if sample != last_status:

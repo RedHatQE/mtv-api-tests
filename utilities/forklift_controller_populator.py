@@ -22,6 +22,7 @@ LOGGER = get_logger(__name__)
 
 POPULATOR_CONTROLLER_DEPLOYMENT = "forklift-volume-populator-controller"
 MAX_POPULATOR_INFLIGHT_ENV = "MAX_POPULATOR_INFLIGHT"
+POPULATOR_INFLIGHT_LOCK_TIMEOUT = 3600  # seconds; covers full 7-step class including migration
 
 
 def _controller_max_populator_inflight_as_int(raw_value: Any) -> int | None:
@@ -149,12 +150,12 @@ def wait_for_populator_inflight_deployment(
         return get_populator_inflight_from_deployment(deployment=current_deployment) == expected_value
 
     try:
-        for _ in TimeoutSampler(
+        for ready in TimeoutSampler(
             wait_timeout=300,
             sleep=2,
             func=_deployment_ready_with_limit,
         ):
-            if _:
+            if ready:
                 LOGGER.info(
                     f"Populator controller deployment has {MAX_POPULATOR_INFLIGHT_ENV}={expected_value} "
                     "and is fully available"

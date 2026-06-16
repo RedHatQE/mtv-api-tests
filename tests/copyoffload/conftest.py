@@ -28,6 +28,7 @@ from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
 from utilities.forklift_controller_populator import (
     MAX_POPULATOR_INFLIGHT_ENV,
     POPULATOR_CONTROLLER_DEPLOYMENT,
+    POPULATOR_INFLIGHT_LOCK_TIMEOUT,
     get_forkliftcontroller_populator_inflight_lock_path,
     get_populator_inflight_from_deployment,
     populator_inflight_limit,
@@ -187,11 +188,11 @@ def populator_inflight_forkliftcontroller(
 
     Raises:
         ValueError: If MAX_POPULATOR_INFLIGHT is not set on the populator deployment.
-        TimeoutError: If the cross-worker file lock cannot be acquired within 3600 seconds.
+        TimeoutError: If the cross-worker file lock cannot be acquired within POPULATOR_INFLIGHT_LOCK_TIMEOUT seconds.
     """
     lock_path = get_forkliftcontroller_populator_inflight_lock_path()
     try:
-        with filelock.FileLock(lock_path, timeout=3600):
+        with filelock.FileLock(lock_path, timeout=POPULATOR_INFLIGHT_LOCK_TIMEOUT):
             forklift_controller = ForkliftController(
                 client=ocp_admin_client,
                 name=FORKLIFT_CONTROLLER_NAME,
@@ -228,7 +229,7 @@ def populator_inflight_forkliftcontroller(
                 yield
     except filelock.Timeout as err:
         raise TimeoutError(
-            f"Timeout (3600s) waiting for ForkliftController populator-inflight lock at {lock_path}. "
+            f"Timeout ({POPULATOR_INFLIGHT_LOCK_TIMEOUT}s) waiting for ForkliftController populator-inflight lock at {lock_path}. "
             "Another worker may be running the populator throttling test."
         ) from err
 

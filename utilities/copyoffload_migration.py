@@ -27,6 +27,7 @@ from exceptions.exceptions import MigrationNotFoundError
 from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
     POPULATOR_THROTTLED_EVENT_REASON,
+    PVC_NAME_LABEL,
     SOURCE_HOST_LABEL,
 )
 from utilities.mtv_migration import get_migration_for_plan, wait_for_migration_complate
@@ -590,7 +591,7 @@ def verify_xcopy_used(
     expected_value: int = 1 if expected_xcopy_used else 0
 
     for pod in populate_pods:
-        pvc_name: str = pod.instance.metadata.labels.get("pvcName", pod.name)
+        pvc_name: str = pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name)
         log_content: str = pod.log()
         xcopy_used, xcopy_log_line = _parse_xcopy_used_from_log_content(
             pod_name=pod.name,
@@ -699,7 +700,7 @@ def verify_xcopy_used_per_datastore(
     verified_datastore_ids: set[str] = set()
 
     for pod in populate_pods:
-        pvc_name: str = pod.instance.metadata.labels.get("pvcName", pod.name)
+        pvc_name: str = pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name)
         log_content: str = pod.log()
         source_datastore_name: str = _parse_source_datastore_name_from_log_content(
             pod_name=pod.name,
@@ -937,7 +938,7 @@ def _verify_throttled_events_on_pods(
         seen: set[str] = set()
         for pod in populate_pods:
             labels: dict[str, str] = pod.instance.metadata.labels or {}
-            pvc_name: str = labels.get("pvcName", pod.name)
+            pvc_name: str = labels.get(PVC_NAME_LABEL, pod.name)
             field_selector = f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim"
             for event in Event.list(
                 client=ocp_admin_client,
@@ -947,7 +948,7 @@ def _verify_throttled_events_on_pods(
             ):
                 if event.instance.reason == POPULATOR_THROTTLED_EVENT_REASON:
                     seen.add(pvc_name)
-                    LOGGER.info("PVC '%s' has %s event", pvc_name, POPULATOR_THROTTLED_EVENT_REASON)
+                    LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
                     break
         return seen
 
