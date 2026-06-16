@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING, Any
 
 from ocp_resources.event import Event
 from ocp_resources.migration import Migration
+from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.pod import Pod
 from ocp_resources.plan import Plan
-from pytest_testconfig import config as py_config
 from rrmngmnt import Host, RootUser, User
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
@@ -42,8 +42,6 @@ LOGGER = get_logger(__name__)
 
 STORAGE_SECRET_EXTRA_ENV = "COPYOFFLOAD_STORAGE_SECRET_EXTRA"  # pragma: allowlist secret
 _ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
-_THROTTLED_EVENT_POLL_TIMEOUT = 30  # Event API is eventually consistent after migration completes
-_THROTTLED_EVENT_POLL_SLEEP = 2
 
 
 def get_copyoffload_credential(
@@ -907,6 +905,33 @@ def _verify_source_host_labels_on_pods(populate_pods: list[Pod]) -> str:
     return source_hosts.pop()
 
 
+def _get_pvc_events(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    pvc_name: str,
+) -> list[Any]:
+    """Return Kubernetes events for a specific PVC.
+
+    Uses an involvedObject field selector, matching the OpenShift console PVC Events tab.
+    Do not use ``Event.list()``: it applies a default ``since_seconds=300`` client-side
+    filter that drops PopulatorThrottled events emitted at migration start.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where the PVC exists.
+        pvc_name (str): Name of the PVC to fetch events for.
+
+    Returns:
+        list[Any]: Event objects for the PVC from the Kubernetes API.
+    """
+    event_resource = ocp_admin_client.resources.get(api_version=Event.api_version, kind="Event")
+    response = event_resource.get(
+        namespace=namespace,
+        field_selector=f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim",
+    )
+    return response.items or []
+
+
 def _verify_throttled_events_on_pods(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
@@ -934,36 +959,34 @@ def _verify_throttled_events_on_pods(
             f"({max_populator_inflight}) to verify throttling for migration '{migration_uid}'"
         )
 
-    def _collect_throttled_pvc_names() -> set[str]:
-        seen: set[str] = set()
-        for pod in populate_pods:
-            labels: dict[str, str] = pod.instance.metadata.labels or {}
-            pvc_name: str = labels.get(PVC_NAME_LABEL, pod.name)
-            field_selector = f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim"
-            for event in Event.list(
-                client=ocp_admin_client,
-                namespace=target_namespace,
-                field_selector=field_selector,
-                since_seconds=py_config["plan_wait_timeout"],
-            ):
-                if event.instance and event.instance.reason == POPULATOR_THROTTLED_EVENT_REASON:
-                    seen.add(pvc_name)
-                    LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
-                    break
-        return seen
+    pvc_names_from_pods: set[str] = {
+        (pod.instance.metadata.labels or {}).get(PVC_NAME_LABEL, pod.name) for pod in populate_pods
+    }
+    pvc_names_from_label: set[str] = {
+        pvc.name
+        for pvc in PersistentVolumeClaim.get(
+            client=ocp_admin_client,
+            namespace=target_namespace,
+            label_selector=f"migration={migration_uid}",
+        )
+    }
+    pvc_names_to_check: set[str] = pvc_names_from_pods | pvc_names_from_label
+    LOGGER.info(
+        f"Checking {len(pvc_names_to_check)} PVC(s) for throttled events "
+        f"(from pods: {pvc_names_from_pods}, from label: {pvc_names_from_label})"
+    )
 
     throttled_pvc_names: set[str] = set()
-    try:
-        for sample in TimeoutSampler(
-            wait_timeout=_THROTTLED_EVENT_POLL_TIMEOUT,
-            sleep=_THROTTLED_EVENT_POLL_SLEEP,
-            func=_collect_throttled_pvc_names,
+    for pvc_name in pvc_names_to_check:
+        for event in _get_pvc_events(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            pvc_name=pvc_name,
         ):
-            throttled_pvc_names = sample
-            if len(throttled_pvc_names) >= min_expected_throttled:
+            if event.get("reason") == POPULATOR_THROTTLED_EVENT_REASON:
+                throttled_pvc_names.add(pvc_name)
+                LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
                 break
-    except TimeoutExpiredError:
-        throttled_pvc_names = _collect_throttled_pvc_names()
 
     if len(throttled_pvc_names) < min_expected_throttled:
         raise ValueError(
