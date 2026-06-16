@@ -174,3 +174,6 @@ jira.cfg
 # ENV
 .env
 .envrc
+
+# Qualify workflow
+.qualify/

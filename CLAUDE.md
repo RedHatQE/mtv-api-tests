@@ -607,6 +607,8 @@ AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live
 AI can: Read/analyze/write/fix tests, suggest improvements, review structure
 AI cannot: Execute tests, validate by running
 
+**Exception:** The `/qualify` workflow (`llm/qualify/`) may run pytest on a real cluster when a user explicitly invokes it with cluster credentials. See `llm/qualify/README.md`.
+
 ### No Module-Level Provider Loading (MUST)
 
 `load_source_providers()` must only be called within the pytest ecosystem (fixtures, hooks).
