@@ -792,10 +792,16 @@ class TestNameHere:
   `test_check_xcopy_used` calls `verify_xcopy_used()` from `utilities/copyoffload_migration.py`. This step
   validates the transfer mechanism (infrastructure), not the migrated VM (application), and provides
   clearer failure diagnostics.
+- **7-step copy-offload throttling pattern**: storagemap -> networkmap -> plan -> migrate -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
+  Populator throttling tests insert `test_verify_populator_throttling` after `test_migrate_vms` and before
+  `test_check_xcopy_used`. This step calls `verify_populator_throttling()` from `utilities/copyoffload_migration.py`
+  to validate per-ESXi-host concurrency limits, `PopulatorThrottled` events, and `sourceHost` labels.
+  Requires the `populator_inflight_forkliftcontroller` fixture.
 
 **Test method naming:** Base tests: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`,
 `test_migrate_vms`, `test_check_vms`. Copy-offload tests: same through `test_migrate_vms`, then
-`test_check_xcopy_used`, `test_check_vms`.
+`test_check_xcopy_used`, `test_check_vms`. Copy-offload throttling tests: same through `test_migrate_vms`, then
+`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`.
 
 **Fixture parameters:** Each test method requests only the fixtures it needs. The example shows typical patterns.
 
@@ -815,7 +821,8 @@ tests_params: dict = {
 1. Create the test file in the feature subdirectory described in **Test File Location (MUST)** (for example, `tests/<feature>/test_<feature>_migration.py`)
 2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
 3. Add pytest markers at class level (tier0, warm, remote, copyoffload)
-4. Implement the 5 test methods following the pattern above (6 for copy-offload tests — use the 6-step copy-offload pattern)
+4. Implement the 5 test methods following the pattern above (6 for copy-offload tests — use the 6-step copy-offload pattern;
+   7 for copy-offload populator throttling tests — use the 7-step copy-offload throttling pattern)
 
 **VM Configuration Options:**
 
