@@ -181,8 +181,9 @@ def _ensure_forklift_controller_populator_limit(
 ) -> None:
     """Patch ForkliftController populator limit when it differs from the target.
 
-    Uses a non-restoring update so the limit remains at ``target_limit`` after teardown,
-    matching ``precopy_interval_forkliftcontroller`` in ``conftest.py``.
+    Uses a non-restoring ResourceEditor update (``backup_resources=False``). Callers that
+    need restore on exit must patch back explicitly, as ``populator_inflight_limit`` does
+    in its ``finally`` block.
 
     Args:
         forklift_controller (ForkliftController): ForkliftController resource to patch.

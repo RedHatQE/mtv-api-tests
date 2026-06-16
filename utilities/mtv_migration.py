@@ -21,35 +21,14 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.resources import create_and_store_resource
 from utilities.copyoffload_plan_secret import wait_for_plan_secret
+from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(__name__)
-
-
-def _find_migration_for_plan(plan: Plan) -> Migration:
-    """Find Migration CR for Plan.
-
-    Args:
-        plan (Plan): The Plan resource
-
-    Returns:
-        Migration: The Migration CR owned by the Plan
-
-    Raises:
-        MigrationNotFoundError: If Migration CR cannot be found
-    """
-    for migration in Migration.get(client=plan.client, namespace=plan.namespace):
-        if migration.instance.metadata.ownerReferences:
-            for owner_ref in migration.instance.metadata.ownerReferences:
-                if owner_ref.get("kind") == "Plan" and owner_ref.get("name") == plan.name:
-                    return migration
-
-    raise MigrationNotFoundError(f"Migration CR not found for Plan '{plan.name}' in namespace '{plan.namespace}'")
 
 
 def get_migration_for_plan(plan: Plan) -> Migration:
@@ -64,7 +43,13 @@ def get_migration_for_plan(plan: Plan) -> Migration:
     Raises:
         MigrationNotFoundError: If Migration CR cannot be found.
     """
-    return _find_migration_for_plan(plan=plan)
+    for migration in Migration.get(client=plan.client, namespace=plan.namespace):
+        if migration.instance.metadata.ownerReferences:
+            for owner_ref in migration.instance.metadata.ownerReferences:
+                if owner_ref.get("kind") == "Plan" and owner_ref.get("name") == plan.name:
+                    return migration
+
+    raise MigrationNotFoundError(f"Migration CR not found for Plan '{plan.name}' in namespace '{plan.namespace}'")
 
 
 def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
@@ -357,7 +342,7 @@ def get_plan_migration_status(plan: Plan) -> str:
 
     # Check if Migration CR exists to confirm execution
     try:
-        _find_migration_for_plan(plan)
+        get_migration_for_plan(plan=plan)
         return Plan.Status.EXECUTING
     except MigrationNotFoundError:
         return ""

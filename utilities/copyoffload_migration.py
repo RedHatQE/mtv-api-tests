@@ -361,28 +361,28 @@ def _get_migration_uid(plan: Plan) -> str:
 
 
 def _resolve_migration_uid(plan: Plan) -> str | None:
-    """Resolve migration UID from Plan status or the Migration CR.
+    """Resolve migration UID from the Migration CR.
 
-    Plan status history may lag behind Migration CR creation. Checking both sources
-    lets populator monitoring start as soon as either is available.
+    Returns None when the Migration CR is not created yet (e.g. during early migration polling).
 
     Args:
         plan (Plan): The Plan CR resource.
 
     Returns:
-        str | None: Migration UID when found, otherwise None.
-    """
-    try:
-        return _get_migration_uid(plan=plan)
-    except ValueError as exc:
-        LOGGER.debug("Primary migration UID lookup failed: %s; falling back to Migration CR", exc)
+        str | None: Migration UID when the Migration CR exists, otherwise None.
 
+    Raises:
+        ValueError: If the Migration CR exists but has no UID.
+    """
     try:
         migration = get_migration_for_plan(plan=plan)
     except MigrationNotFoundError:
         return None
 
-    return migration.instance.metadata.uid
+    migration_uid = migration.instance.metadata.uid
+    if not migration_uid:
+        raise ValueError(f"Migration CR for Plan '{plan.name}' has no UID")
+    return migration_uid
 
 
 def _get_populate_pods_for_plan(
@@ -1041,7 +1041,7 @@ def verify_populator_throttling(
             f"No populator monitoring data for sourceHost {source_host!r}; "
             f"observed during migration: {sorted(max_concurrent_by_host)}"
         )
-    verify_populator_inflight_observed(
+    _verify_populator_inflight_observed(
         max_concurrent_by_host={source_host: max_concurrent_by_host[source_host]},
         max_populator_inflight=max_populator_inflight,
         disk_count=len(populate_pods),
@@ -1049,7 +1049,7 @@ def verify_populator_throttling(
     return source_host
 
 
-def verify_populator_inflight_observed(
+def _verify_populator_inflight_observed(
     max_concurrent_by_host: dict[str, int],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
     disk_count: int | None = None,
