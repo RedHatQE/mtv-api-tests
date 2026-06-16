@@ -180,6 +180,9 @@ def _ensure_forklift_controller_populator_limit(
 ) -> None:
     """Patch ForkliftController populator limit when it differs from the target.
 
+    Uses a non-restoring update so the limit remains at ``target_limit`` after teardown,
+    matching ``precopy_interval_forkliftcontroller`` in ``conftest.py``.
+
     Args:
         forklift_controller (ForkliftController): ForkliftController resource to patch.
         target_limit (int): Desired controller_max_populator_inflight value.
@@ -188,12 +191,14 @@ def _ensure_forklift_controller_populator_limit(
     if _controller_max_populator_inflight_as_int(current_cr_limit) == target_limit:
         return
 
-    with ResourceEditor(patches={forklift_controller: {"spec": {"controller_max_populator_inflight": target_limit}}}):
-        forklift_controller.wait_for_condition(
-            status=forklift_controller.Condition.Status.TRUE,
-            condition=forklift_controller.Condition.Type.SUCCESSFUL,
-            timeout=300,
-        )
+    ResourceEditor(patches={forklift_controller: {"spec": {"controller_max_populator_inflight": target_limit}}}).update(
+        backup_resources=False
+    )
+    forklift_controller.wait_for_condition(
+        status=forklift_controller.Condition.Status.TRUE,
+        condition=forklift_controller.Condition.Type.SUCCESSFUL,
+        timeout=300,
+    )
 
 
 @contextmanager

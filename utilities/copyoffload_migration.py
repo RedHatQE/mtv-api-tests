@@ -41,6 +41,8 @@ LOGGER = get_logger(__name__)
 
 STORAGE_SECRET_EXTRA_ENV = "COPYOFFLOAD_STORAGE_SECRET_EXTRA"  # pragma: allowlist secret
 _ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
+_THROTTLED_EVENT_POLL_TIMEOUT = 30  # Event API is eventually consistent after migration completes
+_THROTTLED_EVENT_POLL_SLEEP = 2
 
 
 def get_copyoffload_credential(
@@ -931,21 +933,36 @@ def _verify_throttled_events_on_pods(
             f"({max_populator_inflight}) to verify throttling for migration '{migration_uid}'"
         )
 
-    throttled_pvc_names: list[str] = []
-    for pod in populate_pods:
-        labels: dict[str, str] = pod.instance.metadata.labels or {}
-        pvc_name: str = labels.get("pvcName", pod.name)
-        field_selector = f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim"
-        for event in Event.list(
-            client=ocp_admin_client,
-            namespace=target_namespace,
-            field_selector=field_selector,
-            since_seconds=py_config["plan_wait_timeout"],
+    def _collect_throttled_pvc_names() -> set[str]:
+        seen: set[str] = set()
+        for pod in populate_pods:
+            labels: dict[str, str] = pod.instance.metadata.labels or {}
+            pvc_name: str = labels.get("pvcName", pod.name)
+            field_selector = f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim"
+            for event in Event.list(
+                client=ocp_admin_client,
+                namespace=target_namespace,
+                field_selector=field_selector,
+                since_seconds=py_config["plan_wait_timeout"],
+            ):
+                if event.get("reason") == POPULATOR_THROTTLED_EVENT_REASON:
+                    seen.add(pvc_name)
+                    LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
+                    break
+        return seen
+
+    throttled_pvc_names: set[str] = set()
+    try:
+        for sample in TimeoutSampler(
+            wait_timeout=_THROTTLED_EVENT_POLL_TIMEOUT,
+            sleep=_THROTTLED_EVENT_POLL_SLEEP,
+            func=_collect_throttled_pvc_names,
         ):
-            if event.get("reason") == POPULATOR_THROTTLED_EVENT_REASON:
-                throttled_pvc_names.append(pvc_name)
-                LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
+            throttled_pvc_names = sample
+            if len(throttled_pvc_names) >= min_expected_throttled:
                 break
+    except TimeoutExpiredError:
+        throttled_pvc_names = _collect_throttled_pvc_names()
 
     if len(throttled_pvc_names) < min_expected_throttled:
         raise ValueError(
