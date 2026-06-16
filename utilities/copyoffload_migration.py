@@ -435,8 +435,10 @@ def capture_populate_pod_logs(
     deletes them. Stores logs in fixture_store for use by verify_xcopy_used()
     when pods are no longer available.
 
-    This function is safe to call multiple times - it only captures logs once per
-    migration_uid and skips if already captured. Safe for non-copyoffload migrations.
+    This function is safe to call multiple times during migration execution. It re-scans
+    all populate pods each time to capture logs from newly-completed pods (handles
+    multi-pod migrations where pods complete at different times). Safe for non-copyoffload
+    migrations.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
@@ -445,11 +447,6 @@ def capture_populate_pod_logs(
         fixture_store (dict[str, Any]): Fixture store for caching pod logs.
     """
     try:
-        # Skip if already captured for this migration
-        if "populate_pod_logs" in fixture_store and migration_uid in fixture_store["populate_pod_logs"]:
-            LOGGER.debug(f"Populate pod logs already captured for migration '{migration_uid}'")
-            return
-
         populate_pods: list[Pod] = [
             pod
             for pod in Pod.get(
