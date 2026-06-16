@@ -151,12 +151,14 @@ class TestSharedDiskRhelMigration:
         prepared_plan: dict[str, Any],
         vm_ssh_connections: "SSHConnectionManager",
         source_provider_data: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
     ) -> None:
         """Verify shared disk read/write access from both VMs."""
         verify_shared_disk_data(
             prepared_plan=prepared_plan,
             vm_ssh_connections=vm_ssh_connections,
             source_provider_data=source_provider_data,
+            ocp_admin_client=ocp_admin_client,
         )
 
     def test_check_vms(

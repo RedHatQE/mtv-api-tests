@@ -7,13 +7,20 @@ after migration.
 from __future__ import annotations
 
 import shlex
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+
 from exceptions.exceptions import GuestCommandError
+from utilities.naming import resolve_destination_vm_name
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(name=__name__)
 
@@ -97,48 +104,127 @@ def _write_marker(ssh_conn: VMSSHConnection, file_path: str, content: str, vm_la
     _run_cmd_on_vm(ssh_conn, ["sudo", "sync"], f"{vm_label} sync")
 
 
-def _get_shared_disk_device(prepared_plan: dict[str, Any], vm_name: str) -> str:
-    """Determine the shared disk device path from source VM disk layout.
+_VMI_VOLUME_STATUS_TIMEOUT = 300
+_VMI_VOLUME_STATUS_POLL_INTERVAL = 5
 
-    The shared disk is on a separate SCSI controller (Multi-writer requires
-    bus sharing). After migration, KubeVirt assigns /dev/vdX in the same
-    order as the source SCSI layout.
 
-    Note:
-        Assumes exactly two SCSI controllers with the shared disk alone on the
-        non-boot controller. This matches the current test VM layout. If VMs
-        gain additional controllers with non-shared disks, this logic would need
-        to match by exact SCSI position instead.
+def _get_pvc_device_targets(
+    ocp_admin_client: "DynamicClient",
+    target_namespace: str,
+    vm_name: str,
+) -> dict[str, str]:
+    """Map PVC claim names to their runtime device targets from VMI status.
+
+    Uses ``volumeStatus[].target`` which contains the actual device name
+    assigned by KubeVirt at runtime (e.g. ``vda``), eliminating any
+    dependency on volume ordering or index arithmetic.
 
     Args:
-        prepared_plan (dict[str, Any]): Plan config with source_vms_data.
-        vm_name (str): Name of the VM to find the shared disk for.
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where the migrated VM lives.
+        vm_name (str): Destination VM name (already sanitized for Kubernetes).
 
     Returns:
-        str: Device path (e.g., "/dev/vdc").
+        dict[str, str]: Mapping of PVC claim name to device path,
+            e.g. ``{"pvc-boot": "/dev/vda", "pvc-shared": "/dev/vdc"}``.
 
     Raises:
-        ValueError: If no shared disk found (no disk on a different controller).
+        ValueError: If PVC device targets are not populated within the
+            timeout (e.g. VMI not running or volumeStatus not yet available).
     """
-    disks: list[dict[str, Any]] = prepared_plan["source_vms_data"][vm_name]["disks"]
-    if not disks:
-        raise ValueError(f"No disks found for VM '{vm_name}' in source_vms_data")
-    # Shared disk is on a separate SCSI controller (Multi-writer requires bus sharing).
-    # Assumes no non-shared disks on separate controllers — valid for current test VM layout.
-    sorted_disks = sorted(disks, key=lambda d: (d["controller_key"], d["unit_number"]))
-    boot_controller: int = sorted_disks[0]["controller_key"]
-    for index, disk in enumerate(sorted_disks):
-        if disk["controller_key"] != boot_controller:
-            device_path = f"/dev/vd{chr(ord('a') + index)}"
-            LOGGER.info(f"Detected shared disk for VM '{vm_name}' at index {index}: {device_path}")
-            return device_path
-    raise ValueError(f"No shared disk found for VM '{vm_name}' — all disks on same SCSI controller")
+    cnv_vm = VirtualMachine(
+        client=ocp_admin_client,
+        name=vm_name,
+        namespace=target_namespace,
+        ensure_exists=True,
+    )
+    pvc_devices: dict[str, str] = {}
+    sample = None
+    try:
+        for sample in TimeoutSampler(
+            wait_timeout=_VMI_VOLUME_STATUS_TIMEOUT,
+            sleep=_VMI_VOLUME_STATUS_POLL_INTERVAL,
+            func=lambda: cnv_vm.vmi.instance if cnv_vm.vmi else None,
+        ):
+            if not sample:
+                continue
+            volume_status = getattr(sample.status, "volumeStatus", None)
+            if not volume_status:
+                continue
+            pvc_devices.clear()
+            for vol_status in volume_status:
+                pvc_info = getattr(vol_status, "persistentVolumeClaimInfo", None)
+                if not pvc_info:
+                    continue
+                if not vol_status.target:
+                    pvc_devices.clear()
+                    break
+                pvc_devices[pvc_info.claimName] = f"/dev/{vol_status.target}"
+            if pvc_devices:
+                break
+    except TimeoutExpiredError as exc:
+        phase = getattr(sample.status, "phase", "unknown") if sample else "no-sample"
+        raise ValueError(
+            f"VM '{vm_name}' in '{target_namespace}' VMI has no PVC device targets "
+            f"after {_VMI_VOLUME_STATUS_TIMEOUT}s (phase: {phase})"
+        ) from exc
+    LOGGER.debug(f"PVC device targets for VM '{vm_name}': {pvc_devices}")
+    return pvc_devices
+
+
+def _get_shared_disk_devices(
+    ocp_admin_client: "DynamicClient",
+    target_namespace: str,
+    vm1_dest_name: str,
+    vm2_dest_name: str,
+) -> dict[str, str]:
+    """Determine per-VM shared disk device paths from destination PVC references.
+
+    Finds the PVC referenced by both destination VMs (the shared disk) and
+    returns each VM's device path using the runtime device target from
+    ``VMI status.volumeStatus``. Handles VMs with different disk layouts
+    correctly.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where migrated VMs live.
+        vm1_dest_name (str): First destination VM name.
+        vm2_dest_name (str): Second destination VM name.
+
+    Returns:
+        dict[str, str]: Mapping of destination VM name to device path,
+            e.g. ``{"vm1-name": "/dev/vdc", "vm2-name": "/dev/vdb"}``.
+
+    Raises:
+        ValueError: If no shared PVC found between the two VMs.
+    """
+    vm1_pvc_devices = _get_pvc_device_targets(ocp_admin_client, target_namespace, vm1_dest_name)
+    vm2_pvc_devices = _get_pvc_device_targets(ocp_admin_client, target_namespace, vm2_dest_name)
+
+    shared_pvcs = set(vm1_pvc_devices) & set(vm2_pvc_devices)
+    if not shared_pvcs:
+        raise ValueError(
+            f"No shared PVC between '{vm1_dest_name}' and '{vm2_dest_name}'. "
+            f"VM1 PVCs: {list(vm1_pvc_devices)}, VM2 PVCs: {list(vm2_pvc_devices)}"
+        )
+    if len(shared_pvcs) > 1:
+        raise ValueError(
+            f"Multiple shared PVCs between '{vm1_dest_name}' and '{vm2_dest_name}': {shared_pvcs}. "
+            "Only single shared disk is supported."
+        )
+
+    shared_pvc = shared_pvcs.pop()
+    vm1_device = vm1_pvc_devices[shared_pvc]
+    vm2_device = vm2_pvc_devices[shared_pvc]
+    LOGGER.info(f"Shared PVC '{shared_pvc}': '{vm1_dest_name}' -> {vm1_device}, '{vm2_dest_name}' -> {vm2_device}")
+    return {vm1_dest_name: vm1_device, vm2_dest_name: vm2_device}
 
 
 def verify_shared_disk_data(
     prepared_plan: dict[str, Any],
     vm_ssh_connections: SSHConnectionManager,
     source_provider_data: dict[str, Any],
+    ocp_admin_client: "DynamicClient",
 ) -> None:
     """Verify shared disk is accessible from both VMs by writing and reading data.
 
@@ -151,17 +237,25 @@ def verify_shared_disk_data(
     3. VM1: flush block device cache, remount, read VM2's data, unmount
 
     Args:
-        prepared_plan (dict[str, Any]): Plan config with virtual_machines and source_vms_data.
+        prepared_plan (dict[str, Any]): Plan config with virtual_machines, source_vms_data, and _vm_target_namespace.
         vm_ssh_connections (SSHConnectionManager): SSH connection manager.
         source_provider_data (dict[str, Any]): Provider configuration from .providers.json.
+        ocp_admin_client (DynamicClient): OpenShift admin client for destination VM lookup.
 
     Raises:
         AssertionError: If shared disk data verification fails.
         GuestCommandError: If SSH commands fail.
     """
-    vm1_name = prepared_plan["virtual_machines"][0]["name"]
-    vm2_name = prepared_plan["virtual_machines"][1]["name"]
-    shared_disk_device = _get_shared_disk_device(prepared_plan, vm1_name)
+    vm1_config = prepared_plan["virtual_machines"][0]
+    vm2_config = prepared_plan["virtual_machines"][1]
+    vm1_name = vm1_config["name"]
+    vm2_name = vm2_config["name"]
+    vm_namespace = prepared_plan["_vm_target_namespace"]
+    vm1_dest_name = resolve_destination_vm_name(vm1_config)
+    vm2_dest_name = resolve_destination_vm_name(vm2_config)
+    device_by_vm = _get_shared_disk_devices(ocp_admin_client, vm_namespace, vm1_dest_name, vm2_dest_name)
+    vm1_device = device_by_vm[vm1_dest_name]
+    vm2_device = device_by_vm[vm2_dest_name]
 
     LOGGER.info(f"Verifying shared disk between {vm1_name} and {vm2_name}")
 
@@ -175,21 +269,22 @@ def verify_shared_disk_data(
     ssh_vm2 = vm_ssh_connections.create(vm_name=vm2_name, username=vm2_user, password=vm2_pass)
 
     mount_point = "/mnt/shared_disk"
-    partition = f"{shared_disk_device}1"
+    vm1_partition = f"{vm1_device}1"
+    vm2_partition = f"{vm2_device}1"
     test_file_vm1 = f"{mount_point}/test-vm1.txt"
     test_file_vm2 = f"{mount_point}/test-vm2.txt"
 
     # VM1: Mount shared disk, write test data, unmount (keep connection open for verify phase)
-    LOGGER.info(f"VM1 ({vm1_name}): Mounting shared disk {partition}")
+    LOGGER.info(f"VM1 ({vm1_name}): Mounting shared disk {vm1_partition}")
     with ssh_vm1:
-        _mount_shared_partition(ssh_vm1, partition, mount_point, "VM1")
+        _mount_shared_partition(ssh_vm1, vm1_partition, mount_point, "VM1")
         _write_marker(ssh_vm1, test_file_vm1, "Data from VM1", "VM1")
         _umount_shared_partition(ssh_vm1, mount_point, "VM1")
 
         # VM2: Mount shared disk, verify VM1's data, write own data, unmount
-        LOGGER.info(f"VM2 ({vm2_name}): Mounting shared disk {partition}")
+        LOGGER.info(f"VM2 ({vm2_name}): Mounting shared disk {vm2_partition}")
         with ssh_vm2:
-            _mount_shared_partition(ssh_vm2, partition, mount_point, "VM2")
+            _mount_shared_partition(ssh_vm2, vm2_partition, mount_point, "VM2")
 
             vm2_read_data = _run_cmd_on_vm(ssh_vm2, ["sudo", "cat", test_file_vm1], "VM2 read VM1 data")
             assert "Data from VM1" in vm2_read_data.strip(), f"VM2 cannot read VM1's data: {vm2_read_data}"
@@ -203,8 +298,8 @@ def verify_shared_disk_data(
         # Flush block device buffers to clear stale kernel cache.
         # XFS (non-cluster filesystem) retains metadata in kernel buffer cache.
         # Without this, VM1 won't see VM2's newly written files even after remount.
-        _run_cmd_on_vm(ssh_vm1, ["sudo", "blockdev", "--flushbufs", shared_disk_device], "VM1 flush buffers")
-        _run_cmd_on_vm(ssh_vm1, ["sudo", "mount", partition, mount_point], "VM1 remount")
+        _run_cmd_on_vm(ssh_vm1, ["sudo", "blockdev", "--flushbufs", vm1_device], "VM1 flush buffers")
+        _run_cmd_on_vm(ssh_vm1, ["sudo", "mount", vm1_partition, mount_point], "VM1 remount")
 
         vm1_read_data = _run_cmd_on_vm(ssh_vm1, ["sudo", "cat", test_file_vm2], "VM1 read VM2 data")
         assert "Data from VM2" in vm1_read_data.strip(), f"VM1 cannot read VM2's data: {vm1_read_data}"
