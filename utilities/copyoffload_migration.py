@@ -946,7 +946,7 @@ def _verify_throttled_events_on_pods(
                 field_selector=field_selector,
                 since_seconds=py_config["plan_wait_timeout"],
             ):
-                if event.instance.reason == POPULATOR_THROTTLED_EVENT_REASON:
+                if event.instance and event.instance.reason == POPULATOR_THROTTLED_EVENT_REASON:
                     seen.add(pvc_name)
                     LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
                     break
