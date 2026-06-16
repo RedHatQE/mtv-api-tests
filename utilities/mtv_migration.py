@@ -374,6 +374,10 @@ def wait_for_migration_complate(
         plan (Plan): The Plan resource to monitor.
         on_status_poll (Callable[[str], None] | None): Optional callback invoked on each poll
             with the current migration status string.
+
+    Raises:
+        MigrationPlanExecError: If the migration fails, times out, or does not reach Succeeded.
+            Polling uses ``TimeoutSampler`` with ``py_config['plan_wait_timeout']`` (default 600s).
     """
     try:
         last_status: str = ""
