@@ -390,6 +390,9 @@ def wait_for_migration_complate(
         ocp_admin_client (DynamicClient | None): Client for capturing populate pod logs
         target_namespace (str | None): Namespace where populate pods exist
         fixture_store (dict[str, Any] | None): Store for caching populate pod logs
+
+    Raises:
+        MigrationPlanExecError: If migration fails or doesn't reach expected condition within timeout
     """
     try:
         last_status: str = ""

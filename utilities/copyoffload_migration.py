@@ -361,7 +361,7 @@ def wait_for_cloud_init(
             LOGGER.info(f"Leaving VM {vm_name} powered on")
 
 
-def _get_migration_uid(plan: Plan) -> str:
+def get_migration_uid(plan: Plan) -> str:
     """Extract the migration UID from a completed Plan's status.
 
     Args:
@@ -499,7 +499,7 @@ def capture_populate_pod_logs(
                 captured_logs.append(pod_data)
                 LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {pod_data['phase']})")
             except ApiException as pod_err:
-                # ApiException: K8s API failures; AttributeError: missing pod attributes
+                # K8s API failures (pod deleted, network errors, etc.)
                 LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
 
         if captured_logs:
@@ -693,7 +693,7 @@ def verify_xcopy_used(
         ValueError: If no populate pods found or xcopyUsed not found in pod logs.
         AssertionError: If any disk's xcopyUsed value doesn't match expected.
     """
-    migration_uid: str = _get_migration_uid(plan=plan)
+    migration_uid: str = get_migration_uid(plan=plan)
     LOGGER.info(f"Checking xcopyUsed for migration '{migration_uid}'")
 
     expected_value: int = 1 if expected_xcopy_used else 0
@@ -804,7 +804,7 @@ def verify_xcopy_used_per_datastore(
             f"name keys {sorted(datastore_names_by_id.keys())}"
         )
 
-    migration_uid: str = _get_migration_uid(plan=plan)
+    migration_uid: str = get_migration_uid(plan=plan)
     LOGGER.info(
         f"Checking per-datastore xcopyUsed for migration '{migration_uid}' "
         f"(datastores: {sorted(expected_xcopy_by_datastore_id.keys())})"
