@@ -193,10 +193,14 @@ cp .providers.json.example .providers.json
 See `.providers.json.example` for complete templates of all supported providers.
 
 > **Schema & IDE support:** `providers_schema.json` documents which fields are required vs optional
-> per provider type. Add `"$schema"` to your `.providers.json` for IDE autocomplete:
+> per provider type. Add `"$schema"` as the first key in your `.providers.json` for IDE autocomplete:
 >
 > ```json
-> "$schema": "https://raw.githubusercontent.com/RedHatQE/mtv-api-tests/main/providers_schema.json"
+> {
+>   "$schema": "https://raw.githubusercontent.com/RedHatQE/mtv-api-tests/main/providers_schema.json",
+>   "my-vsphere": { ... },
+>   "my-ovirt": { ... }
+> }
 > ```
 
 ---

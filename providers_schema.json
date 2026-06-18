@@ -42,11 +42,7 @@
       "description": "Copy-offload (XCOPY) configuration for hardware-accelerated migration via storage array APIs.",
       "required": [
         "storage_vendor_product",
-        "datastore_id",
-        "default_vm_name",
-        "storage_hostname",
-        "storage_username",
-        "storage_password"
+        "datastore_id"
       ],
       "properties": {
         "storage_vendor_product": {
@@ -230,167 +226,239 @@
     "providerDefinition": {
       "type": "object",
       "description": "A source provider configuration defining connection, authentication, and provider-specific settings.",
-      "required": [
-        "type",
-        "version",
-        "fqdn",
-        "api_url",
-        "username",
-        "password"
-      ],
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["vsphere", "ovirt", "openstack", "openshift", "ova"],
-          "description": "Provider type determining the virtualization platform."
-        },
-        "version": {
-          "type": "string",
-          "description": "Provider platform version (e.g. '8.0.3' for vSphere, '4.4.9' for oVirt, 'psi' for OpenStack)."
-        },
-        "fqdn": {
-          "type": "string",
-          "description": "Fully qualified domain name or IP address of the provider endpoint."
-        },
-        "api_url": {
-          "type": "string",
-          "description": "Full API URL for provider communication (e.g. 'https://vcenter.example.com/sdk' for vSphere, NFS path for OVA)."
-        },
-        "username": {
-          "type": "string",
-          "description": "Username for authenticating with the provider API."
-        },
-        "password": {
-          "type": "string",
-          "description": "Password for authenticating with the provider API."
-        }
-      },
-      "allOf": [
+      "oneOf": [
         {
-          "if": {
-            "properties": {
-              "type": { "const": "vsphere" }
-            },
-            "required": ["type"]
-          },
-          "then": {
-            "$ref": "#/$defs/guestCredentials",
-            "properties": {
-              "endpoint_type": {
-                "type": "string",
-                "enum": ["vcenter", "esxi"],
-                "description": "vSphere endpoint type: 'vcenter' for vCenter Server, 'esxi' for direct ESXi host connection."
-              },
-              "vddk_init_image": {
-                "type": "string",
-                "description": "Container image reference for the VDDK init container used during vSphere migrations (e.g. 'quay.io/rh-openshift-mtv/vddk-init-image:8.0.1')."
-              },
-              "clone_provider": {
-                "type": "string",
-                "description": "Name of a vCenter provider entry (key in this config) used for ESXi cloning when endpoint_type is 'esxi'."
-              },
-              "luks_passphrase": {
-                "type": "string",
-                "description": "LUKS encryption passphrase for decrypting encrypted VM disks during migration."
-              },
-              "copyoffload": {
-                "$ref": "#/$defs/copyoffloadConfig"
-              },
-              "guest_vm_linux_user": true,
-              "guest_vm_linux_password": true,
-              "guest_vm_win_user": true,
-              "guest_vm_win_password": true
+          "description": "vSphere provider: supports vCenter and direct ESXi connections with optional VDDK, copy-offload, and LUKS support.",
+          "allOf": [
+            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "type": "object",
+              "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "vsphere",
+                  "description": "Provider type determining the virtualization platform."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider platform version (e.g. '8.0.3' for vSphere)."
+                },
+                "fqdn": {
+                  "type": "string",
+                  "description": "Fully qualified domain name or IP address of the provider endpoint."
+                },
+                "api_url": {
+                  "type": "string",
+                  "description": "Full API URL for provider communication (e.g. 'https://vcenter.example.com/sdk')."
+                },
+                "username": {
+                  "type": "string",
+                  "description": "Username for authenticating with the provider API."
+                },
+                "password": {
+                  "type": "string",
+                  "description": "Password for authenticating with the provider API."
+                },
+                "endpoint_type": {
+                  "type": "string",
+                  "enum": ["vcenter", "esxi"],
+                  "description": "vSphere endpoint type: 'vcenter' for vCenter Server, 'esxi' for direct ESXi host connection."
+                },
+                "vddk_init_image": {
+                  "type": "string",
+                  "description": "Container image reference for the VDDK init container used during vSphere migrations (e.g. 'quay.io/rh-openshift-mtv/vddk-init-image:8.0.1')."
+                },
+                "clone_provider": {
+                  "type": "string",
+                  "description": "Name of a vCenter provider entry (key in this config) used for ESXi cloning when endpoint_type is 'esxi'."
+                },
+                "luks_passphrase": {
+                  "type": "string",
+                  "description": "LUKS encryption passphrase for decrypting encrypted VM disks during migration."
+                },
+                "copyoffload": {
+                  "$ref": "#/$defs/copyoffloadConfig"
+                }
+              }
             }
-          }
+          ]
         },
         {
-          "if": {
-            "properties": {
-              "type": { "const": "ovirt" }
-            },
-            "required": ["type"]
-          },
-          "then": {
-            "$ref": "#/$defs/guestCredentials",
-            "properties": {
-              "guest_vm_linux_user": true,
-              "guest_vm_linux_password": true,
-              "guest_vm_win_user": true,
-              "guest_vm_win_password": true
+          "description": "oVirt/RHV provider: Red Hat Virtualization with guest credential support.",
+          "allOf": [
+            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "type": "object",
+              "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "ovirt",
+                  "description": "Provider type determining the virtualization platform."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider platform version (e.g. '4.4.9' for oVirt)."
+                },
+                "fqdn": {
+                  "type": "string",
+                  "description": "Fully qualified domain name or IP address of the provider endpoint."
+                },
+                "api_url": {
+                  "type": "string",
+                  "description": "Full API URL for provider communication."
+                },
+                "username": {
+                  "type": "string",
+                  "description": "Username for authenticating with the provider API."
+                },
+                "password": {
+                  "type": "string",
+                  "description": "Password for authenticating with the provider API."
+                }
+              }
             }
-          }
+          ]
         },
         {
-          "if": {
-            "properties": {
-              "type": { "const": "openstack" }
-            },
-            "required": ["type"]
-          },
-          "then": {
-            "$ref": "#/$defs/guestCredentials",
-            "required": [
-              "user_domain_name",
-              "region_name",
-              "project_name",
-              "user_domain_id",
-              "project_domain_id"
-            ],
-            "properties": {
-              "user_domain_name": {
-                "type": "string",
-                "description": "OpenStack Keystone user domain name (e.g. 'redhat.com')."
-              },
-              "region_name": {
-                "type": "string",
-                "description": "OpenStack region name (e.g. 'regionOne')."
-              },
-              "project_name": {
-                "type": "string",
-                "description": "OpenStack project/tenant name for scoping API requests."
-              },
-              "user_domain_id": {
-                "type": "string",
-                "description": "OpenStack Keystone user domain UUID."
-              },
-              "project_domain_id": {
-                "type": "string",
-                "description": "OpenStack Keystone project domain UUID."
-              },
-              "guest_vm_linux_user": true,
-              "guest_vm_linux_password": true,
-              "guest_vm_win_user": true,
-              "guest_vm_win_password": true
+          "description": "OpenStack provider: requires Keystone domain, region, and project configuration.",
+          "allOf": [
+            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "version",
+                "fqdn",
+                "api_url",
+                "username",
+                "password",
+                "user_domain_name",
+                "region_name",
+                "project_name",
+                "user_domain_id",
+                "project_domain_id"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "openstack",
+                  "description": "Provider type determining the virtualization platform."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider platform version (e.g. 'psi' for OpenStack)."
+                },
+                "fqdn": {
+                  "type": "string",
+                  "description": "Fully qualified domain name or IP address of the provider endpoint."
+                },
+                "api_url": {
+                  "type": "string",
+                  "description": "Full API URL for provider communication."
+                },
+                "username": {
+                  "type": "string",
+                  "description": "Username for authenticating with the provider API."
+                },
+                "password": {
+                  "type": "string",
+                  "description": "Password for authenticating with the provider API."
+                },
+                "user_domain_name": {
+                  "type": "string",
+                  "description": "OpenStack Keystone user domain name (e.g. 'redhat.com')."
+                },
+                "region_name": {
+                  "type": "string",
+                  "description": "OpenStack region name (e.g. 'regionOne')."
+                },
+                "project_name": {
+                  "type": "string",
+                  "description": "OpenStack project/tenant name for scoping API requests."
+                },
+                "user_domain_id": {
+                  "type": "string",
+                  "description": "OpenStack Keystone user domain UUID."
+                },
+                "project_domain_id": {
+                  "type": "string",
+                  "description": "OpenStack Keystone project domain UUID."
+                }
+              }
             }
-          }
+          ]
         },
         {
-          "if": {
-            "properties": {
-              "type": { "const": "openshift" }
+          "description": "OpenShift provider: requires only the common base fields; no additional properties.",
+          "type": "object",
+          "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "openshift",
+              "description": "Provider type determining the virtualization platform."
             },
-            "required": ["type"]
-          },
-          "then": {
-            "description": "OpenShift provider requires only the common base fields; no additional properties."
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": { "const": "ova" }
+            "version": {
+              "type": "string",
+              "description": "Provider platform version."
             },
-            "required": ["type"]
-          },
-          "then": {
-            "$ref": "#/$defs/guestCredentials",
-            "properties": {
-              "guest_vm_linux_user": true,
-              "guest_vm_linux_password": true,
-              "guest_vm_win_user": true,
-              "guest_vm_win_password": true
+            "fqdn": {
+              "type": "string",
+              "description": "Fully qualified domain name or IP address of the provider endpoint."
+            },
+            "api_url": {
+              "type": "string",
+              "description": "Full API URL for provider communication."
+            },
+            "username": {
+              "type": "string",
+              "description": "Username for authenticating with the provider API."
+            },
+            "password": {
+              "type": "string",
+              "description": "Password for authenticating with the provider API."
             }
-          }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "OVA provider: file-based VM import with optional guest credentials.",
+          "allOf": [
+            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "type": "object",
+              "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "ova",
+                  "description": "Provider type determining the virtualization platform."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider platform version."
+                },
+                "fqdn": {
+                  "type": "string",
+                  "description": "Fully qualified domain name or IP address of the provider endpoint."
+                },
+                "api_url": {
+                  "type": "string",
+                  "description": "Full API URL for provider communication (e.g. NFS path for OVA)."
+                },
+                "username": {
+                  "type": "string",
+                  "description": "Username for authenticating with the provider API."
+                },
+                "password": {
+                  "type": "string",
+                  "description": "Password for authenticating with the provider API."
+                }
+              }
+            }
+          ]
         }
       ]
     }
