@@ -37,6 +37,7 @@ from utilities.copyoffload_migration import (
     verify_xcopy_used_per_datastore,
 )
 from utilities.migration_utils import get_cutover_value
+from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.mtv_migration import (
     create_plan_resource,
     execute_migration,
@@ -4627,6 +4628,17 @@ class TestSimultaneousCopyoffloadMigrations:
         )
         LOGGER.info(f"Created Migration CR for plan 2: {migration_2.name}")
 
+        wait_for_copyoffload_plan_secret(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource_1,
+            namespace=target_namespace,
+        )
+        wait_for_copyoffload_plan_secret(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource_2,
+            namespace=target_namespace,
+        )
+
         # Validate both migrations are executing simultaneously before either completes
         wait_for_concurrent_migration_execution([self.plan_resource_1, self.plan_resource_2])
 
@@ -5088,6 +5100,12 @@ class TestConcurrentXcopyVddkMigration:
             test_name="concurrent-vddk-migration",
         )
         LOGGER.info(f"Created Migration CR for VDDK plan: {migration_vddk.name}")
+
+        wait_for_copyoffload_plan_secret(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_xcopy,
+            namespace=target_namespace,
+        )
 
         # Validate both migrations are executing simultaneously before either completes
         wait_for_concurrent_migration_execution([self.plan_xcopy, self.plan_vddk])

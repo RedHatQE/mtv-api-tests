@@ -21,7 +21,7 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_plan_secret import wait_for_plan_secret
+from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 
@@ -259,10 +259,6 @@ def create_plan_resource(
         LOGGER.error(f"Destination provider: {destination_provider.ocp_resource.instance}")
         raise
 
-    # Wait for Forklift to create plan-specific secret for copy-offload (race condition)
-    if copyoffload:
-        wait_for_plan_secret(ocp_admin_client, target_namespace, plan.name)
-
     return plan
 
 
@@ -287,6 +283,7 @@ def execute_migration(
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
+        TimeoutError: If a copy-offload plan populator secret is not created in time.
     """
     create_and_store_resource(
         client=ocp_admin_client,
@@ -296,6 +293,12 @@ def execute_migration(
         plan_name=plan.name,
         plan_namespace=plan.namespace,
         cut_over=cut_over,
+    )
+
+    wait_for_copyoffload_plan_secret(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        namespace=target_namespace,
     )
 
     wait_for_migration_complate(plan=plan)

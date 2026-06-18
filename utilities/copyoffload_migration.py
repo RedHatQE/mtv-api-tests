@@ -30,6 +30,7 @@ from utilities.copyoffload_constants import (
     PVC_NAME_LABEL,
     SOURCE_HOST_LABEL,
 )
+from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.mtv_migration import get_migration_for_plan, wait_for_migration_complate
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 from utilities.resources import create_and_store_resource
@@ -857,6 +858,7 @@ def execute_migration_monitoring_populator_inflight(
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
+        TimeoutError: If a copy-offload plan populator secret is not created in time.
     """
     create_and_store_resource(
         client=ocp_admin_client,
@@ -866,6 +868,12 @@ def execute_migration_monitoring_populator_inflight(
         plan_name=plan.name,
         plan_namespace=plan.namespace,
         cut_over=cut_over,
+    )
+
+    wait_for_copyoffload_plan_secret(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        namespace=target_namespace,
     )
 
     tracker = _PopulatorConcurrencyTracker(
