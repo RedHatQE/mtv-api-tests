@@ -57,16 +57,14 @@ All imports must be at the top of the file. Never import inside functions, metho
 ```python
 # Wrong
 def create_plan_resource(...):
-    if copyoffload:
-        from utilities.copyoffload_migration import wait_for_plan_secret
-        wait_for_plan_secret(...)
+    from utilities.resources import create_and_store_resource
+    return create_and_store_resource(...)
 
 # Correct
-from utilities.copyoffload_migration import wait_for_plan_secret
+from utilities.resources import create_and_store_resource
 
 def create_plan_resource(...):
-    if copyoffload:
-        wait_for_plan_secret(...)
+    return create_and_store_resource(...)
 ```
 
 **Only exception:** `TYPE_CHECKING` block for type-only imports.
@@ -792,6 +790,9 @@ class TestNameHere:
   `test_check_xcopy_used` calls `verify_xcopy_used()` from `utilities/copyoffload_migration.py`. This step
   validates the transfer mechanism (infrastructure), not the migrated VM (application), and provides
   clearer failure diagnostics.
+  **Plan populator secret wait:** After Migration CR creation in `execute_migration()`, call
+  `wait_for_copyoffload_plan_secret()` from `utilities/copyoffload_plan_secret.py`. Do not wait in
+  `create_plan_resource()` — Forklift creates the plan populator secret when migration starts, not at Plan Ready.
 - **7-step copy-offload throttling pattern**: storagemap -> networkmap -> plan -> migrate -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
   Populator throttling tests insert `test_verify_populator_throttling` after `test_migrate_vms` and before
   `test_check_xcopy_used`. This step calls `verify_populator_throttling()` from `utilities/copyoffload_migration.py`
