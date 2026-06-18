@@ -330,6 +330,7 @@ def populator_inflight_limit(
         )
         yield
     finally:
+        pending_exc = sys.exc_info()
         try:
             _ensure_forklift_controller_populator_limit(
                 forklift_controller=forklift_controller,
@@ -344,5 +345,5 @@ def populator_inflight_limit(
             LOGGER.exception(
                 f"Failed to restore ForkliftController populator limit to {original_deployment_limit} during cleanup"
             )
-            if sys.exc_info()[0] is None:
+            if pending_exc[0] is None:
                 raise err
