@@ -62,8 +62,10 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
     may create a plan-specific secret containing storage credentials.
     This function polls for that secret's existence.
 
-    The wait is best-effort: if the secret is late or not created at plan-ready time,
-    the suite continues because migration failures are usually more actionable.
+    MTV-5799 tracks moving this wait to migration start. Until then, a timeout at Plan
+    Ready is expected because Forklift creates populator secrets when migration starts,
+    not when the Plan becomes Ready. That is an intentional exception to "No Silent
+    Recovery" so migration produces the actionable failure instead.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
@@ -85,6 +87,7 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
                 return
     except TimeoutExpiredError:
         secret_names = _list_namespace_secret_names(ocp_admin_client=ocp_admin_client, namespace=namespace)
+        # MTV-5799: remove this continue-on-timeout once wait_for_plan_secret runs at migration start.
         LOGGER.warning(
             f"Timeout waiting for plan secret '{plan_name}-*' in namespace '{namespace}' "
             f"after {PLAN_SECRET_WAIT_TIMEOUT}s (secrets present: {secret_names}) - continuing anyway"

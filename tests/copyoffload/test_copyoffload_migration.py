@@ -3629,14 +3629,13 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         target_namespace: str,
     ) -> None:
         """Verify sourceHost labels, PopulatorThrottled events, and observed concurrency."""
-        source_host = verify_populator_throttling(
+        verify_populator_throttling(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             max_concurrent_by_host=self.max_concurrent_by_host,
             max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
         )
-        LOGGER.info(f"All populate pods share sourceHost={source_host!r}")
 
     def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
         """Verify XCOPY acceleration was used for all disks."""

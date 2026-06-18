@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -204,7 +205,12 @@ def get_deployment_populator_inflight_limit(
             f"{MAX_POPULATOR_INFLIGHT_ENV} not found on {POPULATOR_CONTROLLER_DEPLOYMENT} "
             f"before populator throttling test setup"
         )
-    return int(limit_str)
+    try:
+        return int(limit_str)
+    except (ValueError, TypeError) as err:
+        raise ValueError(
+            f"{MAX_POPULATOR_INFLIGHT_ENV} on {POPULATOR_CONTROLLER_DEPLOYMENT} has non-integer value {limit_str!r}"
+        ) from err
 
 
 def _get_cr_populator_limit(forklift_controller: ForkliftController) -> int | None:
@@ -237,10 +243,9 @@ def _warn_if_cr_limit_leftover_from_crashed_run(
     """
     if cr_limit_int == test_limit:
         LOGGER.warning(
-            "ForkliftController controller_max_populator_inflight already at test limit %s but deployment "
-            "reports %s; this may be leftover from a previous crashed run",
-            test_limit,
-            original_deployment_limit,
+            f"ForkliftController controller_max_populator_inflight already at test limit {test_limit} "
+            f"but deployment reports {original_deployment_limit}; "
+            "this may be leftover from a previous crashed run"
         )
 
 
@@ -325,12 +330,19 @@ def populator_inflight_limit(
         )
         yield
     finally:
-        _ensure_forklift_controller_populator_limit(
-            forklift_controller=forklift_controller,
-            target_limit=original_deployment_limit,
-        )
-        wait_for_populator_inflight_deployment(
-            ocp_admin_client=ocp_admin_client,
-            mtv_namespace=mtv_namespace,
-            expected_limit=original_deployment_limit,
-        )
+        try:
+            _ensure_forklift_controller_populator_limit(
+                forklift_controller=forklift_controller,
+                target_limit=original_deployment_limit,
+            )
+            wait_for_populator_inflight_deployment(
+                ocp_admin_client=ocp_admin_client,
+                mtv_namespace=mtv_namespace,
+                expected_limit=original_deployment_limit,
+            )
+        except (TimeoutError, ValueError) as err:
+            LOGGER.exception(
+                f"Failed to restore ForkliftController populator limit to {original_deployment_limit} during cleanup"
+            )
+            if sys.exc_info()[0] is None:
+                raise err
