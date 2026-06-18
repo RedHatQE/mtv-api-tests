@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 import filelock
 import pytest
 from ocp_resources.forklift_controller import ForkliftController
-from ocp_resources.deployment import Deployment
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
@@ -26,11 +25,10 @@ from utilities.copyoffload_migration import (
 )
 from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
 from utilities.forklift_controller_populator import (
-    MAX_POPULATOR_INFLIGHT_ENV,
-    POPULATOR_CONTROLLER_DEPLOYMENT,
+    FORKLIFT_CONTROLLER_CONDITION_TIMEOUT,
     POPULATOR_INFLIGHT_LOCK_TIMEOUT,
+    get_deployment_populator_inflight_limit,
     get_forkliftcontroller_populator_inflight_lock_path,
-    get_populator_inflight_from_deployment,
     populator_inflight_limit,
 )
 from utilities.resources import create_and_store_resource
@@ -202,22 +200,13 @@ def populator_inflight_forkliftcontroller(
             forklift_controller.wait_for_condition(
                 status=forklift_controller.Condition.Status.TRUE,
                 condition=forklift_controller.Condition.Type.RUNNING,
-                timeout=300,
+                timeout=FORKLIFT_CONTROLLER_CONDITION_TIMEOUT,
             )
 
-            initial_deployment = Deployment(
-                client=ocp_admin_client,
-                name=POPULATOR_CONTROLLER_DEPLOYMENT,
-                namespace=mtv_namespace,
-                ensure_exists=True,
+            original_deployment_limit = get_deployment_populator_inflight_limit(
+                ocp_admin_client=ocp_admin_client,
+                mtv_namespace=mtv_namespace,
             )
-            original_deployment_limit_str = get_populator_inflight_from_deployment(deployment=initial_deployment)
-            if original_deployment_limit_str is None:
-                raise ValueError(
-                    f"{MAX_POPULATOR_INFLIGHT_ENV} not found on {POPULATOR_CONTROLLER_DEPLOYMENT} "
-                    f"before populator throttling test setup"
-                )
-            original_deployment_limit = int(original_deployment_limit_str)
 
             with populator_inflight_limit(
                 forklift_controller=forklift_controller,

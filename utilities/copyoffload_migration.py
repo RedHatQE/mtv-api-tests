@@ -932,6 +932,66 @@ def _get_pvc_events(
     return response.items or []
 
 
+def _collect_migration_pvc_names(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    migration_uid: str,
+    populate_pods: list[Pod],
+) -> tuple[set[str], set[str]]:
+    """Collect PVC names from populate pod labels and the migration label selector.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where migration PVCs exist.
+        migration_uid (str): Migration UID label value.
+        populate_pods (list[Pod]): Populate pods for the migration.
+
+    Returns:
+        tuple[set[str], set[str]]: PVC names from pod labels and from the migration label.
+    """
+    pvc_names_from_pods: set[str] = {
+        (pod.instance.metadata.labels or {}).get(PVC_NAME_LABEL, pod.name) for pod in populate_pods
+    }
+    pvc_names_from_label: set[str] = {
+        pvc.name
+        for pvc in PersistentVolumeClaim.get(
+            client=ocp_admin_client,
+            namespace=target_namespace,
+            label_selector=f"migration={migration_uid}",
+        )
+    }
+    return pvc_names_from_pods, pvc_names_from_label
+
+
+def _find_throttled_pvc_names(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    pvc_names: set[str],
+) -> set[str]:
+    """Return PVC names that have a PopulatorThrottled event.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where PVC events exist.
+        pvc_names (set[str]): PVC names to inspect.
+
+    Returns:
+        set[str]: PVC names with at least one PopulatorThrottled event.
+    """
+    throttled_pvc_names: set[str] = set()
+    for pvc_name in pvc_names:
+        for event in _get_pvc_events(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            pvc_name=pvc_name,
+        ):
+            if event.get("reason") == POPULATOR_THROTTLED_EVENT_REASON:
+                throttled_pvc_names.add(pvc_name)
+                LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
+                break
+    return throttled_pvc_names
+
+
 def _verify_throttled_events_on_pods(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
@@ -959,34 +1019,23 @@ def _verify_throttled_events_on_pods(
             f"({max_populator_inflight}) to verify throttling for migration '{migration_uid}'"
         )
 
-    pvc_names_from_pods: set[str] = {
-        (pod.instance.metadata.labels or {}).get(PVC_NAME_LABEL, pod.name) for pod in populate_pods
-    }
-    pvc_names_from_label: set[str] = {
-        pvc.name
-        for pvc in PersistentVolumeClaim.get(
-            client=ocp_admin_client,
-            namespace=target_namespace,
-            label_selector=f"migration={migration_uid}",
-        )
-    }
-    pvc_names_to_check: set[str] = pvc_names_from_pods | pvc_names_from_label
+    pvc_names_from_pods, pvc_names_from_label = _collect_migration_pvc_names(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        populate_pods=populate_pods,
+    )
+    pvc_names_to_check = pvc_names_from_pods | pvc_names_from_label
     LOGGER.info(
         f"Checking {len(pvc_names_to_check)} PVC(s) for throttled events "
         f"(from pods: {pvc_names_from_pods}, from label: {pvc_names_from_label})"
     )
 
-    throttled_pvc_names: set[str] = set()
-    for pvc_name in pvc_names_to_check:
-        for event in _get_pvc_events(
-            ocp_admin_client=ocp_admin_client,
-            namespace=target_namespace,
-            pvc_name=pvc_name,
-        ):
-            if event.get("reason") == POPULATOR_THROTTLED_EVENT_REASON:
-                throttled_pvc_names.add(pvc_name)
-                LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
-                break
+    throttled_pvc_names = _find_throttled_pvc_names(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        pvc_names=pvc_names_to_check,
+    )
 
     if len(throttled_pvc_names) < min_expected_throttled:
         raise ValueError(
