@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/RedHatQE/mtv-api-tests/main/providers_schema.json",
   "vsphere": {
     "type": "vsphere",
     "version": "<SERVER VERSION>",
@@ -11,7 +12,8 @@
     "guest_vm_win_user": "WINDOWS VMS USERNAME",
     "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
     "vddk_init_image": "<PATH TO VDDK INIT IMAGE>",
-    "endpoint_type": "vcenter"
+    "endpoint_type": "vcenter",
+    "luks_passphrase": "<LUKS DISK ENCRYPTION PASSPHRASE>"
   },
 
   "vsphere-copy-offload": {
@@ -54,6 +56,7 @@
       "non_xcopy_datastore_id": "datastore-99999",
 
       "default_vm_name": "rhel9-template",
+      "resource_pool": "<VSPHERE RESOURCE POOL NAME>",
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
       "storage_password": "your-password-here",  # pragma: allowlist secret

@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/RedHatQE/mtv-api-tests/main/providers_schema.json",
+  "title": "MTV API Tests Provider Configuration",
+  "description": "Provider configuration for MTV migration test suites. Each top-level key is a provider name, and its value defines connection details, credentials, and provider-specific settings.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "JSON Schema URI for editor validation."
+    }
+  },
+  "additionalProperties": {
+    "$ref": "#/$defs/providerDefinition"
+  },
+  "$defs": {
+    "guestCredentials": {
+      "type": "object",
+      "description": "Guest VM credentials for post-migration validation (SSH/WinRM access).",
+      "properties": {
+        "guest_vm_linux_user": {
+          "type": "string",
+          "description": "SSH username for Linux guest VMs (e.g. 'root')."
+        },
+        "guest_vm_linux_password": {
+          "type": "string",
+          "description": "SSH password for Linux guest VMs."
+        },
+        "guest_vm_win_user": {
+          "type": "string",
+          "description": "WinRM username for Windows guest VMs (e.g. 'Administrator')."
+        },
+        "guest_vm_win_password": {
+          "type": "string",
+          "description": "WinRM password for Windows guest VMs."
+        }
+      }
+    },
+    "copyoffloadConfig": {
+      "type": "object",
+      "description": "Copy-offload (XCOPY) configuration for hardware-accelerated migration via storage array APIs.",
+      "required": [
+        "storage_vendor_product",
+        "datastore_id",
+        "default_vm_name",
+        "storage_hostname",
+        "storage_username",
+        "storage_password"
+      ],
+      "properties": {
+        "storage_vendor_product": {
+          "type": "string",
+          "enum": [
+            "ontap",
+            "vantara",
+            "primera3par",
+            "pureFlashArray",
+            "powerflex",
+            "powermax",
+            "powerstore",
+            "infinibox",
+            "flashsystem"
+          ],
+          "description": "Storage array vendor/product type used for XCOPY offload."
+        },
+        "datastore_id": {
+          "type": "string",
+          "description": "vSphere managed object ID of the primary XCOPY-capable datastore (e.g. 'datastore-79826')."
+        },
+        "default_vm_name": {
+          "type": "string",
+          "description": "Name of the default template VM used for copy-offload test cloning."
+        },
+        "storage_hostname": {
+          "type": "string",
+          "description": "Hostname or IP address of the storage array management interface."
+        },
+        "storage_username": {
+          "type": "string",
+          "description": "Username for authenticating with the storage array API."
+        },
+        "storage_password": {
+          "type": "string",
+          "description": "Password for authenticating with the storage array API."
+        },
+        "secondary_datastore_id": {
+          "type": "string",
+          "description": "vSphere managed object ID of a secondary XCOPY-capable datastore for multi-datastore tests."
+        },
+        "non_xcopy_datastore_id": {
+          "type": "string",
+          "description": "vSphere managed object ID of a datastore that does NOT support XCOPY, used for fallback/negative tests."
+        },
+        "storage_secret_extra": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Additional key-value pairs to include in the storage Secret resource for vendor-specific configuration."
+        },
+        "esxi_clone_method": {
+          "type": "string",
+          "enum": ["vib", "ssh"],
+          "description": "Method used to clone VMs on ESXi hosts: 'vib' uses a VIB package, 'ssh' uses direct SSH commands."
+        },
+        "esxi_host": {
+          "type": "string",
+          "description": "Hostname or IP address of the ESXi host used for copy-offload cloning operations."
+        },
+        "esxi_user": {
+          "type": "string",
+          "description": "SSH username for the ESXi host."
+        },
+        "esxi_password": {
+          "type": "string",
+          "description": "SSH password for the ESXi host."
+        },
+        "rdm_lun_uuid": {
+          "type": "string",
+          "pattern": "^naa\\.",
+          "description": "NAA-format UUID of a Raw Device Mapping (RDM) LUN for RDM migration tests (e.g. 'naa.600a098038313954...')."
+        },
+        "resource_pool": {
+          "type": "string",
+          "description": "vSphere resource pool for VM placement during cloning operations."
+        },
+        "ontap_svm": {
+          "type": "string",
+          "description": "NetApp ONTAP Storage Virtual Machine (SVM/vServer) name."
+        },
+        "vantara_storage_id": {
+          "type": "string",
+          "description": "Hitachi Vantara storage array serial number."
+        },
+        "vantara_storage_port": {
+          "type": "string",
+          "description": "Hitachi Vantara storage management API port."
+        },
+        "vantara_hostgroup_id_list": {
+          "type": "string",
+          "description": "Hitachi Vantara host group ID list in 'port,id' format (e.g. 'CL1-A,1:CL2-B,2')."
+        },
+        "pure_cluster_prefix": {
+          "type": "string",
+          "description": "Pure Storage FlashArray cluster prefix identifier (e.g. 'px_...')."
+        },
+        "powerflex_system_id": {
+          "type": "string",
+          "description": "Dell PowerFlex system identifier."
+        },
+        "powermax_symmetrix_id": {
+          "type": "string",
+          "description": "Dell PowerMax Symmetrix array identifier."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "storage_vendor_product": { "const": "ontap" }
+            },
+            "required": ["storage_vendor_product"]
+          },
+          "then": {
+            "required": ["ontap_svm"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "storage_vendor_product": { "const": "vantara" }
+            },
+            "required": ["storage_vendor_product"]
+          },
+          "then": {
+            "required": [
+              "vantara_storage_id",
+              "vantara_storage_port",
+              "vantara_hostgroup_id_list"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "storage_vendor_product": { "const": "pureFlashArray" }
+            },
+            "required": ["storage_vendor_product"]
+          },
+          "then": {
+            "required": ["pure_cluster_prefix"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "storage_vendor_product": { "const": "powerflex" }
+            },
+            "required": ["storage_vendor_product"]
+          },
+          "then": {
+            "required": ["powerflex_system_id"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "storage_vendor_product": { "const": "powermax" }
+            },
+            "required": ["storage_vendor_product"]
+          },
+          "then": {
+            "required": ["powermax_symmetrix_id"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "esxi_clone_method": { "const": "ssh" }
+            },
+            "required": ["esxi_clone_method"]
+          },
+          "then": {
+            "required": ["esxi_host", "esxi_user", "esxi_password"]
+          }
+        }
+      ]
+    },
+    "providerDefinition": {
+      "type": "object",
+      "description": "A source provider configuration defining connection, authentication, and provider-specific settings.",
+      "required": [
+        "type",
+        "version",
+        "fqdn",
+        "api_url",
+        "username",
+        "password"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["vsphere", "ovirt", "openstack", "openshift", "ova"],
+          "description": "Provider type determining the virtualization platform."
+        },
+        "version": {
+          "type": "string",
+          "description": "Provider platform version (e.g. '8.0.3' for vSphere, '4.4.9' for oVirt, 'psi' for OpenStack)."
+        },
+        "fqdn": {
+          "type": "string",
+          "description": "Fully qualified domain name or IP address of the provider endpoint."
+        },
+        "api_url": {
+          "type": "string",
+          "description": "Full API URL for provider communication (e.g. 'https://vcenter.example.com/sdk' for vSphere, NFS path for OVA)."
+        },
+        "username": {
+          "type": "string",
+          "description": "Username for authenticating with the provider API."
+        },
+        "password": {
+          "type": "string",
+          "description": "Password for authenticating with the provider API."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "vsphere" }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "$ref": "#/$defs/guestCredentials",
+            "properties": {
+              "endpoint_type": {
+                "type": "string",
+                "enum": ["vcenter", "esxi"],
+                "description": "vSphere endpoint type: 'vcenter' for vCenter Server, 'esxi' for direct ESXi host connection."
+              },
+              "vddk_init_image": {
+                "type": "string",
+                "description": "Container image reference for the VDDK init container used during vSphere migrations (e.g. 'quay.io/rh-openshift-mtv/vddk-init-image:8.0.1')."
+              },
+              "clone_provider": {
+                "type": "string",
+                "description": "Name of a vCenter provider entry (key in this config) used for ESXi cloning when endpoint_type is 'esxi'."
+              },
+              "luks_passphrase": {
+                "type": "string",
+                "description": "LUKS encryption passphrase for decrypting encrypted VM disks during migration."
+              },
+              "copyoffload": {
+                "$ref": "#/$defs/copyoffloadConfig"
+              },
+              "guest_vm_linux_user": true,
+              "guest_vm_linux_password": true,
+              "guest_vm_win_user": true,
+              "guest_vm_win_password": true
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "ovirt" }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "$ref": "#/$defs/guestCredentials",
+            "properties": {
+              "guest_vm_linux_user": true,
+              "guest_vm_linux_password": true,
+              "guest_vm_win_user": true,
+              "guest_vm_win_password": true
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "openstack" }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "$ref": "#/$defs/guestCredentials",
+            "required": [
+              "user_domain_name",
+              "region_name",
+              "project_name",
+              "user_domain_id",
+              "project_domain_id"
+            ],
+            "properties": {
+              "user_domain_name": {
+                "type": "string",
+                "description": "OpenStack Keystone user domain name (e.g. 'redhat.com')."
+              },
+              "region_name": {
+                "type": "string",
+                "description": "OpenStack region name (e.g. 'regionOne')."
+              },
+              "project_name": {
+                "type": "string",
+                "description": "OpenStack project/tenant name for scoping API requests."
+              },
+              "user_domain_id": {
+                "type": "string",
+                "description": "OpenStack Keystone user domain UUID."
+              },
+              "project_domain_id": {
+                "type": "string",
+                "description": "OpenStack Keystone project domain UUID."
+              },
+              "guest_vm_linux_user": true,
+              "guest_vm_linux_password": true,
+              "guest_vm_win_user": true,
+              "guest_vm_win_password": true
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "openshift" }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "description": "OpenShift provider requires only the common base fields; no additional properties."
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "ova" }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "$ref": "#/$defs/guestCredentials",
+            "properties": {
+              "guest_vm_linux_user": true,
+              "guest_vm_linux_password": true,
+              "guest_vm_win_user": true,
+              "guest_vm_win_password": true
+            }
+          }
+        }
+      ]
+    }
+  }
+}
