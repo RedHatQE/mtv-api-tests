@@ -391,9 +391,9 @@
           ]
         },
         {
-          "description": "OpenShift provider: requires only the common base fields; no additional properties.",
+          "description": "OpenShift provider: migration target cluster with storage class and optional SSL configuration.",
           "type": "object",
-          "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+          "required": ["type", "version", "host", "api_url", "username", "password", "storage_class"],
           "properties": {
             "type": {
               "type": "string",
@@ -404,9 +404,9 @@
               "type": "string",
               "description": "Provider platform version."
             },
-            "fqdn": {
+            "host": {
               "type": "string",
-              "description": "Fully qualified domain name or IP address of the provider endpoint."
+              "description": "OpenShift cluster API hostname or URL."
             },
             "api_url": {
               "type": "string",
@@ -419,6 +419,18 @@
             "password": {
               "type": "string",
               "description": "Password for authenticating with the provider API."
+            },
+            "storage_class": {
+              "type": "string",
+              "description": "Default storage class for migration target PVCs."
+            },
+            "verify_ssl": {
+              "type": "string",
+              "description": "Whether to verify SSL certificates ('true'/'false')."
+            },
+            "ca_bundle": {
+              "type": "string",
+              "description": "Path to CA bundle file for SSL verification."
             }
           },
           "additionalProperties": false

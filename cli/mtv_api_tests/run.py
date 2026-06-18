@@ -36,7 +36,7 @@ def _resolve_ocp_provider(providers: dict[str, Any], destination_key: str) -> di
     Raises:
         typer.Exit: If key is invalid or selection fails.
     """
-    ocp_providers = {k: v for k, v in providers.items() if v.get("type") == "openshift"}
+    ocp_providers = {k: v for k, v in providers.items() if isinstance(v, dict) and v.get("type") == "openshift"}
 
     if destination_key:
         if destination_key not in ocp_providers:
@@ -79,7 +79,7 @@ def _resolve_source_provider_key(providers: dict[str, Any], source_key: str) -> 
     Raises:
         typer.Exit: If key is invalid or selection fails.
     """
-    source_providers = {k: v for k, v in providers.items() if v.get("type") != "openshift"}
+    source_providers = {k: v for k, v in providers.items() if isinstance(v, dict) and v.get("type") != "openshift"}
 
     if not source_key:
         keys = list(source_providers.keys())
@@ -313,7 +313,10 @@ def run_command(
         console.print(f"[red]Error: {providers_path} must contain a JSON object, got {type(providers).__name__}[/red]")
         raise typer.Exit(code=1)
 
-    invalid_provider_keys = [key for key, value in providers.items() if not isinstance(value, dict)]
+    _METADATA_KEYS = {"$schema"}
+    invalid_provider_keys = [
+        key for key, value in providers.items() if key not in _METADATA_KEYS and not isinstance(value, dict)
+    ]
     if invalid_provider_keys:
         invalid_keys = ", ".join(sorted(invalid_provider_keys))
         console.print(

@@ -151,10 +151,11 @@
   "openshift": {
     "type": "openshift",
     "version": "<SERVER VERSION>",
-    "fqdn": "",
-    "api_url": "",
-    "username": "",
-    "password": ""  # pragma: allowlist secret
+    "host": "<CLUSTER API URL>",
+    "api_url": "<CLUSTER API URL>",
+    "username": "<USERNAME>",
+    "password": "<PASSWORD>",  # pragma: allowlist secret
+    "storage_class": "<STORAGE CLASS NAME>"
   },
   "ova": {
     "type": "ova",
