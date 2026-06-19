@@ -17,3 +17,11 @@ SUPPORTED_VENDORS = (
     "infinibox",
     "flashsystem",
 )
+
+# MTV-696: per-ESXi-host populator throttling (ForkliftController controller_max_populator_inflight)
+POPULATOR_INFLIGHT_LIMIT = 2
+
+SOURCE_HOST_LABEL = "sourceHost"
+PVC_NAME_LABEL = "pvcName"
+POPULATOR_THROTTLED_EVENT_REASON = "PopulatorThrottled"
+FORKLIFT_CONTROLLER_NAME = "forklift-controller"
