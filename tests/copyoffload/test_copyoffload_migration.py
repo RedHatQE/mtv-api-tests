@@ -3692,13 +3692,19 @@ class TestCopyoffloadPopulatorThrottlingMigration:
             max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks."""
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
