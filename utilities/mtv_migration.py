@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -20,7 +21,7 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_migration import wait_for_plan_secret
+from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 
@@ -30,17 +31,17 @@ if TYPE_CHECKING:
 LOGGER = get_logger(__name__)
 
 
-def _find_migration_for_plan(plan: Plan) -> Migration:
+def get_migration_for_plan(plan: Plan) -> Migration:
     """Find Migration CR for Plan.
 
     Args:
-        plan (Plan): The Plan resource
+        plan (Plan): The Plan resource.
 
     Returns:
-        Migration: The Migration CR owned by the Plan
+        Migration: The Migration CR owned by the Plan.
 
     Raises:
-        MigrationNotFoundError: If Migration CR cannot be found
+        MigrationNotFoundError: If Migration CR cannot be found.
     """
     for migration in Migration.get(client=plan.client, namespace=plan.namespace):
         if migration.instance.metadata.ownerReferences:
@@ -243,10 +244,6 @@ def create_plan_resource(
         LOGGER.error(f"Destination provider: {destination_provider.ocp_resource.instance}")
         raise
 
-    # Wait for Forklift to create plan-specific secret for copy-offload (race condition)
-    if copyoffload:
-        wait_for_plan_secret(ocp_admin_client, target_namespace, plan.name)
-
     return plan
 
 
@@ -271,6 +268,7 @@ def execute_migration(
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
+        TimeoutError: If a copy-offload plan populator secret is not created in time.
     """
     create_and_store_resource(
         client=ocp_admin_client,
@@ -280,6 +278,12 @@ def execute_migration(
         plan_name=plan.name,
         plan_namespace=plan.namespace,
         cut_over=cut_over,
+    )
+
+    wait_for_copyoffload_plan_secret(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        namespace=target_namespace,
     )
 
     wait_for_migration_complate(plan=plan)
@@ -326,25 +330,43 @@ def get_plan_migration_status(plan: Plan) -> str:
 
     # Check if Migration CR exists to confirm execution
     try:
-        _find_migration_for_plan(plan)
+        get_migration_for_plan(plan=plan)
         return Plan.Status.EXECUTING
     except MigrationNotFoundError:
         return ""
 
 
-def wait_for_migration_complate(plan: Plan) -> None:
+def wait_for_migration_complate(
+    plan: Plan,
+    *,
+    on_status_poll: Callable[[str], None] | None = None,
+) -> None:
+    """Wait for a Plan migration to reach Succeeded or Failed.
+
+    Args:
+        plan (Plan): The Plan resource to monitor.
+        on_status_poll (Callable[[str], None] | None): Optional callback invoked on each poll
+            with the current migration status string.
+
+    Raises:
+        MigrationPlanExecError: If the migration fails, times out, or does not reach Succeeded.
+            Polling uses ``TimeoutSampler`` with ``py_config['plan_wait_timeout']``.
+    """
     try:
         last_status: str = ""
 
         for sample in TimeoutSampler(
             func=get_plan_migration_status,
             sleep=1,
-            wait_timeout=py_config.get("plan_wait_timeout", 600),
+            wait_timeout=py_config["plan_wait_timeout"],
             plan=plan,
         ):
             if sample != last_status:
                 LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
                 last_status = sample
+
+            if on_status_poll is not None:
+                on_status_poll(sample)
 
             if sample == Plan.Status.SUCCEEDED:
                 return
