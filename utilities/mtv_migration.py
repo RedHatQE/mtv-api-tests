@@ -22,10 +22,7 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_migration import (
-    get_migration_uid,
-    capture_populate_pod_logs,
-)
+from utilities.copyoffload_migration import capture_populate_pod_logs
 from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
@@ -290,9 +287,9 @@ def execute_migration(
     Creates a Migration Custom Resource that triggers the actual VM migration
     based on the provided Plan, then waits for the migration to complete.
 
-    For copy-offload migrations, populate pod logs are captured immediately after
-    completion to ensure they're available for verification even if MTV cleans up
-    the pods quickly.
+    For copy-offload migrations, populate pod logs are captured during the
+    EXECUTING phase to ensure they're available for verification before MTV
+    cleans up the pods.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
@@ -419,15 +416,17 @@ def wait_for_migration_complate(
                 and fixture_store is not None
             ):
                 try:
-                    migration_uid: str = get_migration_uid(plan=plan)
+                    migration = get_migration_for_plan(plan=plan)
+                    migration_uid: str = migration.instance.metadata.uid
                     capture_populate_pod_logs(
                         ocp_admin_client=ocp_admin_client,
                         namespace=target_namespace,
                         migration_uid=migration_uid,
                         fixture_store=fixture_store,
                     )
-                except (ApiException, ValueError, KeyError) as e:
-                    # ApiException: K8s API failures; ValueError: migration UID extraction; KeyError: missing attributes
+                except (MigrationNotFoundError, ApiException, ValueError, KeyError) as e:
+                    # MigrationNotFoundError: Migration CR not created yet; ApiException: K8s API failures
+                    # ValueError: migration UID extraction; KeyError: missing attributes
                     LOGGER.debug(f"Could not capture populate pod logs during migration: {e}")
 
             if sample == Plan.Status.SUCCEEDED:

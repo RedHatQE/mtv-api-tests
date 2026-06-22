@@ -4713,10 +4713,20 @@ class TestSimultaneousCopyoffloadMigrations:
 
         # Wait for both migrations to complete
         LOGGER.info("Waiting for both copyoffload migrations to complete")
-        wait_for_migration_complate(plan=self.plan_resource_1)
+        wait_for_migration_complate(
+            plan=self.plan_resource_1,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            fixture_store=fixture_store,
+        )
         LOGGER.info("Copyoffload migration 1 completed")
 
-        wait_for_migration_complate(plan=self.plan_resource_2)
+        wait_for_migration_complate(
+            plan=self.plan_resource_2,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            fixture_store=fixture_store,
+        )
         LOGGER.info("Copyoffload migration 2 completed")
 
     def test_check_xcopy_used_plan1(
@@ -5189,11 +5199,21 @@ class TestConcurrentXcopyVddkMigration:
 
         # Wait for both migrations to complete
         LOGGER.info("Waiting for XCOPY migration to complete")
-        wait_for_migration_complate(plan=self.plan_xcopy)
+        wait_for_migration_complate(
+            plan=self.plan_xcopy,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            fixture_store=fixture_store,
+        )
         LOGGER.info("XCOPY migration completed")
 
         LOGGER.info("Waiting for VDDK migration to complete")
-        wait_for_migration_complate(plan=self.plan_vddk)
+        wait_for_migration_complate(
+            plan=self.plan_vddk,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            fixture_store=fixture_store,
+        )
         LOGGER.info("VDDK migration completed")
 
     def test_check_xcopy_used(
