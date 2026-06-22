@@ -275,10 +275,6 @@ def create_plan_resource(
         LOGGER.error(f"Destination provider: {destination_provider.ocp_resource.instance}")
         raise
 
-    # Wait for Forklift to create plan-specific secret for copy-offload (race condition)
-    if copyoffload:
-        wait_for_plan_secret(ocp_admin_client, target_namespace, plan.name)
-
     return plan
 
 
@@ -379,6 +375,8 @@ def wait_for_migration_complate(
     ocp_admin_client: DynamicClient | None = None,
     target_namespace: str | None = None,
     fixture_store: dict[str, Any] | None = None,
+    *,
+    on_status_poll: Callable[[str], None] | None = None,
 ) -> None:
     """Wait for migration to complete.
 
@@ -390,6 +388,8 @@ def wait_for_migration_complate(
         ocp_admin_client (DynamicClient | None): Client for capturing populate pod logs
         target_namespace (str | None): Namespace where populate pods exist
         fixture_store (dict[str, Any] | None): Store for caching populate pod logs
+        on_status_poll (Callable[[str], None] | None): Optional callback invoked on each poll
+            with the current migration status string
 
     Raises:
         MigrationPlanExecError: If migration fails or doesn't reach expected condition within timeout
@@ -406,6 +406,9 @@ def wait_for_migration_complate(
             if sample != last_status:
                 LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
                 last_status = sample
+
+            if on_status_poll is not None:
+                on_status_poll(sample)
 
             # Capture populate pod logs during EXECUTING phase (before MTV cleanup deletes them)
             # Re-scan every iteration to capture pods that complete at different times (multi-pod migrations)
