@@ -29,11 +29,10 @@ from exceptions.exceptions import MigrationNotFoundError
 from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
     POPULATOR_THROTTLED_EVENT_REASON,
-    PVC_NAME_LABEL,
     SOURCE_HOST_LABEL,
 )
 from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
-from utilities.mtv_migration import get_migration_for_plan, wait_for_migration_complate
+from utilities.mtv_migration import PVC_NAME_LABEL, get_migration_for_plan, wait_for_migration_complate
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 from utilities.resources import create_and_store_resource
 
@@ -203,37 +202,6 @@ def merge_storage_secret_extra(
         merged[secret_key] = value
         LOGGER.info(f"✓ Added extra secret field from storage_secret_extra: {secret_key}")
     return merged
-
-
-def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_name: str) -> None:
-    """
-    Wait for Forklift to create plan-specific secret for copy-offload.
-
-    When a Plan is created with copy-offload configuration, ForkliftController
-    should automatically create a plan-specific secret containing storage credentials.
-    This function polls for that secret's existence.
-
-    Args:
-        ocp_admin_client: OpenShift dynamic client
-        namespace: Namespace where the plan and secret exist
-        plan_name: Name of the Plan (secret will be named {plan_name}-*)
-
-    Note:
-        Times out after 60 seconds but continues anyway (logs warning).
-        The migration will fail with clearer error if secret is missing.
-    """
-    LOGGER.info("Copy-offload: waiting for Forklift to create plan-specific secret...")
-    try:
-        for _ in TimeoutSampler(
-            wait_timeout=60,
-            sleep=2,
-            func=lambda: any(
-                s.name.startswith(f"{plan_name}-") for s in Secret.get(client=ocp_admin_client, namespace=namespace)
-            ),
-        ):
-            break
-    except TimeoutExpiredError:
-        LOGGER.warning(f"Timeout waiting for plan secret '{plan_name}-*' - continuing anyway")
 
 
 def wait_for_vmware_cloud_init_all_vms(

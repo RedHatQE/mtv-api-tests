@@ -23,8 +23,6 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_constants import PVC_NAME_LABEL
-from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 
@@ -32,6 +30,10 @@ if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(__name__)
+
+# Volume populator framework label for PVC name on populate pods
+# Used by copy-offload migrations to match populate pods to their target PVCs
+PVC_NAME_LABEL = "pvcName"
 
 
 def capture_populate_pod_logs(
@@ -114,13 +116,25 @@ def capture_populate_pod_logs(
                 LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
 
         if captured_logs:
-            fixture_store["populate_pod_logs"][migration_uid] = captured_logs
-            LOGGER.info(
-                f"Successfully captured {len(captured_logs)} populate pod log(s) for migration '{migration_uid}'"
-            )
+            # Initialize migration's log cache if not exists
+            if migration_uid not in fixture_store["populate_pod_logs"]:
+                fixture_store["populate_pod_logs"][migration_uid] = []
 
-    except (ApiException, ValueError, KeyError) as e:
-        # ApiException: K8s API failures; ValueError: invalid migration UID; KeyError: missing fixture_store keys
+            # Track already-captured pod names to avoid duplicates
+            existing_pod_names = {log["pod_name"] for log in fixture_store["populate_pod_logs"][migration_uid]}
+
+            # Only add logs from pods we haven't captured yet
+            new_logs = [log for log in captured_logs if log["pod_name"] not in existing_pod_names]
+
+            if new_logs:
+                fixture_store["populate_pod_logs"][migration_uid].extend(new_logs)
+                LOGGER.info(
+                    f"Captured {len(new_logs)} new populate pod log(s) for migration '{migration_uid}' "
+                    f"({len(fixture_store['populate_pod_logs'][migration_uid])} total)"
+                )
+
+    except ApiException as e:
+        # K8s API failures (network errors, pod deleted during iteration, etc.)
         LOGGER.warning(f"Failed to capture populate pod logs for migration '{migration_uid}': {e}")
 
 
@@ -488,7 +502,7 @@ def wait_for_migration_complate(
         for sample in TimeoutSampler(
             func=get_plan_migration_status,
             sleep=1,
-            wait_timeout=py_config.get("plan_wait_timeout", 600),
+            wait_timeout=py_config["plan_wait_timeout"],
             plan=plan,
         ):
             if sample != last_status:
