@@ -1078,6 +1078,13 @@ def execute_copyoffload_migration(
         cut_over=cut_over,
     )
 
+    # Wait for copy-offload plan secret to be ready
+    wait_for_copyoffload_plan_secret(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        namespace=target_namespace,
+    )
+
     # Create log capture callback
     callback = create_log_capture_callback(
         ocp_admin_client=ocp_admin_client,
@@ -1087,8 +1094,6 @@ def execute_copyoffload_migration(
     )
 
     # Wait for migration with log capture
-    from utilities.mtv_migration import wait_for_migration_complate  # noqa: PLC0415
-
     wait_for_migration_complate(plan=plan, on_status_poll=callback)
 
 
