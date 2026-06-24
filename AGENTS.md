@@ -797,9 +797,14 @@ class TestNameHere:
   `test_check_xcopy_used` calls `verify_xcopy_used()` from `utilities/copyoffload_migration.py`. This step
   validates the transfer mechanism (infrastructure), not the migrated VM (application), and provides
   clearer failure diagnostics.
-  **Plan populator secret wait:** After Migration CR creation in `execute_migration()`, call
-  `wait_for_copyoffload_plan_secret()` from `utilities/copyoffload_plan_secret.py`. Do not wait in
-  `create_plan_resource()` — Forklift creates the plan populator secret when migration starts, not at Plan Ready.
+
+  **Copy-offload test implementation:**
+  - After Migration CR creation, call `wait_for_copyoffload_plan_secret()` from `utilities/copyoffload_plan_secret.py`
+  - Create log capture callback using `create_log_capture_callback()` from `utilities/copyoffload_migration.py`
+  - Pass callback to `wait_for_migration_complate()` via `on_status_poll` parameter
+  - This captures populate pod logs during EXECUTING phase before MTV cleanup deletes them
+
+  Do not wait for plan secret in `create_plan_resource()` — Forklift creates the plan populator secret when migration starts, not at Plan Ready.
 - **7-step copy-offload throttling pattern**: storagemap -> networkmap -> plan -> migrate -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
   Populator throttling tests insert `test_verify_populator_throttling` after `test_migrate_vms` and before
   `test_check_xcopy_used`. This step calls `verify_populator_throttling()` from `utilities/copyoffload_migration.py`

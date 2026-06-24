@@ -11,6 +11,7 @@ import json
 import os
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -32,7 +33,7 @@ from utilities.copyoffload_constants import (
     SOURCE_HOST_LABEL,
 )
 from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
-from utilities.mtv_migration import PVC_NAME_LABEL, get_migration_for_plan, wait_for_migration_complate
+from utilities.mtv_migration import get_migration_for_plan, wait_for_migration_complate
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 from utilities.resources import create_and_store_resource
 
@@ -44,6 +45,9 @@ LOGGER = get_logger(__name__)
 
 STORAGE_SECRET_EXTRA_ENV = "COPYOFFLOAD_STORAGE_SECRET_EXTRA"  # pragma: allowlist secret
 _ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
+
+# Volume populator framework label for PVC name on populate pods
+PVC_NAME_LABEL = "pvcName"
 
 
 def get_copyoffload_credential(
@@ -202,6 +206,149 @@ def merge_storage_secret_extra(
         merged[secret_key] = value
         LOGGER.info(f"✓ Added extra secret field from storage_secret_extra: {secret_key}")
     return merged
+
+
+def capture_populate_pod_logs(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    migration_uid: str,
+    fixture_store: dict[str, Any],
+) -> None:
+    """Capture populate pod logs and metadata for later verification.
+
+    Captures logs from populate pods during or after migration, before MTV cleanup
+    deletes them. Stores logs in fixture_store for use by verify_xcopy_used()
+    when pods are no longer available.
+
+    This function is safe to call multiple times during migration execution. It re-scans
+    all populate pods each time to capture logs from newly-completed pods (handles
+    multi-pod migrations where pods complete at different times). Safe for non-copyoffload
+    migrations.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where populate pods exist.
+        migration_uid (str): Migration UID to filter pods by.
+        fixture_store (dict[str, Any]): Fixture store for caching pod logs.
+    """
+    try:
+        populate_pods: list[Pod] = [
+            pod
+            for pod in Pod.get(
+                client=ocp_admin_client,
+                namespace=namespace,
+                label_selector=f"migration={migration_uid}",
+            )
+            if pod.name.startswith("populate-")
+        ]
+
+        if not populate_pods:
+            LOGGER.debug(f"No populate pods found for migration '{migration_uid}' (non-copyoffload or not yet started)")
+            return
+
+        # Filter for pods that have completed
+        pods_with_logs: list[Pod] = []
+        for pod in populate_pods:
+            phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+            # Only capture from completed pods - Running pods don't have xcopyUsed in logs yet
+            if phase in ("Succeeded", "Failed"):
+                pods_with_logs.append(pod)
+
+        if not pods_with_logs:
+            LOGGER.debug(
+                f"Found {len(populate_pods)} populate pod(s) for migration '{migration_uid}' "
+                f"but none are ready for log capture yet"
+            )
+            return
+
+        LOGGER.info(
+            f"Capturing logs from {len(pods_with_logs)}/{len(populate_pods)} populate pod(s) "
+            f"for migration '{migration_uid}'"
+        )
+
+        # Initialize storage if not exists
+        if "populate_pod_logs" not in fixture_store:
+            fixture_store["populate_pod_logs"] = {}
+
+        # Capture logs and metadata for each pod
+        captured_logs: list[dict[str, Any]] = []
+        for pod in pods_with_logs:
+            try:
+                pod_data: dict[str, Any] = {
+                    "pod_name": pod.name,
+                    "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+                    "log_content": pod.log(),
+                    "labels": dict(pod.instance.metadata.labels),
+                    "phase": pod.instance.status.phase if pod.instance.status else "Unknown",
+                }
+                captured_logs.append(pod_data)
+                LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {pod_data['phase']})")
+            except ApiException as pod_err:
+                # K8s API failures (pod deleted, network errors, etc.)
+                LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
+
+        if captured_logs:
+            # Initialize migration's log cache if not exists
+            if migration_uid not in fixture_store["populate_pod_logs"]:
+                fixture_store["populate_pod_logs"][migration_uid] = []
+
+            # Track already-captured pod names to avoid duplicates
+            existing_pod_names = {log["pod_name"] for log in fixture_store["populate_pod_logs"][migration_uid]}
+
+            # Only add logs from pods we haven't captured yet
+            new_logs = [log for log in captured_logs if log["pod_name"] not in existing_pod_names]
+
+            if new_logs:
+                fixture_store["populate_pod_logs"][migration_uid].extend(new_logs)
+                LOGGER.info(
+                    f"Captured {len(new_logs)} new populate pod log(s) for migration '{migration_uid}' "
+                    f"({len(fixture_store['populate_pod_logs'][migration_uid])} total)"
+                )
+
+    except ApiException as e:
+        # K8s API failures (network errors, pod deleted during iteration, etc.)
+        LOGGER.warning(f"Failed to capture populate pod logs for migration '{migration_uid}': {e}")
+
+
+def create_log_capture_callback(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    plan: Plan,
+    fixture_store: dict[str, Any],
+) -> Callable[[str], None]:
+    """Create a callback for capturing populate pod logs during migration.
+
+    Returns a callback function compatible with wait_for_migration_complate's
+    on_status_poll parameter. The callback captures populate pod logs when
+    migration status is EXECUTING.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client
+        namespace (str): Namespace where populate pods exist
+        plan (Plan): Plan resource being executed
+        fixture_store (dict[str, Any]): Fixture store for caching pod logs
+
+    Returns:
+        callable: Callback function that accepts migration status string
+    """
+
+    def _capture(status: str) -> None:
+        if status == Plan.Status.EXECUTING:
+            try:
+                migration = get_migration_for_plan(plan=plan)
+                migration_uid: str = migration.instance.metadata.uid
+                capture_populate_pod_logs(
+                    ocp_admin_client=ocp_admin_client,
+                    namespace=namespace,
+                    migration_uid=migration_uid,
+                    fixture_store=fixture_store,
+                )
+            except (MigrationNotFoundError, ApiException) as e:
+                # MigrationNotFoundError: Migration CR not created yet
+                # ApiException: K8s API failures
+                LOGGER.debug(f"Could not capture populate pod logs during migration: {e}")
+
+    return _capture
 
 
 def wait_for_vmware_cloud_init_all_vms(
@@ -944,7 +1091,21 @@ def execute_migration_monitoring_populator_inflight(
         target_namespace=target_namespace,
         max_populator_inflight=max_populator_inflight,
     )
-    wait_for_migration_complate(plan=plan, on_status_poll=tracker.poll)
+
+    # Create log capture callback for test_check_xcopy_used verification
+    log_capture: Callable[[str], None] = create_log_capture_callback(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        plan=plan,
+        fixture_store=fixture_store,
+    )
+
+    # Combine callbacks - both tracker and log capture
+    def combined_callback(status: str) -> None:
+        tracker.poll(status)
+        log_capture(status)
+
+    wait_for_migration_complate(plan=plan, on_status_poll=combined_callback)
     return tracker.results
 
 

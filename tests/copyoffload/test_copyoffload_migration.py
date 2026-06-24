@@ -31,6 +31,7 @@ from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT
 from utilities.copyoffload_migration import (
+    create_log_capture_callback,
     execute_migration_monitoring_populator_inflight,
     verify_populator_throttling,
     verify_xcopy_used,
@@ -4713,20 +4714,22 @@ class TestSimultaneousCopyoffloadMigrations:
 
         # Wait for both migrations to complete
         LOGGER.info("Waiting for both copyoffload migrations to complete")
-        wait_for_migration_complate(
-            plan=self.plan_resource_1,
+        callback_1 = create_log_capture_callback(
             ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
+            namespace=target_namespace,
+            plan=self.plan_resource_1,
             fixture_store=fixture_store,
         )
+        wait_for_migration_complate(plan=self.plan_resource_1, on_status_poll=callback_1)
         LOGGER.info("Copyoffload migration 1 completed")
 
-        wait_for_migration_complate(
-            plan=self.plan_resource_2,
+        callback_2 = create_log_capture_callback(
             ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
+            namespace=target_namespace,
+            plan=self.plan_resource_2,
             fixture_store=fixture_store,
         )
+        wait_for_migration_complate(plan=self.plan_resource_2, on_status_poll=callback_2)
         LOGGER.info("Copyoffload migration 2 completed")
 
     def test_check_xcopy_used_plan1(
@@ -5199,21 +5202,17 @@ class TestConcurrentXcopyVddkMigration:
 
         # Wait for both migrations to complete
         LOGGER.info("Waiting for XCOPY migration to complete")
-        wait_for_migration_complate(
-            plan=self.plan_xcopy,
+        callback_xcopy = create_log_capture_callback(
             ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
+            namespace=target_namespace,
+            plan=self.plan_xcopy,
             fixture_store=fixture_store,
         )
+        wait_for_migration_complate(plan=self.plan_xcopy, on_status_poll=callback_xcopy)
         LOGGER.info("XCOPY migration completed")
 
         LOGGER.info("Waiting for VDDK migration to complete")
-        wait_for_migration_complate(
-            plan=self.plan_vddk,
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            fixture_store=fixture_store,
-        )
+        wait_for_migration_complate(plan=self.plan_vddk)
         LOGGER.info("VDDK migration completed")
 
     def test_check_xcopy_used(
