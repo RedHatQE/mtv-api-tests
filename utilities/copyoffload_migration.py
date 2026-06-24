@@ -1065,6 +1065,7 @@ def execute_copyoffload_migration(
         cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
 
     Raises:
+        TimeoutError: If the copy-offload plan secret is not created before the timeout.
         MigrationPlanExecError: If migration fails or times out.
     """
     # Create Migration CR
