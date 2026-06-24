@@ -32,6 +32,7 @@ from libs.providers.openshift import OCPProvider
 from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT
 from utilities.copyoffload_migration import (
     create_log_capture_callback,
+    execute_copyoffload_migration,
     execute_migration_monitoring_populator_inflight,
     verify_populator_throttling,
     verify_xcopy_used,
@@ -41,7 +42,6 @@ from utilities.migration_utils import get_cutover_value
 from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.mtv_migration import (
     create_plan_resource,
-    execute_migration,
     get_network_migration_map,
     get_storage_migration_map,
     verify_vm_disk_count,
@@ -185,7 +185,7 @@ class TestCopyoffloadThinMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -391,7 +391,7 @@ class CopyoffloadSnapshotBase:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -698,7 +698,7 @@ class TestCopyoffloadThickLazyMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -869,7 +869,7 @@ class TestCopyoffloadThickEagerMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -1039,7 +1039,7 @@ class TestCopyoffloadMultiDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -1213,7 +1213,7 @@ class TestCopyoffloadDualDiskMixedThinThickMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -1387,7 +1387,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -1563,7 +1563,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -1743,7 +1743,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
         target_namespace: str,
     ) -> None:
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -1931,7 +1931,7 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
     ) -> None:
         """Execute warm migration with cutover."""
         LOGGER.info("Executing warm copy-offload migration with virtual RDM disk")
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -2113,7 +2113,7 @@ class TestCopyoffloadMultiDatastoreMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -2298,7 +2298,7 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
         target_namespace: str,
     ) -> None:
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -2487,7 +2487,7 @@ class TestCopyoffloadMixedDatastoreMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -2768,7 +2768,7 @@ class TestCopyoffloadFallbackLargeMigration:
         Raises:
             AssertionError: If migration execution fails.
         """
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -2959,7 +2959,7 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -3133,7 +3133,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -3308,7 +3308,7 @@ class TestCopyoffload10MixedDisksMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -3482,7 +3482,7 @@ class TestCopyoffloadLargeVmMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -3885,7 +3885,7 @@ class TestCopyoffloadNonconformingNameMigration:
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         LOGGER.info("Executing copy-offload migration with non-conforming name")
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -4102,7 +4102,7 @@ class TestCopyoffloadWarmMigration:
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute warm migration with cutover."""
         LOGGER.info("Executing warm migration with copy-offload acceleration")
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -4278,7 +4278,7 @@ class TestCopyoffloadScaleMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,

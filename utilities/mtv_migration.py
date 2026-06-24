@@ -30,6 +30,43 @@ if TYPE_CHECKING:
 LOGGER = get_logger(__name__)
 
 
+def _is_copyoffload_plan(plan: Plan) -> bool:
+    """Check if a Plan uses copy-offload by inspecting its storage map.
+
+    Args:
+        plan (Plan): The Plan CR to check
+
+    Returns:
+        bool: True if the Plan's storage map contains offloadPlugin configuration
+    """
+    try:
+        storage_map_ref = plan.instance.spec.get("map", {}).get("storage")
+        if not storage_map_ref:
+            return False
+
+        storage_map_name = storage_map_ref.get("name")
+        storage_map_namespace = storage_map_ref.get("namespace")
+
+        if not storage_map_name or not storage_map_namespace:
+            return False
+
+        storage_map = StorageMap(
+            client=plan.client,
+            name=storage_map_name,
+            namespace=storage_map_namespace,
+        )
+
+        # Check if any mapping has offloadPlugin
+        for mapping in storage_map.instance.spec.get("map", []):
+            if "offloadPlugin" in mapping:
+                return True
+
+        return False
+    except Exception:
+        # If we can't determine, assume it's not copyoffload
+        return False
+
+
 def get_migration_for_plan(plan: Plan) -> Migration:
     """Find Migration CR for Plan.
 
@@ -278,11 +315,16 @@ def execute_migration(
     plan: Plan,
     target_namespace: str,
     cut_over: datetime | None = None,
+    *,
+    enable_copyoffload_log_capture: bool = True,
 ) -> None:
     """Create Migration CR and wait for completion.
 
     Creates a Migration Custom Resource that triggers the actual VM migration
     based on the provided Plan, then waits for the migration to complete.
+
+    For copy-offload migrations, automatically captures populate pod logs during
+    migration execution to handle MTV's quick pod cleanup (unless disabled).
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
@@ -290,6 +332,8 @@ def execute_migration(
         plan (Plan): The Plan CR resource defining the migration configuration.
         target_namespace (str): Target namespace for the Migration CR.
         cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+        enable_copyoffload_log_capture (bool): Enable automatic populate pod log capture
+            for copy-offload migrations. Defaults to True.
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
@@ -304,7 +348,19 @@ def execute_migration(
         cut_over=cut_over,
     )
 
-    wait_for_migration_complate(plan=plan)
+    # Auto-detect copy-offload and create log capture callback if enabled
+    callback = None
+    if enable_copyoffload_log_capture and _is_copyoffload_plan(plan):
+        from utilities.copyoffload_migration import create_log_capture_callback  # noqa: PLC0415
+
+        callback = create_log_capture_callback(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            plan=plan,
+            fixture_store=fixture_store,
+        )
+
+    wait_for_migration_complate(plan=plan, on_status_poll=callback)
 
 
 def get_vm_suffix(warm_migration: bool) -> str:

@@ -1044,6 +1044,54 @@ class _PopulatorConcurrencyTracker:
         return dict(self._max_concurrent_by_host)
 
 
+def execute_copyoffload_migration(
+    ocp_admin_client: DynamicClient,
+    fixture_store: dict[str, Any],
+    plan: Plan,
+    target_namespace: str,
+    cut_over: datetime | None = None,
+) -> None:
+    """Execute a copy-offload migration with automatic populate pod log capture.
+
+    Creates a Migration CR and waits for completion with log capture callback
+    to handle MTV's quick pod cleanup. Use this instead of execute_migration()
+    for all copy-offload tests.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        fixture_store (dict[str, Any]): Fixture store for resource tracking and cleanup.
+        plan (Plan): The Plan CR resource defining the migration configuration.
+        target_namespace (str): Target namespace for the Migration CR.
+        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+
+    Raises:
+        MigrationPlanExecError: If migration fails or times out.
+    """
+    # Create Migration CR
+    create_and_store_resource(
+        client=ocp_admin_client,
+        fixture_store=fixture_store,
+        resource=Migration,
+        namespace=target_namespace,
+        plan_name=plan.name,
+        plan_namespace=plan.namespace,
+        cut_over=cut_over,
+    )
+
+    # Create log capture callback
+    callback = create_log_capture_callback(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        plan=plan,
+        fixture_store=fixture_store,
+    )
+
+    # Wait for migration with log capture
+    from utilities.mtv_migration import wait_for_migration_complate  # noqa: PLC0415
+
+    wait_for_migration_complate(plan=plan, on_status_poll=callback)
+
+
 def execute_migration_monitoring_populator_inflight(
     ocp_admin_client: DynamicClient,
     fixture_store: dict[str, Any],
