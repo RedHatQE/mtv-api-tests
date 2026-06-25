@@ -739,7 +739,11 @@ def _get_populate_pod_logs(
         )
 
     # Query live pods to fill any cache gaps (for pods not yet cached or MTV builds that keep pods longer)
-    log_message = "Querying live populate pods to fill cache gaps" if cached_logs else "No cached logs, querying live populate pods"
+    log_message = (
+        "Querying live populate pods to fill cache gaps"
+        if cached_logs
+        else "No cached logs, querying live populate pods"
+    )
     LOGGER.info(log_message)
     populate_pods: list[Pod] = _find_populate_pods(
         ocp_admin_client=ocp_admin_client,
