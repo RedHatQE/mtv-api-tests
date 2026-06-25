@@ -21,7 +21,6 @@ from ocp_resources.migration import Migration
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.pod import Pod
 from ocp_resources.plan import Plan
-from ocp_resources.secret import Secret
 from rrmngmnt import Host, RootUser, User
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
