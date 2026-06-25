@@ -725,34 +725,49 @@ def _get_populate_pod_logs(
     """
     # Try cached logs first (for MTV builds that cleanup pods quickly)
     cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
+    pod_logs: list[dict[str, str]] = []
 
     if cached_logs:
         LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
-        return [
+        pod_logs.extend(
             {
                 "pod_name": pod_data["pod_name"],
                 "pvc_name": pod_data["pvc_name"],
                 "log_content": pod_data["log_content"],
             }
             for pod_data in cached_logs
-        ]
+        )
 
-    # Fall back to querying live pods (for MTV builds that keep pods longer)
-    LOGGER.info("No cached logs found, querying live populate pods")
+    # Query live pods to fill any cache gaps (for pods not yet cached or MTV builds that keep pods longer)
+    log_message = "Querying live populate pods to fill cache gaps" if cached_logs else "No cached logs, querying live populate pods"
+    LOGGER.info(log_message)
     populate_pods: list[Pod] = _find_populate_pods(
         ocp_admin_client=ocp_admin_client,
         namespace=target_namespace,
         migration_uid=migration_uid,
+        require_pods=not pod_logs,
     )
-    LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
-    return [
+
+    # Add live pods not already in cache
+    cached_pod_names = {pod_log["pod_name"] for pod_log in pod_logs}
+    new_live_pods = [
         {
             "pod_name": pod.name,
             "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
             "log_content": pod.log(),
         }
         for pod in populate_pods
+        if pod.name not in cached_pod_names
     ]
+    pod_logs.extend(new_live_pods)
+
+    LOGGER.info(
+        "Returning %d total populate pod log(s) (%d cached, %d live)",
+        len(pod_logs),
+        len(cached_logs or []),
+        len(new_live_pods),
+    )
+    return pod_logs
 
 
 def verify_xcopy_used(
