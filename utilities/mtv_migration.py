@@ -617,7 +617,27 @@ def get_network_migration_map(
     target_namespace: str,
     source_provider_inventory: ForkliftInventory,
     vms: list[str],
+    per_nic_network_map: bool = False,
 ) -> NetworkMap:
+    """Create a NetworkMap resource for migration.
+
+    Args:
+        fixture_store (dict[str, Any]): Fixture store for resource tracking.
+        source_provider (BaseProvider): Source provider instance.
+        destination_provider (BaseProvider): Destination provider instance.
+        multus_network_name (dict[str, str]): Multus network name and namespace.
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Target namespace.
+        source_provider_inventory (ForkliftInventory): Source provider inventory.
+        vms (list[str]): VM names to query.
+        per_nic_network_map (bool): Create one map entry per NIC without deduplication.
+
+    Returns:
+        NetworkMap: The created NetworkMap resource.
+
+    Raises:
+        ValueError: If provider resources are not set.
+    """
     if not source_provider.ocp_resource:
         raise ValueError("source_provider.ocp_resource is not set")
 
@@ -629,6 +649,7 @@ def get_network_migration_map(
         source_provider_inventory=source_provider_inventory,
         multus_network_name=multus_network_name,
         vms=vms,
+        per_nic_network_map=per_nic_network_map,
     )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,

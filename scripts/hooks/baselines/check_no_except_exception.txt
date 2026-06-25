@@ -3,7 +3,6 @@ cli/mtv_api_tests/common.py:2686733a75d0bafd  # L671: except Exception:
 cli/mtv_api_tests/common.py:2a629fac22074ea4  # L449: except Exception as exc:
 cli/mtv_api_tests/common.py:d62a733b7f520891  # L611: except Exception as exc:
 conftest.py:61a55546613f7b07  # L1232: except Exception:
-conftest.py:e1689e44542f1cc2  # L1164: except Exception as e:
 libs/providers/openstack.py:44a2de0dcd40cca2  # L494: except Exception as e:
 libs/providers/openstack.py:9318725bd548f22f  # L558: except Exception as e:
 libs/providers/openstack.py:f22d5cbec3933ec6  # L582: except Exception as e:

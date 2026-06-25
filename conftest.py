@@ -33,10 +33,12 @@ from ocp_resources.subscription import Subscription
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
-from timeout_sampler import TimeoutSampler
+from pyVmomi import vim
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
+    GuestCommandError,
     MissingProvidersFileError,
     MtvOperatorNotInstalledError,
     RemoteClusterAndLocalCluterNamesError,
@@ -77,6 +79,7 @@ from utilities.utils import (
     get_cluster_client,
     get_cluster_version,
     get_cluster_version_str,
+    get_per_nic_networks,
     get_value_from_py_config,
     load_source_providers,
     resolve_providers_json_path,
@@ -872,8 +875,11 @@ def multus_network_name(
     if not networks:
         raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
 
-    # Calculate how many multus NADs we need (all networks except the first one)
-    multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
+    # Calculate how many multus NADs we need
+    if class_plan_config.get("per_nic_network_map", False):
+        multus_count = len(get_per_nic_networks(source_provider_inventory=source_provider_inventory, vms=vms)) - 1
+    else:
+        multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
 
     created_nads = []
     # Create all required NADs with consistent naming
@@ -1115,123 +1121,126 @@ def prepared_plan(
         cloned_vm_names: list[str] = []
         first_vm_esxi_host: str | None = None
 
-        for vm in virtual_machines:
-            clone_options = {**vm, "enable_ctk": warm_migration}
+        skip_clone = plan.get("skip_clone", False)
 
-            # Pin VM2+ to same ESXi host as VM1 (required for per-host inflight throttling).
-            # Uses setdefault to respect any explicit per-VM target_esxi_host override.
-            if plan.get("clone_to_same_host", False) and first_vm_esxi_host:
-                clone_options.setdefault("target_esxi_host", first_vm_esxi_host)
+        if not skip_clone:
+            for vm in virtual_machines:
+                clone_options = {**vm, "enable_ctk": warm_migration}
 
-            provider_vm_api = clone_provider.get_vm_by_name(
-                query=vm["name"],
-                vm_name_suffix=vm_name_suffix,
-                clone_vm=True,
-                session_uuid=fixture_store["session_uuid"],
-                clone_options=clone_options,
-            )
+                # Pin VM2+ to same ESXi host as VM1 (required for per-host inflight throttling).
+                # Uses setdefault to respect any explicit per-VM target_esxi_host override.
+                if plan.get("clone_to_same_host", False) and first_vm_esxi_host:
+                    clone_options.setdefault("target_esxi_host", first_vm_esxi_host)
 
-            # Capture first VM's ESXi hostname for subsequent same-host clones.
-            if plan.get("clone_to_same_host", False) and first_vm_esxi_host is None:
-                runtime_host = provider_vm_api.runtime.host
-                if runtime_host is None or not runtime_host.name:
-                    raise ValueError(
-                        f"clone_to_same_host=True but could not determine ESXi host "
-                        f"for VM '{vm['name']}'. Cannot pin subsequent clones."
-                    )
-                first_vm_esxi_host = runtime_host.name
-                LOGGER.info(f"Same-host cloning: pinning subsequent VMs to ESXi host '{first_vm_esxi_host}'")
+                provider_vm_api = clone_provider.get_vm_by_name(
+                    query=vm["name"],
+                    vm_name_suffix=vm_name_suffix,
+                    clone_vm=True,
+                    session_uuid=fixture_store["session_uuid"],
+                    clone_options=clone_options,
+                )
 
-            # Disable DRS per VM to prevent relocation after cloning.
-            if plan.get("disable_drs_for_vms", False) and isinstance(clone_provider, VMWareProvider):
-                clone_provider.disable_drs_for_vm(provider_vm_api)
-
-            if has_shared_disk_config:
-                cloned_vm_objects.append(provider_vm_api)
-
-            # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
-            source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
-            if source_vm_power == "on":
-                source_provider.start_vm(provider_vm_api)
-                # Wait for guest info to become available (VMware only)
-                if source_provider.type == Provider.ProviderType.VSPHERE:
-                    source_provider.wait_for_vmware_guest_info(
-                        provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
-                    )
-            elif source_vm_power == "off":
-                source_provider.stop_vm(provider_vm_api)
-
-            # NOW call vm_dict() with VM in correct power state for guest info
-            source_vm_details = source_provider.vm_dict(
-                provider_vm_api=provider_vm_api,
-                name=vm["name"],
-                namespace=source_vms_namespace,
-                clone=False,  # Already cloned above
-                vm_name_suffix=vm_name_suffix,
-                session_uuid=fixture_store["session_uuid"],
-                clone_options=vm,
-            )
-            vm["name"] = source_vm_details["name"]
-            cloned_vm_names.append(vm["name"])
-
-            provider_vm_api = source_vm_details["provider_vm_api"]
-
-            vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
-            # Store complete source VM data separately (keeps virtual_machines clean for Plan CR serialization)
-            plan["source_vms_data"][vm["name"]] = source_vm_details
-
-            # Detect IP origins via Guest Operations for Linux VMs where VMware doesn't report origin
-            # (known open-vm-tools limitation: https://github.com/vmware/open-vm-tools/issues/694)
-            if source_provider.type == Provider.ProviderType.VSPHERE and not source_vm_details.get("win_os"):
-                try:
-                    detect_vmware_ip_origins_via_guest_ops(
-                        source_provider=source_provider,
-                        vm=provider_vm_api,
-                        source_provider_data=fixture_store["source_provider_data"],
-                        vm_details=source_vm_details,
-                    )
-                except ValueError:
-                    raise
-                except Exception as e:
-                    if plan.get("preserve_static_ips"):
+                # Capture first VM's ESXi hostname for subsequent same-host clones.
+                if plan.get("clone_to_same_host", False) and first_vm_esxi_host is None:
+                    runtime_host = provider_vm_api.runtime.host
+                    if runtime_host is None or not runtime_host.name:
                         raise ValueError(
+                            f"clone_to_same_host=True but could not determine ESXi host "
+                            f"for VM '{vm['name']}'. Cannot pin subsequent clones."
+                        )
+                    first_vm_esxi_host = runtime_host.name
+                    LOGGER.info(f"Same-host cloning: pinning subsequent VMs to ESXi host '{first_vm_esxi_host}'")
+
+                # Disable DRS per VM to prevent relocation after cloning.
+                if plan.get("disable_drs_for_vms", False) and isinstance(clone_provider, VMWareProvider):
+                    clone_provider.disable_drs_for_vm(provider_vm_api)
+
+                if has_shared_disk_config:
+                    cloned_vm_objects.append(provider_vm_api)
+
+                # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
+                source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
+                if source_vm_power == "on":
+                    source_provider.start_vm(provider_vm_api)
+                    # Wait for guest info to become available (VMware only)
+                    if source_provider.type == Provider.ProviderType.VSPHERE:
+                        source_provider.wait_for_vmware_guest_info(
+                            provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                        )
+                elif source_vm_power == "off":
+                    source_provider.stop_vm(provider_vm_api)
+
+                # NOW call vm_dict() with VM in correct power state for guest info
+                source_vm_details = source_provider.vm_dict(
+                    provider_vm_api=provider_vm_api,
+                    name=vm["name"],
+                    namespace=source_vms_namespace,
+                    clone=False,  # Already cloned above
+                    vm_name_suffix=vm_name_suffix,
+                    session_uuid=fixture_store["session_uuid"],
+                    clone_options=vm,
+                )
+                vm["name"] = source_vm_details["name"]
+                cloned_vm_names.append(vm["name"])
+
+                provider_vm_api = source_vm_details["provider_vm_api"]
+
+                vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
+                # Store complete source VM data separately (keeps virtual_machines clean for Plan CR serialization)
+                plan["source_vms_data"][vm["name"]] = source_vm_details
+
+                # Detect IP origins via Guest Operations for Linux VMs where VMware doesn't report origin
+                # (known open-vm-tools limitation: https://github.com/vmware/open-vm-tools/issues/694)
+                if source_provider.type == Provider.ProviderType.VSPHERE and not source_vm_details.get("win_os"):
+                    try:
+                        detect_vmware_ip_origins_via_guest_ops(
+                            source_provider=source_provider,
+                            vm=provider_vm_api,
+                            source_provider_data=fixture_store["source_provider_data"],
+                            vm_details=source_vm_details,
+                        )
+                    except ValueError:
+                        raise
+                    except (GuestCommandError, vim.fault.VimFault, TimeoutExpiredError, OSError) as e:
+                        if plan.get("preserve_static_ips"):
+                            raise ValueError(
+                                f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
+                                "IP origin detection is required when preserve_static_ips is enabled."
+                            ) from e
+                        LOGGER.warning(
                             f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
-                            "IP origin detection is required when preserve_static_ips is enabled."
-                        ) from e
-                    LOGGER.warning(
-                        f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
-                        "Static IP verification may not work for this VM."
-                    )
+                            "Static IP verification may not work for this VM."
+                        )
 
-                if plan.get("preserve_static_ips"):
-                    detect_guest_nic_names(
-                        source_provider=source_provider,
-                        vm=provider_vm_api,
-                        source_provider_data=fixture_store["source_provider_data"],
-                        vm_details=source_vm_details,
-                    )
+                    if plan.get("preserve_static_ips"):
+                        detect_guest_nic_names(
+                            source_provider=source_provider,
+                            vm=provider_vm_api,
+                            source_provider_data=fixture_store["source_provider_data"],
+                            vm_details=source_vm_details,
+                        )
 
-        # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
-        # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
-        inventory_timeout = plan.get("inventory_timeout", 300)
-        wait_for_cloned_vms_in_forklift_inventory(
-            source_provider=source_provider,
-            source_provider_inventory=source_provider_inventory,
-            cloned_vm_names=cloned_vm_names,
-            virtual_machines=virtual_machines,
-            copyoffload_config=fixture_store["source_provider_data"].get("copyoffload", {}),
-            inventory_timeout=inventory_timeout,
-            jira_issue_open=jira_issue_scope_session,
-        )
-
-        # Relink shared disks between clones (VMware-specific)
-        # When VMs with shared disks are cloned, each clone gets independent disk copies,
-        # breaking the shared disk relationship. This restores it on the clones.
-        if has_shared_disk_config:
-            clone_provider.relink_shared_disks(
-                source_vm_names=original_source_vm_names,
-                cloned_vms=cloned_vm_objects,
+            # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
+            # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
+            inventory_timeout = plan.get("inventory_timeout", 300)
+            wait_for_cloned_vms_in_forklift_inventory(
+                source_provider=source_provider,
+                source_provider_inventory=source_provider_inventory,
+                cloned_vm_names=cloned_vm_names,
+                virtual_machines=virtual_machines,
+                copyoffload_config=fixture_store["source_provider_data"].get("copyoffload", {}),
+                inventory_timeout=inventory_timeout,
+                jira_issue_open=jira_issue_scope_session,
             )
+
+            # Relink shared disks between clones (VMware-specific)
+            # When VMs with shared disks are cloned, each clone gets independent disk copies,
+            # breaking the shared disk relationship. This restores it on the clones.
+            if has_shared_disk_config:
+                clone_provider.relink_shared_disks(
+                    source_vm_names=original_source_vm_names,
+                    cloned_vms=cloned_vm_objects,
+                )
     else:
         # OVA VMs aren't cloned — add unique targetName to prevent destination VM name conflicts
         # across parallel test sessions. The source VM name stays unchanged (must match OVA file).

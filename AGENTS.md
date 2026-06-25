@@ -638,6 +638,8 @@ storage_class = py_config["storage_class"]
 warm_migration = plan.get("warm_migration", False)
 copyoffload = plan.get("copyoffload", False)
 xfs_compatibility = plan.get("xfs_compatibility", False)
+skip_clone = plan.get("skip_clone", False)
+per_nic_network_map = plan.get("per_nic_network_map", False)
 
 # Correct — .get() with validation for external data
 vm_id = provider_data.get("vm_id")
@@ -650,8 +652,8 @@ if not vm_id:
 - `.get("key", <default>)` on `py_config`, `plan`, `tests_params`, or any dict we control
 - `.get("key")` on external data without validation afterward
 - Using `False` as default when the key is always present in config
-  (exception: `warm_migration`, `copyoffload`, `enable_nested_virtualization` and `xfs_compatibility`
-  are optional flags — `.get()` is correct)
+  (exception: `warm_migration`, `copyoffload`, `enable_nested_virtualization`, `xfs_compatibility`,
+  `skip_clone`, and `per_nic_network_map` are optional flags — `.get()` is correct)
 
 ### Provider Config Key Access (MUST)
 
@@ -898,6 +900,8 @@ tests_params: dict = {
 | `inventory_timeout`    | No       | Per-VM Forklift inventory wait timeout, in seconds                                                        |
 | `clone_to_same_host`   | No       | True to default VM2+ to VM1's ESXi host; explicit `target_esxi_host` overrides                            |
 | `disable_drs_for_vms`  | No       | True to disable vSphere DRS per VM after cloning; not supported for OVA; requires a VMware clone provider |
+| `per_nic_network_map`  | No       | True to create per-NIC network mappings (allows duplicate source network entries in NetworkMap)           |
+| `skip_clone`           | No       | True to skip VM cloning in prepared_plan fixture (for plan-readiness tests that use existing VMs)         |
 
 **Test Verification Configuration:**
 

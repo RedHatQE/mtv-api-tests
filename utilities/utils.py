@@ -225,18 +225,75 @@ def background(func):
     return wrapper
 
 
+def get_per_nic_networks(
+    source_provider_inventory: ForkliftInventory,
+    vms: list[str],
+) -> list[dict[str, str]]:
+    """Collect one network entry per NIC across all VMs without deduplication.
+
+    Args:
+        source_provider_inventory (ForkliftInventory): Source provider inventory.
+        vms (list[str]): VM names to query.
+
+    Returns:
+        list[dict[str, str]]: Network entries, one per NIC (may contain duplicates).
+
+    Raises:
+        ValueError: If a VM has no NICs, a NIC has no network ID, or a network ID is unresolvable.
+    """
+    networks: list[dict[str, str]] = []
+    network_names = {net["id"]: net["name"] for net in source_provider_inventory.networks}
+    for vm_name in vms:
+        vm_data = source_provider_inventory.get_vm(name=vm_name)
+        nics = vm_data.get("nics", [])
+        if not nics:
+            raise ValueError(f"VM '{vm_name}' has no NICs in the inventory")
+        for nic in nics:
+            network_id = (nic.get("network") or {}).get("id")
+            if not network_id:
+                raise ValueError(f"NIC in VM '{vm_name}' has no network ID")
+            if network_id not in network_names:
+                raise ValueError(f"Network ID '{network_id}' not found in provider inventory for VM '{vm_name}'")
+            networks.append({"name": network_names[network_id]})
+    if not networks:
+        raise ValueError(f"Networks not found for vms {vms}")
+    return networks
+
+
 def gen_network_map_list(
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
     vms: list[str],
     multus_network_name: dict[str, str],
     pod_only: bool = False,
+    per_nic_network_map: bool = False,
 ) -> list[dict[str, dict[str, str]]]:
+    """Build network map entries from source provider inventory.
+
+    Args:
+        source_provider_inventory (ForkliftInventory): Source provider inventory.
+        target_namespace (str): Target namespace.
+        vms (list[str]): VM names to query.
+        multus_network_name (dict[str, str]): Multus network name and namespace.
+        pod_only (bool): Map all networks to pod network.
+        per_nic_network_map (bool): Create one map entry per NIC without deduplication.
+
+    Returns:
+        list[dict[str, dict[str, str]]]: Network map entries.
+
+    Raises:
+        ValueError: If no networks are found or a NIC has no resolvable network.
+    """
     network_map_list: list[dict[str, dict[str, str]]] = []
     _destination_pod: dict[str, str] = {"type": "pod"}
     multus_counter = 1
 
-    for index, network in enumerate(source_provider_inventory.vms_networks_mappings(vms=vms)):
+    if per_nic_network_map:
+        networks = get_per_nic_networks(source_provider_inventory=source_provider_inventory, vms=vms)
+    else:
+        networks = source_provider_inventory.vms_networks_mappings(vms=vms)
+
+    for index, network in enumerate(networks):
         if pod_only or index == 0:
             # First network or pod_only mode → pod network
             _destination = _destination_pod

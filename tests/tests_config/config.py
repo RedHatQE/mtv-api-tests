@@ -61,6 +61,16 @@ tests_params: dict = {
         ],
         "warm_migration": False,
     },
+    "test_cold_dual_nic_same_network_migration": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel9-dual-nic",
+            },
+        ],
+        "warm_migration": False,
+        "per_nic_network_map": True,
+        "skip_clone": True,
+    },
     "test_ova_cold_migration": {
         "virtual_machines": [
             {"name": "mtv-win2019-3disks", "guest_agent": True},
