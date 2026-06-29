@@ -332,6 +332,11 @@ def create_log_capture_callback(
     """
 
     def _capture(status: str) -> None:
+        """Capture populate pod logs for one migration status poll.
+
+        Args:
+            status (str): Current migration status from migration polling.
+        """
         if status == Plan.Status.EXECUTING:
             try:
                 migration = get_migration_for_plan(plan=plan)
@@ -1174,6 +1179,11 @@ def execute_migration_monitoring_populator_inflight(
 
     # Combine callbacks - both tracker and log capture
     def combined_callback(status: str) -> None:
+        """Run concurrency tracking and log capture for one migration status poll.
+
+        Args:
+            status (str): Current migration status from migration polling.
+        """
         tracker.poll(status)
         log_capture(status)
 
