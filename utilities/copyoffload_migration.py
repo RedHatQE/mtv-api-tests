@@ -478,10 +478,13 @@ def wait_for_cloud_init(
 
 
 def get_migration_uid(plan: Plan) -> str:
-    """Extract the migration UID from a completed Plan's status.
+    """Extract the migration UID from a completed Plan's migration history.
+
+    Use this for completed migrations where Plan status contains migration history.
+    For in-progress migrations, use _resolve_migration_uid() which queries the live Migration CR.
 
     Args:
-        plan (Plan): The Plan CR resource.
+        plan (Plan): The Plan CR resource (must have completed at least one migration).
 
     Returns:
         str: The migration UID from the first history entry.
@@ -766,10 +769,7 @@ def _get_populate_pod_logs(
     pod_logs.extend(new_live_pods)
 
     LOGGER.info(
-        "Returning %d total populate pod log(s) (%d cached, %d live)",
-        len(pod_logs),
-        len(cached_logs or []),
-        len(new_live_pods),
+        f"Returning {len(pod_logs)} total populate pod log(s) ({len(cached_logs or [])} cached, {len(new_live_pods)} live)"
     )
     return pod_logs
 
