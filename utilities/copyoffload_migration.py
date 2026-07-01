@@ -356,6 +356,7 @@ def create_log_capture_callback(
     Returns:
         callable: Callback function that accepts migration status string
     """
+    cached_migration_uid: list[str] = []
 
     def _capture(status: str) -> None:
         """Capture populate pod logs for one migration status poll.
@@ -365,12 +366,14 @@ def create_log_capture_callback(
         """
         if status == Plan.Status.EXECUTING:
             try:
-                migration = get_migration_for_plan(plan=plan)
-                migration_uid: str = migration.instance.metadata.uid
+                if not cached_migration_uid:
+                    migration = get_migration_for_plan(plan=plan)
+                    cached_migration_uid.append(migration.instance.metadata.uid)
+
                 capture_populate_pod_logs(
                     ocp_admin_client=ocp_admin_client,
                     namespace=namespace,
-                    migration_uid=migration_uid,
+                    migration_uid=cached_migration_uid[0],
                     fixture_store=fixture_store,
                 )
             except (MigrationNotFoundError, ApiException) as e:
@@ -737,6 +740,65 @@ def _log_xcopy_verification_result(
     )
 
 
+def _extract_cached_populate_logs(
+    fixture_store: dict[str, Any],
+    migration_uid: str,
+) -> list[dict[str, str]]:
+    """Extract cached populate pod logs from fixture store.
+
+    Args:
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        migration_uid (str): Migration UID to retrieve cached logs for.
+
+    Returns:
+        list[dict[str, str]]: Cached pod logs with keys: pod_name, pvc_name, log_content.
+    """
+    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
+    if not cached_logs:
+        return []
+
+    LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
+    return [
+        {
+            "pod_name": pod_data["pod_name"],
+            "pvc_name": pod_data["pvc_name"],
+            "log_content": pod_data["log_content"],
+        }
+        for pod_data in cached_logs
+    ]
+
+
+def _collect_live_populate_logs(
+    populate_pods: list[Pod],
+    cached_pod_names: set[str],
+) -> list[dict[str, str]]:
+    """Collect logs from live populate pods not already in cache.
+
+    Args:
+        populate_pods (list[Pod]): Live populate pods to collect logs from.
+        cached_pod_names (set[str]): Names of pods already in cache (to avoid duplicates).
+
+    Returns:
+        list[dict[str, str]]: Live pod logs with keys: pod_name, pvc_name, log_content.
+    """
+    new_live_pods: list[dict[str, str]] = []
+    for pod in populate_pods:
+        if pod.name in cached_pod_names:
+            continue
+        try:
+            new_live_pods.append({
+                "pod_name": pod.name,
+                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+                "log_content": pod.log(),
+            })
+        except ApiException as pod_err:
+            LOGGER.warning(
+                f"Failed to read logs from live populate pod '{pod.name}': {pod_err}. "
+                "Skipping this pod (cached logs preserved)."
+            )
+    return new_live_pods
+
+
 def _get_populate_pod_logs(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
@@ -757,52 +819,22 @@ def _get_populate_pod_logs(
     Raises:
         ValueError: If no populate pods found and no cached logs available.
     """
-    # Try cached logs first (for MTV builds that cleanup pods quickly)
-    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
-    pod_logs: list[dict[str, str]] = []
+    pod_logs = _extract_cached_populate_logs(fixture_store, migration_uid)
 
-    if cached_logs:
-        LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
-        pod_logs.extend(
-            {
-                "pod_name": pod_data["pod_name"],
-                "pvc_name": pod_data["pvc_name"],
-                "log_content": pod_data["log_content"],
-            }
-            for pod_data in cached_logs
-        )
-
-    # Query live pods to fill any cache gaps (for pods not yet cached or MTV builds that keep pods longer)
     log_message = (
-        "Querying live populate pods to fill cache gaps"
-        if cached_logs
-        else "No cached logs, querying live populate pods"
+        "Querying live populate pods to fill cache gaps" if pod_logs else "No cached logs, querying live populate pods"
     )
     LOGGER.info(log_message)
-    populate_pods: list[Pod] = _find_populate_pods(
+
+    populate_pods = _find_populate_pods(
         ocp_admin_client=ocp_admin_client,
         namespace=target_namespace,
         migration_uid=migration_uid,
         require_pods=not pod_logs,
     )
 
-    # Add live pods not already in cache
     cached_pod_names = {pod_log["pod_name"] for pod_log in pod_logs}
-    new_live_pods: list[dict[str, str]] = []
-    for pod in populate_pods:
-        if pod.name in cached_pod_names:
-            continue
-        try:
-            new_live_pods.append({
-                "pod_name": pod.name,
-                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-                "log_content": pod.log(),
-            })
-        except ApiException as pod_err:
-            LOGGER.warning(
-                f"Failed to read logs from live populate pod '{pod.name}': {pod_err}. "
-                "Skipping this pod (cached logs preserved)."
-            )
+    new_live_pods = _collect_live_populate_logs(populate_pods, cached_pod_names)
     pod_logs.extend(new_live_pods)
 
     if not pod_logs:
@@ -812,7 +844,7 @@ def _get_populate_pod_logs(
         )
 
     LOGGER.info(
-        f"Returning {len(pod_logs)} total populate pod log(s) ({len(cached_logs or [])} cached, {len(new_live_pods)} live)"
+        f"Returning {len(pod_logs)} total populate pod log(s) ({len(pod_logs) - len(new_live_pods)} cached, {len(new_live_pods)} live)"
     )
     return pod_logs
 

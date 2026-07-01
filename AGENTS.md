@@ -799,10 +799,13 @@ class TestNameHere:
   clearer failure diagnostics.
 
   **Copy-offload test implementation:**
-  - After Migration CR creation, call `wait_for_copyoffload_plan_secret()` from `utilities/copyoffload_plan_secret.py`
-  - Create log capture callback using `create_log_capture_callback()` from `utilities/copyoffload_migration.py`
-  - Pass callback to `wait_for_migration_complate()` via `on_status_poll` parameter
-  - This captures populate pod logs during EXECUTING phase before MTV cleanup deletes them
+  - **Default approach:** Use `execute_copyoffload_migration()` from `utilities/copyoffload_migration.py`
+    for standard copy-offload tests. This function handles all orchestration: Migration CR creation,
+    plan secret waiting, log capture callback setup, and migration polling.
+  - **Concurrent migrations only:** For tests running multiple migrations simultaneously (e.g.,
+    `test_copyoffload_simultaneous_migration.py`), use the low-level orchestration:
+    `wait_for_copyoffload_plan_secret()`, `create_log_capture_callback()`, and
+    `wait_for_migration_complate(on_status_poll=...)` to manage each migration independently.
 
   Do not wait for plan secret in `create_plan_resource()` — Forklift creates the plan populator secret when migration starts, not at Plan Ready.
 - **7-step copy-offload throttling pattern**: storagemap -> networkmap -> plan -> migrate -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
