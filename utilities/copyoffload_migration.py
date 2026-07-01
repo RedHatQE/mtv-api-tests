@@ -827,6 +827,7 @@ def _get_populate_pod_logs(
     )
     LOGGER.info(log_message)
 
+    new_live_pods: list[dict[str, str]] = []
     try:
         populate_pods = _find_populate_pods(
             ocp_admin_client=ocp_admin_client,
