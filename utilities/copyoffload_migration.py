@@ -13,7 +13,7 @@ import re
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from kubernetes.dynamic.exceptions import ApiException
 from ocp_resources.event import Event
@@ -47,6 +47,16 @@ _ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
 
 # Volume populator framework label for PVC name on populate pods
 PVC_NAME_LABEL = "pvcName"
+
+
+class PopulatePodLogData(TypedDict):
+    """Schema for populate pod log data stored in fixture_store."""
+
+    pod_name: str
+    pvc_name: str
+    log_content: str
+    labels: dict[str, str]
+    phase: str
 
 
 def get_copyoffload_credential(
@@ -224,19 +234,19 @@ def _filter_completed_pods(populate_pods: list[Pod]) -> list[Pod]:
     return pods_with_logs
 
 
-def _capture_logs_from_pods(pods: list[Pod]) -> list[dict[str, Any]]:
+def _capture_logs_from_pods(pods: list[Pod]) -> list[PopulatePodLogData]:
     """Capture logs and metadata from a list of populate pods.
 
     Args:
         pods (list[Pod]): Populate pods to capture logs from.
 
     Returns:
-        list[dict[str, Any]]: Captured pod log data with metadata.
+        list[PopulatePodLogData]: Captured pod log data with metadata.
     """
-    captured_logs: list[dict[str, Any]] = []
+    captured_logs: list[PopulatePodLogData] = []
     for pod in pods:
         try:
-            pod_data: dict[str, Any] = {
+            pod_data: PopulatePodLogData = {
                 "pod_name": pod.name,
                 "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
                 "log_content": pod.log(),
@@ -794,6 +804,12 @@ def _get_populate_pod_logs(
                 "Skipping this pod (cached logs preserved)."
             )
     pod_logs.extend(new_live_pods)
+
+    if not pod_logs:
+        raise ValueError(
+            f"No populate pod logs available for migration '{migration_uid}'. "
+            "Both cached logs and live pod queries returned no results."
+        )
 
     LOGGER.info(
         f"Returning {len(pod_logs)} total populate pod log(s) ({len(cached_logs or [])} cached, {len(new_live_pods)} live)"
