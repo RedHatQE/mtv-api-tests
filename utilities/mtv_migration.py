@@ -147,6 +147,7 @@ def create_plan_resource(
     enable_nested_virtualization: bool | None = None,
     xfs_compatibility: bool = False,
     run_preflight_inspection: bool | None = None,
+    rdm_as_lun: bool | None = None,
 ) -> Plan:
     """Create MTV Plan CR resource.
 
@@ -185,6 +186,8 @@ def create_plan_resource(
         xfs_compatibility (bool): Whether to use XFS-compatible virt-v2v image for VMs with XFS v4 filesystems. Defaults to False.
         run_preflight_inspection (bool | None): Whether to run preflight Deep Inspection on warm migrations.
             Defaults to None (forklift default: True).
+        rdm_as_lun (bool | None): Whether to map RDM disks as LUN devices with SCSI bus
+            on the target VM. Only applies to vSphere source providers. Defaults to None.
 
     Returns:
         Plan: The created Plan CR resource.
@@ -251,6 +254,9 @@ def create_plan_resource(
 
     if enable_nested_virtualization is not None:
         plan_kwargs["enable_nested_virtualization"] = enable_nested_virtualization
+
+    if rdm_as_lun is not None:
+        plan_kwargs["rdm_as_lun"] = rdm_as_lun
 
     # Add copy-offload specific parameters if enabled
     if copyoffload:
