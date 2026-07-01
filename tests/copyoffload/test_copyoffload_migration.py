@@ -200,6 +200,7 @@ class TestCopyoffloadThinMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -406,6 +407,7 @@ class CopyoffloadSnapshotBase:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -713,6 +715,7 @@ class TestCopyoffloadThickLazyMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -884,6 +887,7 @@ class TestCopyoffloadThickEagerMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1054,6 +1058,7 @@ class TestCopyoffloadMultiDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1228,6 +1233,7 @@ class TestCopyoffloadDualDiskMixedThinThickMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1402,6 +1408,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1578,6 +1585,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1758,6 +1766,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -2128,6 +2137,7 @@ class TestCopyoffloadMultiDatastoreMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -2313,6 +2323,7 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -2783,6 +2794,7 @@ class TestCopyoffloadFallbackLargeMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -2974,6 +2986,7 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3148,6 +3161,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3323,6 +3337,7 @@ class TestCopyoffload10MixedDisksMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3497,6 +3512,7 @@ class TestCopyoffloadLargeVmMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3900,6 +3916,7 @@ class TestCopyoffloadNonconformingNameMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -4118,6 +4135,7 @@ class TestCopyoffloadWarmMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -4293,6 +4311,7 @@ class TestCopyoffloadScaleMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -5223,6 +5242,7 @@ class TestConcurrentXcopyVddkMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,

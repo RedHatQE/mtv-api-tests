@@ -207,6 +207,49 @@ def merge_storage_secret_extra(
     return merged
 
 
+def _filter_completed_pods(populate_pods: list[Pod]) -> list[Pod]:
+    """Filter populate pods to include only those in terminal phases.
+
+    Args:
+        populate_pods (list[Pod]): All populate pods for a migration.
+
+    Returns:
+        list[Pod]: Pods in Succeeded or Failed phase (ready for log capture).
+    """
+    pods_with_logs: list[Pod] = []
+    for pod in populate_pods:
+        phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+        if phase in ("Succeeded", "Failed"):
+            pods_with_logs.append(pod)
+    return pods_with_logs
+
+
+def _capture_logs_from_pods(pods: list[Pod]) -> list[dict[str, Any]]:
+    """Capture logs and metadata from a list of populate pods.
+
+    Args:
+        pods (list[Pod]): Populate pods to capture logs from.
+
+    Returns:
+        list[dict[str, Any]]: Captured pod log data with metadata.
+    """
+    captured_logs: list[dict[str, Any]] = []
+    for pod in pods:
+        try:
+            pod_data: dict[str, Any] = {
+                "pod_name": pod.name,
+                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+                "log_content": pod.log(),
+                "labels": dict(pod.instance.metadata.labels),
+                "phase": pod.instance.status.phase if pod.instance.status else "Unknown",
+            }
+            captured_logs.append(pod_data)
+            LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {pod_data['phase']})")
+        except ApiException as pod_err:
+            LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
+    return captured_logs
+
+
 def capture_populate_pod_logs(
     ocp_admin_client: DynamicClient,
     namespace: str,
@@ -245,13 +288,7 @@ def capture_populate_pod_logs(
             LOGGER.debug(f"No populate pods found for migration '{migration_uid}' (non-copyoffload or not yet started)")
             return
 
-        # Filter for pods that have completed
-        pods_with_logs: list[Pod] = []
-        for pod in populate_pods:
-            phase = pod.instance.status.phase if pod.instance.status else "Unknown"
-            # Only capture from completed pods - Running pods don't have xcopyUsed in logs yet
-            if phase in ("Succeeded", "Failed"):
-                pods_with_logs.append(pod)
+        pods_with_logs = _filter_completed_pods(populate_pods)
 
         if not pods_with_logs:
             LOGGER.debug(
@@ -265,36 +302,16 @@ def capture_populate_pod_logs(
             f"for migration '{migration_uid}'"
         )
 
-        # Initialize storage if not exists
         if "populate_pod_logs" not in fixture_store:
             fixture_store["populate_pod_logs"] = {}
 
-        # Capture logs and metadata for each pod
-        captured_logs: list[dict[str, Any]] = []
-        for pod in pods_with_logs:
-            try:
-                pod_data: dict[str, Any] = {
-                    "pod_name": pod.name,
-                    "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-                    "log_content": pod.log(),
-                    "labels": dict(pod.instance.metadata.labels),
-                    "phase": pod.instance.status.phase if pod.instance.status else "Unknown",
-                }
-                captured_logs.append(pod_data)
-                LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {pod_data['phase']})")
-            except ApiException as pod_err:
-                # K8s API failures (pod deleted, network errors, etc.)
-                LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
+        captured_logs = _capture_logs_from_pods(pods_with_logs)
 
         if captured_logs:
-            # Initialize migration's log cache if not exists
             if migration_uid not in fixture_store["populate_pod_logs"]:
                 fixture_store["populate_pod_logs"][migration_uid] = []
 
-            # Track already-captured pod names to avoid duplicates
             existing_pod_names = {log["pod_name"] for log in fixture_store["populate_pod_logs"][migration_uid]}
-
-            # Only add logs from pods we haven't captured yet
             new_logs = [log for log in captured_logs if log["pod_name"] not in existing_pod_names]
 
             if new_logs:
@@ -305,7 +322,6 @@ def capture_populate_pod_logs(
                 )
 
     except ApiException as e:
-        # K8s API failures (network errors, pod deleted during iteration, etc.)
         LOGGER.warning(f"Failed to capture populate pod logs for migration '{migration_uid}': {e}")
 
 
@@ -762,15 +778,21 @@ def _get_populate_pod_logs(
 
     # Add live pods not already in cache
     cached_pod_names = {pod_log["pod_name"] for pod_log in pod_logs}
-    new_live_pods = [
-        {
-            "pod_name": pod.name,
-            "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-            "log_content": pod.log(),
-        }
-        for pod in populate_pods
-        if pod.name not in cached_pod_names
-    ]
+    new_live_pods: list[dict[str, str]] = []
+    for pod in populate_pods:
+        if pod.name in cached_pod_names:
+            continue
+        try:
+            new_live_pods.append({
+                "pod_name": pod.name,
+                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+                "log_content": pod.log(),
+            })
+        except ApiException as pod_err:
+            LOGGER.warning(
+                f"Failed to read logs from live populate pod '{pod.name}': {pod_err}. "
+                "Skipping this pod (cached logs preserved)."
+            )
     pod_logs.extend(new_live_pods)
 
     LOGGER.info(
@@ -1091,7 +1113,6 @@ def execute_copyoffload_migration(
         TimeoutError: If the copy-offload plan secret is not created before the timeout.
         MigrationPlanExecError: If migration fails or times out.
     """
-    # Create Migration CR
     create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
@@ -1102,14 +1123,12 @@ def execute_copyoffload_migration(
         cut_over=cut_over,
     )
 
-    # Wait for copy-offload plan secret to be ready
     wait_for_copyoffload_plan_secret(
         ocp_admin_client=ocp_admin_client,
         plan=plan,
         namespace=target_namespace,
     )
 
-    # Create log capture callback
     callback = create_log_capture_callback(
         ocp_admin_client=ocp_admin_client,
         namespace=target_namespace,
@@ -1117,7 +1136,6 @@ def execute_copyoffload_migration(
         fixture_store=fixture_store,
     )
 
-    # Wait for migration with log capture
     wait_for_migration_complate(plan=plan, on_status_poll=callback)
 
 
