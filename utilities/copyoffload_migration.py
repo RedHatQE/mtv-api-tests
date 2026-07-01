@@ -487,7 +487,7 @@ def wait_for_cloud_init(
             try:
                 rc, _, _ = host.executor(user=user).run_cmd(["ls", file_name])
                 return rc == 0
-            except (ConnectionError, OSError, TimeoutError) as e:
+            except (RuntimeError, ConnectionError, OSError, TimeoutError) as e:
                 # SSH/network failures during command execution
                 LOGGER.warning(f"SSH check failed for {vm_name}: {type(e).__name__}: {e} - retrying...")
                 return False
