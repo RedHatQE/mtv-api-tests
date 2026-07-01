@@ -216,20 +216,19 @@ def merge_storage_secret_extra(
 
 
 def _filter_completed_pods(populate_pods: list[Pod]) -> list[Pod]:
-    """Filter populate pods to include only those in terminal phases.
+    """Filter populate pods to include those ready for log capture.
+
+    Returns all pods (Running, Succeeded, Failed) since logs may contain xcopyUsed
+    or failure markers even while pods are still running. This ensures log capture
+    before MTV cleanup deletes pods.
 
     Args:
         populate_pods (list[Pod]): All populate pods for a migration.
 
     Returns:
-        list[Pod]: Pods in Succeeded or Failed phase (ready for log capture).
+        list[Pod]: Pods ready for log capture (all phases).
     """
-    pods_with_logs: list[Pod] = []
-    for pod in populate_pods:
-        phase = pod.instance.status.phase if pod.instance.status else "Unknown"
-        if phase in ("Succeeded", "Failed"):
-            pods_with_logs.append(pod)
-    return pods_with_logs
+    return populate_pods
 
 
 def _capture_logs_from_pods(pods: list[Pod]) -> list[PopulatePodLogData]:
@@ -827,16 +826,25 @@ def _get_populate_pod_logs(
     )
     LOGGER.info(log_message)
 
-    populate_pods = _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=target_namespace,
-        migration_uid=migration_uid,
-        require_pods=not pod_logs,
-    )
+    try:
+        populate_pods = _find_populate_pods(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            migration_uid=migration_uid,
+            require_pods=not pod_logs,
+        )
 
-    cached_pod_names = {pod_log["pod_name"] for pod_log in pod_logs}
-    new_live_pods = _collect_live_populate_logs(populate_pods, cached_pod_names)
-    pod_logs.extend(new_live_pods)
+        cached_pod_names = {pod_log["pod_name"] for pod_log in pod_logs}
+        new_live_pods = _collect_live_populate_logs(populate_pods, cached_pod_names)
+        pod_logs.extend(new_live_pods)
+    except ApiException as api_err:
+        if pod_logs:
+            LOGGER.warning(
+                f"Failed to query live populate pods for migration '{migration_uid}': {api_err}. "
+                f"Using {len(pod_logs)} cached log(s) only."
+            )
+        else:
+            raise
 
     if not pod_logs:
         raise ValueError(
@@ -1138,6 +1146,44 @@ class _PopulatorConcurrencyTracker:
         return dict(self._max_concurrent_by_host)
 
 
+def _start_copyoffload_migration(
+    ocp_admin_client: DynamicClient,
+    fixture_store: dict[str, Any],
+    plan: Plan,
+    target_namespace: str,
+    cut_over: datetime | None = None,
+) -> None:
+    """Create Migration CR and wait for copy-offload plan secret.
+
+    Shared helper for copy-offload migration start sequence.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        fixture_store (dict[str, Any]): Fixture store for resource tracking and cleanup.
+        plan (Plan): The Plan CR resource defining the migration configuration.
+        target_namespace (str): Target namespace for the Migration CR.
+        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+
+    Raises:
+        TimeoutError: If the copy-offload plan secret is not created before the timeout.
+    """
+    create_and_store_resource(
+        client=ocp_admin_client,
+        fixture_store=fixture_store,
+        resource=Migration,
+        namespace=target_namespace,
+        plan_name=plan.name,
+        plan_namespace=plan.namespace,
+        cut_over=cut_over,
+    )
+
+    wait_for_copyoffload_plan_secret(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        namespace=target_namespace,
+    )
+
+
 def execute_copyoffload_migration(
     ocp_admin_client: DynamicClient,
     fixture_store: dict[str, Any],
@@ -1162,20 +1208,12 @@ def execute_copyoffload_migration(
         TimeoutError: If the copy-offload plan secret is not created before the timeout.
         MigrationPlanExecError: If migration fails or times out.
     """
-    create_and_store_resource(
-        client=ocp_admin_client,
-        fixture_store=fixture_store,
-        resource=Migration,
-        namespace=target_namespace,
-        plan_name=plan.name,
-        plan_namespace=plan.namespace,
-        cut_over=cut_over,
-    )
-
-    wait_for_copyoffload_plan_secret(
+    _start_copyoffload_migration(
         ocp_admin_client=ocp_admin_client,
+        fixture_store=fixture_store,
         plan=plan,
-        namespace=target_namespace,
+        target_namespace=target_namespace,
+        cut_over=cut_over,
     )
 
     callback = create_log_capture_callback(
@@ -1213,20 +1251,12 @@ def execute_migration_monitoring_populator_inflight(
         MigrationPlanExecError: If migration fails or times out.
         TimeoutError: If a copy-offload plan populator secret is not created in time.
     """
-    create_and_store_resource(
-        client=ocp_admin_client,
-        fixture_store=fixture_store,
-        resource=Migration,
-        namespace=target_namespace,
-        plan_name=plan.name,
-        plan_namespace=plan.namespace,
-        cut_over=cut_over,
-    )
-
-    wait_for_copyoffload_plan_secret(
+    _start_copyoffload_migration(
         ocp_admin_client=ocp_admin_client,
+        fixture_store=fixture_store,
         plan=plan,
-        namespace=target_namespace,
+        target_namespace=target_namespace,
+        cut_over=cut_over,
     )
 
     tracker = _PopulatorConcurrencyTracker(

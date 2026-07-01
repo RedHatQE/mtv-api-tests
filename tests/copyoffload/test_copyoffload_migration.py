@@ -4728,26 +4728,28 @@ class TestSimultaneousCopyoffloadMigrations:
             namespace=target_namespace,
         )
 
-        # Validate both migrations are executing simultaneously before either completes
-        wait_for_concurrent_migration_execution([self.plan_resource_1, self.plan_resource_2])
-
-        # Wait for both migrations to complete
-        LOGGER.info("Waiting for both copyoffload migrations to complete")
+        # Create log capture callbacks before migrations can finish
         callback_1 = create_log_capture_callback(
             ocp_admin_client=ocp_admin_client,
             namespace=target_namespace,
             plan=self.plan_resource_1,
             fixture_store=fixture_store,
         )
-        wait_for_migration_complate(plan=self.plan_resource_1, on_status_poll=callback_1)
-        LOGGER.info("Copyoffload migration 1 completed")
-
         callback_2 = create_log_capture_callback(
             ocp_admin_client=ocp_admin_client,
             namespace=target_namespace,
             plan=self.plan_resource_2,
             fixture_store=fixture_store,
         )
+
+        # Validate both migrations are executing simultaneously before either completes
+        wait_for_concurrent_migration_execution([self.plan_resource_1, self.plan_resource_2])
+
+        # Wait for both migrations to complete
+        LOGGER.info("Waiting for both copyoffload migrations to complete")
+        wait_for_migration_complate(plan=self.plan_resource_1, on_status_poll=callback_1)
+        LOGGER.info("Copyoffload migration 1 completed")
+
         wait_for_migration_complate(plan=self.plan_resource_2, on_status_poll=callback_2)
         LOGGER.info("Copyoffload migration 2 completed")
 
@@ -5216,17 +5218,19 @@ class TestConcurrentXcopyVddkMigration:
             namespace=target_namespace,
         )
 
-        # Validate both migrations are executing simultaneously before either completes
-        wait_for_concurrent_migration_execution([self.plan_xcopy, self.plan_vddk])
-
-        # Wait for both migrations to complete
-        LOGGER.info("Waiting for XCOPY migration to complete")
+        # Create log capture callback before migration can finish
         callback_xcopy = create_log_capture_callback(
             ocp_admin_client=ocp_admin_client,
             namespace=target_namespace,
             plan=self.plan_xcopy,
             fixture_store=fixture_store,
         )
+
+        # Validate both migrations are executing simultaneously before either completes
+        wait_for_concurrent_migration_execution([self.plan_xcopy, self.plan_vddk])
+
+        # Wait for both migrations to complete
+        LOGGER.info("Waiting for XCOPY migration to complete")
         wait_for_migration_complate(plan=self.plan_xcopy, on_status_poll=callback_xcopy)
         LOGGER.info("XCOPY migration completed")
 
