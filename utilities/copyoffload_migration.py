@@ -216,19 +216,20 @@ def merge_storage_secret_extra(
 
 
 def _filter_completed_pods(populate_pods: list[Pod]) -> list[Pod]:
-    """Filter populate pods to include those ready for log capture.
-
-    Returns all pods (Running, Succeeded, Failed) since logs may contain xcopyUsed
-    or failure markers even while pods are still running. This ensures log capture
-    before MTV cleanup deletes pods.
+    """Filter populate pods to include only those in terminal phases.
 
     Args:
         populate_pods (list[Pod]): All populate pods for a migration.
 
     Returns:
-        list[Pod]: Pods ready for log capture (all phases).
+        list[Pod]: Pods in Succeeded or Failed phase (ready for log capture).
     """
-    return populate_pods
+    pods_with_logs: list[Pod] = []
+    for pod in populate_pods:
+        phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+        if phase in ("Succeeded", "Failed"):
+            pods_with_logs.append(pod)
+    return pods_with_logs
 
 
 def _capture_logs_from_pods(pods: list[Pod]) -> list[PopulatePodLogData]:
