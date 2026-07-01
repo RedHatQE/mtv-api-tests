@@ -55,8 +55,6 @@ class PopulatePodLogData(TypedDict):
     pod_name: str
     pvc_name: str
     log_content: str
-    labels: dict[str, str]
-    phase: str
 
 
 def get_copyoffload_credential(
@@ -246,15 +244,14 @@ def _capture_logs_from_pods(pods: list[Pod]) -> list[PopulatePodLogData]:
     captured_logs: list[PopulatePodLogData] = []
     for pod in pods:
         try:
+            phase = pod.instance.status.phase if pod.instance.status else "Unknown"
             pod_data: PopulatePodLogData = {
                 "pod_name": pod.name,
                 "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
                 "log_content": pod.log(),
-                "labels": dict(pod.instance.metadata.labels),
-                "phase": pod.instance.status.phase if pod.instance.status else "Unknown",
             }
             captured_logs.append(pod_data)
-            LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {pod_data['phase']})")
+            LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {phase})")
         except ApiException as pod_err:
             LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
     return captured_logs
@@ -354,7 +351,7 @@ def create_log_capture_callback(
         fixture_store (dict[str, Any]): Fixture store for caching pod logs
 
     Returns:
-        callable: Callback function that accepts migration status string
+        Callable[[str], None]: Callback function that accepts migration status string
     """
     cached_migration_uid: list[str] = []
 
@@ -368,7 +365,10 @@ def create_log_capture_callback(
             try:
                 if not cached_migration_uid:
                     migration = get_migration_for_plan(plan=plan)
-                    cached_migration_uid.append(migration.instance.metadata.uid)
+                    migration_uid = migration.instance.metadata.uid
+                    if not migration_uid:
+                        raise ValueError("Migration CR has no UID")
+                    cached_migration_uid.append(migration_uid)
 
                 capture_populate_pod_logs(
                     ocp_admin_client=ocp_admin_client,
@@ -376,9 +376,10 @@ def create_log_capture_callback(
                     migration_uid=cached_migration_uid[0],
                     fixture_store=fixture_store,
                 )
-            except (MigrationNotFoundError, ApiException) as e:
+            except (MigrationNotFoundError, ApiException, ValueError) as e:
                 # MigrationNotFoundError: Migration CR not created yet
                 # ApiException: K8s API failures
+                # ValueError: Migration UID is None
                 LOGGER.debug(f"Could not capture populate pod logs during migration: {e}")
 
     return _capture
