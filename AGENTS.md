@@ -802,6 +802,11 @@ class TestNameHere:
   - **Default approach:** Use `execute_copyoffload_migration()` from `utilities/copyoffload_migration.py`
     for standard copy-offload tests. This function handles all orchestration: Migration CR creation,
     plan secret waiting, log capture callback setup, and migration polling.
+  - **Populator throttling tests:** Use `execute_migration_monitoring_populator_inflight()` from
+    `utilities/copyoffload_migration.py` for tests that need to track populator concurrency during
+    migration. This function combines migration execution with populator in-flight monitoring and
+    log capture callback setup, ensuring both concurrency tracking and populate pod logs are
+    collected during migration polling.
   - **Concurrent migrations only:** For tests running multiple migrations simultaneously (e.g.,
     `test_copyoffload_simultaneous_migration.py`), use the low-level orchestration:
     `wait_for_copyoffload_plan_secret()`, `create_log_capture_callback()`, and
