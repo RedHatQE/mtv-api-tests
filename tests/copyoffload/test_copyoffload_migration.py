@@ -4758,7 +4758,14 @@ class TestSimultaneousCopyoffloadMigrations:
         )
 
         # Validate both migrations are executing simultaneously before either completes
-        wait_for_concurrent_migration_execution([self.plan_resource_1, self.plan_resource_2])
+        # Pass callbacks to ensure log capture starts as soon as EXECUTING is observed
+        wait_for_concurrent_migration_execution(
+            [self.plan_resource_1, self.plan_resource_2],
+            callbacks={
+                self.plan_resource_1.name: callback_1,
+                self.plan_resource_2.name: callback_2,
+            },
+        )
 
         # Wait for both migrations to complete - poll both plans together
         LOGGER.info("Waiting for both copyoffload migrations to complete")
@@ -4808,11 +4815,11 @@ class TestSimultaneousCopyoffloadMigrations:
                 if len(completed_plans) == 2:
                     break
 
-        except TimeoutExpiredError:
+        except TimeoutExpiredError as timeout_err:
             raise MigrationPlanExecError(
                 f"One or both migrations failed to complete within timeout. "
                 f"Completed: {completed_plans}, Expected: {{{self.plan_resource_1.name}, {self.plan_resource_2.name}}}"
-            )
+            ) from timeout_err
 
     def test_check_xcopy_used_plan1(
         self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]

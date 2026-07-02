@@ -48,6 +48,10 @@ _ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
 # Volume populator framework label for PVC name on populate pods
 PVC_NAME_LABEL = "pvcName"
 
+# Populate pod log caching constants
+_POPULATE_POD_LOGS_CACHE_KEY = "populate_pod_logs"
+_POPULATE_POD_NAME_PREFIX = "populate-"
+
 
 class PopulatePodLogData(TypedDict):
     """Schema for populate pod log data stored in fixture_store."""
@@ -288,7 +292,7 @@ def capture_populate_pod_logs(
                 namespace=namespace,
                 label_selector=f"migration={migration_uid}",
             )
-            if pod.name.startswith("populate-")
+            if pod.name.startswith(_POPULATE_POD_NAME_PREFIX)
         ]
 
         if not populate_pods:
@@ -309,23 +313,23 @@ def capture_populate_pod_logs(
             f"for migration '{migration_uid}'"
         )
 
-        if "populate_pod_logs" not in fixture_store:
-            fixture_store["populate_pod_logs"] = {}
+        if _POPULATE_POD_LOGS_CACHE_KEY not in fixture_store:
+            fixture_store[_POPULATE_POD_LOGS_CACHE_KEY] = {}
 
         captured_logs = _capture_logs_from_pods(pods_with_logs)
 
         if captured_logs:
-            if migration_uid not in fixture_store["populate_pod_logs"]:
-                fixture_store["populate_pod_logs"][migration_uid] = []
+            if migration_uid not in fixture_store[_POPULATE_POD_LOGS_CACHE_KEY]:
+                fixture_store[_POPULATE_POD_LOGS_CACHE_KEY][migration_uid] = []
 
-            existing_pod_names = {log["pod_name"] for log in fixture_store["populate_pod_logs"][migration_uid]}
+            existing_pod_names = {log["pod_name"] for log in fixture_store[_POPULATE_POD_LOGS_CACHE_KEY][migration_uid]}
             new_logs = [log for log in captured_logs if log["pod_name"] not in existing_pod_names]
 
             if new_logs:
-                fixture_store["populate_pod_logs"][migration_uid].extend(new_logs)
+                fixture_store[_POPULATE_POD_LOGS_CACHE_KEY][migration_uid].extend(new_logs)
                 LOGGER.info(
                     f"Captured {len(new_logs)} new populate pod log(s) for migration '{migration_uid}' "
-                    f"({len(fixture_store['populate_pod_logs'][migration_uid])} total)"
+                    f"({len(fixture_store[_POPULATE_POD_LOGS_CACHE_KEY][migration_uid])} total)"
                 )
 
     except ApiException as e:
@@ -364,10 +368,9 @@ def create_log_capture_callback(
         if status == Plan.Status.EXECUTING:
             try:
                 if not cached_migration_uid:
-                    migration = get_migration_for_plan(plan=plan)
-                    migration_uid = migration.instance.metadata.uid
-                    if not migration_uid:
-                        raise ValueError("Migration CR has no UID")
+                    migration_uid = _resolve_migration_uid(plan=plan)
+                    if migration_uid is None:
+                        return
                     cached_migration_uid.append(migration_uid)
 
                 capture_populate_pod_logs(
@@ -376,10 +379,9 @@ def create_log_capture_callback(
                     migration_uid=cached_migration_uid[0],
                     fixture_store=fixture_store,
                 )
-            except (MigrationNotFoundError, ApiException, ValueError) as e:
-                # MigrationNotFoundError: Migration CR not created yet
+            except (ApiException, ValueError) as e:
                 # ApiException: K8s API failures
-                # ValueError: Migration UID is None
+                # ValueError: Invalid migration UID from _resolve_migration_uid
                 LOGGER.debug(f"Could not capture populate pod logs during migration: {e}")
 
     return _capture
@@ -755,7 +757,9 @@ def _extract_cached_populate_logs(
     Returns:
         list[PopulatePodLogData]: Cached pod logs with keys: pod_name, pvc_name, log_content.
     """
-    cached_logs: list[PopulatePodLogData] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
+    cached_logs: list[PopulatePodLogData] | None = fixture_store.get(_POPULATE_POD_LOGS_CACHE_KEY, {}).get(
+        migration_uid
+    )
     if not cached_logs:
         return []
 
@@ -1267,13 +1271,11 @@ def execute_migration_monitoring_populator_inflight(
         """
         try:
             tracker.poll(status)
-        except (ApiException, ValueError, KeyError, AttributeError) as tracker_err:
+        except ApiException as tracker_err:
             LOGGER.warning(f"Populator concurrency tracking failed during poll: {tracker_err}")
 
-        try:
-            log_capture(status)
-        except (ApiException, ValueError, MigrationNotFoundError) as log_err:
-            LOGGER.warning(f"Populate pod log capture failed during poll: {log_err}")
+        # log_capture already isolates its own expected failure modes internally
+        log_capture(status)
 
     wait_for_migration_complate(plan=plan, on_status_poll=combined_callback)
     return tracker.results

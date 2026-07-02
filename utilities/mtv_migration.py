@@ -603,7 +603,11 @@ def verify_vm_disk_count(destination_provider, plan, target_namespace):
         LOGGER.info(f"Successfully verified {expected_disks} disks on the migrated VM '{source_vm_name}'.")
 
 
-def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int = 120) -> None:
+def wait_for_concurrent_migration_execution(
+    plan_list: list[Plan],
+    timeout: int = 120,
+    callbacks: dict[str, Callable[[str], None]] | None = None,
+) -> None:
     """Wait for multiple migration plans to be executing simultaneously.
 
     Polls the status of all provided plans and validates that they all reach the "Executing"
@@ -613,6 +617,8 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
     Args:
         plan_list: List of Plan resources to monitor.
         timeout: Timeout in seconds to wait for simultaneous execution.
+        callbacks: Optional dict mapping plan names to status poll callbacks. Callbacks are
+            invoked with the current status string for their respective plan on each poll.
 
     Returns:
         None
@@ -622,6 +628,7 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
     """
     LOGGER.info(f"Validating {len(plan_list)} migrations enter executing state simultaneously")
     plans_executing = {plan.name: False for plan in plan_list}
+    callbacks = callbacks or {}
 
     try:
         for current_statuses in TimeoutSampler(
@@ -629,9 +636,14 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
             sleep=2,
             wait_timeout=timeout,
         ):
-            # Update executing state for each plan
+            # Update executing state for each plan and invoke callbacks
             for plan in plan_list:
                 status = current_statuses[plan.name]
+
+                # Invoke callback if provided
+                if plan.name in callbacks:
+                    callbacks[plan.name](status)
+
                 if status == Plan.Status.EXECUTING:
                     if not plans_executing[plan.name]:
                         LOGGER.info(f"Plan '{plan.name}' is now executing")
