@@ -25,7 +25,9 @@ from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
@@ -43,6 +45,7 @@ from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.mtv_migration import (
     create_plan_resource,
     get_network_migration_map,
+    get_plan_migration_status,
     get_storage_migration_map,
     verify_vm_disk_count,
     wait_for_concurrent_migration_execution,
@@ -1951,7 +1954,13 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
     def test_check_xcopy_used(
         self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
     ) -> None:
-        """Verify XCOPY acceleration was used for all disks."""
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
@@ -3715,7 +3724,13 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         target_namespace: str,
         fixture_store: dict[str, Any],
     ) -> None:
-        """Verify XCOPY acceleration was used for all disks."""
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
@@ -4745,13 +4760,59 @@ class TestSimultaneousCopyoffloadMigrations:
         # Validate both migrations are executing simultaneously before either completes
         wait_for_concurrent_migration_execution([self.plan_resource_1, self.plan_resource_2])
 
-        # Wait for both migrations to complete
+        # Wait for both migrations to complete - poll both plans together
         LOGGER.info("Waiting for both copyoffload migrations to complete")
-        wait_for_migration_complate(plan=self.plan_resource_1, on_status_poll=callback_1)
-        LOGGER.info("Copyoffload migration 1 completed")
+        completed_plans: set[str] = set()
+        last_status_1: str = ""
+        last_status_2: str = ""
 
-        wait_for_migration_complate(plan=self.plan_resource_2, on_status_poll=callback_2)
-        LOGGER.info("Copyoffload migration 2 completed")
+        try:
+            for _ in TimeoutSampler(
+                func=lambda: None,
+                sleep=1,
+                wait_timeout=py_config["plan_wait_timeout"],
+            ):
+                # Poll plan 1 if not yet completed
+                if self.plan_resource_1.name not in completed_plans:
+                    status_1 = get_plan_migration_status(plan=self.plan_resource_1)
+                    if status_1 != last_status_1:
+                        LOGGER.info(f"Plan '{self.plan_resource_1.name}' migration status: '{status_1}'")
+                        last_status_1 = status_1
+                    callback_1(status_1)
+
+                    if status_1 == Plan.Status.SUCCEEDED:
+                        completed_plans.add(self.plan_resource_1.name)
+                        LOGGER.info("Copyoffload migration 1 completed")
+                    elif status_1 == Plan.Status.FAILED:
+                        raise MigrationPlanExecError(
+                            f"Plan {self.plan_resource_1.name} failed. \nstatus:\n\t{self.plan_resource_1.instance}"
+                        )
+
+                # Poll plan 2 if not yet completed
+                if self.plan_resource_2.name not in completed_plans:
+                    status_2 = get_plan_migration_status(plan=self.plan_resource_2)
+                    if status_2 != last_status_2:
+                        LOGGER.info(f"Plan '{self.plan_resource_2.name}' migration status: '{status_2}'")
+                        last_status_2 = status_2
+                    callback_2(status_2)
+
+                    if status_2 == Plan.Status.SUCCEEDED:
+                        completed_plans.add(self.plan_resource_2.name)
+                        LOGGER.info("Copyoffload migration 2 completed")
+                    elif status_2 == Plan.Status.FAILED:
+                        raise MigrationPlanExecError(
+                            f"Plan {self.plan_resource_2.name} failed. \nstatus:\n\t{self.plan_resource_2.instance}"
+                        )
+
+                # Break when both plans have completed
+                if len(completed_plans) == 2:
+                    break
+
+        except TimeoutExpiredError:
+            raise MigrationPlanExecError(
+                f"One or both migrations failed to complete within timeout. "
+                f"Completed: {completed_plans}, Expected: {{{self.plan_resource_1.name}, {self.plan_resource_2.name}}}"
+            )
 
     def test_check_xcopy_used_plan1(
         self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]

@@ -745,7 +745,7 @@ def _log_xcopy_verification_result(
 def _extract_cached_populate_logs(
     fixture_store: dict[str, Any],
     migration_uid: str,
-) -> list[dict[str, str]]:
+) -> list[PopulatePodLogData]:
     """Extract cached populate pod logs from fixture store.
 
     Args:
@@ -753,20 +753,20 @@ def _extract_cached_populate_logs(
         migration_uid (str): Migration UID to retrieve cached logs for.
 
     Returns:
-        list[dict[str, str]]: Cached pod logs with keys: pod_name, pvc_name, log_content.
+        list[PopulatePodLogData]: Cached pod logs with keys: pod_name, pvc_name, log_content.
     """
-    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
+    cached_logs: list[PopulatePodLogData] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
     if not cached_logs:
         return []
 
     LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
-    return cached_logs
+    return list(cached_logs)
 
 
 def _collect_live_populate_logs(
     populate_pods: list[Pod],
     cached_pod_names: set[str],
-) -> list[dict[str, str]]:
+) -> list[PopulatePodLogData]:
     """Collect logs from live populate pods not already in cache.
 
     Args:
@@ -774,9 +774,9 @@ def _collect_live_populate_logs(
         cached_pod_names (set[str]): Names of pods already in cache (to avoid duplicates).
 
     Returns:
-        list[dict[str, str]]: Live pod logs with keys: pod_name, pvc_name, log_content.
+        list[PopulatePodLogData]: Live pod logs with keys: pod_name, pvc_name, log_content.
     """
-    new_live_pods: list[dict[str, str]] = []
+    new_live_pods: list[PopulatePodLogData] = []
     for pod in populate_pods:
         if pod.name in cached_pod_names:
             continue
@@ -799,7 +799,7 @@ def _get_populate_pod_logs(
     target_namespace: str,
     migration_uid: str,
     fixture_store: dict[str, Any],
-) -> list[dict[str, str]]:
+) -> list[PopulatePodLogData]:
     """Get populate pod logs from cache or live pods.
 
     Args:
@@ -809,7 +809,7 @@ def _get_populate_pod_logs(
         fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
 
     Returns:
-        list[dict[str, str]]: List of pod logs with keys: pod_name, pvc_name, log_content.
+        list[PopulatePodLogData]: List of pod logs with keys: pod_name, pvc_name, log_content.
 
     Raises:
         ValueError: If no populate pods found and no cached logs available.
@@ -821,7 +821,7 @@ def _get_populate_pod_logs(
     )
     LOGGER.info(log_message)
 
-    new_live_pods: list[dict[str, str]] = []
+    new_live_pods: list[PopulatePodLogData] = []
     try:
         populate_pods = _find_populate_pods(
             ocp_admin_client=ocp_admin_client,
@@ -885,7 +885,7 @@ def verify_xcopy_used(
     expected_value: int = 1 if expected_xcopy_used else 0
 
     # Get populate pod logs (cached or live)
-    pod_logs: list[dict[str, str]] = _get_populate_pod_logs(
+    pod_logs: list[PopulatePodLogData] = _get_populate_pod_logs(
         ocp_admin_client=ocp_admin_client,
         target_namespace=target_namespace,
         migration_uid=migration_uid,
@@ -999,7 +999,7 @@ def verify_xcopy_used_per_datastore(
     verified_datastore_ids: set[str] = set()
 
     # Get populate pod logs (cached or live)
-    pod_logs: list[dict[str, str]] = _get_populate_pod_logs(
+    pod_logs: list[PopulatePodLogData] = _get_populate_pod_logs(
         ocp_admin_client=ocp_admin_client,
         target_namespace=target_namespace,
         migration_uid=migration_uid,
@@ -1281,12 +1281,12 @@ def execute_migration_monitoring_populator_inflight(
         """
         try:
             tracker.poll(status)
-        except Exception as tracker_err:
+        except (ApiException, ValueError, KeyError, AttributeError) as tracker_err:
             LOGGER.warning(f"Populator concurrency tracking failed during poll: {tracker_err}")
 
         try:
             log_capture(status)
-        except Exception as log_err:
+        except (ApiException, ValueError, MigrationNotFoundError) as log_err:
             LOGGER.warning(f"Populate pod log capture failed during poll: {log_err}")
 
     wait_for_migration_complate(plan=plan, on_status_poll=combined_callback)
