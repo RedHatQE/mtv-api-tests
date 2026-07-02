@@ -565,9 +565,10 @@ def _resolve_migration_uid(plan: Plan) -> str | None:
         migration = get_migration_for_plan(plan=plan)
     except MigrationNotFoundError:
         return None
-    if not migration.instance.metadata.uid:
+    migration_uid = migration.instance.metadata.uid
+    if not migration_uid:
         raise ValueError(f"Migration CR for Plan '{plan.name}' has no UID")
-    return migration.instance.metadata.uid
+    return migration_uid
 
 
 def _get_populate_pods_for_plan(
@@ -759,14 +760,7 @@ def _extract_cached_populate_logs(
         return []
 
     LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
-    return [
-        {
-            "pod_name": pod_data["pod_name"],
-            "pvc_name": pod_data["pvc_name"],
-            "log_content": pod_data["log_content"],
-        }
-        for pod_data in cached_logs
-    ]
+    return cached_logs
 
 
 def _collect_live_populate_logs(
@@ -1280,11 +1274,20 @@ def execute_migration_monitoring_populator_inflight(
     def combined_callback(status: str) -> None:
         """Run concurrency tracking and log capture for one migration status poll.
 
+        Isolates exceptions so failure in one callback doesn't prevent the other from running.
+
         Args:
             status (str): Current migration status from migration polling.
         """
-        tracker.poll(status)
-        log_capture(status)
+        try:
+            tracker.poll(status)
+        except Exception as tracker_err:
+            LOGGER.warning(f"Populator concurrency tracking failed during poll: {tracker_err}")
+
+        try:
+            log_capture(status)
+        except Exception as log_err:
+            LOGGER.warning(f"Populate pod log capture failed during poll: {log_err}")
 
     wait_for_migration_complate(plan=plan, on_status_poll=combined_callback)
     return tracker.results
