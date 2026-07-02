@@ -776,22 +776,8 @@ def _collect_live_populate_logs(
     Returns:
         list[PopulatePodLogData]: Live pod logs with keys: pod_name, pvc_name, log_content.
     """
-    new_live_pods: list[PopulatePodLogData] = []
-    for pod in populate_pods:
-        if pod.name in cached_pod_names:
-            continue
-        try:
-            new_live_pods.append({
-                "pod_name": pod.name,
-                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-                "log_content": pod.log(),
-            })
-        except ApiException as pod_err:
-            LOGGER.warning(
-                f"Failed to read logs from live populate pod '{pod.name}': {pod_err}. "
-                "Skipping this pod (cached logs preserved)."
-            )
-    return new_live_pods
+    uncached_pods = [pod for pod in populate_pods if pod.name not in cached_pod_names]
+    return _capture_logs_from_pods(uncached_pods)
 
 
 def _get_populate_pod_logs(
