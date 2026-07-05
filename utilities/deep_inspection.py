@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from typing import TYPE_CHECKING, Any
 
+from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.conversion import Conversion
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
@@ -42,14 +43,15 @@ def create_di_connection_secret(
         Secret: The created connection secret.
 
     Raises:
-        ValueError: If provider CR, secret, or fingerprint is missing.
+        ValueError: If provider CR, secret, or fingerprint is missing or not found on cluster.
     """
     provider_cr = source_provider.ocp_resource
     if provider_cr is None:
         raise ValueError("source_provider.ocp_resource is not set")
-    provider_instance = provider_cr.instance
-    if provider_instance is None:
-        raise ValueError(f"Provider '{provider_cr.name}' instance not found on cluster")
+    try:
+        provider_instance = provider_cr.instance
+    except NotFoundError:
+        raise ValueError(f"Provider '{provider_cr.name}' not found on cluster")
     provider_spec = provider_instance.spec
 
     provider_secret_ref = provider_spec.secret
@@ -61,8 +63,9 @@ def create_di_connection_secret(
         name=provider_secret_ref.name,
         namespace=provider_secret_ref.namespace,
     )
-    secret_instance = source_secret.instance
-    if secret_instance is None:
+    try:
+        secret_instance = source_secret.instance
+    except NotFoundError:
         raise ValueError(f"Provider secret '{source_secret.name}' not found on cluster")
     raw_data = secret_instance.data
     if not raw_data:
