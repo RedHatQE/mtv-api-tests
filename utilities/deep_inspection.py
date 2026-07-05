@@ -42,12 +42,15 @@ def create_di_connection_secret(
         Secret: The created connection secret.
 
     Raises:
-        ValueError: If provider secret or fingerprint is missing.
+        ValueError: If provider CR, secret, or fingerprint is missing.
     """
     provider_cr = source_provider.ocp_resource
-    assert provider_cr is not None, "source_provider.ocp_resource is not set"
-    assert provider_cr.instance is not None, f"Provider '{provider_cr.name}' instance not found on cluster"
-    provider_spec = provider_cr.instance.spec
+    if provider_cr is None:
+        raise ValueError("source_provider.ocp_resource is not set")
+    provider_instance = provider_cr.instance
+    if provider_instance is None:
+        raise ValueError(f"Provider '{provider_cr.name}' instance not found on cluster")
+    provider_spec = provider_instance.spec
 
     provider_secret_ref = provider_spec.secret
     if not provider_secret_ref:
@@ -58,8 +61,10 @@ def create_di_connection_secret(
         name=provider_secret_ref.name,
         namespace=provider_secret_ref.namespace,
     )
-    assert source_secret.instance is not None, f"Provider secret '{source_secret.name}' not found on cluster"
-    raw_data = source_secret.instance.data
+    secret_instance = source_secret.instance
+    if secret_instance is None:
+        raise ValueError(f"Provider secret '{source_secret.name}' not found on cluster")
+    raw_data = secret_instance.data
     if not raw_data:
         raise ValueError(f"Provider secret '{source_secret.name}' has no data")
     secret_data: dict[str, str] = dict(raw_data)
@@ -69,7 +74,7 @@ def create_di_connection_secret(
         raise ValueError(f"Provider '{provider_cr.name}' has no URL in spec")
     secret_data["url"] = base64.b64encode(provider_url.encode()).decode()
 
-    provider_status = provider_cr.instance.status
+    provider_status = provider_instance.status
     if not provider_status:
         raise ValueError(f"Provider '{provider_cr.name}' has no status — provider may not be reconciled")
     fingerprint = provider_status.get("fingerprint")
