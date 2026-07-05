@@ -584,6 +584,7 @@ tests_params: dict = {
         "warm_migration": True,
         "target_power_state": "on",
         "preserve_static_ips": True,
+        "enable_nested_virtualization": False,
         "vm_target_namespace": f"mtv-vms-warm-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": "default",  # Cross-namespace NAD access
         "pvc_name_template": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
@@ -618,6 +619,7 @@ tests_params: dict = {
         "warm_migration": False,
         "target_power_state": "on",
         "preserve_static_ips": True,
+        "enable_nested_virtualization": False,
         "pvc_name_template": "{{.VmName}}-disk-{{.DiskIndex}}",
         "pvc_name_template_use_generate_name": False,
         "target_node_selector": {
@@ -700,11 +702,64 @@ tests_params: dict = {
         ],
         "warm_migration": False,
     },
+    "test_shared_disk_windows_migration": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-shared-win1",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "migrate_shared_disks": True,
+            },
+            {
+                "name": "mtv-tests-shared-win2",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "migrate_shared_disks": False,
+            },
+        ],
+        "warm_migration": False,
+        "migrate_shared_disks": True,
+        "target_power_state": "on",
+    },
     "test_upgrade_cold_migration": {
         "virtual_machines": [
             {"name": "mtv-tests-rhel8", "guest_agent": True},
         ],
         "warm_migration": False,
+    },
+    "test_warm_migration_xfs": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-rhel7-xfs",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+        "target_power_state": "on",
+        "xfs_compatibility": True,
+        "xfs_check": {
+            "command": "/usr/sbin/xfs_info",
+            "mount_point": "/",
+            "expected_output": "crc=0",
+        },
+    },
+    "test_cold_migration_xfs": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-rhel8-2xfs",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
+        "xfs_compatibility": True,
+        "xfs_check": {
+            "command": "/usr/sbin/xfs_info",
+            "mount_point": "/sdb1",
+            "expected_output": "crc=0",
+        },
     },
 }
 

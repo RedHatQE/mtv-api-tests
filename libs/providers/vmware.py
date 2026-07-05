@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import ipaddress
+
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 import shortuuid
@@ -729,6 +730,28 @@ class VMWareProvider(BaseProvider):
         # Guest OS
         result_vm_info["win_os"] = "win" in vm_config.guestId
 
+        # Firmware configuration — boot type, secure boot, TPM
+        firmware_info: dict[str, Any] = {}
+        boot_firmware_raw: str | None = vm_config.firmware
+        if not boot_firmware_raw:
+            raise ValueError(f"firmware attribute is missing or empty for VM '{_vm.name}'")
+        boot_firmware: str = boot_firmware_raw.lower()
+        if boot_firmware not in ("bios", "efi"):
+            raise ValueError(f"Unexpected firmware type '{boot_firmware}' for VM '{_vm.name}'")
+        firmware_info["boot_firmware"] = boot_firmware
+        boot_options: vim.vm.BootOptions | None = vm_config.bootOptions
+        if boot_firmware == "efi":
+            if boot_options is None:
+                raise ValueError(f"bootOptions is None for EFI VM '{_vm.name}' — expected boot configuration")
+            firmware_info["secure_boot"] = boot_options.efiSecureBootEnabled
+        else:
+            firmware_info["secure_boot"] = False
+
+        firmware_info["tpm_present"] = any(
+            isinstance(device, vim.vm.device.VirtualTPM) for device in vm_config.hardware.device
+        )
+        result_vm_info["firmware"] = firmware_info
+
         # Power state
         if _vm.runtime.powerState == "poweredOn":
             result_vm_info["power_state"] = "on"
@@ -1197,7 +1220,8 @@ class VMWareProvider(BaseProvider):
 
         Raises:
             ValueError: If the session_uuid is too long to build a valid clone name within
-                      63 characters when preserve_name_format is True.
+                      63 characters when preserve_name_format is True, or if a network
+                      device has no deviceInfo in the source VM config.
             VmCloneError: If the datastore or resource pool cannot be determined, or if
                         cloning fails.
 
@@ -1336,21 +1360,28 @@ class VMWareProvider(BaseProvider):
             )
             device_changes.extend(disk_device_specs)
 
+        uppercase_mac_nics: set[str] = set()
         if regenerate_mac:
             source_config = source_vm.config
             if source_config and source_config.hardware and source_config.hardware.device:
                 for device in source_config.hardware.device:
                     if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                        if not device.deviceInfo:
+                            raise ValueError(f"Device has no deviceInfo in VM '{source_vm_name}' config")
+                        nic_label = device.deviceInfo.label
+                        if device.addressType == "manual":
+                            # VMware generates lowercase MACs by default. Only uppercase manual MACs
+                            # need post-clone restoration — lowercase manual MACs get a new generated
+                            # MAC that already matches the expected case/format.
+                            if device.macAddress != device.macAddress.lower():
+                                uppercase_mac_nics.add(nic_label)
+                        device.addressType = "generated"
+
                         device_spec = vim.vm.device.VirtualDeviceSpec()
                         device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
                         device_spec.device = device
-                        device_spec.device.addressType = "generated"
                         device_changes.append(device_spec)
-                        LOGGER.info(
-                            f"Configured MAC regeneration for network device: {
-                                device.deviceInfo.label if device.deviceInfo else 'Unknown'
-                            }",
-                        )
+                        LOGGER.info(f"Configured MAC regeneration for network device: {nic_label}")
 
         if device_changes:
             config_spec.deviceChange = device_changes
@@ -1448,6 +1479,7 @@ class VMWareProvider(BaseProvider):
         except VmCloneError as e:
             if regenerate_mac and "in use" in str(e).lower():
                 LOGGER.warning("Clone failed with resource conflict, retrying without MAC regeneration")
+                uppercase_mac_nics.clear()
                 if clone_spec.config and clone_spec.config.deviceChange:
                     non_mac_changes = [
                         change
@@ -1468,14 +1500,72 @@ class VMWareProvider(BaseProvider):
             else:
                 raise
 
-        if res and self.fixture_store:
+        if self.fixture_store:
             self.fixture_store["teardown"].setdefault(self.type, []).append({"name": clone_vm_name})
+
+        if not res:
+            raise VmCloneError(f"Clone task for '{clone_vm_name}' returned no VM object")
 
         # Add RDM disks post-clone (RDM requires VMFS datastore, can't be added during clone on NFS)
         for rdm_config in rdm_disks:
             self.add_rdm_disk_to_vm(vm=res, rdm_type=rdm_config["rdm_type"], enable_cbt=enable_ctk)
 
+        if regenerate_mac and uppercase_mac_nics:
+            self._reconfigure_uppercase_manual_macs(
+                vm=res, clone_vm_name=clone_vm_name, uppercase_mac_nics=uppercase_mac_nics
+            )
+
         return res
+
+    def _reconfigure_uppercase_manual_macs(
+        self, vm: vim.VirtualMachine, clone_vm_name: str, uppercase_mac_nics: set[str]
+    ) -> None:
+        """Reconfigure cloned NICs with uppercase manual MACs back to manual address type.
+
+        VMware generates lowercase MACs by default, so only uppercase MACs need
+        reconfiguration after cloning.
+
+        Args:
+            vm (vim.VirtualMachine): The cloned VM object to reconfigure.
+            clone_vm_name (str): Name of the cloned VM (used for logging and error messages).
+            uppercase_mac_nics (set[str]): Set of NIC labels whose MACs need uppercasing.
+
+        Raises:
+            ValueError: If the cloned VM has no hardware device configuration
+                or a network device is missing deviceInfo.
+            VmCloneError: If NICs expected for MAC restoration are not found
+                in the cloned VM.
+        """
+        if not (vm.config and vm.config.hardware and vm.config.hardware.device):
+            raise ValueError(f"Cloned VM '{clone_vm_name}' has no hardware device configuration")
+
+        matched_labels: set[str] = set()
+        reconfig_specs = []
+        for dev in vm.config.hardware.device:
+            if not isinstance(dev, vim.vm.device.VirtualEthernetCard):
+                continue
+            if not dev.deviceInfo:
+                raise ValueError(f"Device has no deviceInfo in cloned VM '{clone_vm_name}'")
+            if dev.deviceInfo.label not in uppercase_mac_nics:
+                continue
+            matched_labels.add(dev.deviceInfo.label)
+            dev.macAddress = dev.macAddress.upper()
+            dev.addressType = "manual"
+            dev_spec = vim.vm.device.VirtualDeviceSpec()
+            dev_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+            dev_spec.device = dev
+            reconfig_specs.append(dev_spec)
+            LOGGER.info(f"Set manual MAC for {dev.deviceInfo.label}: {dev.macAddress}")
+
+        unmatched = uppercase_mac_nics - matched_labels
+        if unmatched:
+            raise VmCloneError(f"NICs not found in cloned VM '{clone_vm_name}' for MAC restoration: {unmatched}")
+
+        if reconfig_specs:
+            self.wait_task(
+                task=vm.ReconfigVM_Task(spec=vim.vm.ConfigSpec(deviceChange=reconfig_specs)),
+                action_name=f"Reconfiguring manual MACs on {clone_vm_name}",
+            )
 
     @staticmethod
     def _get_bus_number_for_controller_key(
@@ -1530,6 +1620,20 @@ class VMWareProvider(BaseProvider):
                 return device
 
         return None
+
+    def find_shared_vmdk_paths(self, vm_names: list[str]) -> dict[str, list[tuple[int, int, int]]]:
+        """Find VMDKs shared across multiple VMs.
+
+        Args:
+            vm_names (list[str]): Source VM names to scan.
+
+        Returns:
+            dict[str, list[tuple[int, int, int]]]: Mapping of shared VMDK backing-file
+                paths to their SCSI positions. Each tuple is ``(vm_index, bus_number,
+                unit_number)`` where ``vm_index`` is the index into the caller-supplied
+                ``vm_names`` list.
+        """
+        return self._find_shared_vmdks(self._build_vmdk_position_map(vm_names))
 
     def _build_vmdk_position_map(
         self,

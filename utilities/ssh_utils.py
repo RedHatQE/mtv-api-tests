@@ -19,10 +19,40 @@ from pytest_testconfig import config as py_config
 from rrmngmnt import Host, RootUser, User, UserWithPKey
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutSampler, TimeoutExpiredError
-
+from exceptions.exceptions import GuestCommandError, SSHConnectionSetupError
 from libs.base_provider import BaseProvider
 
 LOGGER = get_logger(__name__)
+
+
+def run_cmd_in_vm(
+    ssh_conn: "VMSSHConnection",
+    cmd: list[str],
+    description: str,
+) -> str:
+    """Execute a command in a VM via SSH using the explicit executor pattern.
+
+    Args:
+        ssh_conn (VMSSHConnection): SSH connection object (must be connected via context manager).
+        cmd (list[str]): Command to execute.
+        description (str): Human-readable description for logging and error messages.
+
+    Returns:
+        str: Command stdout.
+
+    Raises:
+        ConnectionError: If SSH connection is not established.
+        GuestCommandError: If the command fails (non-zero return code).
+    """
+    if ssh_conn.rrmngmnt_host is None or ssh_conn.rrmngmnt_user is None or ssh_conn.local_port is None:
+        raise ConnectionError(f"{description}: SSH connection is not fully established")
+
+    executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)
+    executor.port = ssh_conn.local_port
+    rc, stdout, stderr = executor.run_cmd(cmd)
+    if rc != 0:
+        raise GuestCommandError(f"{description} failed (rc={rc}): {stderr}")
+    return stdout
 
 
 class VMSSHConnection:
@@ -98,7 +128,7 @@ class VMSSHConnection:
         # Get virtctl binary path
         virtctl_path = shutil.which("virtctl")
         if not virtctl_path:
-            raise RuntimeError(
+            raise SSHConnectionSetupError(
                 "virtctl command not found in PATH. "
                 "Please install virtctl before running the test suite. "
                 "See README.md for installation instructions."

@@ -16,6 +16,7 @@ from utilities.post_migration import check_vms
 from utilities.utils import get_value_from_py_config, populate_vm_ids
 
 
+@pytest.mark.vsphere
 @pytest.mark.remote
 @pytest.mark.tier1
 @pytest.mark.warm
@@ -129,6 +130,7 @@ class TestClusterroleWarmMtvMigration:
             )
 
 
+@pytest.mark.vsphere
 @pytest.mark.remote
 @pytest.mark.tier0
 @pytest.mark.warm

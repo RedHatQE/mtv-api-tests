@@ -103,9 +103,6 @@ def run_command_in_vmware_guest(
             if process_info:
                 break
 
-        if process_info.exitCode != 0:
-            raise GuestCommandError(f"Guest process {pid} on VM {vm.name} exited with code {process_info.exitCode}")
-
         transfer_info = fm.InitiateFileTransferFromGuest(vm=vm, auth=auth, guestFilePath=output_file)
         url = transfer_info.url
         if "://*" in url:
@@ -115,7 +112,14 @@ def run_command_in_vmware_guest(
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(url, context=ctx, timeout=_FILE_TRANSFER_TIMEOUT) as resp:
-            return resp.read().decode("utf-8")
+            output = resp.read().decode("utf-8")
+
+        if process_info.exitCode != 0:
+            raise GuestCommandError(
+                f"Guest process {pid} on VM {vm.name} exited with code {process_info.exitCode}. Output:\n{output}"
+            )
+
+        return output
     finally:
         try:
             fm.DeleteFileInGuest(vm=vm, auth=auth, filePath=output_file)

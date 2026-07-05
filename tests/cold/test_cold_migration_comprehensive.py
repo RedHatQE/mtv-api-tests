@@ -47,6 +47,8 @@ class TestColdMigrationComprehensive:
     - Target VM labels
     - Target VM affinity rules
     - Custom target namespace for VMs
+    - Nested virtualization disabled (vmx/svm CPU features)
+    - VBS (Virtualization Based Security) verification
     """
 
     storage_map: StorageMap
@@ -176,6 +178,7 @@ class TestColdMigrationComprehensive:
             target_labels=target_vm_labels["vm_labels"],
             target_affinity=prepared_plan["target_affinity"],
             vm_target_namespace=prepared_plan["vm_target_namespace"],
+            enable_nested_virtualization=prepared_plan["enable_nested_virtualization"],
         )
         assert self.plan_resource, "Plan creation failed"
 

@@ -25,7 +25,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
 from utilities.naming import resolve_destination_vm_name
-from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection
+from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection, run_cmd_in_vm
 from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
 from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
 
@@ -36,6 +36,12 @@ KUBERNETES_MAX_NAME_LENGTH: int = 63
 KUBERNETES_MAX_GENERATE_NAME_PREFIX_LENGTH: int = 58
 
 _LUKS_FSTYPE = "crypto_LUKS"  # lsblk filesystem-type identifier for LUKS partitions
+
+_VBS_STATUS_RUNNING = "2"
+_NESTED_VIRT_DISABLED_FEATURES: list[dict[str, str]] = [
+    {"name": "vmx", "policy": "disable"},
+    {"name": "svm", "policy": "disable"},
+]
 
 
 def get_ssh_credentials_from_provider_config(
@@ -772,12 +778,114 @@ def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None
         raise AssertionError(f"CPU failed checks: {failed_checks}")
 
 
+def check_cpu_features(
+    destination_vm: dict[str, Any],
+    expected_features: list[dict[str, str]],
+) -> None:
+    """Verify CPU feature policies on the migrated VM.
+
+    Args:
+        destination_vm (dict[str, Any]): Destination VM data dictionary
+        expected_features (list[dict[str, str]]): Expected CPU features with policies,
+            e.g. [{"name": "vmx", "policy": "disable"}, {"name": "svm", "policy": "disable"}]
+
+    Raises:
+        AssertionError: If CPU features do not match expected configuration
+    """
+    actual_features: list[dict[str, Any]] = destination_vm["cpu"].get("features", [])
+    for expected in expected_features:
+        feature_name = expected["name"]
+        expected_policy = expected["policy"]
+        matching = [f for f in actual_features if f.get("name") == feature_name]
+        assert matching, f"CPU feature '{feature_name}' not found on migrated VM. Actual features: {actual_features}"
+        actual_policy = matching[0].get("policy")
+        assert actual_policy is not None, (
+            f"CPU feature '{feature_name}' found but has no 'policy' field. Feature data: {matching[0]}"
+        )
+        assert actual_policy == expected_policy, (
+            f"CPU feature '{feature_name}' has policy '{actual_policy}', expected '{expected_policy}'"
+        )
+
+    LOGGER.info(f"CPU feature verification passed: {[f['name'] + '=' + f['policy'] for f in expected_features]}")
+
+
+def check_vbs_status(
+    vm_name: str,
+    vm_ssh_connections: SSHConnectionManager,
+    source_provider_data: dict[str, Any],
+    source_vm_info: dict[str, Any],
+) -> None:
+    """Verify Virtualization Based Security (VBS) is not running on a Windows VM.
+
+    Connects via SSH to the Windows guest and queries the DeviceGuard WMI class
+    to confirm VirtualizationBasedSecurityStatus is not 2 (running).
+    Status 1 (enabled but not running) is expected when nested virtualization
+    extensions are disabled at the emulator level.
+
+    Args:
+        vm_name (str): Name of the VM to check
+        vm_ssh_connections (SSHConnectionManager): SSH connections manager
+        source_provider_data (dict[str, Any]): Source provider data with Windows credentials
+        source_vm_info (dict[str, Any]): VM information including OS type
+
+    Raises:
+        ConnectionError: If SSH connection cannot be established to the VM
+        ValueError: If credentials are not found or VBS status command fails
+        AssertionError: If VBS is still running (status 2)
+    """
+    ssh_username, ssh_password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_info)
+    ssh_conn = vm_ssh_connections.create(vm_name=vm_name, username=ssh_username, password=ssh_password)
+
+    vbs_cmd = [
+        "powershell",
+        "-Command",
+        "(Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard "
+        "-ClassName Win32_DeviceGuard).VirtualizationBasedSecurityStatus",
+    ]
+
+    with ssh_conn:
+        if not ssh_conn.rrmngmnt_host:
+            raise ConnectionError(f"SSH connection not established for VM {vm_name}")
+
+        executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)
+        executor.port = ssh_conn.local_port
+        rc, stdout, err = executor.run_cmd(vbs_cmd)
+
+        if rc != 0:
+            raise ValueError(f"VBS status command failed on VM '{vm_name}'. rc={rc}, stderr={err}")
+
+        vbs_status = stdout.strip()
+        assert vbs_status != _VBS_STATUS_RUNNING, (
+            f"VBS is still running on VM '{vm_name}'. "
+            f"VirtualizationBasedSecurityStatus: {vbs_status}, expected: not 2 (not running)"
+        )
+        LOGGER.info(f"VBS verification passed for VM '{vm_name}': VirtualizationBasedSecurityStatus={vbs_status}")
+
+
 def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
     assert source_vm["memory_in_mb"] == destination_vm["memory_in_mb"]
 
 
 def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, Any]:
-    return [nic for nic in nics if nic["macAddress"] == mac_address][0]
+    """Get a NIC from a list of NICs by MAC address (case-insensitive).
+
+    Args:
+        nics (list[dict[str, Any]]): List of NIC dictionaries with "macAddress" keys.
+        mac_address (str): The MAC address to search for.
+
+    Returns:
+        dict[str, Any]: The matching NIC dictionary.
+
+    Raises:
+        ValueError: If no NIC matches the MAC address.
+    """
+    matched = [nic for nic in nics if nic["macAddress"].lower() == mac_address.lower()]
+    if not matched:
+        raise ValueError(
+            f"No NIC found with MAC address '{mac_address}' in {len(nics)} NICs "
+            f"(available: {[n['macAddress'] for n in nics]})"
+        )
+    return matched[0]
 
 
 def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], network_migration_map: NetworkMap) -> None:
@@ -1257,6 +1365,39 @@ def check_serial_preservation(
         LOGGER.info(f"Serial preserved correctly (OCP {ocp_version} < 4.20, plain UUID): {dest_serial}")
 
 
+def check_boot_configuration(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
+    """Verify boot configuration is preserved after migration.
+
+    Args:
+        source_vm: Source VM info dictionary with firmware data.
+        destination_vm: Destination VM info dictionary with firmware data.
+
+    Raises:
+        AssertionError: If firmware type, secure boot, or TPM settings don't match.
+        KeyError: If required firmware keys are missing in source or destination VM info.
+    """
+    source_firmware: dict[str, Any] = source_vm["firmware"]
+    dest_firmware: dict[str, Any] = destination_vm["firmware"]
+
+    firmware_checks: list[tuple[str, str]] = [
+        ("boot_firmware", "Boot firmware"),
+        ("secure_boot", "Secure boot"),
+        ("tpm_present", "TPM"),
+    ]
+    mismatches: list[str] = []
+    for key, label in firmware_checks:
+        if source_firmware[key] != dest_firmware[key]:
+            mismatches.append(f"{label}: source={source_firmware[key]}, destination={dest_firmware[key]}")
+    if mismatches:
+        raise AssertionError(f"Firmware mismatch for VM '{destination_vm['name']}': {'; '.join(mismatches)}")
+
+    LOGGER.info(
+        f"Firmware checks passed for VM '{destination_vm['name']}': "
+        f"boot={dest_firmware['boot_firmware']}, secure_boot={dest_firmware['secure_boot']}, "
+        f"tpm={dest_firmware['tpm_present']}"
+    )
+
+
 def check_vm_node_placement(
     destination_vm: dict[str, Any],
     expected_node: str,
@@ -1419,6 +1560,53 @@ def check_ssl_configuration(source_provider: BaseProvider) -> None:
     LOGGER.info(f"SSL configuration verified: insecureSkipVerify='{actual_value}' matches config")
 
 
+def check_vm_command_output(
+    vm: dict[str, Any],
+    vm_ssh_connections: SSHConnectionManager,
+    source_vm_info: dict[str, Any],
+    source_provider_data: dict[str, Any],
+    command: list[str],
+    expected_output: str,
+) -> None:
+    """Execute a command on VM via SSH and verify expected output is present.
+
+    Args:
+        vm: VM dict from plan["virtual_machines"]
+        vm_ssh_connections: SSH connections fixture manager
+        source_vm_info: Source VM information from source_provider.vm_dict()
+        source_provider_data: Provider configuration from .providers.json
+        command: Command to execute
+        expected_output: Expected string in command output
+
+    Raises:
+        ValueError: If VM is Windows (Linux-only feature)
+        AssertionError: If expected_output not found in command stdout
+    """
+    vm_name = vm["name"]
+    destination_vm_name = resolve_destination_vm_name(vm)
+
+    if source_vm_info.get("win_os", False):
+        raise ValueError(
+            f"Command output verification is only supported on Linux guests. VM '{vm_name}' is a Windows guest."
+        )
+
+    LOGGER.info(f"Running command on VM {destination_vm_name}: {' '.join(command)}")
+
+    ssh_username, ssh_password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_info)
+    ssh_conn = vm_ssh_connections.create(vm_name=destination_vm_name, username=ssh_username, password=ssh_password)
+
+    with ssh_conn:
+        stdout = run_cmd_in_vm(ssh_conn, command, f"Command on VM {destination_vm_name}")
+        LOGGER.info(f"Command output:\n{stdout}")
+
+        if expected_output not in stdout:
+            raise AssertionError(
+                f"Expected '{expected_output}' not found in command output on VM {destination_vm_name}. "
+                f"Command: {' '.join(command)}\n"
+                f"Output: {stdout}"
+            )
+
+
 def check_vms(
     plan: dict[str, Any],
     source_provider: BaseProvider,
@@ -1488,7 +1676,7 @@ def check_vms(
                 res[vm_name].append(f"check_guest_agent - {str(exp)}")
 
         # SSH connectivity check - only when destination VM is powered on
-        if vm_ssh_connections and destination_vm.get("power_state") == "on":
+        if vm_ssh_connections is not None and destination_vm.get("power_state") == "on":
             try:
                 check_ssh_connectivity(
                     vm_name=destination_vm_name,
@@ -1539,7 +1727,7 @@ def check_vms(
                     )
                 except Exception as exp:
                     res[vm_name].append(f"check_nic_name_preservation - {str(exp)}")
-        elif vm_ssh_connections:
+        elif vm_ssh_connections is not None:
             LOGGER.info(
                 f"Skipping SSH connectivity check for VM {vm_name} - destination VM is not powered on "
                 f"(power_state: {destination_vm.get('power_state', 'unknown')})"
@@ -1571,6 +1759,34 @@ def check_vms(
                 )
             except Exception as exp:
                 res[vm_name].append(f"check_vm_affinity - {str(exp)}")
+
+        # Nested virtualization checks not applicable for OCP→OCP migrations
+        if (
+            plan.get("enable_nested_virtualization") is False
+            and source_provider.type != Provider.ProviderType.OPENSHIFT
+        ):
+            try:
+                check_cpu_features(
+                    destination_vm=destination_vm,
+                    expected_features=_NESTED_VIRT_DISABLED_FEATURES,
+                )
+            except Exception as exp:
+                res[vm_name].append(f"check_cpu_features - {str(exp)}")
+
+            if (
+                vm_ssh_connections is not None
+                and destination_vm.get("power_state") == "on"
+                and source_vm.get("win_os", False)
+            ):
+                try:
+                    check_vbs_status(
+                        vm_name=destination_vm_name,
+                        vm_ssh_connections=vm_ssh_connections,
+                        source_provider_data=source_provider_data,
+                        source_vm_info=source_vm,
+                    )
+                except Exception as exp:
+                    res[vm_name].append(f"check_vbs_status - {str(exp)}")
 
         # Group 2: Source-comparison checks — require real source VM data (OVA has none)
         if source_provider.type != Provider.ProviderType.OVA:
@@ -1634,6 +1850,11 @@ def check_vms(
                 )
             except Exception as exp:
                 res[vm_name].append(f"check_serial_preservation - {str(exp)}")
+
+            try:
+                check_boot_configuration(source_vm=source_vm, destination_vm=destination_vm)
+            except Exception as exp:
+                res[vm_name].append(f"check_boot_configuration - {str(exp)}")
 
         # Group 4: RHV-specific checks
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):

@@ -6,14 +6,15 @@ from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 
-from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_plan_resource,
     execute_migration,
     get_network_migration_map,
     get_storage_migration_map,
 )
-from utilities.post_migration import check_vms
+
+from utilities.post_migration import check_vms, check_vm_command_output
+from utilities.migration_utils import get_cutover_value
 from utilities.utils import populate_vm_ids
 
 if TYPE_CHECKING:
@@ -26,32 +27,25 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.vsphere
-@pytest.mark.rhv
-@pytest.mark.tier0
 @pytest.mark.warm
+@pytest.mark.tier1
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [
         pytest.param(
-            py_config["tests_params"]["test_warm_migration_comprehensive"],
+            py_config["tests_params"]["test_warm_migration_xfs"],
+            id="xfs-warm",
         )
     ],
     indirect=True,
-    ids=["comprehensive-warm"],
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms", "precopy_interval_forkliftcontroller")
-class TestWarmMigrationComprehensive:
-    """Comprehensive warm migration test covering multiple features.
+class TestWarmMigrationXfs:
+    """Warm migrate VM with XFS v4 filesystem from vSphere.
 
-    Tests the following MTV 2.10.0+ features:
-    - Static IP preservation
-    - Nested virtualization and VBS verification
-    - Custom VM target namespace
-    - Custom PVC naming template
-    - PVC naming with generateName
-    - Target VM labels
-    - Target VM affinity rules
+    Test for following feature:
+    - XFS v4 filesystem
     """
 
     storage_map: StorageMap
@@ -68,19 +62,16 @@ class TestWarmMigrationComprehensive:
         source_provider_inventory: "ForkliftInventory",
         target_namespace: str,
     ) -> None:
-        """Create StorageMap resource for migration.
+        """Create StorageMap resource.
 
         Args:
-            prepared_plan: The prepared migration plan
+            prepared_plan: Plan configuration with VM details
             fixture_store: Fixture store for resource tracking
             ocp_admin_client: OpenShift admin client
             source_provider: Source provider instance
             destination_provider: Destination provider instance
             source_provider_inventory: Source provider inventory
             target_namespace: Target namespace for migration
-
-        Returns:
-            None
 
         Raises:
             AssertionError: If StorageMap creation fails
@@ -108,20 +99,17 @@ class TestWarmMigrationComprehensive:
         target_namespace: str,
         multus_network_name: dict[str, str],
     ) -> None:
-        """Create NetworkMap resource for migration.
+        """Create NetworkMap resource with optional custom pod network.
 
         Args:
-            prepared_plan: The prepared migration plan
+            prepared_plan: Plan configuration with VM details
             fixture_store: Fixture store for resource tracking
             ocp_admin_client: OpenShift admin client
             source_provider: Source provider instance
             destination_provider: Destination provider instance
             source_provider_inventory: Source provider inventory
             target_namespace: Target namespace for migration
-            multus_network_name: Name of the multus network
-
-        Returns:
-            None
+            multus_network_name: Dict with NAD base name and namespace
 
         Raises:
             AssertionError: If NetworkMap creation fails
@@ -148,27 +136,22 @@ class TestWarmMigrationComprehensive:
         destination_provider: "OCPProvider",
         target_namespace: str,
         source_provider_inventory: "ForkliftInventory",
-        target_vm_labels: dict[str, Any],
     ) -> None:
-        """Create MTV Plan CR resource with comprehensive features.
+        """Create MTV Plan CR with XFS compatibility enabled.
 
         Args:
-            prepared_plan: The prepared migration plan
+            prepared_plan: Plan configuration with VM details
             fixture_store: Fixture store for resource tracking
             ocp_admin_client: OpenShift admin client
             source_provider: Source provider instance
             destination_provider: Destination provider instance
             target_namespace: Target namespace for migration
             source_provider_inventory: Source provider inventory
-            target_vm_labels: Target VM labels configuration
-
-        Returns:
-            None
 
         Raises:
             AssertionError: If Plan creation fails
         """
-        populate_vm_ids(plan=prepared_plan, inventory=source_provider_inventory)
+        populate_vm_ids(prepared_plan, source_provider_inventory)
 
         self.__class__.plan_resource = create_plan_resource(
             ocp_admin_client=ocp_admin_client,
@@ -178,16 +161,10 @@ class TestWarmMigrationComprehensive:
             storage_map=self.storage_map,
             network_map=self.network_map,
             virtual_machines_list=prepared_plan["virtual_machines"],
-            target_power_state=prepared_plan["target_power_state"],
             target_namespace=target_namespace,
-            warm_migration=prepared_plan["warm_migration"],
-            preserve_static_ips=prepared_plan["preserve_static_ips"],
-            vm_target_namespace=prepared_plan["vm_target_namespace"],
-            pvc_name_template=prepared_plan["pvc_name_template"],
-            pvc_name_template_use_generate_name=prepared_plan["pvc_name_template_use_generate_name"],
-            target_labels=target_vm_labels["vm_labels"],
-            target_affinity=prepared_plan["target_affinity"],
-            enable_nested_virtualization=prepared_plan["enable_nested_virtualization"],
+            target_power_state=prepared_plan["target_power_state"],
+            warm_migration=prepared_plan.get("warm_migration", False),
+            xfs_compatibility=prepared_plan.get("xfs_compatibility", False),
         )
         assert self.plan_resource, "Plan creation failed"
 
@@ -203,9 +180,6 @@ class TestWarmMigrationComprehensive:
             fixture_store: Fixture store for resource tracking
             ocp_admin_client: OpenShift admin client
             target_namespace: Target namespace for migration
-
-        Returns:
-            None
         """
         execute_migration(
             ocp_admin_client=ocp_admin_client,
@@ -214,6 +188,39 @@ class TestWarmMigrationComprehensive:
             target_namespace=target_namespace,
             cut_over=get_cutover_value(),
         )
+
+    def test_verify_xfs_version(
+        self,
+        prepared_plan: dict[str, Any],
+        source_provider: "BaseProvider",
+        source_provider_data: dict[str, Any],
+        source_vms_namespace: str,
+        vm_ssh_connections: "SSHConnectionManager",
+    ) -> None:
+        """Verify XFS filesystem on migrated VMs.
+
+        Args:
+            prepared_plan: Plan configuration with VM details
+            source_provider: Source provider instance
+            source_provider_data: Provider configuration from .providers.json
+            source_vms_namespace: Source VMs namespace
+            vm_ssh_connections: SSH connection manager for VMs
+        """
+        xfs_check = prepared_plan["xfs_check"]
+        for vm in prepared_plan["virtual_machines"]:
+            source_vm_info = source_provider.vm_dict(
+                name=vm["name"],
+                namespace=source_vms_namespace,
+                source=True,
+            )
+            check_vm_command_output(
+                vm=vm,
+                vm_ssh_connections=vm_ssh_connections,
+                source_vm_info=source_vm_info,
+                source_provider_data=source_provider_data,
+                command=[xfs_check["command"], xfs_check["mount_point"]],
+                expected_output=xfs_check["expected_output"],
+            )
 
     def test_check_vms(
         self,
@@ -224,22 +231,17 @@ class TestWarmMigrationComprehensive:
         source_vms_namespace: str,
         source_provider_inventory: "ForkliftInventory",
         vm_ssh_connections: "SSHConnectionManager",
-        target_vm_labels: dict[str, Any],
     ) -> None:
-        """Validate migrated VMs with comprehensive features.
+        """Validate migrated VMs.
 
         Args:
-            prepared_plan: The prepared migration plan
+            prepared_plan: Plan configuration with VM details
             source_provider: Source provider instance
             destination_provider: Destination provider instance
-            source_provider_data: Source provider configuration data
-            source_vms_namespace: Namespace of source VMs
+            source_provider_data: Provider configuration from .providers.json
+            source_vms_namespace: Source VMs namespace
             source_provider_inventory: Source provider inventory
-            vm_ssh_connections: SSH connections to migrated VMs
-            target_vm_labels: Target VM labels configuration
-
-        Returns:
-            None
+            vm_ssh_connections: SSH connection manager for VMs
         """
         check_vms(
             plan=prepared_plan,
@@ -251,5 +253,4 @@ class TestWarmMigrationComprehensive:
             source_vms_namespace=source_vms_namespace,
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
-            target_vm_labels=target_vm_labels,
         )

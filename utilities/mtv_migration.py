@@ -145,6 +145,8 @@ def create_plan_resource(
     vm_target_namespace: str | None = None,
     migrate_shared_disks: bool | None = None,
     target_power_state: str | None = None,
+    enable_nested_virtualization: bool | None = None,
+    xfs_compatibility: bool = False,
 ) -> Plan:
     """Create MTV Plan CR resource.
 
@@ -178,6 +180,9 @@ def create_plan_resource(
         migrate_shared_disks (bool | None): Whether to migrate shared disks at plan level. True enables shared disk
             migration for all VMs by default. Individual VMs can override via per-VM migrateSharedDisks. Defaults to None.
         target_power_state (str | None): Target power state for VMs after migration (e.g., 'on', 'off'). Defaults to None.
+        enable_nested_virtualization (bool | None): Whether to enable nested virtualization on migrated VMs.
+            When False, CPU features vmx/svm are disabled. Defaults to None (not set on Plan CR).
+        xfs_compatibility (bool): Whether to use XFS-compatible virt-v2v image for VMs with XFS v4 filesystems. Defaults to False.
 
     Returns:
         Plan: The created Plan CR resource.
@@ -242,12 +247,18 @@ def create_plan_resource(
     if migrate_shared_disks is not None:
         plan_kwargs["migrate_shared_disks"] = migrate_shared_disks
 
+    if enable_nested_virtualization is not None:
+        plan_kwargs["enable_nested_virtualization"] = enable_nested_virtualization
+
     # Add copy-offload specific parameters if enabled
     if copyoffload:
         # Set PVC naming template for copy-offload migrations
         # The volume populator framework requires this to generate consistent PVC names
         # Note: generateName is enabled by default, so Kubernetes adds random suffix automatically
         plan_kwargs["pvc_name_template"] = "pvc"
+
+    if xfs_compatibility:
+        plan_kwargs["xfs_compatibility"] = xfs_compatibility
 
     plan = create_and_store_resource(**plan_kwargs)
 

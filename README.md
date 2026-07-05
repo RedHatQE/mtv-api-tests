@@ -271,6 +271,8 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | `copyoffload` | Fast migrations via shared storage | Testing storage arrays |
 | `copyoffload_sanity` | Copy-offload sanity subset (see below) | Quick copy-offload validation |
 | `warm` | Warm migrations (VMs stay running) | Specific scenario testing |
+| `shared_disk` | Shared disk migration tests | Testing shared disk between VMs |
+| `vsphere` | VMware vSphere provider-specific tests | Tests specific to vSphere provider |
 | `upgrade` | Migration across MTV operator upgrades | Validating upgrade compatibility |
 
 ### Copy-Offload Sanity Tests
@@ -591,8 +593,9 @@ For technical implementation details, see the
 
 ## LUKS Disk Encryption Migration (tier1)
 
-The test suite includes migration tests for VMs with LUKS-encrypted disks. These tests verify that
-LUKS encryption is preserved after cold migration by checking `lsblk` output on the migrated VM.
+This test suite verifies MTV's ability to migrate LUKS-encrypted VMs. It validates both
+successful cold migration when the correct decryption passphrase is provided, and expected
+failure at the ImageConversion phase when an incorrect LUKS decryption passphrase is used.
 
 ### Configuration
 

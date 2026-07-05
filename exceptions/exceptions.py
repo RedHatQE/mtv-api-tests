@@ -129,3 +129,7 @@ class GuestCommandError(Exception):
 
 class MtvUpgradeError(Exception):
     """Raised when MTV operator upgrade fails."""
+
+
+class SSHConnectionSetupError(Exception):
+    """Raised when SSH connection setup fails (e.g., missing virtctl, port-forward failure)."""

@@ -26,6 +26,7 @@ class BaseProvider(abc.ABC):
         "memory_in_mb": 0,
         "snapshots_data": [],
         "power_state": "",
+        "firmware": {},
     }
 
     def __init__(
