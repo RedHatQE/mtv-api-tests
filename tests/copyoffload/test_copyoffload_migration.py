@@ -50,6 +50,7 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
     verify_vm_disk_count,
     wait_for_concurrent_migration_execution,
+    wait_for_dual_migration_completion,
     wait_for_migration_complate,
 )
 from utilities.naming import sanitize_kubernetes_name
@@ -65,73 +66,6 @@ EARLY_COMPLETION_MSG = (
     "Plan {plan_num} reached {completed_status} before both plans were executing simultaneously. "
     "Other plan status: {other_status}"
 )
-
-
-def _wait_for_dual_migration_completion(
-    plan_1: Plan,
-    plan_2: Plan,
-    callback_1: Callable[[str], None],
-    callback_2: Callable[[str], None],
-) -> None:
-    """Poll two migration plans until both complete, invoking callbacks on each poll.
-
-    Args:
-        plan_1 (Plan): First migration plan to monitor.
-        plan_2 (Plan): Second migration plan to monitor.
-        callback_1 (Callable[[str], None]): Status callback for plan 1.
-        callback_2 (Callable[[str], None]): Status callback for plan 2.
-
-    Raises:
-        MigrationPlanExecError: If either plan fails or timeout expires before both complete.
-    """
-    LOGGER.info("Waiting for both copyoffload migrations to complete")
-    completed_plans: set[str] = set()
-    last_status_1: str = ""
-    last_status_2: str = ""
-
-    try:
-        for _ in TimeoutSampler(
-            func=lambda: None,
-            sleep=1,
-            wait_timeout=py_config["plan_wait_timeout"],
-        ):
-            # Poll plan 1 if not yet completed
-            if plan_1.name not in completed_plans:
-                status_1 = get_plan_migration_status(plan=plan_1)
-                if status_1 != last_status_1:
-                    LOGGER.info(f"Plan '{plan_1.name}' migration status: '{status_1}'")
-                    last_status_1 = status_1
-                callback_1(status_1)
-
-                if status_1 == Plan.Status.SUCCEEDED:
-                    completed_plans.add(plan_1.name)
-                    LOGGER.info("Copyoffload migration 1 completed")
-                elif status_1 == Plan.Status.FAILED:
-                    raise MigrationPlanExecError(f"Plan {plan_1.name} failed. \nstatus:\n\t{plan_1.instance}")
-
-            # Poll plan 2 if not yet completed
-            if plan_2.name not in completed_plans:
-                status_2 = get_plan_migration_status(plan=plan_2)
-                if status_2 != last_status_2:
-                    LOGGER.info(f"Plan '{plan_2.name}' migration status: '{status_2}'")
-                    last_status_2 = status_2
-                callback_2(status_2)
-
-                if status_2 == Plan.Status.SUCCEEDED:
-                    completed_plans.add(plan_2.name)
-                    LOGGER.info("Copyoffload migration 2 completed")
-                elif status_2 == Plan.Status.FAILED:
-                    raise MigrationPlanExecError(f"Plan {plan_2.name} failed. \nstatus:\n\t{plan_2.instance}")
-
-            # Break when both plans have completed
-            if len(completed_plans) == 2:
-                break
-
-    except TimeoutExpiredError as timeout_err:
-        raise MigrationPlanExecError(
-            f"One or both migrations failed to complete within timeout. "
-            f"Completed: {completed_plans}, Expected: {{{plan_1.name}, {plan_2.name}}}"
-        ) from timeout_err
 
 
 @pytest.mark.vsphere
@@ -4836,7 +4770,7 @@ class TestSimultaneousCopyoffloadMigrations:
         )
 
         # Wait for both migrations to complete - poll both plans together
-        _wait_for_dual_migration_completion(
+        wait_for_dual_migration_completion(
             plan_1=self.plan_resource_1,
             plan_2=self.plan_resource_2,
             callback_1=callback_1,
