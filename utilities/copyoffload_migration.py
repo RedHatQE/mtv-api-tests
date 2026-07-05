@@ -222,9 +222,10 @@ def merge_storage_secret_extra(
 def _filter_and_fetch_pod_logs(populate_pods: list[Pod]) -> list[tuple[Pod, str]]:
     """Filter populate pods and fetch logs in a single pass.
 
-    Filters based on log content readiness rather than pod phase, to avoid race
-    condition where Plan reaches Succeeded before pod reaches terminal phase and
-    MTV deletes pods before callback can capture logs.
+    Only captures logs from pods in terminal phase (Succeeded or Failed) to ensure
+    xcopyUsed value is final. Populate pods initially log xcopyUsed=0, then update
+    to the final value (0 or 1) after the transfer completes. Capturing early would
+    cache the initial value instead of the final result.
 
     Returns both pod and log content to avoid double-reading (TOCTOU issue where
     pod could be deleted between filter check and subsequent log fetch).
@@ -233,14 +234,20 @@ def _filter_and_fetch_pod_logs(populate_pods: list[Pod]) -> list[tuple[Pod, str]
         populate_pods (list[Pod]): All populate pods for a migration.
 
     Returns:
-        list[tuple[Pod, str]]: Tuples of (pod, log_content) for pods with readable logs
-            containing xcopyUsed marker or copy-offload failure.
+        list[tuple[Pod, str]]: Tuples of (pod, log_content) for pods in terminal phase
+            with readable logs containing xcopyUsed marker or copy-offload failure.
     """
     pods_with_logs: list[tuple[Pod, str]] = []
     for pod in populate_pods:
+        phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+
+        # Only capture from terminal pods to get final xcopyUsed value
+        if phase not in ("Succeeded", "Failed"):
+            continue
+
         try:
             log_content = pod.log()
-            # Check for log readiness signals: xcopyUsed or copy-offload failure
+            # Verify logs contain xcopyUsed or copy-offload failure markers
             if _XCOPY_USED_LOG_RE.search(log_content) or _COPY_OFFLOAD_FAILED_ERR_RE.search(log_content):
                 pods_with_logs.append((pod, log_content))
         except ApiException:
