@@ -219,54 +219,56 @@ def merge_storage_secret_extra(
     return merged
 
 
-def _filter_completed_pods(populate_pods: list[Pod]) -> list[Pod]:
-    """Filter populate pods to include only those with readable logs.
+def _filter_and_fetch_pod_logs(populate_pods: list[Pod]) -> list[tuple[Pod, str]]:
+    """Filter populate pods and fetch logs in a single pass.
 
     Filters based on log content readiness rather than pod phase, to avoid race
     condition where Plan reaches Succeeded before pod reaches terminal phase and
     MTV deletes pods before callback can capture logs.
 
+    Returns both pod and log content to avoid double-reading (TOCTOU issue where
+    pod could be deleted between filter check and subsequent log fetch).
+
     Args:
         populate_pods (list[Pod]): All populate pods for a migration.
 
     Returns:
-        list[Pod]: Pods with logs containing xcopyUsed marker or copy-offload failure.
+        list[tuple[Pod, str]]: Tuples of (pod, log_content) for pods with readable logs
+            containing xcopyUsed marker or copy-offload failure.
     """
-    pods_with_logs: list[Pod] = []
+    pods_with_logs: list[tuple[Pod, str]] = []
     for pod in populate_pods:
         try:
             log_content = pod.log()
             # Check for log readiness signals: xcopyUsed or copy-offload failure
             if _XCOPY_USED_LOG_RE.search(log_content) or _COPY_OFFLOAD_FAILED_ERR_RE.search(log_content):
-                pods_with_logs.append(pod)
+                pods_with_logs.append((pod, log_content))
         except ApiException:
             # Pod not ready for log reading yet, skip it
             continue
     return pods_with_logs
 
 
-def _capture_logs_from_pods(pods: list[Pod]) -> list[PopulatePodLogData]:
-    """Capture logs and metadata from a list of populate pods.
+def _capture_logs_from_pods(pods_with_content: list[tuple[Pod, str]]) -> list[PopulatePodLogData]:
+    """Build log data structures from pre-fetched pod logs.
 
     Args:
-        pods (list[Pod]): Populate pods to capture logs from.
+        pods_with_content (list[tuple[Pod, str]]): Tuples of (pod, log_content) with
+            pre-fetched log content to avoid double-reading.
 
     Returns:
         list[PopulatePodLogData]: Captured pod log data with metadata.
     """
     captured_logs: list[PopulatePodLogData] = []
-    for pod in pods:
-        try:
-            phase = pod.instance.status.phase if pod.instance.status else "Unknown"
-            pod_data: PopulatePodLogData = {
-                "pod_name": pod.name,
-                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-                "log_content": pod.log(),
-            }
-            captured_logs.append(pod_data)
-            LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {phase})")
-        except ApiException as pod_err:
-            LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
+    for pod, log_content in pods_with_content:
+        phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+        pod_data: PopulatePodLogData = {
+            "pod_name": pod.name,
+            "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+            "log_content": log_content,
+        }
+        captured_logs.append(pod_data)
+        LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {phase})")
     return captured_logs
 
 
@@ -308,7 +310,7 @@ def capture_populate_pod_logs(
             LOGGER.debug(f"No populate pods found for migration '{migration_uid}' (non-copyoffload or not yet started)")
             return
 
-        pods_with_logs = _filter_completed_pods(populate_pods)
+        pods_with_logs = _filter_and_fetch_pod_logs(populate_pods)
 
         if not pods_with_logs:
             LOGGER.debug(
@@ -790,7 +792,17 @@ def _collect_live_populate_logs(
         list[PopulatePodLogData]: Live pod logs with keys: pod_name, pvc_name, log_content.
     """
     uncached_pods = [pod for pod in populate_pods if pod.name not in cached_pod_names]
-    return _capture_logs_from_pods(uncached_pods)
+
+    # Fetch logs once and pass to capture function
+    pods_with_logs: list[tuple[Pod, str]] = []
+    for pod in uncached_pods:
+        try:
+            log_content = pod.log()
+            pods_with_logs.append((pod, log_content))
+        except ApiException as pod_err:
+            LOGGER.warning(f"Failed to read logs from live populate pod '{pod.name}': {pod_err}")
+
+    return _capture_logs_from_pods(pods_with_logs)
 
 
 def _get_populate_pod_logs(
