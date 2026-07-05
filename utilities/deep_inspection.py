@@ -45,6 +45,8 @@ def create_di_connection_secret(
         ValueError: If provider secret or fingerprint is missing.
     """
     provider_cr = source_provider.ocp_resource
+    assert provider_cr is not None, "source_provider.ocp_resource is not set"
+    assert provider_cr.instance is not None, f"Provider '{provider_cr.name}' instance not found on cluster"
     provider_spec = provider_cr.instance.spec
 
     provider_secret_ref = provider_spec.secret
@@ -56,6 +58,7 @@ def create_di_connection_secret(
         name=provider_secret_ref.name,
         namespace=provider_secret_ref.namespace,
     )
+    assert source_secret.instance is not None, f"Provider secret '{source_secret.name}' not found on cluster"
     raw_data = source_secret.instance.data
     if not raw_data:
         raise ValueError(f"Provider secret '{source_secret.name}' has no data")
