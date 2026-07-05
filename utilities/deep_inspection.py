@@ -3,8 +3,8 @@ from __future__ import annotations
 import base64
 from typing import TYPE_CHECKING, Any
 
-from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.conversion import Conversion
+from ocp_resources.resource import NotFoundError
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
