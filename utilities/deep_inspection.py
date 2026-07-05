@@ -50,8 +50,8 @@ def create_di_connection_secret(
         raise ValueError("source_provider.ocp_resource is not set")
     try:
         provider_instance = provider_cr.instance
-    except NotFoundError:
-        raise ValueError(f"Provider '{provider_cr.name}' not found on cluster")
+    except NotFoundError as err:
+        raise ValueError(f"Provider '{provider_cr.name}' not found on cluster") from err
     provider_spec = provider_instance.spec
 
     provider_secret_ref = provider_spec.secret
@@ -65,8 +65,10 @@ def create_di_connection_secret(
     )
     try:
         secret_instance = source_secret.instance
-    except NotFoundError:
-        raise ValueError(f"Provider secret '{source_secret.name}' not found on cluster")
+    except NotFoundError as err:
+        raise ValueError(
+            f"Provider secret '{source_secret.name}' in namespace '{source_secret.namespace}' not found on cluster"
+        ) from err
     raw_data = secret_instance.data
     if not raw_data:
         raise ValueError(f"Provider secret '{source_secret.name}' has no data")
