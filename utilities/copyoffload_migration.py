@@ -650,7 +650,7 @@ def _find_populate_pods(
             namespace=namespace,
             label_selector=f"migration={migration_uid}",
         )
-        if pod.name.startswith("populate-")
+        if pod.name.startswith(_POPULATE_POD_NAME_PREFIX)
     ]
 
     if require_pods and not populate_pods:
@@ -791,6 +791,11 @@ def _collect_live_populate_logs(
 ) -> list[PopulatePodLogData]:
     """Collect logs from live populate pods not already in cache.
 
+    Only captures logs from pods in terminal phase (Succeeded or Failed) to ensure
+    xcopyUsed value is final. Populate pods initially log xcopyUsed=0, then update
+    to the final value (0 or 1) after the transfer completes. Capturing early would
+    cache the initial value instead of the final result.
+
     Args:
         populate_pods (list[Pod]): Live populate pods to collect logs from.
         cached_pod_names (set[str]): Names of pods already in cache (to avoid duplicates).
@@ -800,12 +805,20 @@ def _collect_live_populate_logs(
     """
     uncached_pods = [pod for pod in populate_pods if pod.name not in cached_pod_names]
 
-    # Fetch logs once and pass to capture function
+    # Fetch logs only from terminal pods with xcopyUsed or failure markers
     pods_with_logs: list[tuple[Pod, str]] = []
     for pod in uncached_pods:
+        phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+
+        # Only capture from terminal pods to get final xcopyUsed value
+        if phase not in ("Succeeded", "Failed"):
+            continue
+
         try:
             log_content = pod.log()
-            pods_with_logs.append((pod, log_content))
+            # Verify logs contain xcopyUsed or copy-offload failure markers
+            if _XCOPY_USED_LOG_RE.search(log_content) or _COPY_OFFLOAD_FAILED_ERR_RE.search(log_content):
+                pods_with_logs.append((pod, log_content))
         except ApiException as pod_err:
             LOGGER.warning(f"Failed to read logs from live populate pod '{pod.name}': {pod_err}")
 

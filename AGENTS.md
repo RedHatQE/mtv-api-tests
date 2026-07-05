@@ -807,10 +807,12 @@ class TestNameHere:
     migration. This function combines migration execution with populator in-flight monitoring and
     log capture callback setup, ensuring both concurrency tracking and populate pod logs are
     collected during migration polling.
-  - **Concurrent migrations only:** For tests running multiple migrations simultaneously (e.g.,
-    `test_copyoffload_simultaneous_migration.py`), use the low-level orchestration:
-    `wait_for_copyoffload_plan_secret()`, `create_log_capture_callback()`, and
-    `wait_for_migration_complate(on_status_poll=...)` to manage each migration independently.
+  - **Concurrent migrations only:** For tests running multiple migrations simultaneously (see
+    `TestSimultaneousCopyoffloadMigrations.test_migrate_vms_simultaneously` in
+    `tests/copyoffload/test_copyoffload_migration.py`), use the low-level orchestration:
+    `wait_for_copyoffload_plan_secret()`, `create_log_capture_callback()`,
+    `wait_for_dual_migration_completion()` (from `utilities/mtv_migration.py` for two-plan tests),
+    and `wait_for_migration_complate(on_status_poll=...)` to manage each migration independently.
 
   Do not wait for plan secret in `create_plan_resource()` — Forklift creates the plan populator secret when migration starts, not at Plan Ready.
 - **7-step copy-offload throttling pattern**: storagemap -> networkmap -> plan -> migrate -> `verify_populator_throttling` -> check_xcopy_used -> check_vms

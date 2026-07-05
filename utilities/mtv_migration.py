@@ -417,10 +417,12 @@ def wait_for_dual_migration_completion(
     Raises:
         MigrationPlanExecError: If either plan fails or timeout expires before both complete.
     """
-    LOGGER.info("Waiting for both migrations to complete")
+    plans = [plan_1, plan_2]
+    callbacks = {plan_1.name: callback_1, plan_2.name: callback_2}
+
+    LOGGER.info(f"Waiting for {len(plans)} migrations to complete")
     completed_plans: set[str] = set()
-    last_status_1: str = ""
-    last_status_2: str = ""
+    last_statuses: dict[str, str] = {plan.name: "" for plan in plans}
 
     try:
         for _ in TimeoutSampler(
@@ -428,42 +430,36 @@ def wait_for_dual_migration_completion(
             sleep=1,
             wait_timeout=py_config["plan_wait_timeout"],
         ):
-            # Poll plan 1 if not yet completed
-            if plan_1.name not in completed_plans:
-                status_1 = get_plan_migration_status(plan=plan_1)
-                if status_1 != last_status_1:
-                    LOGGER.info(f"Plan '{plan_1.name}' migration status: '{status_1}'")
-                    last_status_1 = status_1
-                callback_1(status_1)
+            for plan in plans:
+                # Skip if already completed
+                if plan.name in completed_plans:
+                    continue
 
-                if status_1 == Plan.Status.SUCCEEDED:
-                    completed_plans.add(plan_1.name)
-                    LOGGER.info("Migration 1 completed")
-                elif status_1 == Plan.Status.FAILED:
-                    raise MigrationPlanExecError(f"Plan {plan_1.name} failed. \nstatus:\n\t{plan_1.instance}")
+                # Fetch and log status on change
+                status = get_plan_migration_status(plan=plan)
+                if status != last_statuses[plan.name]:
+                    LOGGER.info(f"Plan '{plan.name}' migration status: '{status}'")
+                    last_statuses[plan.name] = status
 
-            # Poll plan 2 if not yet completed
-            if plan_2.name not in completed_plans:
-                status_2 = get_plan_migration_status(plan=plan_2)
-                if status_2 != last_status_2:
-                    LOGGER.info(f"Plan '{plan_2.name}' migration status: '{status_2}'")
-                    last_status_2 = status_2
-                callback_2(status_2)
+                # Invoke callback for this plan
+                callbacks[plan.name](status)
 
-                if status_2 == Plan.Status.SUCCEEDED:
-                    completed_plans.add(plan_2.name)
-                    LOGGER.info("Migration 2 completed")
-                elif status_2 == Plan.Status.FAILED:
-                    raise MigrationPlanExecError(f"Plan {plan_2.name} failed. \nstatus:\n\t{plan_2.instance}")
+                # Handle terminal states
+                if status == Plan.Status.SUCCEEDED:
+                    completed_plans.add(plan.name)
+                    LOGGER.info(f"Migration '{plan.name}' completed")
+                elif status == Plan.Status.FAILED:
+                    raise MigrationPlanExecError(f"Plan {plan.name} failed. \nstatus:\n\t{plan.instance}")
 
-            # Break when both plans have completed
-            if len(completed_plans) == 2:
+            # Break when all plans have completed
+            if len(completed_plans) == len(plans):
                 break
 
     except TimeoutExpiredError as timeout_err:
+        expected_plans = {plan.name for plan in plans}
         raise MigrationPlanExecError(
-            f"One or both migrations failed to complete within timeout. "
-            f"Completed: {completed_plans}, Expected: {{{plan_1.name}, {plan_2.name}}}"
+            f"One or more migrations failed to complete within timeout. "
+            f"Completed: {completed_plans}, Expected: {expected_plans}"
         ) from timeout_err
 
 
