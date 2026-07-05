@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 from dotenv import load_dotenv
+from ocp_resources.conversion import Conversion
 from ocp_resources.host import Host
 from ocp_resources.migration import Migration
 from ocp_resources.namespace import Namespace
@@ -152,6 +153,7 @@ def teardown_resources(
     networkmaps = session_teardown_resources.get(NetworkMap.kind, [])
     namespaces = session_teardown_resources.get(Namespace.kind, [])
     storagemaps = session_teardown_resources.get(StorageMap.kind, [])
+    conversions = session_teardown_resources.get(Conversion.kind, [])
     vmware_cloned_vms = session_teardown_resources.get(Provider.ProviderType.VSPHERE, [])
     openstack_cloned_vms = session_teardown_resources.get(Provider.ProviderType.OPENSTACK, [])
     rhv_cloned_vms = session_teardown_resources.get(Provider.ProviderType.RHV, [])
@@ -239,6 +241,15 @@ def teardown_resources(
         except Exception as exc:
             LOGGER.error(f"Failed to cleanup NetworkMap {networkmap['name']}: {exc}")
             leftovers.setdefault(NetworkMap.kind, []).append(networkmap)
+
+    for conversion in conversions:
+        try:
+            conversion_obj = Conversion(name=conversion["name"], namespace=conversion["namespace"], client=ocp_client)
+            if not conversion_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=conversion_obj)
+        except Exception as exc:
+            LOGGER.error(f"Failed to cleanup Conversion {conversion['name']}: {exc}")
+            leftovers.setdefault(Conversion.kind, []).append(conversion)
 
     # Check that resources that was created by running migration are deleted
     for virtual_machine in virtual_machines:

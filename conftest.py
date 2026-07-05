@@ -331,7 +331,12 @@ def pytest_collection_modifyitems(session, config, items):
             if source_provider_type != Provider.ProviderType.VSPHERE:
                 vsphere_only_skip = pytest.mark.skip(reason="Test is only applicable to vSphere source providers")
                 for item in items:
-                    if "copyoffload" in item.keywords or "shared_disk" in item.keywords or "vsphere" in item.keywords:
+                    if (
+                        "copyoffload" in item.keywords
+                        or "shared_disk" in item.keywords
+                        or "deep_inspection" in item.keywords
+                        or "vsphere" in item.keywords
+                    ):
                         item.add_marker(vsphere_only_skip)
 
     _session_store = get_fixture_store(session)

@@ -133,3 +133,20 @@ class MtvUpgradeError(Exception):
 
 class SSHConnectionSetupError(Exception):
     """Raised when SSH connection setup fails (e.g., missing virtctl, port-forward failure)."""
+
+
+class ConversionError(Exception):
+    """Raised when a Conversion CR reaches Failed or Canceled phase."""
+
+    def __init__(self, conversion_name: str, phase: str, message: str = "") -> None:
+        """Initialize ConversionError.
+
+        Args:
+            conversion_name (str): Name of the Conversion CR.
+            phase (str): The terminal phase (Failed or Canceled).
+            message (str): Additional context about the failure.
+        """
+        self.conversion_name = conversion_name
+        self.phase = phase
+        detail = f": {message}" if message else ""
+        super().__init__(f"Conversion '{conversion_name}' reached phase '{phase}'{detail}")

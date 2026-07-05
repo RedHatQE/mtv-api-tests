@@ -761,6 +761,14 @@ tests_params: dict = {
             "expected_output": "crc=0",
         },
     },
+    "test_standalone_di_vsphere": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+            },
+        ],
+        "deep_inspection": True,
+    },
 }
 
 for _dir in dir():
