@@ -764,7 +764,7 @@ tests_params: dict = {
     "test_standalone_di_vsphere": {
         "virtual_machines": [
             {
-                "name": "mtv-tests-rhel8",
+                "name": "mtv-tests-di-rhel8",
             },
         ],
         "deep_inspection": True,
