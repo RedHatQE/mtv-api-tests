@@ -220,19 +220,28 @@ def merge_storage_secret_extra(
 
 
 def _filter_completed_pods(populate_pods: list[Pod]) -> list[Pod]:
-    """Filter populate pods to include only those in terminal phases.
+    """Filter populate pods to include only those with readable logs.
+
+    Filters based on log content readiness rather than pod phase, to avoid race
+    condition where Plan reaches Succeeded before pod reaches terminal phase and
+    MTV deletes pods before callback can capture logs.
 
     Args:
         populate_pods (list[Pod]): All populate pods for a migration.
 
     Returns:
-        list[Pod]: Pods in Succeeded or Failed phase (ready for log capture).
+        list[Pod]: Pods with logs containing xcopyUsed marker or copy-offload failure.
     """
     pods_with_logs: list[Pod] = []
     for pod in populate_pods:
-        phase = pod.instance.status.phase if pod.instance.status else "Unknown"
-        if phase in ("Succeeded", "Failed"):
-            pods_with_logs.append(pod)
+        try:
+            log_content = pod.log()
+            # Check for log readiness signals: xcopyUsed or copy-offload failure
+            if _XCOPY_USED_LOG_RE.search(log_content) or _COPY_OFFLOAD_FAILED_ERR_RE.search(log_content):
+                pods_with_logs.append(pod)
+        except ApiException:
+            # Pod not ready for log reading yet, skip it
+            continue
     return pods_with_logs
 
 
