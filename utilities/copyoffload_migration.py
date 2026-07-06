@@ -593,37 +593,6 @@ def _resolve_migration_uid(plan: Plan) -> str | None:
     return migration_uid
 
 
-def _get_populate_pods_for_plan(
-    ocp_admin_client: DynamicClient,
-    plan: Plan,
-    target_namespace: str,
-    *,
-    require_pods: bool = True,
-) -> tuple[str, list[Pod]]:
-    """Resolve migration UID and fetch populate pods for a completed migration.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        plan (Plan): The Plan CR resource.
-        target_namespace (str): Namespace where populate pods exist.
-        require_pods (bool): When True, raise if no populate pods are found.
-
-    Returns:
-        tuple[str, list[Pod]]: Migration UID and matching populate pods.
-
-    Raises:
-        ValueError: If migration UID or populate pods cannot be resolved.
-    """
-    migration_uid = get_migration_uid(plan=plan)
-    populate_pods = _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=target_namespace,
-        migration_uid=migration_uid,
-        require_pods=require_pods,
-    )
-    return migration_uid, populate_pods
-
-
 def _find_populate_pods(
     ocp_admin_client: DynamicClient,
     namespace: str,
@@ -1324,33 +1293,6 @@ def execute_migration_monitoring_populator_inflight(
     return tracker.results
 
 
-def _verify_source_host_labels_on_pods(populate_pods: list[Pod]) -> str:
-    """Verify sourceHost labels on populate pods and return the shared host value.
-
-    Args:
-        populate_pods (list[Pod]): Populate pods for the migration.
-
-    Returns:
-        str: The shared sourceHost label value.
-
-    Raises:
-        ValueError: If labels are missing or inconsistent across pods.
-    """
-    source_hosts: set[str] = set()
-    for pod in populate_pods:
-        labels: dict[str, str] = pod.instance.metadata.labels or {}
-        source_host: str | None = labels.get(SOURCE_HOST_LABEL)
-        if not source_host:
-            raise ValueError(f"Populate pod '{pod.name}' is missing required label '{SOURCE_HOST_LABEL}'")
-        source_hosts.add(source_host)
-        LOGGER.info(f"Populate pod '{pod.name}' has {SOURCE_HOST_LABEL}={source_host!r}")
-
-    if len(source_hosts) != 1:
-        raise ValueError(f"Expected a single ESXi sourceHost across populate pods, found: {sorted(source_hosts)}")
-
-    return source_hosts.pop()
-
-
 def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) -> str:
     """Verify sourceHost labels from cached populate pod data and return the shared host value.
 
@@ -1405,37 +1347,6 @@ def _get_pvc_events(
     return response.items or []
 
 
-def _collect_migration_pvc_names(
-    ocp_admin_client: DynamicClient,
-    target_namespace: str,
-    migration_uid: str,
-    populate_pods: list[Pod],
-) -> tuple[set[str], set[str]]:
-    """Collect PVC names from populate pod labels and the migration label selector.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        target_namespace (str): Namespace where migration PVCs exist.
-        migration_uid (str): Migration UID label value.
-        populate_pods (list[Pod]): Populate pods for the migration.
-
-    Returns:
-        tuple[set[str], set[str]]: PVC names from pod labels and from the migration label.
-    """
-    pvc_names_from_pods: set[str] = {
-        (pod.instance.metadata.labels or {}).get(PVC_NAME_LABEL, pod.name) for pod in populate_pods
-    }
-    pvc_names_from_label: set[str] = {
-        pvc.name
-        for pvc in PersistentVolumeClaim.get(
-            client=ocp_admin_client,
-            namespace=target_namespace,
-            label_selector=f"migration={migration_uid}",
-        )
-    }
-    return pvc_names_from_pods, pvc_names_from_label
-
-
 def _find_throttled_pvc_names(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
@@ -1463,63 +1374,6 @@ def _find_throttled_pvc_names(
                 LOGGER.info(f"PVC '{pvc_name}' has {POPULATOR_THROTTLED_EVENT_REASON} event")
                 break
     return throttled_pvc_names
-
-
-def _verify_throttled_events_on_pods(
-    ocp_admin_client: DynamicClient,
-    target_namespace: str,
-    migration_uid: str,
-    populate_pods: list[Pod],
-    max_populator_inflight: int,
-) -> None:
-    """Verify PopulatorThrottled events on PVCs when the in-flight limit was reached.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        target_namespace (str): Namespace where PVC events exist.
-        migration_uid (str): Migration UID for error messages.
-        populate_pods (list[Pod]): Populate pods for the migration.
-        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
-
-    Raises:
-        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
-            PopulatorThrottled events.
-    """
-    min_expected_throttled = len(populate_pods) - max_populator_inflight
-    if min_expected_throttled <= 0:
-        raise ValueError(
-            f"Expected more populate pods ({len(populate_pods)}) than in-flight limit "
-            f"({max_populator_inflight}) to verify throttling for migration '{migration_uid}'"
-        )
-
-    pvc_names_from_pods, pvc_names_from_label = _collect_migration_pvc_names(
-        ocp_admin_client=ocp_admin_client,
-        target_namespace=target_namespace,
-        migration_uid=migration_uid,
-        populate_pods=populate_pods,
-    )
-    pvc_names_to_check = pvc_names_from_pods | pvc_names_from_label
-    LOGGER.info(
-        f"Checking {len(pvc_names_to_check)} PVC(s) for throttled events "
-        f"(from pods: {pvc_names_from_pods}, from label: {pvc_names_from_label})"
-    )
-
-    throttled_pvc_names = _find_throttled_pvc_names(
-        ocp_admin_client=ocp_admin_client,
-        target_namespace=target_namespace,
-        pvc_names=pvc_names_to_check,
-    )
-
-    if len(throttled_pvc_names) < min_expected_throttled:
-        raise ValueError(
-            f"Expected at least {min_expected_throttled} PVC(s) with {POPULATOR_THROTTLED_EVENT_REASON} "
-            f"events for migration '{migration_uid}' ({len(populate_pods)} disks, "
-            f"limit={max_populator_inflight}); found {len(throttled_pvc_names)}: {throttled_pvc_names}"
-        )
-    LOGGER.info(
-        f"{len(throttled_pvc_names)}/{len(populate_pods)} PVC(s) reported {POPULATOR_THROTTLED_EVENT_REASON} "
-        f"(minimum expected: {min_expected_throttled})"
-    )
 
 
 def _verify_throttled_events_on_pod_logs(
