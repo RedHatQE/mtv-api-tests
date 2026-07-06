@@ -1290,20 +1290,40 @@ class VMWareProvider(BaseProvider):
 
         relocate_spec.datastore = target_datastore  # Ensure relocate_spec uses the determined datastore
 
+        # Handle target ESXi host specification
         target_esxi_host = kwargs.get("target_esxi_host")
+        host_obj = None
         if target_esxi_host:
             host_obj = self.get_obj([vim.HostSystem], target_esxi_host)
             relocate_spec.host = host_obj
             LOGGER.info(f"Using target host from config: {host_obj.name}")
 
-        # If the source is a template, it may not have a resource pool; find a suitable one from the cluster.
-        if not source_vm.resourcePool:
+        # Determine resource pool with priority order:
+        # 1. Explicit config (copyoffload.resource_pool) - user override
+        # 2. Target host's pool - automatic compatibility when host is specified
+        # 3. Source VM's pool - preserve original location
+        # 4. Cluster search - fallback for templates
+        configured_pool_name = self.copyoffload_config.get("resource_pool") if self.copyoffload_config else None
+        if configured_pool_name:
+            # Use explicitly configured resource pool (highest priority)
+            relocate_spec.pool = self.get_obj([vim.ResourcePool], configured_pool_name)
+            LOGGER.info(f"Using configured resource pool: {configured_pool_name}")
+        elif host_obj:
+            # When a target host is specified, use its parent compute resource's pool to ensure compatibility
+            relocate_spec.pool = host_obj.parent.resourcePool
+            LOGGER.info(f"Using resource pool from target host's compute resource: {host_obj.parent.name}")
+        elif source_vm.resourcePool:
+            # Use source VM's resource pool if available
+            relocate_spec.pool = source_vm.resourcePool
+            LOGGER.info("Using source VM's resource pool")
+        else:
+            # If source is a template with no pool, find a suitable one from the cluster
             container = self.view_manager.CreateContainerView(self.content.rootFolder, [vim.ComputeResource], True)
             view = container.view  # type: ignore[attr-defined]
             relocate_spec.pool = next((cr.resourcePool for cr in view if cr.resourcePool), None)
             container.Destroy()
-        else:
-            relocate_spec.pool = source_vm.resourcePool
+            if relocate_spec.pool:
+                LOGGER.info("Using resource pool from cluster compute resource")
 
         if not relocate_spec.pool:
             raise VmCloneError("Could not determine a valid resource pool for cloning.")
