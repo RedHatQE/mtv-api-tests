@@ -1296,8 +1296,8 @@ def execute_migration_monitoring_populator_inflight(
 def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) -> str:
     """Verify sourceHost labels from cached populate pod data and return the shared host value.
 
-    Mirrors _verify_source_host_labels_on_pods() but uses cached PopulatePodLogData
-    instead of live Pod objects. Use when live pods are no longer available post-migration.
+    Uses cached PopulatePodLogData captured during migration, because live populate pods
+    are no longer available after migration completes.
 
     Args:
         pod_logs (list[PopulatePodLogData]): Cached populate pod log data including source_host.
@@ -1385,9 +1385,8 @@ def _verify_throttled_events_on_pod_logs(
 ) -> None:
     """Verify PopulatorThrottled events on PVCs using cached pod log data.
 
-    Mirrors _verify_throttled_events_on_pods() but uses cached PopulatePodLogData
-    instead of live Pod objects. PVCs are still queried live because they persist
-    after populate pods are deleted.
+    PVCs are queried live because they persist after populate pods are deleted.
+    Uses cached PopulatePodLogData to avoid dependency on live Pod objects.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
