@@ -8,6 +8,7 @@ vSphere and OpenShift environments.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -25,12 +26,16 @@ from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT
 from utilities.copyoffload_migration import (
+    create_log_capture_callback,
+    execute_copyoffload_migration,
     execute_migration_monitoring_populator_inflight,
     verify_populator_throttling,
     verify_xcopy_used,
@@ -40,11 +45,12 @@ from utilities.migration_utils import get_cutover_value
 from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.mtv_migration import (
     create_plan_resource,
-    execute_migration,
     get_network_migration_map,
+    get_plan_migration_status,
     get_storage_migration_map,
     verify_vm_disk_count,
     wait_for_concurrent_migration_execution,
+    wait_for_dual_migration_completion,
     wait_for_migration_complate,
 )
 from utilities.naming import sanitize_kubernetes_name
@@ -184,25 +190,29 @@ class TestCopyoffloadThinMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -387,25 +397,29 @@ class CopyoffloadSnapshotBase:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY fallback was used (no XCOPY acceleration).
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=False,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -691,25 +705,29 @@ class TestCopyoffloadThickLazyMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -859,25 +877,29 @@ class TestCopyoffloadThickEagerMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1026,25 +1048,29 @@ class TestCopyoffloadMultiDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1197,25 +1223,29 @@ class TestCopyoffloadDualDiskMixedThinThickMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1368,25 +1398,29 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1541,25 +1575,29 @@ class TestCopyoffloadRdmVirtualDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1718,25 +1756,29 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
         target_namespace: str,
     ) -> None:
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -1903,7 +1945,7 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
     ) -> None:
         """Execute warm migration with cutover."""
         LOGGER.info("Executing warm copy-offload migration with virtual RDM disk")
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -1911,13 +1953,22 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
             cut_over=get_cutover_value(),
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
-        """Verify XCOPY acceleration was used for all disks."""
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2082,25 +2133,29 @@ class TestCopyoffloadMultiDatastoreMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2264,25 +2319,29 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
         target_namespace: str,
     ) -> None:
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2450,7 +2509,7 @@ class TestCopyoffloadMixedDatastoreMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -2463,6 +2522,7 @@ class TestCopyoffloadMixedDatastoreMigration:
         target_namespace: str,
         source_provider: VMWareProvider,
         source_provider_data: dict[str, Any],
+        fixture_store: dict[str, Any],
     ) -> None:
         """Verify XCOPY per disk: XCOPY-capable datastore uses XCOPY, non-XCOPY uses fallback.
 
@@ -2471,6 +2531,7 @@ class TestCopyoffloadMixedDatastoreMigration:
             target_namespace (str): Namespace where populate pods exist.
             source_provider (VMWareProvider): Source VMware provider for datastore name lookup.
             source_provider_data (dict[str, Any]): Source provider configuration.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         copyoffload_config_data: dict[str, Any] = source_provider_data["copyoffload"]
         xcopy_datastore_id: str = copyoffload_config_data["datastore_id"]
@@ -2489,6 +2550,7 @@ class TestCopyoffloadMixedDatastoreMigration:
                 non_xcopy_datastore_id: False,
             },
             datastore_names_by_id=datastore_names_by_id,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2728,25 +2790,29 @@ class TestCopyoffloadFallbackLargeMigration:
         Raises:
             AssertionError: If migration execution fails.
         """
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY fallback was used (no XCOPY acceleration).
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=False,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -2916,25 +2982,29 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3087,25 +3157,29 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3259,25 +3333,29 @@ class TestCopyoffload10MixedDisksMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3430,25 +3508,29 @@ class TestCopyoffloadLargeVmMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3638,13 +3720,25 @@ class TestCopyoffloadPopulatorThrottlingMigration:
             max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
-        """Verify XCOPY acceleration was used for all disks."""
+    def test_check_xcopy_used(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+    ) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -3824,25 +3918,29 @@ class TestCopyoffloadNonconformingNameMigration:
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
         LOGGER.info("Executing copy-offload migration with non-conforming name")
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -4038,7 +4136,7 @@ class TestCopyoffloadWarmMigration:
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute warm migration with cutover."""
         LOGGER.info("Executing warm migration with copy-offload acceleration")
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -4046,18 +4144,22 @@ class TestCopyoffloadWarmMigration:
             cut_over=get_cutover_value(),
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -4211,25 +4313,29 @@ class TestCopyoffloadScaleMigration:
 
     def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
         """Execute migration."""
-        execute_migration(
+        execute_copyoffload_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for all disks.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms(
@@ -4639,29 +4745,54 @@ class TestSimultaneousCopyoffloadMigrations:
             namespace=target_namespace,
         )
 
+        # Create log capture callbacks before migrations can finish
+        callback_1 = create_log_capture_callback(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            plan=self.plan_resource_1,
+            fixture_store=fixture_store,
+        )
+        callback_2 = create_log_capture_callback(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            plan=self.plan_resource_2,
+            fixture_store=fixture_store,
+        )
+
         # Validate both migrations are executing simultaneously before either completes
-        wait_for_concurrent_migration_execution([self.plan_resource_1, self.plan_resource_2])
+        # Pass callbacks to ensure log capture starts as soon as EXECUTING is observed
+        wait_for_concurrent_migration_execution(
+            [self.plan_resource_1, self.plan_resource_2],
+            callbacks={
+                self.plan_resource_1.name: callback_1,
+                self.plan_resource_2.name: callback_2,
+            },
+        )
 
-        # Wait for both migrations to complete
-        LOGGER.info("Waiting for both copyoffload migrations to complete")
-        wait_for_migration_complate(plan=self.plan_resource_1)
-        LOGGER.info("Copyoffload migration 1 completed")
+        # Wait for both migrations to complete - poll both plans together
+        wait_for_dual_migration_completion(
+            plan_1=self.plan_resource_1,
+            plan_2=self.plan_resource_2,
+            callback_1=callback_1,
+            callback_2=callback_2,
+        )
 
-        wait_for_migration_complate(plan=self.plan_resource_2)
-        LOGGER.info("Copyoffload migration 2 completed")
-
-    def test_check_xcopy_used_plan1(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used_plan1(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for plan 1.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource_1,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms_plan1(
@@ -4708,18 +4839,22 @@ class TestSimultaneousCopyoffloadMigrations:
             destination_provider=destination_provider, plan=prepared_plan_1, target_namespace=target_namespace
         )
 
-    def test_check_xcopy_used_plan2(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used_plan2(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for plan 2.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource_2,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms_plan2(
@@ -5107,30 +5242,46 @@ class TestConcurrentXcopyVddkMigration:
             namespace=target_namespace,
         )
 
+        # Create log capture callback before migration can finish
+        callback_xcopy = create_log_capture_callback(
+            ocp_admin_client=ocp_admin_client,
+            namespace=target_namespace,
+            plan=self.plan_xcopy,
+            fixture_store=fixture_store,
+        )
+
         # Validate both migrations are executing simultaneously before either completes
-        wait_for_concurrent_migration_execution([self.plan_xcopy, self.plan_vddk])
+        # Pass callback to ensure XCOPY log capture starts as soon as EXECUTING is observed
+        wait_for_concurrent_migration_execution(
+            [self.plan_xcopy, self.plan_vddk],
+            callbacks={self.plan_xcopy.name: callback_xcopy},
+        )
 
         # Wait for both migrations to complete
         LOGGER.info("Waiting for XCOPY migration to complete")
-        wait_for_migration_complate(plan=self.plan_xcopy)
+        wait_for_migration_complate(plan=self.plan_xcopy, on_status_poll=callback_xcopy)
         LOGGER.info("XCOPY migration completed")
 
         LOGGER.info("Waiting for VDDK migration to complete")
         wait_for_migration_complate(plan=self.plan_vddk)
         LOGGER.info("VDDK migration completed")
 
-    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
         """Verify XCOPY acceleration was used for XCOPY plan.
 
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_xcopy,
             target_namespace=target_namespace,
             expected_xcopy_used=True,
+            fixture_store=fixture_store,
         )
 
     def test_check_vms_xcopy(
