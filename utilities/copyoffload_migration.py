@@ -58,6 +58,7 @@ class PopulatePodLogData(TypedDict):
 
     pod_name: str
     pvc_name: str
+    source_host: str  # ESXi sourceHost label value, empty string if not present
     log_content: str
 
 
@@ -272,6 +273,7 @@ def _capture_logs_from_pods(pods_with_content: list[tuple[Pod, str]]) -> list[Po
         pod_data: PopulatePodLogData = {
             "pod_name": pod.name,
             "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+            "source_host": pod.instance.metadata.labels.get(SOURCE_HOST_LABEL, ""),
             "log_content": log_content,
         }
         captured_logs.append(pod_data)
@@ -773,7 +775,7 @@ def _extract_cached_populate_logs(
         migration_uid (str): Migration UID to retrieve cached logs for.
 
     Returns:
-        list[PopulatePodLogData]: Cached pod logs with keys: pod_name, pvc_name, log_content.
+        list[PopulatePodLogData]: Cached pod logs with keys: pod_name, pvc_name, source_host, log_content.
     """
     cached_logs: list[PopulatePodLogData] | None = fixture_store.get(_POPULATE_POD_LOGS_CACHE_KEY, {}).get(
         migration_uid
@@ -801,7 +803,7 @@ def _collect_live_populate_logs(
         cached_pod_names (set[str]): Names of pods already in cache (to avoid duplicates).
 
     Returns:
-        list[PopulatePodLogData]: Live pod logs with keys: pod_name, pvc_name, log_content.
+        list[PopulatePodLogData]: Live pod logs with keys: pod_name, pvc_name, source_host, log_content.
     """
     uncached_pods = [pod for pod in populate_pods if pod.name not in cached_pod_names]
 
@@ -840,7 +842,7 @@ def _get_populate_pod_logs(
         fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
 
     Returns:
-        list[PopulatePodLogData]: List of pod logs with keys: pod_name, pvc_name, log_content.
+        list[PopulatePodLogData]: List of pod logs with keys: pod_name, pvc_name, source_host, log_content.
 
     Raises:
         ValueError: If no populate pods found and no cached logs available.
@@ -1349,6 +1351,33 @@ def _verify_source_host_labels_on_pods(populate_pods: list[Pod]) -> str:
     return source_hosts.pop()
 
 
+def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) -> str:
+    """Verify sourceHost labels from cached populate pod data and return the shared host value.
+
+    Mirrors _verify_source_host_labels_on_pods() but uses cached PopulatePodLogData
+    instead of live Pod objects. Use when live pods are no longer available post-migration.
+
+    Args:
+        pod_logs (list[PopulatePodLogData]): Cached populate pod log data including source_host.
+
+    Returns:
+        str: The shared sourceHost label value.
+
+    Raises:
+        ValueError: If source_host is missing from any entry or hosts are inconsistent across pods.
+    """
+    source_hosts: set[str] = set()
+    for log_data in pod_logs:
+        source_host = log_data["source_host"]
+        if not source_host:
+            raise ValueError(f"Populate pod '{log_data['pod_name']}' is missing cached '{SOURCE_HOST_LABEL}' label")
+        source_hosts.add(source_host)
+        LOGGER.info(f"Populate pod '{log_data['pod_name']}' has {SOURCE_HOST_LABEL}={source_host!r} (from cache)")
+    if len(source_hosts) != 1:
+        raise ValueError(f"Expected a single ESXi sourceHost across populate pods, found: {sorted(source_hosts)}")
+    return source_hosts.pop()
+
+
 def _get_pvc_events(
     ocp_admin_client: DynamicClient,
     namespace: str,
@@ -1493,14 +1522,84 @@ def _verify_throttled_events_on_pods(
     )
 
 
+def _verify_throttled_events_on_pod_logs(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    migration_uid: str,
+    pod_logs: list[PopulatePodLogData],
+    max_populator_inflight: int,
+) -> None:
+    """Verify PopulatorThrottled events on PVCs using cached pod log data.
+
+    Mirrors _verify_throttled_events_on_pods() but uses cached PopulatePodLogData
+    instead of live Pod objects. PVCs are still queried live because they persist
+    after populate pods are deleted.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where PVC events exist.
+        migration_uid (str): Migration UID for PVC label selector and error messages.
+        pod_logs (list[PopulatePodLogData]): Cached populate pod log data.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+
+    Raises:
+        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
+            PopulatorThrottled events.
+    """
+    pod_count = len(pod_logs)
+    min_expected_throttled = pod_count - max_populator_inflight
+    if min_expected_throttled <= 0:
+        raise ValueError(
+            f"Expected more populate pods ({pod_count}) than in-flight limit "
+            f"({max_populator_inflight}) to verify throttling for migration '{migration_uid}'"
+        )
+
+    pvc_names_from_pods: set[str] = {log_data["pvc_name"] for log_data in pod_logs}
+    pvc_names_from_label: set[str] = {
+        pvc.name
+        for pvc in PersistentVolumeClaim.get(
+            client=ocp_admin_client,
+            namespace=target_namespace,
+            label_selector=f"migration={migration_uid}",
+        )
+    }
+    pvc_names_to_check = pvc_names_from_pods | pvc_names_from_label
+    LOGGER.info(
+        f"Checking {len(pvc_names_to_check)} PVC(s) for throttled events "
+        f"(from pods: {pvc_names_from_pods}, from label: {pvc_names_from_label})"
+    )
+
+    throttled_pvc_names = _find_throttled_pvc_names(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        pvc_names=pvc_names_to_check,
+    )
+
+    if len(throttled_pvc_names) < min_expected_throttled:
+        raise ValueError(
+            f"Expected at least {min_expected_throttled} PVC(s) with {POPULATOR_THROTTLED_EVENT_REASON} "
+            f"events for migration '{migration_uid}' ({pod_count} disks, "
+            f"limit={max_populator_inflight}); found {len(throttled_pvc_names)}: {throttled_pvc_names}"
+        )
+    LOGGER.info(
+        f"{len(throttled_pvc_names)}/{pod_count} PVC(s) reported {POPULATOR_THROTTLED_EVENT_REASON} "
+        f"(minimum expected: {min_expected_throttled})"
+    )
+
+
 def verify_populator_throttling(
     ocp_admin_client: DynamicClient,
     plan: Plan,
     target_namespace: str,
     max_concurrent_by_host: dict[str, int],
+    fixture_store: dict[str, Any],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
 ) -> str:
     """Verify MTV-696 populator throttling: labels, events, and peak concurrency.
+
+    Uses cached populate pod data from fixture_store when live pods are no longer
+    available (same pattern as verify_xcopy_used). PVC events are still queried live
+    because PVCs persist after migration.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
@@ -1508,6 +1607,7 @@ def verify_populator_throttling(
         target_namespace (str): Namespace where populate pods and PVCs exist.
         max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per sourceHost
             observed during migration.
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
 
     Returns:
@@ -1516,17 +1616,19 @@ def verify_populator_throttling(
     Raises:
         ValueError: If any throttling verification check fails.
     """
-    migration_uid, populate_pods = _get_populate_pods_for_plan(
-        ocp_admin_client=ocp_admin_client,
-        plan=plan,
-        target_namespace=target_namespace,
-    )
-    source_host = _verify_source_host_labels_on_pods(populate_pods=populate_pods)
-    _verify_throttled_events_on_pods(
+    migration_uid = get_migration_uid(plan=plan)
+    pod_logs = _get_populate_pod_logs(
         ocp_admin_client=ocp_admin_client,
         target_namespace=target_namespace,
         migration_uid=migration_uid,
-        populate_pods=populate_pods,
+        fixture_store=fixture_store,
+    )
+    source_host = _verify_source_host_labels_from_cache(pod_logs=pod_logs)
+    _verify_throttled_events_on_pod_logs(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        pod_logs=pod_logs,
         max_populator_inflight=max_populator_inflight,
     )
     if source_host not in max_concurrent_by_host:
@@ -1537,7 +1639,7 @@ def verify_populator_throttling(
     _verify_populator_inflight_observed(
         max_concurrent_by_host={source_host: max_concurrent_by_host[source_host]},
         max_populator_inflight=max_populator_inflight,
-        disk_count=len(populate_pods),
+        disk_count=len(pod_logs),
     )
     return source_host
 

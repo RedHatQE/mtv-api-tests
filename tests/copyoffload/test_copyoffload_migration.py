@@ -3710,13 +3710,21 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         self,
         ocp_admin_client: DynamicClient,
         target_namespace: str,
+        fixture_store: dict[str, Any],
     ) -> None:
-        """Verify sourceHost labels, PopulatorThrottled events, and observed concurrency."""
+        """Verify sourceHost labels, PopulatorThrottled events, and observed concurrency.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods and PVCs exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
         verify_populator_throttling(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
             max_concurrent_by_host=self.max_concurrent_by_host,
+            fixture_store=fixture_store,
             max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
         )
 
