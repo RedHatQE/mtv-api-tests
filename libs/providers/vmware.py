@@ -1302,7 +1302,7 @@ class VMWareProvider(BaseProvider):
         # 1. Explicit config (copyoffload.resource_pool) - user override
         # 2. Target host's pool - automatic compatibility when host is specified
         # 3. Source VM's pool - preserve original location
-        # 4. Cluster search - fallback for templates
+        # 4. Cluster search - fallback for templates (with datastore compatibility check)
         configured_pool_name = self.copyoffload_config.get("resource_pool") if self.copyoffload_config else None
         if configured_pool_name:
             # Use explicitly configured resource pool (highest priority)
@@ -1317,13 +1317,24 @@ class VMWareProvider(BaseProvider):
             relocate_spec.pool = source_vm.resourcePool
             LOGGER.info("Using source VM's resource pool")
         else:
-            # If source is a template with no pool, find a suitable one from the cluster
+            # If source is a template with no pool, find a compatible one from the cluster
+            # Verify datastore accessibility to avoid incompatible pool selection
             container = self.view_manager.CreateContainerView(self.content.rootFolder, [vim.ComputeResource], True)
-            view = container.view  # type: ignore[attr-defined]
-            relocate_spec.pool = next((cr.resourcePool for cr in view if cr.resourcePool), None)
-            container.Destroy()
-            if relocate_spec.pool:
-                LOGGER.info("Using resource pool from cluster compute resource")
+            try:
+                view = container.view  # type: ignore[attr-defined]
+                for compute_resource in view:
+                    if not compute_resource.resourcePool:
+                        continue
+                    # Verify target datastore is accessible from this compute resource
+                    if target_datastore in compute_resource.datastore:
+                        relocate_spec.pool = compute_resource.resourcePool
+                        LOGGER.info(
+                            f"Using resource pool from compute resource '{compute_resource.name}' "
+                            f"(datastore compatible)"
+                        )
+                        break
+            finally:
+                container.Destroy()
 
         if not relocate_spec.pool:
             raise VmCloneError("Could not determine a valid resource pool for cloning.")
@@ -1868,19 +1879,28 @@ class VMWareProvider(BaseProvider):
 
         Returns:
             List of network mappings in format [{"name": "network-name"}, ...]
+
+        Raises:
+            ValueError: If networks not found or VM/template lookup fails
         """
         try:
             # Try Forklift inventory first (works for VMs)
             return inventory.vms_networks_mappings(vms=names)
         except ValueError as e:
-            # If VM not found in inventory, try direct vSphere query (for templates)
-            if "not found" in str(e):
+            # Only fall back to vSphere API if VM not found in inventory (template case)
+            # Propagate network mapping failures (no networks on VM) immediately
+            error_msg = str(e)
+            if "not found" in error_msg and "Available VMs:" in error_msg:
                 LOGGER.info(f"VM(s) not found in Forklift inventory, querying vSphere directly for templates: {names}")
                 return self._get_networks_from_vsphere(names=names)
+            # Re-raise if it's a different error (e.g., "Networks not found for vms")
             raise
 
     def _get_networks_from_vsphere(self, names: list[str]) -> list[dict[str, str]]:
         """Query vSphere directly for network information from VMs or templates.
+
+        Reuses _get_network_name_from_device() to properly handle all network
+        backing types including DVS portgroups.
 
         Args:
             names: List of VM/template names to query
@@ -1895,38 +1915,17 @@ class VMWareProvider(BaseProvider):
 
         for vm_name in names:
             vm_obj = self.get_obj([vim.VirtualMachine], vm_name)
-            LOGGER.info(
-                f"Querying networks for VM/template: {vm_name} (isTemplate: {vm_obj.config.template if vm_obj.config else 'unknown'})"
-            )
 
             if not vm_obj.config or not vm_obj.config.hardware or not vm_obj.config.hardware.device:
                 LOGGER.warning(f"VM/template '{vm_name}' has no hardware devices configured")
                 continue
 
-            device_count = len(vm_obj.config.hardware.device)
-            nic_count = 0
-            LOGGER.info(f"Found {device_count} hardware devices on '{vm_name}'")
-
             for device in vm_obj.config.hardware.device:
                 if isinstance(device, vim.vm.device.VirtualEthernetCard):
-                    nic_count += 1
-                    # Extract network name from backing info
-                    backing = device.backing
-                    LOGGER.info(
-                        f"Found NIC: {device.deviceInfo.label if device.deviceInfo else 'unknown'}, backing type: {type(backing).__name__}"
-                    )
-
-                    if hasattr(backing, "network") and backing.network:
-                        network_names.add(backing.network.name)
-                        LOGGER.info(f"  -> Network: {backing.network.name}")
-                    elif hasattr(backing, "deviceName"):
-                        # Standard port group
-                        network_names.add(backing.deviceName)
-                        LOGGER.info(f"  -> Device name: {backing.deviceName}")
-                    else:
-                        LOGGER.warning(f"  -> No network name found in backing info")
-
-            LOGGER.info(f"VM/template '{vm_name}': {nic_count} NICs found, {len(network_names)} unique networks")
+                    # Reuse existing method that handles all network backing types
+                    network_name = self._get_network_name_from_device(device)
+                    if network_name and network_name != "Unknown":
+                        network_names.add(network_name)
 
         if not network_names:
             raise ValueError(f"No networks found for VMs/templates {names}")
