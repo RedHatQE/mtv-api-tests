@@ -1290,20 +1290,51 @@ class VMWareProvider(BaseProvider):
 
         relocate_spec.datastore = target_datastore  # Ensure relocate_spec uses the determined datastore
 
+        # Handle target ESXi host specification
         target_esxi_host = kwargs.get("target_esxi_host")
+        host_obj = None
         if target_esxi_host:
             host_obj = self.get_obj([vim.HostSystem], target_esxi_host)
             relocate_spec.host = host_obj
             LOGGER.info(f"Using target host from config: {host_obj.name}")
 
-        # If the source is a template, it may not have a resource pool; find a suitable one from the cluster.
-        if not source_vm.resourcePool:
-            container = self.view_manager.CreateContainerView(self.content.rootFolder, [vim.ComputeResource], True)
-            view = container.view  # type: ignore[attr-defined]
-            relocate_spec.pool = next((cr.resourcePool for cr in view if cr.resourcePool), None)
-            container.Destroy()
-        else:
+        # Determine resource pool with priority order:
+        # 1. Explicit config (copyoffload.resource_pool) - user override
+        # 2. Target host's pool - automatic compatibility when host is specified
+        # 3. Source VM's pool - preserve original location
+        # 4. Cluster search - fallback for templates (with datastore compatibility check)
+        configured_pool_name = self.copyoffload_config.get("resource_pool") if self.copyoffload_config else None
+        if configured_pool_name:
+            # Use explicitly configured resource pool (highest priority)
+            relocate_spec.pool = self.get_obj([vim.ResourcePool], configured_pool_name)
+            LOGGER.info(f"Using configured resource pool: {configured_pool_name}")
+        elif host_obj:
+            # When a target host is specified, use its parent compute resource's pool to ensure compatibility
+            relocate_spec.pool = host_obj.parent.resourcePool
+            LOGGER.info(f"Using resource pool from target host's compute resource: {host_obj.parent.name}")
+        elif source_vm.resourcePool:
+            # Use source VM's resource pool if available
             relocate_spec.pool = source_vm.resourcePool
+            LOGGER.info("Using source VM's resource pool")
+        else:
+            # If source is a template with no pool, find a compatible one from the cluster
+            # Verify datastore accessibility to avoid incompatible pool selection
+            container = self.view_manager.CreateContainerView(self.content.rootFolder, [vim.ComputeResource], True)
+            try:
+                view = container.view  # type: ignore[attr-defined]
+                for compute_resource in view:
+                    if not compute_resource.resourcePool:
+                        continue
+                    # Verify target datastore is accessible from this compute resource
+                    if target_datastore in compute_resource.datastore:
+                        relocate_spec.pool = compute_resource.resourcePool
+                        LOGGER.info(
+                            f"Using resource pool from compute resource '{compute_resource.name}' "
+                            f"(datastore compatible)"
+                        )
+                        break
+            finally:
+                container.Destroy()
 
         if not relocate_spec.pool:
             raise VmCloneError("Could not determine a valid resource pool for cloning.")
@@ -1837,16 +1868,69 @@ class VMWareProvider(BaseProvider):
         names: list[str],
         inventory: ForkliftInventory,
     ) -> list[dict[str, str]]:
-        """Delegate to Forklift inventory for VMware VMs.
+        """Get network mappings for VMs or templates.
+
+        Tries Forklift inventory first (for VMs), falls back to direct vSphere
+        API query (for templates not in inventory).
 
         Args:
-            names: List of VM names to query
+            names: List of VM/template names to query
             inventory: Forklift inventory instance
 
         Returns:
-            List of network mappings
+            List of network mappings in format [{"name": "network-name"}, ...]
+
+        Raises:
+            ValueError: If networks not found or VM/template lookup fails
         """
-        return inventory.vms_networks_mappings(vms=names)
+        try:
+            # Try Forklift inventory first (works for VMs)
+            return inventory.vms_networks_mappings(vms=names)
+        except ValueError as e:
+            # Only fall back to vSphere API if VM not found in inventory (template case)
+            # Propagate network mapping failures (no networks on VM) immediately
+            error_msg = str(e)
+            if "not found" in error_msg and "Available VMs:" in error_msg:
+                LOGGER.info(f"VM(s) not found in Forklift inventory, querying vSphere directly for templates: {names}")
+                return self._get_networks_from_vsphere(names=names)
+            # Re-raise if it's a different error (e.g., "Networks not found for vms")
+            raise
+
+    def _get_networks_from_vsphere(self, names: list[str]) -> list[dict[str, str]]:
+        """Query vSphere directly for network information from VMs or templates.
+
+        Reuses _get_network_name_from_device() to properly handle all network
+        backing types including DVS portgroups.
+
+        Args:
+            names: List of VM/template names to query
+
+        Returns:
+            List of network mappings in format [{"name": "network-name"}, ...]
+
+        Raises:
+            ValueError: If no networks found or VM/template not found
+        """
+        network_names: set[str] = set()
+
+        for vm_name in names:
+            vm_obj = self.get_obj([vim.VirtualMachine], vm_name)
+
+            if not vm_obj.config or not vm_obj.config.hardware or not vm_obj.config.hardware.device:
+                LOGGER.warning(f"VM/template '{vm_name}' has no hardware devices configured")
+                continue
+
+            for device in vm_obj.config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                    # Reuse existing method that handles all network backing types
+                    network_name = self._get_network_name_from_device(device)
+                    if network_name and network_name != "Unknown":
+                        network_names.add(network_name)
+
+        if not network_names:
+            raise ValueError(f"No networks found for VMs/templates {names}")
+
+        return [{"name": name} for name in sorted(network_names)]
 
     def wait_for_vmware_guest_info(self, vm: vim.VirtualMachine, timeout: int = 60) -> bool:
         """Wait for VMware guest information to become available after VM power-on.

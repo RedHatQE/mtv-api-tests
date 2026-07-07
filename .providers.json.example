@@ -56,7 +56,16 @@
       "non_xcopy_datastore_id": "datastore-99999",
 
       "default_vm_name": "rhel9-template",
-      "resource_pool": "<VSPHERE RESOURCE POOL NAME>",
+
+      # Optional: vSphere resource pool for VM placement during cloning
+      # Priority order for resource pool selection:
+      #   1. This configured value (highest priority - explicit override)
+      #   2. Target ESXi host's pool (when esxi_host is set - automatic compatibility)
+      #   3. Source VM/template's pool (preserve original location)
+      #   4. Cluster-wide search with datastore compatibility check (fallback)
+      # Example: "e2e-qe-resources" or leave commented to use automatic selection
+      # "resource_pool": "<VSPHERE RESOURCE POOL NAME>",
+
       "storage_hostname": "storage.example.com",
       "storage_username": "admin",
       "storage_password": "your-password-here",  # pragma: allowlist secret
