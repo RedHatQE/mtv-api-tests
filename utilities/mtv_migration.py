@@ -21,7 +21,6 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 
@@ -35,13 +34,13 @@ def get_migration_for_plan(plan: Plan) -> Migration:
     """Find Migration CR for Plan.
 
     Args:
-        plan (Plan): The Plan resource.
+        plan (Plan): The Plan resource
 
     Returns:
-        Migration: The Migration CR owned by the Plan.
+        Migration: The Migration CR owned by the Plan
 
     Raises:
-        MigrationNotFoundError: If Migration CR cannot be found.
+        MigrationNotFoundError: If Migration CR cannot be found
     """
     for migration in Migration.get(client=plan.client, namespace=plan.namespace):
         if migration.instance.metadata.ownerReferences:
@@ -259,6 +258,9 @@ def execute_migration(
     Creates a Migration Custom Resource that triggers the actual VM migration
     based on the provided Plan, then waits for the migration to complete.
 
+    Note: For copy-offload migrations, use execute_copyoffload_migration() from
+    utilities.copyoffload_migration instead to ensure populate pod logs are captured.
+
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
         fixture_store (dict[str, Any]): Fixture store for resource tracking and cleanup.
@@ -268,7 +270,6 @@ def execute_migration(
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
-        TimeoutError: If a copy-offload plan populator secret is not created in time.
     """
     create_and_store_resource(
         client=ocp_admin_client,
@@ -278,12 +279,6 @@ def execute_migration(
         plan_name=plan.name,
         plan_namespace=plan.namespace,
         cut_over=cut_over,
-    )
-
-    wait_for_copyoffload_plan_secret(
-        ocp_admin_client=ocp_admin_client,
-        plan=plan,
-        namespace=target_namespace,
     )
 
     wait_for_migration_complate(plan=plan)
@@ -330,7 +325,7 @@ def get_plan_migration_status(plan: Plan) -> str:
 
     # Check if Migration CR exists to confirm execution
     try:
-        get_migration_for_plan(plan=plan)
+        get_migration_for_plan(plan)
         return Plan.Status.EXECUTING
     except MigrationNotFoundError:
         return ""
@@ -341,16 +336,15 @@ def wait_for_migration_complate(
     *,
     on_status_poll: Callable[[str], None] | None = None,
 ) -> None:
-    """Wait for a Plan migration to reach Succeeded or Failed.
+    """Wait for migration to complete.
 
     Args:
-        plan (Plan): The Plan resource to monitor.
+        plan (Plan): The Plan resource to monitor
         on_status_poll (Callable[[str], None] | None): Optional callback invoked on each poll
-            with the current migration status string.
+            with the current migration status string
 
     Raises:
-        MigrationPlanExecError: If the migration fails, times out, or does not reach Succeeded.
-            Polling uses ``TimeoutSampler`` with ``py_config['plan_wait_timeout']``.
+        MigrationPlanExecError: If migration fails or doesn't reach expected condition within timeout
     """
     try:
         last_status: str = ""
@@ -378,6 +372,69 @@ def wait_for_migration_complate(
         raise MigrationPlanExecError(
             f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
         )
+
+
+def wait_for_dual_migration_completion(
+    plan_1: Plan,
+    plan_2: Plan,
+    callback_1: Callable[[str], None],
+    callback_2: Callable[[str], None],
+) -> None:
+    """Poll two migration plans until both complete, invoking callbacks on each poll.
+
+    Args:
+        plan_1 (Plan): First migration plan to monitor.
+        plan_2 (Plan): Second migration plan to monitor.
+        callback_1 (Callable[[str], None]): Status callback for plan 1.
+        callback_2 (Callable[[str], None]): Status callback for plan 2.
+
+    Raises:
+        MigrationPlanExecError: If either plan fails or timeout expires before both complete.
+    """
+    plans = [plan_1, plan_2]
+    callbacks = {plan_1.name: callback_1, plan_2.name: callback_2}
+
+    LOGGER.info(f"Waiting for {len(plans)} migrations to complete")
+    completed_plans: set[str] = set()
+    last_statuses: dict[str, str] = {plan.name: "" for plan in plans}
+
+    try:
+        for _ in TimeoutSampler(
+            func=lambda: None,
+            sleep=1,
+            wait_timeout=py_config["plan_wait_timeout"],
+        ):
+            for plan in plans:
+                # Skip if already completed
+                if plan.name in completed_plans:
+                    continue
+
+                # Fetch and log status on change
+                status = get_plan_migration_status(plan=plan)
+                if status != last_statuses[plan.name]:
+                    LOGGER.info(f"Plan '{plan.name}' migration status: '{status}'")
+                    last_statuses[plan.name] = status
+
+                # Invoke callback for this plan
+                callbacks[plan.name](status)
+
+                # Handle terminal states
+                if status == Plan.Status.SUCCEEDED:
+                    completed_plans.add(plan.name)
+                    LOGGER.info(f"Migration '{plan.name}' completed")
+                elif status == Plan.Status.FAILED:
+                    raise MigrationPlanExecError(f"Plan {plan.name} failed. \nstatus:\n\t{plan.instance}")
+
+            # Break when all plans have completed
+            if len(completed_plans) == len(plans):
+                break
+
+    except TimeoutExpiredError as timeout_err:
+        expected_plans = {plan.name for plan in plans}
+        raise MigrationPlanExecError(
+            f"One or more migrations failed to complete within timeout. "
+            f"Completed: {completed_plans}, Expected: {expected_plans}"
+        ) from timeout_err
 
 
 def get_storage_migration_map(
@@ -583,7 +640,11 @@ def verify_vm_disk_count(destination_provider, plan, target_namespace):
         LOGGER.info(f"Successfully verified {expected_disks} disks on the migrated VM '{source_vm_name}'.")
 
 
-def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int = 120) -> None:
+def wait_for_concurrent_migration_execution(
+    plan_list: list[Plan],
+    timeout: int = 120,
+    callbacks: dict[str, Callable[[str], None]] | None = None,
+) -> None:
     """Wait for multiple migration plans to be executing simultaneously.
 
     Polls the status of all provided plans and validates that they all reach the "Executing"
@@ -593,6 +654,8 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
     Args:
         plan_list: List of Plan resources to monitor.
         timeout: Timeout in seconds to wait for simultaneous execution.
+        callbacks: Optional dict mapping plan names to status poll callbacks. Callbacks are
+            invoked with the current status string for their respective plan on each poll.
 
     Returns:
         None
@@ -602,6 +665,7 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
     """
     LOGGER.info(f"Validating {len(plan_list)} migrations enter executing state simultaneously")
     plans_executing = {plan.name: False for plan in plan_list}
+    callbacks = callbacks or {}
 
     try:
         for current_statuses in TimeoutSampler(
@@ -609,9 +673,14 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
             sleep=2,
             wait_timeout=timeout,
         ):
-            # Update executing state for each plan
+            # Update executing state for each plan and invoke callbacks
             for plan in plan_list:
                 status = current_statuses[plan.name]
+
+                # Invoke callback if provided
+                if plan.name in callbacks:
+                    callbacks[plan.name](status)
+
                 if status == Plan.Status.EXECUTING:
                     if not plans_executing[plan.name]:
                         LOGGER.info(f"Plan '{plan.name}' is now executing")
