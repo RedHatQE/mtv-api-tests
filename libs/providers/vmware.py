@@ -1857,16 +1857,63 @@ class VMWareProvider(BaseProvider):
         names: list[str],
         inventory: ForkliftInventory,
     ) -> list[dict[str, str]]:
-        """Delegate to Forklift inventory for VMware VMs.
+        """Get network mappings for VMs or templates.
+
+        Tries Forklift inventory first (for VMs), falls back to direct vSphere
+        API query (for templates not in inventory).
 
         Args:
-            names: List of VM names to query
+            names: List of VM/template names to query
             inventory: Forklift inventory instance
 
         Returns:
-            List of network mappings
+            List of network mappings in format [{"name": "network-name"}, ...]
         """
-        return inventory.vms_networks_mappings(vms=names)
+        try:
+            # Try Forklift inventory first (works for VMs)
+            return inventory.vms_networks_mappings(vms=names)
+        except ValueError as e:
+            # If VM not found in inventory, try direct vSphere query (for templates)
+            if "not found" in str(e):
+                LOGGER.info(f"VM(s) not found in Forklift inventory, querying vSphere directly for templates: {names}")
+                return self._get_networks_from_vsphere(names=names)
+            raise
+
+    def _get_networks_from_vsphere(self, names: list[str]) -> list[dict[str, str]]:
+        """Query vSphere directly for network information from VMs or templates.
+
+        Args:
+            names: List of VM/template names to query
+
+        Returns:
+            List of network mappings in format [{"name": "network-name"}, ...]
+
+        Raises:
+            ValueError: If no networks found or VM/template not found
+        """
+        network_names: set[str] = set()
+
+        for vm_name in names:
+            vm_obj = self.get_obj([vim.VirtualMachine], vm_name)
+
+            if not vm_obj.config or not vm_obj.config.hardware or not vm_obj.config.hardware.device:
+                LOGGER.warning(f"VM/template '{vm_name}' has no hardware devices configured")
+                continue
+
+            for device in vm_obj.config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                    # Extract network name from backing info
+                    backing = device.backing
+                    if hasattr(backing, "network") and backing.network:
+                        network_names.add(backing.network.name)
+                    elif hasattr(backing, "deviceName"):
+                        # Standard port group
+                        network_names.add(backing.deviceName)
+
+        if not network_names:
+            raise ValueError(f"No networks found for VMs/templates {names}")
+
+        return [{"name": name} for name in sorted(network_names)]
 
     def wait_for_vmware_guest_info(self, vm: vim.VirtualMachine, timeout: int = 60) -> bool:
         """Wait for VMware guest information to become available after VM power-on.
