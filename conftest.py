@@ -811,6 +811,7 @@ def multus_network_name(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
     class_plan_config: dict[str, Any],
+    prepared_plan: dict[str, Any],
     request: pytest.FixtureRequest,
 ) -> dict[str, str]:
     """Create NADs based on network requirements with unique names per test class.
@@ -830,6 +831,7 @@ def multus_network_name(
         source_provider (BaseProvider): Source provider instance
         source_provider_inventory (ForkliftInventory): Source provider inventory
         class_plan_config (dict[str, Any]): Plan configuration from class parametrization
+        prepared_plan (dict[str, Any]): Prepared plan with cloned VM names
         request (pytest.FixtureRequest): Pytest fixture request
 
     Returns:
@@ -853,9 +855,10 @@ def multus_network_name(
     else:
         nad_namespace = target_namespace
 
-    # Get VM/template names from the class plan config
-    vms = [vm["name"] for vm in class_plan_config["virtual_machines"]]
-    LOGGER.info(f"Found VMs from class config: {vms}")
+    # Get cloned VM names from prepared_plan (not original template names from class_plan_config)
+    # After cloning, prepared_plan has the actual VM names (e.g., auto-zzsx-xcopy-template-test-...)
+    vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+    LOGGER.info(f"Found VMs from prepared plan: {vms}")
 
     # Query networks using provider abstraction (handles templates vs VMs internally)
     networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)

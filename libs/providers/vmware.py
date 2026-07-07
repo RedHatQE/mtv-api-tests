@@ -1895,20 +1895,38 @@ class VMWareProvider(BaseProvider):
 
         for vm_name in names:
             vm_obj = self.get_obj([vim.VirtualMachine], vm_name)
+            LOGGER.info(
+                f"Querying networks for VM/template: {vm_name} (isTemplate: {vm_obj.config.template if vm_obj.config else 'unknown'})"
+            )
 
             if not vm_obj.config or not vm_obj.config.hardware or not vm_obj.config.hardware.device:
                 LOGGER.warning(f"VM/template '{vm_name}' has no hardware devices configured")
                 continue
 
+            device_count = len(vm_obj.config.hardware.device)
+            nic_count = 0
+            LOGGER.info(f"Found {device_count} hardware devices on '{vm_name}'")
+
             for device in vm_obj.config.hardware.device:
                 if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                    nic_count += 1
                     # Extract network name from backing info
                     backing = device.backing
+                    LOGGER.info(
+                        f"Found NIC: {device.deviceInfo.label if device.deviceInfo else 'unknown'}, backing type: {type(backing).__name__}"
+                    )
+
                     if hasattr(backing, "network") and backing.network:
                         network_names.add(backing.network.name)
+                        LOGGER.info(f"  -> Network: {backing.network.name}")
                     elif hasattr(backing, "deviceName"):
                         # Standard port group
                         network_names.add(backing.deviceName)
+                        LOGGER.info(f"  -> Device name: {backing.deviceName}")
+                    else:
+                        LOGGER.warning(f"  -> No network name found in backing info")
+
+            LOGGER.info(f"VM/template '{vm_name}': {nic_count} NICs found, {len(network_names)} unique networks")
 
         if not network_names:
             raise ValueError(f"No networks found for VMs/templates {names}")
