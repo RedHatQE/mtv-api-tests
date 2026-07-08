@@ -45,6 +45,7 @@ from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
+    VsphereForkliftInventory,
     create_forklift_inventory,
 )
 from libs.providers.openshift import OCPProvider
@@ -1001,6 +1002,12 @@ def prepared_plan(
     function-scoped `plan` fixture but at class scope. It prepares VMs
     once per test class rather than once per test function.
 
+    Cloning uses a two-phase pattern: all VMs are cloned first, then Forklift
+    inventory sync is waited on for every cloned VM. For vSphere providers,
+    host inventory is waited on first before VM validation to prevent 'host id
+    not found' errors (MTV-6066). This avoids inventory sync failures when
+    cloning VM2+ while still waiting for VM1 (MTV-777).
+
     Args:
         request (pytest.FixtureRequest): Pytest fixture request
         class_plan_config (dict[str, Any]): Plan configuration from parametrization
@@ -1103,6 +1110,7 @@ def prepared_plan(
 
         original_source_vm_names: list[str] = [vm["name"] for vm in virtual_machines] if has_shared_disk_config else []
         cloned_vm_objects: list[Any] = []
+        cloned_vm_names: list[str] = []
 
         for vm in virtual_machines:
             clone_options = {**vm, "enable_ctk": warm_migration}
@@ -1139,12 +1147,7 @@ def prepared_plan(
                 clone_options=vm,
             )
             vm["name"] = source_vm_details["name"]
-
-            # Wait for cloned VM to appear in Forklift inventory before proceeding
-            # This is needed for external providers that Forklift needs to sync from
-            # OVA is excluded because it doesn't clone VMs (uses pre-existing files)
-            if source_provider.type != Provider.ProviderType.OVA:
-                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=300)
+            cloned_vm_names.append(vm["name"])
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 
@@ -1182,6 +1185,19 @@ def prepared_plan(
                         source_provider_data=fixture_store["source_provider_data"],
                         vm_details=source_vm_details,
                     )
+
+        # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
+        # Sequential per-VM wait during cloning causes inventory sync failures on VM2+ (MTV-777).
+        inventory_timeout = plan.get("inventory_timeout", 300)
+
+        # For vSphere providers, wait for host inventory before VM validation.
+        # Fresh vSphere providers report Ready while GET /hosts returns empty, causing VM validation failures.
+        if source_provider.type == Provider.ProviderType.VSPHERE:
+            if isinstance(source_provider_inventory, VsphereForkliftInventory):
+                source_provider_inventory.wait_for_hosts(timeout=inventory_timeout)
+
+        for vm_name in cloned_vm_names:
+            source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
 
         # Relink shared disks between clones (VMware-specific)
         # When VMs with shared disks are cloned, each clone gets independent disk copies,

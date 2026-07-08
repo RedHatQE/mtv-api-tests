@@ -407,8 +407,47 @@ class VsphereForkliftInventory(ForkliftInventory):
         )
 
     @property
+    def hosts(self) -> list[dict[str, Any]]:
+        return self._request(url_path=f"{self.provider_url_path}/hosts")
+
+    @property
     def storages(self) -> list[dict[str, Any]]:
         return self._request(url_path=f"{self.provider_url_path}/datastores")
+
+    def wait_for_hosts(self, timeout: int = 300, sleep: int = 10) -> list[dict[str, Any]]:
+        """Wait for hosts to appear in the Forklift inventory.
+
+        Fresh vSphere providers report Ready while GET /hosts returns empty.
+        This causes VM validation to fail with 'host id not found' errors.
+
+        Args:
+            timeout: Maximum time to wait in seconds (default: 300)
+            sleep: Time to sleep between checks in seconds (default: 10)
+
+        Returns:
+            List of host dictionaries from inventory
+
+        Raises:
+            TimeoutExpiredError: If hosts don't appear within timeout
+        """
+        LOGGER.info(f"Waiting for hosts to appear in Forklift inventory for provider '{self.provider_name}'...")
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=sleep,
+                func=lambda: self.hosts,
+            ):
+                if sample:
+                    LOGGER.info(f"Found {len(sample)} hosts in inventory for provider '{self.provider_name}'")
+                    return sample
+        except TimeoutExpiredError:
+            raise TimeoutExpiredError(
+                f"No hosts appeared in Forklift inventory for provider '{self.provider_name}' after {timeout}s"
+            )
+
+        # This should never be reached, but satisfies type checker
+        raise TimeoutExpiredError("Host wait completed unexpectedly without returning")
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
