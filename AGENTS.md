@@ -885,6 +885,7 @@ tests_params: dict = {
 | `copyoffload`         | No       | True to enable copy-offload (XCOPY) migration         |
 | `xfs_compatibility`   | No       | True to enable XFS v4 filesystem compatibility        |
 | `migrate_shared_disks`| No       | True to enable shared disk migration at plan level    |
+| `inventory_timeout`   | No       | Max seconds for Forklift inventory waits in prepared_plan (default 300) |
 
 **Test Verification Configuration:**
 
@@ -936,7 +937,7 @@ Common: `ocp_admin_client`, `session_uuid`, `target_namespace`, `source_provider
 Two class-scoped fixtures work together (used with `indirect=True` parametrization):
 
 - `class_plan_config`: Raw test configuration from `@pytest.mark.parametrize`
-- `prepared_plan`: Processed config with cloned VMs, updated names, and `source_vms_data`
+- `prepared_plan`: Processed config with cloned VMs, updated names, and `source_vms_data`. Uses a two-phase clone pattern: clone all VMs first, then batch inventory sync via `wait_for_cloned_vms_in_forklift_inventory`. Applies to all non-OVA class tests with cloned VMs. vSphere MTV-6066 workarounds (host/datastore wait, refresh on timeout) are gated on MTV-6072 via `jira_issue_open` in `utilities/provider_inventory.py`; disabled when MTV-6072 is resolved in Jira. Use `utilities/jira_helpers.py` for Jira runtime checks in fixtures.
 
 Test methods receive `prepared_plan` which is ready to use:
 

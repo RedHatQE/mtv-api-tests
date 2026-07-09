@@ -15,9 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import filelock
 import pytest
-import requests
 from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
-from pytest_jira import CONNECTION_ERROR_FLAG_NAME, CONNECTION_SKIP_MESSAGE, SKIP, STRICT
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -53,6 +51,7 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
+from utilities.jira_helpers import is_jira_issue_open
 from utilities.provider_inventory import wait_for_cloned_vms_in_forklift_inventory
 from utilities.naming import (
     generate_name_with_uuid,
@@ -982,45 +981,20 @@ def class_plan_config(request: pytest.FixtureRequest) -> dict[str, Any]:
     return request.param
 
 
-_JIRA_PLUGIN_NAME = "jira_plugin"
-
-
-def _is_jira_issue_open(request: pytest.FixtureRequest, issue_id: str) -> bool | None:
-    """Check if a Jira issue is open, mirroring pytest-jira's jira_issue fixture.
-
-    Args:
-        request: Pytest fixture request for plugin/config access
-        issue_id: Jira issue key (e.g. MTV-6072)
-
-    Returns:
-        True if issue is open, False if resolved, None if Jira is unavailable
-    """
-    jira_plugin = request.config.pluginmanager.getplugin(_JIRA_PLUGIN_NAME)
-    if jira_plugin:
-        try:
-            result = jira_plugin.is_issue_resolved(issue_id)
-            if request.config.option.return_jira_metadata:
-                return result
-            return not result
-        except requests.RequestException as e:
-            strategy = request.config.getoption(CONNECTION_ERROR_FLAG_NAME)
-            if strategy == SKIP:
-                pytest.skip(CONNECTION_SKIP_MESSAGE % e)
-            elif strategy == STRICT:
-                raise
-    return None
-
-
 @pytest.fixture(scope="session")
 def jira_issue_open(request: pytest.FixtureRequest) -> Callable[[str], bool | None]:
     """Return a callable that checks whether a Jira issue is open.
 
     Mirrors pytest-jira's jira_issue fixture for use outside test functions.
-    Returns True if open, False if resolved, None if Jira is unavailable.
+    See ``utilities/jira_helpers.py`` for the underlying implementation.
+
+    Returns:
+        Callable[[str], bool | None]: Wrapper returning True if open, False if resolved,
+        None if Jira is unavailable.
     """
 
     def wrapper(issue_id: str) -> bool | None:
-        return _is_jira_issue_open(request, issue_id)
+        return is_jira_issue_open(request, issue_id)
 
     return wrapper
 

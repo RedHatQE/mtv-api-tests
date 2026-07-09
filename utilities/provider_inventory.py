@@ -9,6 +9,7 @@ from timeout_sampler import TimeoutExpiredError
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory, VsphereForkliftInventory
+from utilities.copyoffload_datastore import resolve_datastore_moid_from_disk_config
 
 LOGGER = get_logger(__name__)
 
@@ -18,6 +19,9 @@ INVENTORY_SYNC_WORKAROUND_JIRA = "MTV-6072"
 
 def force_inventory_refresh(provider: Provider) -> None:
     """Force Forklift provider inventory refresh by patching spec.settings._refresh.
+
+    Waits for Ready (not Validated) because _refresh triggers reconciliation; Ready
+    is sufficient for inventory repopulation to start.
 
     Args:
         provider (Provider): Forklift Provider resource to refresh.
@@ -58,22 +62,12 @@ def collect_cross_datastore_ids(
                 continue
 
             has_cross_datastore_disks = True
-            if disk_datastore_id == "secondary_datastore_id":
-                resolved_id = copyoffload_config.get("secondary_datastore_id")
-                if not resolved_id:
-                    raise ValueError(
-                        "Disk requested secondary datastore but copyoffload.secondary_datastore_id is not configured"
-                    )
-                datastore_ids.append(resolved_id)
-            elif disk_datastore_id == "non_xcopy_datastore_id":
-                resolved_id = copyoffload_config.get("non_xcopy_datastore_id")
-                if not resolved_id:
-                    raise ValueError(
-                        "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
-                    )
-                datastore_ids.append(resolved_id)
-            else:
-                datastore_ids.append(disk_datastore_id)
+            datastore_ids.append(
+                resolve_datastore_moid_from_disk_config(
+                    disk_datastore_id=disk_datastore_id,
+                    copyoffload_config=copyoffload_config,
+                )
+            )
 
     if has_cross_datastore_disks:
         primary_datastore_id = copyoffload_config.get("datastore_id")
@@ -110,6 +104,37 @@ def _wait_for_vsphere_host_and_datastore_inventory(
         )
 
 
+def _retry_vsphere_vm_inventory_after_refresh(
+    source_provider: BaseProvider,
+    source_provider_inventory: VsphereForkliftInventory,
+    vm_name: str,
+    virtual_machines: list[dict[str, Any]],
+    copyoffload_config: dict[str, Any],
+    inventory_timeout: int,
+) -> None:
+    """Force provider refresh and retry vSphere inventory waits after VM wait timeout.
+
+    Args:
+        source_provider: Source provider instance (must have ocp_resource set)
+        source_provider_inventory: vSphere Forklift inventory client
+        vm_name: VM name to wait for after refresh
+        virtual_machines: VM configurations from the test plan
+        copyoffload_config: copyoffload section from source provider data
+        inventory_timeout: Maximum time to wait in seconds
+
+    Raises:
+        TimeoutExpiredError: If the VM does not appear in inventory within the timeout
+    """
+    force_inventory_refresh(source_provider.ocp_resource)
+    _wait_for_vsphere_host_and_datastore_inventory(
+        source_provider_inventory=source_provider_inventory,
+        virtual_machines=virtual_machines,
+        copyoffload_config=copyoffload_config,
+        inventory_timeout=inventory_timeout,
+    )
+    source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+
+
 def wait_for_cloned_vms_in_forklift_inventory(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
@@ -121,9 +146,13 @@ def wait_for_cloned_vms_in_forklift_inventory(
 ) -> None:
     """Wait for cloned VMs in Forklift inventory with MTV-6066 workarounds gated by MTV-6072.
 
-    When MTV-6072 is open (or Jira is unavailable), vSphere providers run host/datastore
-    inventory waits before VM validation and force a provider refresh on VM wait timeout.
-    When MTV-6072 is resolved, only the plain wait_for_vm loop runs.
+    When MTV-6072 is open, vSphere providers run host/datastore inventory waits before VM
+    validation and force a provider refresh on VM wait timeout. When MTV-6072 is resolved,
+    only the plain wait_for_vm loop runs.
+
+    ``jira_issue_open(...) is not False`` keeps workarounds active when Jira is unavailable
+    (returns None). This is an intentional fail-safe: workarounds stay enabled unless Jira
+    explicitly reports the issue as resolved.
 
     Args:
         source_provider: Source provider instance
@@ -140,14 +169,16 @@ def wait_for_cloned_vms_in_forklift_inventory(
     """
     workaround_active = jira_issue_open(INVENTORY_SYNC_WORKAROUND_JIRA) is not False
     is_vsphere = source_provider.type == Provider.ProviderType.VSPHERE
+    vsphere_inventory: VsphereForkliftInventory | None = None
 
     if is_vsphere and workaround_active:
         if not isinstance(source_provider_inventory, VsphereForkliftInventory):
             raise TypeError(
                 f"vSphere provider requires VsphereForkliftInventory, got {type(source_provider_inventory).__name__}"
             )
+        vsphere_inventory = source_provider_inventory
         _wait_for_vsphere_host_and_datastore_inventory(
-            source_provider_inventory=source_provider_inventory,
+            source_provider_inventory=vsphere_inventory,
             virtual_machines=virtual_machines,
             copyoffload_config=copyoffload_config,
             inventory_timeout=inventory_timeout,
@@ -157,19 +188,14 @@ def wait_for_cloned_vms_in_forklift_inventory(
         try:
             source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
         except TimeoutExpiredError:
-            if is_vsphere and workaround_active and source_provider.ocp_resource:
-                force_inventory_refresh(source_provider.ocp_resource)
-                if not isinstance(source_provider_inventory, VsphereForkliftInventory):
-                    raise TypeError(
-                        f"vSphere provider requires VsphereForkliftInventory, "
-                        f"got {type(source_provider_inventory).__name__}"
-                    )
-                _wait_for_vsphere_host_and_datastore_inventory(
-                    source_provider_inventory=source_provider_inventory,
+            if is_vsphere and workaround_active and vsphere_inventory is not None and source_provider.ocp_resource:
+                _retry_vsphere_vm_inventory_after_refresh(
+                    source_provider=source_provider,
+                    source_provider_inventory=vsphere_inventory,
+                    vm_name=vm_name,
                     virtual_machines=virtual_machines,
                     copyoffload_config=copyoffload_config,
                     inventory_timeout=inventory_timeout,
                 )
-                source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
             else:
                 raise

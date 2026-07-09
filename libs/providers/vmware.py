@@ -18,6 +18,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
 from libs.base_provider import BaseProvider
+from utilities.copyoffload_datastore import resolve_datastore_moid_from_disk_config
 
 if TYPE_CHECKING:
     from libs.forklift_inventory import ForkliftInventory
@@ -29,12 +30,6 @@ LOGGER = get_logger(__name__)
 # The gateway routing table uses device IDs without this offset
 # Reference: VMware vSphere API VirtualEthernetCard documentation
 VSPHERE_NIC_DEVICE_KEY_OFFSET = 4000
-
-# Error messages for VM cloning operations
-ERR_SECONDARY_DS_NOT_CONFIGURED = (
-    "Disk requested secondary datastore but copyoffload.secondary_datastore_id is not configured"
-)
-
 
 def format_insufficient_capacity_message(datastore_name: str, required_gb: float, available_gb: float) -> str:
     """Format error/log message for insufficient datastore capacity.
@@ -1051,27 +1046,29 @@ class VMWareProvider(BaseProvider):
             """
             if disk_datastore_id in resolved_datastores:
                 return resolved_datastores[disk_datastore_id]
-            if disk_datastore_id == "secondary_datastore_id":
-                if secondary_datastore is None:
-                    raise VmCloneError(ERR_SECONDARY_DS_NOT_CONFIGURED)
-                resolved = secondary_datastore
-            elif disk_datastore_id == "non_xcopy_datastore_id":
-                if non_xcopy_datastore is None:
-                    raise VmCloneError(
-                        "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
-                    )
-                resolved = non_xcopy_datastore
-            elif disk_datastore_id is not None:
+            if disk_datastore_id is None:
+                resolved = target_datastore
+            else:
                 if not disk_datastore_id:
                     raise VmCloneError("Disk datastore_id is empty. Provide a valid MoID or omit the field.")
                 try:
-                    resolved = self.get_obj([vim.Datastore], disk_datastore_id)
-                except ValueError:
-                    raise VmCloneError(
-                        f"Custom datastore not found for disk. MoID '{disk_datastore_id}' is invalid or not accessible."
-                    ) from None
-            else:
-                resolved = target_datastore
+                    resolved_moid = resolve_datastore_moid_from_disk_config(
+                        disk_datastore_id=disk_datastore_id,
+                        copyoffload_config=self.copyoffload_config or {},
+                    )
+                except ValueError as err:
+                    raise VmCloneError(str(err)) from err
+                if secondary_datastore and resolved_moid == secondary_datastore._moId:
+                    resolved = secondary_datastore
+                elif non_xcopy_datastore and resolved_moid == non_xcopy_datastore._moId:
+                    resolved = non_xcopy_datastore
+                else:
+                    try:
+                        resolved = self.get_obj([vim.Datastore], resolved_moid)
+                    except ValueError:
+                        raise VmCloneError(
+                            f"Custom datastore not found for disk. MoID '{resolved_moid}' is invalid or not accessible."
+                        ) from None
             resolved_datastores[disk_datastore_id] = resolved
             return resolved
 
