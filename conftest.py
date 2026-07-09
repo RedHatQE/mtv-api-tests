@@ -7,7 +7,7 @@ import pickle
 import shutil
 import tempfile
 import uuid
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from copy import deepcopy
 from pathlib import Path
 from shutil import rmtree
@@ -15,7 +15,9 @@ from typing import TYPE_CHECKING, Any
 
 import filelock
 import pytest
+import requests
 from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
+from pytest_jira import CONNECTION_ERROR_FLAG_NAME, CONNECTION_SKIP_MESSAGE, SKIP, STRICT
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -33,7 +35,7 @@ from ocp_resources.subscription import Subscription
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
-from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+from timeout_sampler import TimeoutSampler
 
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
@@ -43,11 +45,7 @@ from exceptions.exceptions import (
 )
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from libs.base_provider import BaseProvider
-from libs.forklift_inventory import (
-    ForkliftInventory,
-    VsphereForkliftInventory,
-    create_forklift_inventory,
-)
+from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
@@ -55,7 +53,7 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.provider_inventory import force_inventory_refresh
+from utilities.provider_inventory import wait_for_cloned_vms_in_forklift_inventory
 from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
@@ -984,55 +982,47 @@ def class_plan_config(request: pytest.FixtureRequest) -> dict[str, Any]:
     return request.param
 
 
-def _collect_cross_datastore_ids(
-    virtual_machines: list[dict[str, Any]],
-    copyoffload_config: dict[str, Any],
-) -> list[str]:
-    """Collect MoIDs of datastores required for cross-datastore add_disks configurations.
+_JIRA_PLUGIN_NAME = "jira_plugin"
+
+
+def _is_jira_issue_open(request: pytest.FixtureRequest, issue_id: str) -> bool | None:
+    """Check if a Jira issue is open, mirroring pytest-jira's jira_issue fixture.
 
     Args:
-        virtual_machines: VM configurations from the test plan
-        copyoffload_config: copyoffload section from source provider data
+        request: Pytest fixture request for plugin/config access
+        issue_id: Jira issue key (e.g. MTV-6072)
 
     Returns:
-        Deduplicated list of datastore MoIDs to wait for in Forklift inventory
-
-    Raises:
-        ValueError: If a symbolic datastore key cannot be resolved from copyoffload config
+        True if issue is open, False if resolved, None if Jira is unavailable
     """
-    datastore_ids: list[str] = []
-    has_cross_datastore_disks = False
+    jira_plugin = request.config.pluginmanager.getplugin(_JIRA_PLUGIN_NAME)
+    if jira_plugin:
+        try:
+            result = jira_plugin.is_issue_resolved(issue_id)
+            if request.config.option.return_jira_metadata:
+                return result
+            return not result
+        except requests.RequestException as e:
+            strategy = request.config.getoption(CONNECTION_ERROR_FLAG_NAME)
+            if strategy == SKIP:
+                pytest.skip(CONNECTION_SKIP_MESSAGE % e)
+            elif strategy == STRICT:
+                raise
+    return None
 
-    for vm in virtual_machines:
-        for disk in vm.get("add_disks", []):
-            disk_datastore_id: str | None = disk.get("datastore_id")
-            if not disk_datastore_id:
-                continue
 
-            has_cross_datastore_disks = True
-            if disk_datastore_id == "secondary_datastore_id":
-                resolved_id = copyoffload_config.get("secondary_datastore_id")
-                if not resolved_id:
-                    raise ValueError(
-                        "Disk requested secondary datastore but copyoffload.secondary_datastore_id is not configured"
-                    )
-                datastore_ids.append(resolved_id)
-            elif disk_datastore_id == "non_xcopy_datastore_id":
-                resolved_id = copyoffload_config.get("non_xcopy_datastore_id")
-                if not resolved_id:
-                    raise ValueError(
-                        "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
-                    )
-                datastore_ids.append(resolved_id)
-            else:
-                datastore_ids.append(disk_datastore_id)
+@pytest.fixture(scope="session")
+def jira_issue_open(request: pytest.FixtureRequest) -> Callable[[str], bool | None]:
+    """Return a callable that checks whether a Jira issue is open.
 
-    if has_cross_datastore_disks:
-        primary_datastore_id = copyoffload_config.get("datastore_id")
-        if primary_datastore_id:
-            datastore_ids.append(primary_datastore_id)
+    Mirrors pytest-jira's jira_issue fixture for use outside test functions.
+    Returns True if open, False if resolved, None if Jira is unavailable.
+    """
 
-    return list(dict.fromkeys(datastore_ids))
+    def wrapper(issue_id: str) -> bool | None:
+        return _is_jira_issue_open(request, issue_id)
+
+    return wrapper
 
 
 @pytest.fixture(scope="class")
@@ -1047,6 +1037,7 @@ def prepared_plan(
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
     vcenter_clone_provider: VMWareProvider | None,
+    jira_issue_open: Callable[[str], bool | None],
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -1055,10 +1046,11 @@ def prepared_plan(
     once per test class rather than once per test function.
 
     Cloning uses a two-phase pattern: all VMs are cloned first, then Forklift
-    inventory sync is waited on for every cloned VM. For vSphere providers,
-    host inventory is waited on first before VM validation to prevent 'host id
-    not found' errors (MTV-6066). This avoids inventory sync failures when
-    cloning VM2+ while still waiting for VM1 (MTV-777).
+    inventory sync is waited on for every cloned VM. vSphere inventory sync
+    workarounds (MTV-6066) are gated by MTV-6072 via jira_issue_open: active
+    while the issue is open or Jira is unavailable, skipped when resolved.
+    This avoids inventory sync failures when cloning VM2+ while VM1 inventory
+    sync is still pending.
 
     Args:
         request (pytest.FixtureRequest): Pytest fixture request
@@ -1071,6 +1063,7 @@ def prepared_plan(
         source_provider_inventory (ForkliftInventory): Source provider inventory
         target_namespace (str): Default target namespace for VMs
         vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
+        jira_issue_open (Callable[[str], bool | None]): Callable to check Jira issue state
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1239,35 +1232,17 @@ def prepared_plan(
                     )
 
         # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
-        # Sequential per-VM wait during cloning causes inventory sync failures on VM2+ (MTV-777).
+        # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
         inventory_timeout = plan.get("inventory_timeout", 300)
-
-        # For vSphere providers, wait for host inventory before VM validation.
-        # Fresh vSphere providers report Ready while GET /hosts returns empty, causing VM validation failures.
-        if source_provider.type == Provider.ProviderType.VSPHERE:
-            if isinstance(source_provider_inventory, VsphereForkliftInventory):
-                source_provider_inventory.wait_for_hosts(timeout=inventory_timeout)
-
-                copyoffload_config: dict[str, Any] = fixture_store["source_provider_data"].get("copyoffload", {})
-                required_datastore_ids = _collect_cross_datastore_ids(
-                    virtual_machines=virtual_machines,
-                    copyoffload_config=copyoffload_config,
-                )
-                if required_datastore_ids:
-                    source_provider_inventory.wait_for_datastores(
-                        datastore_ids=required_datastore_ids,
-                        timeout=inventory_timeout,
-                    )
-
-        for vm_name in cloned_vm_names:
-            try:
-                source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
-            except TimeoutExpiredError:
-                if source_provider.type == Provider.ProviderType.VSPHERE and source_provider.ocp_resource:
-                    force_inventory_refresh(source_provider.ocp_resource)
-                    source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
-                else:
-                    raise
+        wait_for_cloned_vms_in_forklift_inventory(
+            source_provider=source_provider,
+            source_provider_inventory=source_provider_inventory,
+            cloned_vm_names=cloned_vm_names,
+            virtual_machines=virtual_machines,
+            copyoffload_config=fixture_store["source_provider_data"].get("copyoffload", {}),
+            inventory_timeout=inventory_timeout,
+            jira_issue_open=jira_issue_open,
+        )
 
         # Relink shared disks between clones (VMware-specific)
         # When VMs with shared disks are cloned, each clone gets independent disk copies,
