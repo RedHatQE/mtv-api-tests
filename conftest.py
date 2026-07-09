@@ -33,7 +33,7 @@ from ocp_resources.subscription import Subscription
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
-from timeout_sampler import TimeoutSampler
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
@@ -55,6 +55,7 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
+from utilities.provider_inventory import force_inventory_refresh
 from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
@@ -1259,7 +1260,14 @@ def prepared_plan(
                     )
 
         for vm_name in cloned_vm_names:
-            source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+            try:
+                source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+            except TimeoutExpiredError:
+                if source_provider.type == Provider.ProviderType.VSPHERE and source_provider.ocp_resource:
+                    force_inventory_refresh(source_provider.ocp_resource)
+                    source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+                else:
+                    raise
 
         # Relink shared disks between clones (VMware-specific)
         # When VMs with shared disks are cloned, each clone gets independent disk copies,
