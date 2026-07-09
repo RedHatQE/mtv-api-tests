@@ -983,6 +983,57 @@ def class_plan_config(request: pytest.FixtureRequest) -> dict[str, Any]:
     return request.param
 
 
+def _collect_cross_datastore_ids(
+    virtual_machines: list[dict[str, Any]],
+    copyoffload_config: dict[str, Any],
+) -> list[str]:
+    """Collect MoIDs of datastores required for cross-datastore add_disks configurations.
+
+    Args:
+        virtual_machines: VM configurations from the test plan
+        copyoffload_config: copyoffload section from source provider data
+
+    Returns:
+        Deduplicated list of datastore MoIDs to wait for in Forklift inventory
+
+    Raises:
+        ValueError: If a symbolic datastore key cannot be resolved from copyoffload config
+    """
+    datastore_ids: list[str] = []
+    has_cross_datastore_disks = False
+
+    for vm in virtual_machines:
+        for disk in vm.get("add_disks", []):
+            disk_datastore_id: str | None = disk.get("datastore_id")
+            if not disk_datastore_id:
+                continue
+
+            has_cross_datastore_disks = True
+            if disk_datastore_id == "secondary_datastore_id":
+                resolved_id = copyoffload_config.get("secondary_datastore_id")
+                if not resolved_id:
+                    raise ValueError(
+                        "Disk requested secondary datastore but copyoffload.secondary_datastore_id is not configured"
+                    )
+                datastore_ids.append(resolved_id)
+            elif disk_datastore_id == "non_xcopy_datastore_id":
+                resolved_id = copyoffload_config.get("non_xcopy_datastore_id")
+                if not resolved_id:
+                    raise ValueError(
+                        "Disk requested non-XCOPY datastore but copyoffload.non_xcopy_datastore_id is not configured"
+                    )
+                datastore_ids.append(resolved_id)
+            else:
+                datastore_ids.append(disk_datastore_id)
+
+    if has_cross_datastore_disks:
+        primary_datastore_id = copyoffload_config.get("datastore_id")
+        if primary_datastore_id:
+            datastore_ids.append(primary_datastore_id)
+
+    return list(dict.fromkeys(datastore_ids))
+
+
 @pytest.fixture(scope="class")
 def prepared_plan(
     request: pytest.FixtureRequest,
@@ -1195,6 +1246,17 @@ def prepared_plan(
         if source_provider.type == Provider.ProviderType.VSPHERE:
             if isinstance(source_provider_inventory, VsphereForkliftInventory):
                 source_provider_inventory.wait_for_hosts(timeout=inventory_timeout)
+
+                copyoffload_config: dict[str, Any] = fixture_store["source_provider_data"].get("copyoffload", {})
+                required_datastore_ids = _collect_cross_datastore_ids(
+                    virtual_machines=virtual_machines,
+                    copyoffload_config=copyoffload_config,
+                )
+                if required_datastore_ids:
+                    source_provider_inventory.wait_for_datastores(
+                        datastore_ids=required_datastore_ids,
+                        timeout=inventory_timeout,
+                    )
 
         for vm_name in cloned_vm_names:
             source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)

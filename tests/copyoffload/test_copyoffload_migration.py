@@ -2013,6 +2013,7 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
     "vmware_cloud_init_ready",
     "multus_network_name",
     "copyoffload_config",
+    "multi_datastore_config",
     "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )

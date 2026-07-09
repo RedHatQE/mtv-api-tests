@@ -449,6 +449,63 @@ class VsphereForkliftInventory(ForkliftInventory):
         # This should never be reached, but satisfies type checker
         raise TimeoutExpiredError("Host wait completed unexpectedly without returning")
 
+    def wait_for_datastores(
+        self, datastore_ids: list[str], timeout: int = 300, sleep: int = 10
+    ) -> list[dict[str, Any]]:
+        """Wait for datastores to appear in the Forklift inventory.
+
+        Fresh vSphere providers may report Ready while GET /datastores does not yet
+        include all datastores referenced by cross-datastore disk configurations.
+
+        Args:
+            datastore_ids: MoIDs of datastores to wait for
+            timeout: Maximum time to wait in seconds (default: 300)
+            sleep: Time to sleep between checks in seconds (default: 10)
+
+        Returns:
+            List of storage dictionaries for the requested datastores
+
+        Raises:
+            TimeoutExpiredError: If any requested datastores don't appear within timeout
+        """
+        if not datastore_ids:
+            return []
+
+        requested_ids = set(datastore_ids)
+        LOGGER.info(
+            f"Waiting for datastores {sorted(requested_ids)} to appear in Forklift inventory "
+            f"for provider '{self.provider_name}'..."
+        )
+
+        def _check_datastores() -> list[dict[str, Any]] | None:
+            storages = self.storages
+            found_ids = {storage["id"] for storage in storages if storage.get("id")}
+            if requested_ids - found_ids:
+                return None
+            return [storage for storage in storages if storage.get("id") in requested_ids]
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=sleep,
+                func=_check_datastores,
+            ):
+                if sample:
+                    for storage in sample:
+                        LOGGER.info(
+                            f"Found datastore '{storage.get('id')}' in inventory for provider '{self.provider_name}'"
+                        )
+                    return sample
+        except TimeoutExpiredError:
+            found_ids = {storage["id"] for storage in self.storages if storage.get("id")}
+            missing_ids = sorted(requested_ids - found_ids)
+            raise TimeoutExpiredError(
+                f"Datastores {missing_ids} did not appear in Forklift inventory for provider "
+                f"'{self.provider_name}' after {timeout}s"
+            ) from None
+
+        raise TimeoutExpiredError("Datastore wait completed unexpectedly without returning")
+
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
         _storages = self.storages
