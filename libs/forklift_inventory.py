@@ -18,6 +18,18 @@ PROVIDER_INVENTORY_MAP: dict[str, type[ForkliftInventory]] = {}
 LOGGER = get_logger(__name__)
 
 
+def _extract_storage_ids(storages: list[dict[str, Any]]) -> set[str]:
+    """Extract datastore MoIDs from Forklift storage inventory entries.
+
+    Args:
+        storages: Storage dictionaries from Forklift inventory
+
+    Returns:
+        Set of datastore MoIDs present in the inventory
+    """
+    return {storage["id"] for storage in storages if storage.get("id")}
+
+
 def _register_inventory_classes() -> None:
     """Populate PROVIDER_INVENTORY_MAP after all classes are defined."""
     PROVIDER_INVENTORY_MAP.update({
@@ -444,7 +456,7 @@ class VsphereForkliftInventory(ForkliftInventory):
         except TimeoutExpiredError:
             raise TimeoutExpiredError(
                 f"No hosts appeared in Forklift inventory for provider '{self.provider_name}' after {timeout}s"
-            )
+            ) from None
 
         # This should never be reached, but satisfies type checker
         raise TimeoutExpiredError("Host wait completed unexpectedly without returning")
@@ -479,7 +491,7 @@ class VsphereForkliftInventory(ForkliftInventory):
 
         def _check_datastores() -> list[dict[str, Any]] | None:
             storages = self.storages
-            found_ids = {storage["id"] for storage in storages if storage.get("id")}
+            found_ids = _extract_storage_ids(storages)
             if requested_ids - found_ids:
                 return None
             return [storage for storage in storages if storage.get("id") in requested_ids]
@@ -497,7 +509,7 @@ class VsphereForkliftInventory(ForkliftInventory):
                         )
                     return sample
         except TimeoutExpiredError:
-            found_ids = {storage["id"] for storage in self.storages if storage.get("id")}
+            found_ids = _extract_storage_ids(self.storages)
             missing_ids = sorted(requested_ids - found_ids)
             raise TimeoutExpiredError(
                 f"Datastores {missing_ids} did not appear in Forklift inventory for provider "

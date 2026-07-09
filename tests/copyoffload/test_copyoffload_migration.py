@@ -2043,12 +2043,6 @@ class TestCopyoffloadMultiDatastoreMigration:
         secondary_datastore_id = copyoffload_config_data["secondary_datastore_id"]
         storage_class = py_config["storage_class"]
 
-        # For multi-datastore test, ensure secondary datastore is configured
-        if not secondary_datastore_id:
-            pytest.fail(
-                "Multi-datastore test requires 'secondary_datastore_id' to be configured in copyoffload section."
-            )
-
         LOGGER.info("Multi-datastore migration using primary datastore: %s", datastore_id)
         LOGGER.info("Multi-datastore migration using secondary datastore: %s", secondary_datastore_id)
 

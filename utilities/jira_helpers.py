@@ -14,6 +14,9 @@ def is_jira_issue_open(request: pytest.FixtureRequest, issue_id: str) -> bool | 
 
     Returns:
         True if issue is open, False if resolved, None if Jira is unavailable
+
+    Raises:
+        requests.RequestException: If Jira connection fails and connection strategy is STRICT
     """
     jira_plugin = request.config.pluginmanager.getplugin(JIRA_PLUGIN_NAME)
     if jira_plugin:

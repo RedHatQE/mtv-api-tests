@@ -18,7 +18,11 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
 from libs.base_provider import BaseProvider
-from utilities.copyoffload_datastore import resolve_datastore_moid_from_disk_config
+from utilities.copyoffload_datastore import (
+    ERR_EMPTY_DISK_DATASTORE_ID,
+    format_custom_datastore_not_found_message,
+    resolve_datastore_moid_from_disk_config,
+)
 
 if TYPE_CHECKING:
     from libs.forklift_inventory import ForkliftInventory
@@ -1051,7 +1055,7 @@ class VMWareProvider(BaseProvider):
                 resolved = target_datastore
             else:
                 if not disk_datastore_id:
-                    raise VmCloneError("Disk datastore_id is empty. Provide a valid MoID or omit the field.")
+                    raise VmCloneError(ERR_EMPTY_DISK_DATASTORE_ID)
                 try:
                     resolved_moid = resolve_datastore_moid_from_disk_config(
                         disk_datastore_id=disk_datastore_id,
@@ -1067,9 +1071,7 @@ class VMWareProvider(BaseProvider):
                     try:
                         resolved = self.get_obj([vim.Datastore], resolved_moid)
                     except ValueError:
-                        raise VmCloneError(
-                            f"Custom datastore not found for disk. MoID '{resolved_moid}' is invalid or not accessible."
-                        ) from None
+                        raise VmCloneError(format_custom_datastore_not_found_message(resolved_moid)) from None
             resolved_datastores[disk_datastore_id] = resolved
             return resolved
 

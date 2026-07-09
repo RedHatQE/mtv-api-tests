@@ -104,37 +104,6 @@ def _wait_for_vsphere_host_and_datastore_inventory(
         )
 
 
-def _retry_vsphere_vm_inventory_after_refresh(
-    source_provider: BaseProvider,
-    source_provider_inventory: VsphereForkliftInventory,
-    vm_name: str,
-    virtual_machines: list[dict[str, Any]],
-    copyoffload_config: dict[str, Any],
-    inventory_timeout: int,
-) -> None:
-    """Force provider refresh and retry vSphere inventory waits after VM wait timeout.
-
-    Args:
-        source_provider: Source provider instance (must have ocp_resource set)
-        source_provider_inventory: vSphere Forklift inventory client
-        vm_name: VM name to wait for after refresh
-        virtual_machines: VM configurations from the test plan
-        copyoffload_config: copyoffload section from source provider data
-        inventory_timeout: Maximum time to wait in seconds
-
-    Raises:
-        TimeoutExpiredError: If the VM does not appear in inventory within the timeout
-    """
-    force_inventory_refresh(source_provider.ocp_resource)
-    _wait_for_vsphere_host_and_datastore_inventory(
-        source_provider_inventory=source_provider_inventory,
-        virtual_machines=virtual_machines,
-        copyoffload_config=copyoffload_config,
-        inventory_timeout=inventory_timeout,
-    )
-    source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
-
-
 def wait_for_cloned_vms_in_forklift_inventory(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
@@ -184,18 +153,43 @@ def wait_for_cloned_vms_in_forklift_inventory(
             inventory_timeout=inventory_timeout,
         )
 
+    failed_vm_names: list[str] = []
     for vm_name in cloned_vm_names:
         try:
             source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
         except TimeoutExpiredError:
-            if is_vsphere and workaround_active and vsphere_inventory is not None and source_provider.ocp_resource:
-                _retry_vsphere_vm_inventory_after_refresh(
-                    source_provider=source_provider,
-                    source_provider_inventory=vsphere_inventory,
-                    vm_name=vm_name,
-                    virtual_machines=virtual_machines,
-                    copyoffload_config=copyoffload_config,
-                    inventory_timeout=inventory_timeout,
-                )
-            else:
-                raise
+            failed_vm_names.append(vm_name)
+
+    if not failed_vm_names:
+        return
+
+    if is_vsphere and workaround_active and vsphere_inventory is not None:
+        LOGGER.info(
+            "VM inventory wait timed out for %s; forcing provider refresh and retrying",
+            failed_vm_names,
+        )
+        if source_provider.ocp_resource is None:
+            raise ValueError("source_provider.ocp_resource is not set")
+        force_inventory_refresh(source_provider.ocp_resource)
+        _wait_for_vsphere_host_and_datastore_inventory(
+            source_provider_inventory=vsphere_inventory,
+            virtual_machines=virtual_machines,
+            copyoffload_config=copyoffload_config,
+            inventory_timeout=inventory_timeout,
+        )
+        still_failed_vm_names: list[str] = []
+        for vm_name in failed_vm_names:
+            try:
+                source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+            except TimeoutExpiredError:
+                still_failed_vm_names.append(vm_name)
+        if still_failed_vm_names:
+            raise TimeoutExpiredError(
+                f"VM(s) {still_failed_vm_names} did not appear in Forklift inventory "
+                f"within {inventory_timeout}s after provider refresh"
+            )
+        return
+
+    raise TimeoutExpiredError(
+        f"VM(s) {failed_vm_names} did not appear in Forklift inventory within {inventory_timeout}s"
+    )
