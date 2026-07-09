@@ -31,6 +31,7 @@ LOGGER = get_logger(__name__)
 # Reference: VMware vSphere API VirtualEthernetCard documentation
 VSPHERE_NIC_DEVICE_KEY_OFFSET = 4000
 
+
 def format_insufficient_capacity_message(datastore_name: str, required_gb: float, available_gb: float) -> str:
     """Format error/log message for insufficient datastore capacity.
 
