@@ -885,7 +885,7 @@ tests_params: dict = {
 | `copyoffload`         | No       | True to enable copy-offload (XCOPY) migration         |
 | `xfs_compatibility`   | No       | True to enable XFS v4 filesystem compatibility        |
 | `migrate_shared_disks`| No       | True to enable shared disk migration at plan level    |
-| `inventory_timeout`   | No       | Max seconds for Forklift inventory waits (default 300)|
+| `inventory_timeout`   | No       | Per-VM Forklift inventory wait timeout, in seconds    |
 
 **Test Verification Configuration:**
 

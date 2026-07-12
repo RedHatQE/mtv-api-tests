@@ -20,6 +20,8 @@ from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVm
 from libs.base_provider import BaseProvider
 from utilities.copyoffload_datastore import (
     ERR_EMPTY_DISK_DATASTORE_ID,
+    SYMBOLIC_NON_XCOPY_DATASTORE,
+    SYMBOLIC_SECONDARY_DATASTORE,
     format_custom_datastore_not_found_message,
     resolve_datastore_moid_from_disk_config,
 )
@@ -1056,18 +1058,20 @@ class VMWareProvider(BaseProvider):
             else:
                 if not disk_datastore_id:
                     raise VmCloneError(ERR_EMPTY_DISK_DATASTORE_ID)
-                try:
-                    resolved_moid = resolve_datastore_moid_from_disk_config(
-                        disk_datastore_id=disk_datastore_id,
-                        copyoffload_config=self.copyoffload_config or {},
-                    )
-                except ValueError as err:
-                    raise VmCloneError(str(err)) from err
-                if secondary_datastore and resolved_moid == secondary_datastore._moId:
+                # Compare symbolic keys directly — resolving to MoID and comparing would
+                # always match since both sides come from the same config key (krcmarik).
+                if disk_datastore_id == SYMBOLIC_SECONDARY_DATASTORE and secondary_datastore:
                     resolved = secondary_datastore
-                elif non_xcopy_datastore and resolved_moid == non_xcopy_datastore._moId:
+                elif disk_datastore_id == SYMBOLIC_NON_XCOPY_DATASTORE and non_xcopy_datastore:
                     resolved = non_xcopy_datastore
                 else:
+                    try:
+                        resolved_moid = resolve_datastore_moid_from_disk_config(
+                            disk_datastore_id=disk_datastore_id,
+                            copyoffload_config=self.copyoffload_config or {},
+                        )
+                    except ValueError as err:
+                        raise VmCloneError(str(err)) from err
                     try:
                         resolved = self.get_obj([vim.Datastore], resolved_moid)
                     except ValueError:

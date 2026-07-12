@@ -43,6 +43,7 @@ def _configured_datastore_moid(copyoffload_config: dict[str, Any], key: str) -> 
             raise ValueError(ERR_SECONDARY_DS_NOT_CONFIGURED)
         if key == SYMBOLIC_NON_XCOPY_DATASTORE:
             raise ValueError(ERR_NON_XCOPY_DS_NOT_CONFIGURED)
+        # Defensive: current callers only pass symbolic keys, but guard against future callers.
         raise ValueError(f"copyoffload.{key} is not configured")
     if not isinstance(resolved_id, str):
         raise ValueError(f"copyoffload.{key} must be a string, got {type(resolved_id).__name__}")
