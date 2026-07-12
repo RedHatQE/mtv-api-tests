@@ -1,6 +1,9 @@
 import pytest
 import requests
-from pytest_jira import CONNECTION_ERROR_FLAG_NAME, CONNECTION_SKIP_MESSAGE, SKIP, STRICT
+from pytest_jira import CONNECTION_ERROR_FLAG_NAME, SKIP, STRICT
+from simple_logger.logger import get_logger
+
+LOGGER = get_logger(__name__)
 
 JIRA_PLUGIN_NAME = "jira_plugin"
 
@@ -25,7 +28,8 @@ def is_jira_issue_open(request: pytest.FixtureRequest, issue_id: str) -> bool | 
         except requests.RequestException as e:
             strategy = request.config.getoption(CONNECTION_ERROR_FLAG_NAME)
             if strategy == SKIP:
-                pytest.skip(CONNECTION_SKIP_MESSAGE % e)
+                LOGGER.warning(f"Jira connection failed for issue '{issue_id}'; treating as unavailable: {e}")
+                return None
             elif strategy == STRICT:
                 raise
     return None

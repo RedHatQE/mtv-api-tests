@@ -39,9 +39,9 @@ def _configured_datastore_moid(copyoffload_config: dict[str, Any], key: str) -> 
     """
     resolved_id = copyoffload_config.get(key)
     if not resolved_id:
-        if key == "secondary_datastore_id":
+        if key == SYMBOLIC_SECONDARY_DATASTORE:
             raise ValueError(ERR_SECONDARY_DS_NOT_CONFIGURED)
-        if key == "non_xcopy_datastore_id":
+        if key == SYMBOLIC_NON_XCOPY_DATASTORE:
             raise ValueError(ERR_NON_XCOPY_DS_NOT_CONFIGURED)
         raise ValueError(f"copyoffload.{key} is not configured")
     if not isinstance(resolved_id, str):
@@ -66,9 +66,9 @@ def resolve_datastore_moid_from_disk_config(disk_datastore_id: str, copyoffload_
         ValueError: If a symbolic datastore key cannot be resolved from copyoffload config
     """
     if disk_datastore_id == SYMBOLIC_SECONDARY_DATASTORE:
-        return _configured_datastore_moid(copyoffload_config, "secondary_datastore_id")
+        return _configured_datastore_moid(copyoffload_config, SYMBOLIC_SECONDARY_DATASTORE)
 
     if disk_datastore_id == SYMBOLIC_NON_XCOPY_DATASTORE:
-        return _configured_datastore_moid(copyoffload_config, "non_xcopy_datastore_id")
+        return _configured_datastore_moid(copyoffload_config, SYMBOLIC_NON_XCOPY_DATASTORE)
 
     return disk_datastore_id

@@ -153,6 +153,8 @@ def wait_for_cloned_vms_in_forklift_inventory(
             inventory_timeout=inventory_timeout,
         )
 
+    # Note: total wait is O(N × inventory_timeout) in the worst case — each VM is
+    # waited independently because VMs appear in inventory at different times after cloning.
     failed_vm_names: list[str] = []
     for vm_name in cloned_vm_names:
         try:
@@ -164,10 +166,7 @@ def wait_for_cloned_vms_in_forklift_inventory(
         return
 
     if is_vsphere and workaround_active and vsphere_inventory is not None:
-        LOGGER.info(
-            "VM inventory wait timed out for %s; forcing provider refresh and retrying",
-            failed_vm_names,
-        )
+        LOGGER.info(f"VM inventory wait timed out for {failed_vm_names}; forcing provider refresh and retrying")
         if source_provider.ocp_resource is None:
             raise ValueError("source_provider.ocp_resource is not set")
         force_inventory_refresh(source_provider.ocp_resource)

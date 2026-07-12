@@ -420,6 +420,11 @@ class VsphereForkliftInventory(ForkliftInventory):
 
     @property
     def hosts(self) -> list[dict[str, Any]]:
+        """Return all ESXi hosts from the Forklift vSphere inventory.
+
+        Returns:
+            list[dict[str, Any]]: Host objects from the provider's /hosts endpoint.
+        """
         return self._request(url_path=f"{self.provider_url_path}/hosts")
 
     @property
