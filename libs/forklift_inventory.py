@@ -18,6 +18,18 @@ PROVIDER_INVENTORY_MAP: dict[str, type[ForkliftInventory]] = {}
 LOGGER = get_logger(__name__)
 
 
+def _hosts_timeout_error(provider_name: str, timeout: int) -> TimeoutExpiredError:
+    return TimeoutExpiredError(
+        f"No hosts appeared in Forklift inventory for provider '{provider_name}' after {timeout}s"
+    )
+
+
+def _datastores_timeout_error(provider_name: str, missing_ids: list[str], timeout: int) -> TimeoutExpiredError:
+    return TimeoutExpiredError(
+        f"Datastores {missing_ids} did not appear in Forklift inventory for provider '{provider_name}' after {timeout}s"
+    )
+
+
 def _extract_storage_ids(storages: list[dict[str, Any]]) -> set[str]:
     """Extract datastore MoIDs from Forklift storage inventory entries.
 
@@ -461,9 +473,7 @@ class VsphereForkliftInventory(ForkliftInventory):
         except TimeoutExpiredError:
             pass
 
-        raise TimeoutExpiredError(
-            f"No hosts appeared in Forklift inventory for provider '{self.provider_name}' after {timeout}s"
-        )
+        raise _hosts_timeout_error(self.provider_name, timeout)
 
     def wait_for_datastores(
         self, datastore_ids: list[str], timeout: int = 300, sleep: int = 10
@@ -523,10 +533,7 @@ class VsphereForkliftInventory(ForkliftInventory):
 
         found_ids = _extract_storage_ids(self.storages)
         missing_ids = sorted(requested_ids - found_ids)
-        raise TimeoutExpiredError(
-            f"Datastores {missing_ids} did not appear in Forklift inventory for provider "
-            f"'{self.provider_name}' after {timeout}s"
-        )
+        raise _datastores_timeout_error(self.provider_name, missing_ids, timeout)
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
