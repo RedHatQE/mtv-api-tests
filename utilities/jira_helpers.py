@@ -32,5 +32,12 @@ def is_jira_issue_open(request: pytest.FixtureRequest, issue_id: str) -> bool | 
                 return None
             elif strategy == STRICT:
                 raise
-    LOGGER.warning(f"Jira plugin '{JIRA_PLUGIN_NAME}' not found; treating issue '{issue_id}' as unavailable")
+            else:
+                # strategy == IGNORE (or unrecognised): log the suppressed error and continue
+                LOGGER.warning(
+                    f"Jira connection failed for issue '{issue_id}' (strategy={strategy!r}); "
+                    f"treating as unavailable: {e}"
+                )
+    else:
+        LOGGER.warning(f"Jira plugin '{JIRA_PLUGIN_NAME}' not found; treating issue '{issue_id}' as unavailable")
     return None
