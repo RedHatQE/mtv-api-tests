@@ -495,6 +495,12 @@ class VsphereForkliftInventory(ForkliftInventory):
         )
 
         def _check_datastores() -> list[dict[str, Any]] | None:
+            """Poll for all requested datastore IDs to appear in inventory.
+
+            Returns:
+                list[dict[str, Any]]: Matching storage entries when all requested IDs are present.
+                None: If any requested IDs are still missing.
+            """
             storages = self.storages
             found_ids = _extract_storage_ids(storages)
             if requested_ids - found_ids:
