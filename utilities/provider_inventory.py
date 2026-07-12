@@ -115,9 +115,10 @@ def wait_for_cloned_vms_in_forklift_inventory(
 ) -> None:
     """Wait for cloned VMs in Forklift inventory with MTV-6066 workarounds gated by MTV-6072.
 
-    When MTV-6072 is open, vSphere providers run host/datastore inventory waits before VM
-    validation and force a provider refresh on VM wait timeout. When MTV-6072 is resolved,
-    only the plain wait_for_vm loop runs.
+    When MTV-6072 is open, vSphere providers force a provider inventory refresh upfront before
+    waiting for VMs. Refreshing before the wait is faster than the try→fail→refresh→retry pattern
+    because the inventory sync bug (MTV-6072) occurs consistently. When MTV-6072 is resolved,
+    ``workaround_active`` becomes False and the refresh block is skipped entirely.
 
     ``jira_issue_open(...) is not False`` keeps workarounds active when Jira is unavailable
     (returns None). This is an intentional fail-safe: workarounds stay enabled unless Jira
@@ -134,6 +135,7 @@ def wait_for_cloned_vms_in_forklift_inventory(
 
     Raises:
         TypeError: If vSphere provider inventory is not VsphereForkliftInventory
+        ValueError: If source_provider.ocp_resource is not set when workaround is active
         TimeoutExpiredError: If a VM does not appear in inventory within the timeout
     """
     workaround_active = jira_issue_open(INVENTORY_SYNC_WORKAROUND_JIRA) is not False
@@ -146,29 +148,11 @@ def wait_for_cloned_vms_in_forklift_inventory(
                 f"vSphere provider requires VsphereForkliftInventory, got {type(source_provider_inventory).__name__}"
             )
         vsphere_inventory = source_provider_inventory
-        _wait_for_vsphere_host_and_datastore_inventory(
-            source_provider_inventory=vsphere_inventory,
-            virtual_machines=virtual_machines,
-            copyoffload_config=copyoffload_config,
-            inventory_timeout=inventory_timeout,
-        )
-
-    # Note: total wait is O(N × inventory_timeout) in the worst case — each VM is
-    # waited independently because VMs appear in inventory at different times after cloning.
-    failed_vm_names: list[str] = []
-    for vm_name in cloned_vm_names:
-        try:
-            source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
-        except TimeoutExpiredError:
-            failed_vm_names.append(vm_name)
-
-    if not failed_vm_names:
-        return
-
-    if is_vsphere and workaround_active and vsphere_inventory is not None:
-        LOGGER.info(f"VM inventory wait timed out for {failed_vm_names}; forcing provider refresh and retrying")
         if source_provider.ocp_resource is None:
             raise ValueError("source_provider.ocp_resource is not set")
+        # Patch upfront: the inventory sync bug (MTV-6072) occurs consistently,
+        # so refreshing before waiting is faster than try→fail→refresh→retry.
+        # When MTV-6072 is resolved, workaround_active=False and this block is skipped entirely.
         force_inventory_refresh(source_provider.ocp_resource)
         _wait_for_vsphere_host_and_datastore_inventory(
             source_provider_inventory=vsphere_inventory,
@@ -176,19 +160,7 @@ def wait_for_cloned_vms_in_forklift_inventory(
             copyoffload_config=copyoffload_config,
             inventory_timeout=inventory_timeout,
         )
-        still_failed_vm_names: list[str] = []
-        for vm_name in failed_vm_names:
-            try:
-                source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
-            except TimeoutExpiredError:
-                still_failed_vm_names.append(vm_name)
-        if still_failed_vm_names:
-            raise TimeoutExpiredError(
-                f"VM(s) {still_failed_vm_names} did not appear in Forklift inventory "
-                f"within {inventory_timeout}s after provider refresh"
-            )
-        return
 
-    raise TimeoutExpiredError(
-        f"VM(s) {failed_vm_names} did not appear in Forklift inventory within {inventory_timeout}s"
-    )
+    # Single wait per VM — no retry loop needed since refresh was done upfront (if workaround active)
+    for vm_name in cloned_vm_names:
+        source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
