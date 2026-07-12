@@ -152,8 +152,8 @@ def wait_for_cloned_vms_in_forklift_inventory(
             )
         vsphere_inventory = source_provider_inventory
 
-        # Quick check: try each VM for _QUICK_CHECK_TIMEOUT seconds.
-        # Avoids the refresh overhead when inventory syncs quickly on its own.
+        # Quick check: try each VM for _QUICK_CHECK_TIMEOUT seconds first.
+        # Avoids the 180s force_inventory_refresh overhead when VMs sync quickly on their own.
         failed_vm_names: list[str] = []
         for vm_name in cloned_vm_names:
             try:
@@ -162,10 +162,12 @@ def wait_for_cloned_vms_in_forklift_inventory(
                 failed_vm_names.append(vm_name)
 
         if failed_vm_names:
-            # VMs not found quickly — force refresh + wait for prerequisites + full retry
+            # VMs not found in quick check — force refresh + prerequisites + full retry
             if source_provider.ocp_resource is None:
                 raise ValueError("source_provider.ocp_resource is not set")
-            LOGGER.info(f"Quick check timed out for {failed_vm_names}; forcing provider refresh")
+            LOGGER.info(
+                f"Quick inventory check timed out for {failed_vm_names}; forcing provider refresh (MTV-6072 workaround)"
+            )
             force_inventory_refresh(source_provider.ocp_resource)
             _wait_for_vsphere_host_and_datastore_inventory(
                 source_provider_inventory=vsphere_inventory,
