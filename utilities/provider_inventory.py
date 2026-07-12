@@ -15,6 +15,9 @@ LOGGER = get_logger(__name__)
 
 _INVENTORY_REFRESH_READY_TIMEOUT = 180
 INVENTORY_SYNC_WORKAROUND_JIRA = "MTV-6072"
+# Short initial wait before triggering a provider refresh — avoids refresh overhead
+# when inventory syncs quickly on its own.
+_QUICK_CHECK_TIMEOUT = 30
 
 
 def force_inventory_refresh(provider: Provider) -> None:
@@ -115,10 +118,10 @@ def wait_for_cloned_vms_in_forklift_inventory(
 ) -> None:
     """Wait for cloned VMs in Forklift inventory with MTV-6066 workarounds gated by MTV-6072.
 
-    When MTV-6072 is open, vSphere providers force a provider inventory refresh upfront before
-    waiting for VMs. Refreshing before the wait is faster than the try→fail→refresh→retry pattern
-    because the inventory sync bug (MTV-6072) occurs consistently. When MTV-6072 is resolved,
-    ``workaround_active`` becomes False and the refresh block is skipped entirely.
+    For vSphere when MTV-6072 is open: first tries each VM for _QUICK_CHECK_TIMEOUT seconds.
+    VMs that appear quickly are done with no patch overhead. Only VMs that fail the quick check
+    trigger a provider refresh + host/datastore inventory wait + full retry. When MTV-6072 is
+    resolved, ``workaround_active`` becomes False and the plain wait path runs for all providers.
 
     ``jira_issue_open(...) is not False`` keeps workarounds active when Jira is unavailable
     (returns None). This is an intentional fail-safe: workarounds stay enabled unless Jira
@@ -148,19 +151,33 @@ def wait_for_cloned_vms_in_forklift_inventory(
                 f"vSphere provider requires VsphereForkliftInventory, got {type(source_provider_inventory).__name__}"
             )
         vsphere_inventory = source_provider_inventory
-        if source_provider.ocp_resource is None:
-            raise ValueError("source_provider.ocp_resource is not set")
-        # Patch upfront: the inventory sync bug (MTV-6072) occurs consistently,
-        # so refreshing before waiting is faster than try→fail→refresh→retry.
-        # When MTV-6072 is resolved, workaround_active=False and this block is skipped entirely.
-        force_inventory_refresh(source_provider.ocp_resource)
-        _wait_for_vsphere_host_and_datastore_inventory(
-            source_provider_inventory=vsphere_inventory,
-            virtual_machines=virtual_machines,
-            copyoffload_config=copyoffload_config,
-            inventory_timeout=inventory_timeout,
-        )
 
-    # Single wait per VM — no retry loop needed since refresh was done upfront (if workaround active)
+        # Quick check: try each VM for _QUICK_CHECK_TIMEOUT seconds.
+        # Avoids the refresh overhead when inventory syncs quickly on its own.
+        failed_vm_names: list[str] = []
+        for vm_name in cloned_vm_names:
+            try:
+                source_provider_inventory.wait_for_vm(name=vm_name, timeout=_QUICK_CHECK_TIMEOUT)
+            except TimeoutExpiredError:
+                failed_vm_names.append(vm_name)
+
+        if failed_vm_names:
+            # VMs not found quickly — force refresh + wait for prerequisites + full retry
+            if source_provider.ocp_resource is None:
+                raise ValueError("source_provider.ocp_resource is not set")
+            LOGGER.info(f"Quick check timed out for {failed_vm_names}; forcing provider refresh")
+            force_inventory_refresh(source_provider.ocp_resource)
+            _wait_for_vsphere_host_and_datastore_inventory(
+                source_provider_inventory=vsphere_inventory,
+                virtual_machines=virtual_machines,
+                copyoffload_config=copyoffload_config,
+                inventory_timeout=inventory_timeout,
+            )
+            for vm_name in failed_vm_names:
+                source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+
+        return
+
+    # Non-vSphere or workaround inactive — plain wait per VM
     for vm_name in cloned_vm_names:
         source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
