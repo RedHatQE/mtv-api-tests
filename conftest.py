@@ -990,6 +990,9 @@ def jira_issue(request: pytest.FixtureRequest) -> Callable[[str], bool | None]:
     in class-scoped fixtures like prepared_plan. This session-scoped override
     exposes the same callable interface without the scope mismatch.
 
+    TODO: Remove this override once https://github.com/rhevm-qe-automation/pytest_jira/pull/175
+    is merged — use jira_issue_scope_session from pytest-jira directly instead.
+
     Returns:
         Callable[[str], bool | None]: True if open, False if resolved, None if unavailable.
     """
