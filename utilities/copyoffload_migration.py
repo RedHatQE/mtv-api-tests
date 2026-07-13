@@ -36,9 +36,11 @@ from utilities.mtv_migration import get_migration_for_plan, wait_for_migration_c
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 from utilities.resources import create_and_store_resource
 
+from libs.base_provider import BaseProvider
+from libs.providers.vmware import VMWareProvider
+
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
-    from libs.providers.vmware import VMWareProvider
 
 LOGGER = get_logger(__name__)
 
@@ -51,6 +53,30 @@ PVC_NAME_LABEL = "pvcName"
 # Populate pod log caching constants
 _POPULATE_POD_LOGS_CACHE_KEY = "populate_pod_logs"
 _POPULATE_POD_NAME_PREFIX = "populate-"
+
+
+def apply_copyoffload_vm_name_override(
+    virtual_machines: list[dict[str, str | bool]],
+    source_provider: BaseProvider,
+) -> None:
+    """Override placeholder VM names with the real VM name from copy-offload config.
+
+    Copy-offload test configs use placeholder names (e.g., "xcopy-template-test") that
+    must be resolved to the real template name from the provider's copyoffload_config.
+
+    Args:
+        virtual_machines (list[dict[str, str | bool]]): List of VM config dicts to update in place.
+        source_provider (BaseProvider): Source provider that may have copyoffload_config.
+    """
+    if not isinstance(source_provider, VMWareProvider) or not source_provider.copyoffload_config:
+        return
+    default_vm_override = source_provider.copyoffload_config.get("default_vm_name")
+    if not default_vm_override:
+        return
+    for vm in virtual_machines:
+        if vm.get("clone", False):
+            LOGGER.info(f"Overriding VM name '{vm['name']}' with '{default_vm_override}' from provider config")
+            vm["name"] = default_vm_override
 
 
 class PopulatePodLogData(TypedDict):
