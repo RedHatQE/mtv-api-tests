@@ -15,7 +15,9 @@ from typing import TYPE_CHECKING, Any
 
 import filelock
 import pytest
+import requests
 from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
+from pytest_jira import CONNECTION_ERROR_FLAG_NAME, STRICT
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -49,7 +51,6 @@ from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
-from utilities.jira_helpers import is_jira_issue_open
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
 from utilities.provider_inventory import wait_for_cloned_vms_in_forklift_inventory
@@ -982,20 +983,35 @@ def class_plan_config(request: pytest.FixtureRequest) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def jira_issue_open(request: pytest.FixtureRequest) -> Callable[[str], bool | None]:
-    """Session-scoped Jira issue state checker (MTV-6066 workaround gate).
+def jira_issue(request: pytest.FixtureRequest) -> Callable[[str], bool | None]:
+    """Session-scoped override of pytest-jira's jira_issue fixture.
 
-    pytest-jira's built-in jira_issue fixture is function-scoped and cannot be
-    used in class-scoped fixtures. This session-scoped wrapper avoids the scope mismatch.
+    pytest-jira's built-in jira_issue is function-scoped and cannot be used
+    in class-scoped fixtures like prepared_plan. This session-scoped override
+    exposes the same callable interface without the scope mismatch.
 
     Returns:
         Callable[[str], bool | None]: True if open, False if resolved, None if unavailable.
     """
+    jira_plugin = request.config.pluginmanager.getplugin("jira_plugin")
 
-    def wrapper(issue_id: str) -> bool | None:
-        return is_jira_issue_open(request, issue_id)
+    def _check_issue(issue_id: str) -> bool | None:
+        if jira_plugin:
+            try:
+                return not jira_plugin.is_issue_resolved(issue_id)
+            except requests.RequestException as e:
+                strategy = request.config.getoption(CONNECTION_ERROR_FLAG_NAME)
+                if strategy == STRICT:
+                    raise
+                LOGGER.warning(
+                    f"Jira connection failed for issue '{issue_id}' "
+                    f"(strategy={strategy!r}); treating as unavailable: {e}"
+                )
+        else:
+            LOGGER.warning(f"Jira plugin not configured; treating issue '{issue_id}' as unavailable")
+        return None
 
-    return wrapper
+    return _check_issue
 
 
 @pytest.fixture(scope="class")
@@ -1010,7 +1026,7 @@ def prepared_plan(
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
     vcenter_clone_provider: VMWareProvider | None,
-    jira_issue_open: Callable[[str], bool | None],
+    jira_issue: Callable[[str], bool | None],
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -1020,7 +1036,7 @@ def prepared_plan(
 
     Cloning uses a two-phase pattern: all VMs are cloned first, then Forklift
     inventory sync is waited on for every cloned VM. vSphere inventory sync
-    workarounds (MTV-6066) are gated by MTV-6072 via jira_issue_open: active
+    workarounds (MTV-6066) are gated by MTV-6072 via jira_issue: active
     while the issue is open or Jira is unavailable, skipped when resolved.
     This avoids inventory sync failures when cloning VM2+ while VM1 inventory
     sync is still pending.
@@ -1036,7 +1052,7 @@ def prepared_plan(
         source_provider_inventory (ForkliftInventory): Source provider inventory
         target_namespace (str): Default target namespace for VMs
         vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
-        jira_issue_open (Callable[[str], bool | None]): Session-scoped callable to check Jira issue state
+        jira_issue (Callable[[str], bool | None]): Session-scoped jira_issue override
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1214,7 +1230,7 @@ def prepared_plan(
             virtual_machines=virtual_machines,
             copyoffload_config=fixture_store["source_provider_data"].get("copyoffload", {}),
             inventory_timeout=inventory_timeout,
-            jira_issue_open=jira_issue_open,
+            jira_issue_open=jira_issue,
         )
 
         # Relink shared disks between clones (VMware-specific)
