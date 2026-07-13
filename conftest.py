@@ -51,7 +51,6 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.jira_helpers import is_jira_issue_open
 from utilities.provider_inventory import wait_for_cloned_vms_in_forklift_inventory
 from utilities.naming import (
     generate_name_with_uuid,
@@ -981,24 +980,6 @@ def class_plan_config(request: pytest.FixtureRequest) -> dict[str, Any]:
     return request.param
 
 
-@pytest.fixture(scope="session")
-def jira_issue_open(request: pytest.FixtureRequest) -> Callable[[str], bool | None]:
-    """Return a callable that checks whether a Jira issue is open.
-
-    Mirrors pytest-jira's jira_issue fixture for use outside test functions.
-    See ``utilities/jira_helpers.py`` for the underlying implementation.
-
-    Returns:
-        Callable[[str], bool | None]: Wrapper returning True if open, False if resolved,
-        None if Jira is unavailable.
-    """
-
-    def wrapper(issue_id: str) -> bool | None:
-        return is_jira_issue_open(request, issue_id)
-
-    return wrapper
-
-
 @pytest.fixture(scope="class")
 def prepared_plan(
     request: pytest.FixtureRequest,
@@ -1011,7 +992,7 @@ def prepared_plan(
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
     vcenter_clone_provider: VMWareProvider | None,
-    jira_issue_open: Callable[[str], bool | None],
+    jira_issue: Callable[[str], bool | None],
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -1021,7 +1002,7 @@ def prepared_plan(
 
     Cloning uses a two-phase pattern: all VMs are cloned first, then Forklift
     inventory sync is waited on for every cloned VM. vSphere inventory sync
-    workarounds (MTV-6066) are gated by MTV-6072 via jira_issue_open: active
+    workarounds (MTV-6066) are gated by MTV-6072 via jira_issue: active
     while the issue is open or Jira is unavailable, skipped when resolved.
     This avoids inventory sync failures when cloning VM2+ while VM1 inventory
     sync is still pending.
@@ -1037,7 +1018,7 @@ def prepared_plan(
         source_provider_inventory (ForkliftInventory): Source provider inventory
         target_namespace (str): Default target namespace for VMs
         vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
-        jira_issue_open (Callable[[str], bool | None]): Callable to check Jira issue state
+        jira_issue (Callable[[str], bool | None]): pytest-jira built-in callable to check Jira issue state
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1215,7 +1196,7 @@ def prepared_plan(
             virtual_machines=virtual_machines,
             copyoffload_config=fixture_store["source_provider_data"].get("copyoffload", {}),
             inventory_timeout=inventory_timeout,
-            jira_issue_open=jira_issue_open,
+            jira_issue_open=jira_issue,
         )
 
         # Relink shared disks between clones (VMware-specific)
