@@ -5608,7 +5608,6 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         source_provider: BaseProvider,
         destination_provider: OCPProvider,
         source_provider_data: dict[str, Any],
-        target_namespace: str,
         source_vms_namespace: str,
         source_provider_inventory: ForkliftInventory,
         vm_ssh_connections: SSHConnectionManager | None,
@@ -5620,7 +5619,6 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
             source_provider (BaseProvider): Source provider instance.
             destination_provider (OCPProvider): Destination provider instance.
             source_provider_data (dict[str, Any]): Source provider configuration data.
-            target_namespace (str): Target namespace where migrated VMs exist.
             source_vms_namespace (str): Namespace of the source VMs.
             source_provider_inventory (ForkliftInventory): Source provider inventory.
             vm_ssh_connections (SSHConnectionManager | None): SSH connection manager.

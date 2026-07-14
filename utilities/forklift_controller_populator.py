@@ -518,17 +518,17 @@ def _ensure_forklift_controller_vm_limit(
 
 
 def get_forkliftcontroller_vm_populator_inflight_lock_path() -> Path:
-    """Return the cross-worker lock path for fixtures patching both VM and populator inflight limits.
+    """Return the cross-worker lock path shared with populator_inflight_forkliftcontroller.
 
-    A single combined lock prevents partial-patch races when both
-    controller_max_vm_inflight and controller_max_populator_inflight are set together.
+    Both fixtures mutate controller_max_populator_inflight on the same ForkliftController CR,
+    so they must share one mutex to prevent xdist race conditions.
+    Delegates to get_forkliftcontroller_populator_inflight_lock_path() to use the same
+    ``populator-inflight.lock`` file.
 
     Returns:
         Path: File lock path under a secured shared temp directory.
     """
-    lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-forklift"
-    ensure_secure_shared_lock_dir(lock_dir=lock_dir)
-    return lock_dir / "vm-populator-inflight.lock"
+    return get_forkliftcontroller_populator_inflight_lock_path()
 
 
 @contextmanager

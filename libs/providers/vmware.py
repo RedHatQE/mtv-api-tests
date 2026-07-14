@@ -347,10 +347,10 @@ class VMWareProvider(BaseProvider):
             VmCloneError: If the VM has no runtime host, is not in a
                 ClusterComputeResource, or if the DRS reconfigure task fails.
         """
-        host = getattr(getattr(vm, "runtime", None), "host", None)
+        host = vm.runtime.host
         if host is None:
             raise VmCloneError(f"VM '{vm.name}' has no runtime host — cannot determine cluster")
-        cluster = getattr(host, "parent", None)
+        cluster = host.parent
         if not isinstance(cluster, vim.ClusterComputeResource):
             raise VmCloneError(f"VM '{vm.name}' host is not in a ClusterComputeResource; cannot disable DRS per-VM")
         drs_vm_config = vim.cluster.DrsVmConfigInfo(key=vm, enabled=False)

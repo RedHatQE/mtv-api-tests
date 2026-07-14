@@ -1798,7 +1798,7 @@ def execute_migration_monitoring_vm_and_populator_inflight(
             LOGGER.warning(f"VM concurrency tracking failed during poll: {err}")
         try:
             populator_tracker.poll(status)
-        except ApiException as err:
+        except (ApiException, ValueError) as err:
             LOGGER.warning(f"Populator concurrency tracking failed during poll: {err}")
         log_capture(status)
 
