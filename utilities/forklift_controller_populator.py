@@ -520,8 +520,8 @@ def _ensure_forklift_controller_vm_limit(
 def get_forkliftcontroller_vm_populator_inflight_lock_path() -> Path:
     """Return the cross-worker lock path shared with populator_inflight_forkliftcontroller.
 
-    Both fixtures mutate controller_max_populator_inflight on the same ForkliftController CR,
-    so they must share one mutex to prevent xdist race conditions.
+    The fixtures mutate different in-flight fields on the same ForkliftController CR,
+    so they must share one mutex to prevent xdist patch/restore races.
     Delegates to get_forkliftcontroller_populator_inflight_lock_path() to use the same
     ``populator-inflight.lock`` file.
 
