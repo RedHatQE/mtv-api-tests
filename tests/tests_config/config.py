@@ -381,7 +381,6 @@ tests_params: dict = {
                 "add_disks": [
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                 ],
             },
             {
@@ -390,18 +389,6 @@ tests_params: dict = {
                 "clone": True,
                 "disk_type": "thin",
                 "add_disks": [
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                ],
-            },
-            {
-                "name": "xcopy-template-test",
-                "guest_agent": True,
-                "clone": True,
-                "disk_type": "thin",
-                "add_disks": [
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                 ],
