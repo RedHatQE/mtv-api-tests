@@ -333,6 +333,36 @@ class VMWareProvider(BaseProvider):
         if vm.runtime.powerState == vm.runtime.powerState.poweredOn:
             self.wait_task(task=vm.PowerOff(), action_name=f"Stopping VM {vm.name}")
 
+    def disable_drs_for_vm(self, vm: vim.VirtualMachine) -> None:
+        """Disable DRS for a specific VM to prevent relocation after cloning.
+
+        Sets a per-VM DRS override that pins the VM to its current ESXi host.
+        Required when same-host cloning is active (clone_to_same_host=True) so
+        DRS does not move the VM to a different host between clone and migration.
+
+        Args:
+            vm (vim.VirtualMachine): PyVmomi VM object to pin.
+
+        Raises:
+            VmCloneError: If the VM has no runtime host, is not in a
+                ClusterComputeResource, or if the DRS reconfigure task fails.
+        """
+        host = getattr(getattr(vm, "runtime", None), "host", None)
+        if host is None:
+            raise VmCloneError(f"VM '{vm.name}' has no runtime host — cannot determine cluster")
+        cluster = getattr(host, "parent", None)
+        if not isinstance(cluster, vim.ClusterComputeResource):
+            raise VmCloneError(f"VM '{vm.name}' host is not in a ClusterComputeResource; cannot disable DRS per-VM")
+        drs_vm_config = vim.cluster.DrsVmConfigInfo(key=vm, enabled=False)
+        vm_config_spec = vim.cluster.DrsVmConfigSpec(
+            info=drs_vm_config,
+            operation=vim.option.ArrayUpdateSpec.Operation.add,
+        )
+        cluster_spec = vim.cluster.ConfigSpecEx(drsVmConfigSpec=[vm_config_spec])
+        task = cluster.ReconfigureComputeResource_Task(cluster_spec, modify=True)
+        self.wait_task(task, f"Disable DRS for VM '{vm.name}'")
+        LOGGER.info(f"DRS disabled for VM '{vm.name}' on cluster '{cluster.name}'")
+
     def shutdown_vm_guest(self, vm: vim.VirtualMachine, timeout: int = 120) -> None:
         """Gracefully shut down a VM's guest OS via VMware Tools.
 
