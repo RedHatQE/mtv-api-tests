@@ -42,6 +42,7 @@ from exceptions.exceptions import (
     RemoteClusterAndLocalCluterNamesError,
 )
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
+from utilities.copyoffload_migration import apply_copyoffload_vm_name_override
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
@@ -810,7 +811,6 @@ def multus_network_name(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
     class_plan_config: dict[str, Any],
-    prepared_plan: dict[str, Any],
     request: pytest.FixtureRequest,
 ) -> dict[str, str]:
     """Create NADs based on network requirements with unique names per test class.
@@ -830,7 +830,6 @@ def multus_network_name(
         source_provider (BaseProvider): Source provider instance
         source_provider_inventory (ForkliftInventory): Source provider inventory
         class_plan_config (dict[str, Any]): Plan configuration from class parametrization
-        prepared_plan (dict[str, Any]): Prepared plan with cloned VM names
         request (pytest.FixtureRequest): Pytest fixture request
 
     Returns:
@@ -854,10 +853,11 @@ def multus_network_name(
     else:
         nad_namespace = target_namespace
 
-    # Get cloned VM names from prepared_plan (not original template names from class_plan_config)
-    # After cloning, prepared_plan has the actual VM names (e.g., auto-zzsx-xcopy-template-test-...)
-    vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
-    LOGGER.info(f"Found VMs from prepared plan: {vms}")
+    virtual_machines = [dict(vm) for vm in class_plan_config["virtual_machines"]]
+    # Copy-offload configs use a placeholder VM name; the real name comes from .providers.json
+    apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
+    vms = [vm["name"] for vm in virtual_machines]
+    LOGGER.info(f"Found VMs for network lookup: {vms}")
 
     # Query networks using provider abstraction (handles templates vs VMs internally)
     networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)
@@ -1030,13 +1030,7 @@ def prepared_plan(
         plan["_vm_target_namespace"] = target_namespace
 
     # Override VM names from provider config if specified
-    if hasattr(source_provider, "copyoffload_config") and source_provider.copyoffload_config:
-        default_vm_override = source_provider.copyoffload_config.get("default_vm_name")
-        if default_vm_override:
-            for vm in virtual_machines:
-                if vm.get("clone", False):  # Only override for cloned VMs
-                    LOGGER.info(f"Overriding VM name '{vm['name']}' with '{default_vm_override}' from provider config")
-                    vm["name"] = default_vm_override
+    apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
