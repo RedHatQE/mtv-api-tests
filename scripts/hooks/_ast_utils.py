@@ -173,7 +173,8 @@ def is_module_level(stack: list[ast.AST]) -> bool:
 
     Nested under module-level ``If`` / ``With`` / ``Try`` / ``ClassDef`` still
     counts as module-level: class bodies run at import time. Only
-    ``FunctionDef`` and ``AsyncFunctionDef`` nest out of module scope.
+    ``FunctionDef``, ``AsyncFunctionDef``, and ``Lambda`` nest out of module
+    scope.
 
     Args:
         stack (list[ast.AST]): Nodes visited from root to parent of current.
@@ -181,7 +182,7 @@ def is_module_level(stack: list[ast.AST]) -> bool:
     Returns:
         bool: Whether the current position is module-level.
     """
-    return not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) for node in stack)
+    return not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) for node in stack)
 
 
 def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:

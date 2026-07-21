@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from _ast_utils import FindingCollector, for_each_parsed_file, main_runner, walk_with_stack
+from baseline import repo_relative_posix
 
 _ALLOWED_FIXTURE_NAME = "autouse_fixtures"
 _ALLOWED_FILENAME = "conftest.py"
@@ -61,7 +62,10 @@ def _fixture_has_autouse_enabled(dec: ast.expr) -> bool:
 
 
 def _is_allowlisted(path: Path, func_name: str) -> bool:
-    """Return True if this is ``autouse_fixtures`` defined in ``conftest.py``.
+    """Return True if this is ``autouse_fixtures`` in repo-root ``conftest.py``.
+
+    Nested ``conftest.py`` files are not allowlisted — only the exact
+    repository-root path ``conftest.py`` qualifies.
 
     Args:
         path (Path): Source file path.
@@ -70,7 +74,7 @@ def _is_allowlisted(path: Path, func_name: str) -> bool:
     Returns:
         bool: Whether this autouse fixture is allowlisted.
     """
-    return func_name == _ALLOWED_FIXTURE_NAME and path.name == _ALLOWED_FILENAME
+    return func_name == _ALLOWED_FIXTURE_NAME and repo_relative_posix(path) == _ALLOWED_FILENAME
 
 
 def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
