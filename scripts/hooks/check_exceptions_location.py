@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from _ast_utils import FindingCollector, for_each_parsed_file, main_runner, walk_with_stack
-from baseline import is_baselined, load_baseline
+from baseline import is_baselined, load_baseline, repo_relative_posix
 
 _EXCEPTION_BASE_NAMES: frozenset[str] = frozenset({"Exception", "BaseException"})
 _BASELINE = load_baseline("check_exceptions_location")
@@ -21,9 +21,9 @@ def _is_allowed_file(path: Path) -> bool:
         path (Path): Source file path.
 
     Returns:
-        bool: Whether this is exceptions/exceptions.py.
+        bool: Whether this is exactly ``exceptions/exceptions.py`` at repo root.
     """
-    return path.name == "exceptions.py" and path.parent.name == "exceptions"
+    return repo_relative_posix(path) == "exceptions/exceptions.py"
 
 
 def _base_identifier(base: ast.expr) -> str | None:

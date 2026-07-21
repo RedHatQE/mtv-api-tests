@@ -60,17 +60,24 @@ def _is_kubernetes_module(module: str) -> bool:
     return module == "kubernetes" or module.startswith("kubernetes.")
 
 
-def _inside_type_checking(stack: list[ast.AST]) -> bool:
-    """Return True if any ancestor is ``if TYPE_CHECKING:``.
+def _inside_type_checking(stack: list[ast.AST], node: ast.AST) -> bool:
+    """Return True if ``node`` is under ``If.body`` of a TYPE_CHECKING if.
+
+    Membership in ``If.orelse`` (the ``else`` / ``elif`` branch) does not
+    count as TYPE_CHECKING-guarded.
 
     Args:
         stack (list[ast.AST]): Ancestor nodes from root to parent.
+        node (ast.AST): Current node being inspected.
 
     Returns:
-        bool: Whether the current node is under a TYPE_CHECKING guard.
+        bool: Whether the current node is under a TYPE_CHECKING ``If.body``.
     """
-    for ancestor in stack:
-        if isinstance(ancestor, ast.If) and is_type_checking_test(ancestor.test):
+    for i, ancestor in enumerate(stack):
+        if not isinstance(ancestor, ast.If) or not is_type_checking_test(ancestor.test):
+            continue
+        child = stack[i + 1] if i + 1 < len(stack) else node
+        if child in ancestor.body:
             return True
     return False
 
@@ -87,7 +94,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
         if not isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
 
-        if _inside_type_checking(stack):
+        if _inside_type_checking(stack, node):
             continue
 
         if isinstance(node, ast.Import):
