@@ -150,22 +150,70 @@ def is_pytest_hook_in_conftest(path: Path, stack: list[ast.AST]) -> bool:
     return func_name is not None and func_name.startswith("pytest_")
 
 
-def is_type_checking_test(test: ast.expr) -> bool:
-    """Return True if ``test`` is ``TYPE_CHECKING`` or ``typing.TYPE_CHECKING``.
+def collect_typing_aliases(tree: ast.AST) -> tuple[frozenset[str], frozenset[str]]:
+    """Collect ``typing`` module and ``TYPE_CHECKING`` name aliases from imports.
+
+    Always includes ``typing`` and ``TYPE_CHECKING`` so bare
+    ``if TYPE_CHECKING:`` / ``if typing.TYPE_CHECKING:`` keep working.
+    Also records:
+
+    - ``import typing as <alias>`` → ``<alias>.TYPE_CHECKING``
+    - ``from typing import TYPE_CHECKING`` / ``... as <alias>``
+
+    Args:
+        tree (ast.AST): Parsed module AST.
+
+    Returns:
+        tuple[frozenset[str], frozenset[str]]:
+        ``(typing_module_aliases, type_checking_names)``.
+    """
+    typing_aliases: set[str] = {"typing"}
+    type_checking_names: set[str] = {"TYPE_CHECKING"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "typing":
+                    typing_aliases.add(alias.asname or "typing")
+        elif isinstance(node, ast.ImportFrom) and node.module == "typing":
+            for alias in node.names:
+                if alias.name == "TYPE_CHECKING":
+                    type_checking_names.add(alias.asname or "TYPE_CHECKING")
+    return frozenset(typing_aliases), frozenset(type_checking_names)
+
+
+def is_type_checking_test(
+    test: ast.expr,
+    typing_aliases: frozenset[str] | None = None,
+    type_checking_names: frozenset[str] | None = None,
+) -> bool:
+    """Return True if ``test`` is a TYPE_CHECKING guard (including aliases).
+
+    Recognizes bare names in ``type_checking_names`` (default
+    ``TYPE_CHECKING``) and ``<typing_alias>.TYPE_CHECKING`` where
+    ``typing_alias`` is in ``typing_aliases`` (default ``typing``).
 
     Args:
         test (ast.expr): The ``ast.If`` test expression.
+        typing_aliases (frozenset[str] | None): Names bound to the typing
+            module. Defaults to ``frozenset({"typing"})``.
+        type_checking_names (frozenset[str] | None): Names bound to
+            ``TYPE_CHECKING``. Defaults to ``frozenset({"TYPE_CHECKING"})``.
 
     Returns:
         bool: Whether the test is a TYPE_CHECKING guard.
     """
-    if isinstance(test, ast.Name) and test.id == "TYPE_CHECKING":
+    if typing_aliases is None:
+        typing_aliases = frozenset({"typing"})
+    if type_checking_names is None:
+        type_checking_names = frozenset({"TYPE_CHECKING"})
+
+    if isinstance(test, ast.Name) and test.id in type_checking_names:
         return True
     return (
         isinstance(test, ast.Attribute)
         and test.attr == "TYPE_CHECKING"
         and isinstance(test.value, ast.Name)
-        and test.value.id == "typing"
+        and test.value.id in typing_aliases
     )
 
 

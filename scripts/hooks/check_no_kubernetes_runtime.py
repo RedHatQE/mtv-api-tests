@@ -10,6 +10,7 @@ from pathlib import Path
 
 from _ast_utils import (
     FindingCollector,
+    collect_typing_aliases,
     for_each_parsed_file,
     is_type_checking_test,
     main_runner,
@@ -59,7 +60,12 @@ def _is_kubernetes_module(module: str) -> bool:
     return module == "kubernetes" or module.startswith("kubernetes.")
 
 
-def _inside_type_checking(stack: list[ast.AST], node: ast.AST) -> bool:
+def _inside_type_checking(
+    stack: list[ast.AST],
+    node: ast.AST,
+    typing_aliases: frozenset[str],
+    type_checking_names: frozenset[str],
+) -> bool:
     """Return True if ``node`` is under ``If.body`` of a TYPE_CHECKING if.
 
     Membership in ``If.orelse`` (the ``else`` / ``elif`` branch) does not
@@ -68,12 +74,18 @@ def _inside_type_checking(stack: list[ast.AST], node: ast.AST) -> bool:
     Args:
         stack (list[ast.AST]): Ancestor nodes from root to parent.
         node (ast.AST): Current node being inspected.
+        typing_aliases (frozenset[str]): Names bound to the typing module.
+        type_checking_names (frozenset[str]): Names bound to TYPE_CHECKING.
 
     Returns:
         bool: Whether the current node is under a TYPE_CHECKING ``If.body``.
     """
     for i, ancestor in enumerate(stack):
-        if not isinstance(ancestor, ast.If) or not is_type_checking_test(ancestor.test):
+        if not isinstance(ancestor, ast.If) or not is_type_checking_test(
+            ancestor.test,
+            typing_aliases=typing_aliases,
+            type_checking_names=type_checking_names,
+        ):
             continue
         child = stack[i + 1] if i + 1 < len(stack) else node
         if child in ancestor.body:
@@ -95,11 +107,12 @@ def check_file(
         collector (FindingCollector): Finding sink.
         baseline (set[tuple[str, str]]): Grandfathered path/fingerprint pairs.
     """
+    typing_aliases, type_checking_names = collect_typing_aliases(tree)
     for node, stack in walk_with_stack(tree):
         if not isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
 
-        if _inside_type_checking(stack, node):
+        if _inside_type_checking(stack, node, typing_aliases, type_checking_names):
             continue
 
         if isinstance(node, ast.Import):
