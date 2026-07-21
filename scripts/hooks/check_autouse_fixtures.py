@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Allow only the autouse_fixtures fixture in conftest.py to use autouse=True."""
+"""Allow only the autouse_fixtures fixture in conftest.py to enable autouse."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import ast
 import sys
 from pathlib import Path
 
-from _ast_utils import FindingCollector, iter_py_files, main_runner, parse_file, walk_with_stack
+from _ast_utils import FindingCollector, for_each_parsed_file, main_runner, walk_with_stack
 
 _ALLOWED_FIXTURE_NAME = "autouse_fixtures"
 _ALLOWED_FILENAME = "conftest.py"
@@ -33,21 +33,30 @@ def _decorator_is_fixture(dec: ast.expr) -> bool:
     )
 
 
-def _fixture_has_autouse_true(dec: ast.expr) -> bool:
-    """Return True if a fixture decorator call sets ``autouse=True``.
+def _fixture_has_autouse_enabled(dec: ast.expr) -> bool:
+    """Return True if a fixture decorator call enables ``autouse``.
+
+    Flags ``autouse=<truthy Constant>`` (``True``, ``1``, ``"yes"``, etc.) and
+    any non-Constant ``autouse=`` expression (treated as a potential enable).
+    Does not flag ``autouse=False``, ``autouse=0``, or other falsy constants,
+    and does not flag a bare ``@fixture`` / ``@pytest.fixture`` with no
+    ``autouse`` keyword.
 
     Args:
         dec (ast.expr): Decorator expression.
 
     Returns:
-        bool: Whether autouse=True is present.
+        bool: Whether autouse appears enabled (or potentially enabled).
     """
     if not isinstance(dec, ast.Call):
         return False
     for keyword in dec.keywords:
         if keyword.arg != "autouse":
             continue
-        return isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+        value = keyword.value
+        if isinstance(value, ast.Constant):
+            return bool(value.value)
+        return True
     return False
 
 
@@ -65,7 +74,7 @@ def _is_allowlisted(path: Path, func_name: str) -> bool:
 
 
 def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
-    """Flag autouse fixtures that are not autouse_fixtures in conftest.py.
+    """Flag enabled autouse fixtures that are not autouse_fixtures in conftest.py.
 
     Args:
         path (Path): Source file path.
@@ -78,7 +87,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
 
         has_autouse = False
         for dec in node.decorator_list:
-            if _decorator_is_fixture(dec) and _fixture_has_autouse_true(dec):
+            if _decorator_is_fixture(dec) and _fixture_has_autouse_enabled(dec):
                 has_autouse = True
                 break
 
@@ -91,7 +100,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
         collector.report(
             path,
             node.lineno,
-            f"autouse=True is only allowed on fixture '{_ALLOWED_FIXTURE_NAME}' "
+            f"autouse is only allowed on fixture '{_ALLOWED_FIXTURE_NAME}' "
             f"in {_ALLOWED_FILENAME}, found '{node.name}' in {path.name}",
         )
 
@@ -103,11 +112,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for path in iter_py_files(paths):
-        tree = parse_file(path, collector)
-        if tree is None:
-            continue
-        check_file(path, tree, collector)
+    for_each_parsed_file(paths, collector, check_file)
 
 
 if __name__ == "__main__":

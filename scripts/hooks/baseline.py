@@ -16,6 +16,9 @@ _HOOKS_DIR = Path(__file__).resolve().parent
 _BASELINES_DIR = _HOOKS_DIR / "baselines"
 _REPO_ROOT = _HOOKS_DIR.parent.parent
 
+# Resolved path -> split source lines; populated once per path per process.
+_LINE_CACHE: dict[Path, list[str]] = {}
+
 # path:16-hex, optional whitespace and # comment
 _ENTRY_RE = re.compile(r"^(?P<path>[^:#\s][^:#]*):(?P<fp>[0-9a-f]{16})(?:\s*(?:#.*)?)?$")
 
@@ -97,7 +100,8 @@ def is_baselined(
 ) -> bool:
     """Return True if the source line at ``path:lineno`` matches a baseline entry.
 
-    Reads the current file line, fingerprints its normalized content, and checks
+    Reads the current file line (cached per resolved path for the process),
+    fingerprints its normalized content, and checks
     ``(repo_relative_posix(path), fingerprint)`` against ``baseline``. Matching
     ignores lineno, so line drift from refactors still suppresses the same
     content. Content changes are not suppressed. Missing or unreadable lines
@@ -112,7 +116,11 @@ def is_baselined(
         bool: Whether this finding is grandfathered.
     """
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        resolved = path.resolve()
+        lines = _LINE_CACHE.get(resolved)
+        if lines is None:
+            lines = resolved.read_text(encoding="utf-8").splitlines()
+            _LINE_CACHE[resolved] = lines
     except OSError:
         return False
     if lineno < 1 or lineno > len(lines):

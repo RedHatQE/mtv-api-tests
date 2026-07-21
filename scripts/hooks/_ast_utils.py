@@ -205,6 +205,27 @@ def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
     yield from _visit(tree)
 
 
+def for_each_parsed_file(
+    paths: list[str],
+    collector: FindingCollector,
+    check_file: Callable[[Path, ast.AST, FindingCollector], None],
+) -> None:
+    """Iterate Python files, parse each, and invoke ``check_file``.
+
+    Args:
+        paths (list[str]): File paths from pre-commit (empty = whole repo).
+        collector (FindingCollector): Finding sink for parse failures and
+            check findings.
+        check_file (Callable[[Path, ast.AST, FindingCollector], None]):
+            Per-file checker invoked as ``check_file(path, tree, collector)``.
+    """
+    for path in iter_py_files(paths):
+        tree = parse_file(path, collector)
+        if tree is None:
+            continue
+        check_file(path, tree, collector)
+
+
 def main_runner(check_fn: Callable[[list[str], FindingCollector], None]) -> int:
     """Run a check function against argv file paths and exit with status.
 

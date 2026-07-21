@@ -7,7 +7,7 @@ import ast
 import sys
 from pathlib import Path
 
-from _ast_utils import FindingCollector, iter_py_files, main_runner, parse_file, walk_with_stack
+from _ast_utils import FindingCollector, for_each_parsed_file, main_runner, walk_with_stack
 from baseline import is_baselined, load_baseline
 
 _EXCEPTION_BASE_NAMES: frozenset[str] = frozenset({"Exception", "BaseException"})
@@ -88,11 +88,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for path in iter_py_files(paths):
-        tree = parse_file(path, collector)
-        if tree is None:
-            continue
-        check_file(path, tree, collector)
+    for_each_parsed_file(paths, collector, check_file)
 
 
 if __name__ == "__main__":

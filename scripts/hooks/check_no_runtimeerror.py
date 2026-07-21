@@ -9,10 +9,9 @@ from pathlib import Path
 
 from _ast_utils import (
     FindingCollector,
+    for_each_parsed_file,
     is_pytest_hook_in_conftest,
-    iter_py_files,
     main_runner,
-    parse_file,
     walk_with_stack,
 )
 from baseline import is_baselined, load_baseline
@@ -76,11 +75,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for path in iter_py_files(paths):
-        tree = parse_file(path, collector)
-        if tree is None:
-            continue
-        check_file(path, tree, collector)
+    for_each_parsed_file(paths, collector, check_file)
 
 
 if __name__ == "__main__":

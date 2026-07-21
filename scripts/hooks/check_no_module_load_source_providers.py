@@ -9,10 +9,9 @@ from pathlib import Path
 
 from _ast_utils import (
     FindingCollector,
+    for_each_parsed_file,
     is_module_level,
-    iter_py_files,
     main_runner,
-    parse_file,
     walk_with_stack,
 )
 
@@ -52,6 +51,9 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
     """
+    if not _is_under_tests(path):
+        return
+
     for node, stack in walk_with_stack(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -73,14 +75,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole tests/).
         collector (FindingCollector): Finding sink.
     """
-    files = list(iter_py_files(paths)) if paths else list(iter_py_files(["tests"]))
-    for path in files:
-        if not _is_under_tests(path):
-            continue
-        tree = parse_file(path, collector)
-        if tree is None:
-            continue
-        check_file(path, tree, collector)
+    for_each_parsed_file(paths if paths else ["tests"], collector, check_file)
 
 
 if __name__ == "__main__":
