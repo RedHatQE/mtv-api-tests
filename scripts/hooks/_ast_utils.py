@@ -201,6 +201,38 @@ def is_module_level(stack: list[ast.AST]) -> bool:
     return not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) for node in stack)
 
 
+def is_import_time_expression(stack: list[ast.AST], node: ast.AST) -> bool:
+    """Return True if ``node`` evaluates at import or definition time.
+
+    Returns False only when ``node`` is inside a ``FunctionDef`` /
+    ``AsyncFunctionDef`` body or a ``Lambda`` body (deferred until call).
+    Expressions in ``decorator_list``, ``defaults``, ``kw_defaults``,
+    annotations, and ``returns`` evaluate at definition time and count as
+    import-time even when nested under a function ancestor.
+
+    Nested function definitions inside an outer function body are deferred:
+    defaults/decorators on the inner function still run only when the outer
+    body executes.
+
+    Args:
+        stack (list[ast.AST]): Ancestors from root to parent of ``node``.
+        node (ast.AST): The expression node being classified.
+
+    Returns:
+        bool: Whether ``node`` evaluates at import/definition time.
+    """
+    for i, anc in enumerate(stack):
+        if isinstance(anc, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            child = stack[i + 1] if i + 1 < len(stack) else node
+            if child in anc.body:
+                return False
+        elif isinstance(anc, ast.Lambda):
+            child = stack[i + 1] if i + 1 < len(stack) else node
+            if child is anc.body:
+                return False
+    return True
+
+
 def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
     """Walk an AST yielding each node with its ancestor stack (excluding self).
 

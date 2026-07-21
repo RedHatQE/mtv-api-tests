@@ -104,9 +104,9 @@ def load_baseline(
 ) -> tuple[set[tuple[str, str]], list[tuple[Path, int, str]]]:
     """Load grandfathered findings for ``hook_id``.
 
-    Never raises on malformed lines. Callers should report ``errors`` via
-    ``FindingCollector`` and abort the check (exit 1) when the list is
-    non-empty.
+    Never raises on malformed lines or unreadable baseline files. Callers
+    should report ``errors`` via ``FindingCollector`` and abort the check
+    (exit 1) when the list is non-empty.
 
     Args:
         hook_id (str): Hook identifier (baseline filename stem, e.g.
@@ -116,18 +116,24 @@ def load_baseline(
         tuple[set[tuple[str, str]], list[tuple[Path, int, str]]]:
         ``(entries, errors)`` where ``entries`` is the set of
         ``(repo-relative posix path, fingerprint)`` pairs (empty if the
-        baseline file does not exist), and ``errors`` is a list of
-        ``(baseline_path, 1-based lineno, message)`` for each malformed
-        non-comment line. Valid lines before/after malformed ones are still
-        included in ``entries``.
+        baseline file does not exist or cannot be read), and ``errors`` is a
+        list of ``(baseline_path, 1-based lineno, message)`` for each
+        malformed non-comment line or a single read-failure finding at
+        lineno 1. Valid lines before/after malformed ones are still included
+        in ``entries``.
     """
     path = _BASELINES_DIR / f"{hook_id}.txt"
     if not path.is_file():
         return set(), []
 
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as err:
+        return set(), [(path, 1, f"failed to read baseline: {err}")]
+
     entries: set[tuple[str, str]] = set()
     errors: list[tuple[Path, int, str]] = []
-    for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for lineno, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue

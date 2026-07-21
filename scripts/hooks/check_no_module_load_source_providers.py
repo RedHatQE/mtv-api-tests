@@ -10,7 +10,7 @@ from pathlib import Path
 from _ast_utils import (
     FindingCollector,
     for_each_parsed_file,
-    is_module_level,
+    is_import_time_expression,
     main_runner,
     walk_with_stack,
 )
@@ -44,7 +44,7 @@ def _is_load_source_providers_call(node: ast.Call) -> bool:
 
 
 def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
-    """Flag module-level load_source_providers calls in one tests/ file.
+    """Flag import-time load_source_providers calls in one tests/ file.
 
     Args:
         path (Path): Source file path.
@@ -59,7 +59,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
             continue
         if not _is_load_source_providers_call(node):
             continue
-        if not is_module_level(stack):
+        if not is_import_time_expression(stack, node):
             continue
         collector.report(
             path,
