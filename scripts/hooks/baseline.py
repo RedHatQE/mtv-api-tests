@@ -23,31 +23,32 @@ _LINE_CACHE: dict[Path, list[str]] = {}
 _ENTRY_RE = re.compile(r"^(?P<path>[^:#\s][^:#]*):(?P<fp>[0-9a-f]{16})(?:\s*(?:#.*)?)?$")
 
 
-def normalize_line(line: str) -> str:
+def _normalize_line(line: str) -> str:
     """Normalize a source line for fingerprinting.
 
-    Strips leading/trailing whitespace and collapses internal whitespace to
-    single spaces via ``" ".join(line.split())``.
+    Strips only trailing ``\\n`` / ``\\r``. Leading and internal whitespace are
+    preserved so edits inside string literals (and indentation) change the
+    fingerprint.
 
     Args:
         line (str): Raw source line (with or without trailing newline).
 
     Returns:
-        str: Normalized line content.
+        str: Line content without trailing CR/LF.
     """
-    return " ".join(line.split())
+    return line.rstrip("\r\n")
 
 
-def content_fingerprint(line: str) -> str:
+def _content_fingerprint(line: str) -> str:
     """Return the 16-char SHA-256 hex fingerprint of a normalized source line.
 
     Args:
         line (str): Raw source line.
 
     Returns:
-        str: First 16 hex characters of ``sha256(normalize_line(line))``.
+        str: First 16 hex characters of ``sha256(_normalize_line(line))``.
     """
-    normalized = normalize_line(line)
+    normalized = _normalize_line(line)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
 
@@ -125,5 +126,5 @@ def is_baselined(
         return False
     if lineno < 1 or lineno > len(lines):
         return False
-    fingerprint = content_fingerprint(lines[lineno - 1])
+    fingerprint = _content_fingerprint(lines[lineno - 1])
     return (repo_relative_posix(path), fingerprint) in baseline

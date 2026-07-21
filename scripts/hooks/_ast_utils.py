@@ -193,6 +193,10 @@ def is_module_level(stack: list[ast.AST]) -> bool:
 def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
     """Walk an AST yielding each node with its ancestor stack (excluding self).
 
+    Yields the live ancestor list (read-only for callers). Do not retain or
+    mutate the stack across iterations — it is reused and mutated as the walk
+    proceeds. Callers must only read it within the same loop iteration.
+
     Args:
         tree (ast.AST): Root AST node.
 
@@ -202,7 +206,7 @@ def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
     stack: list[ast.AST] = []
 
     def _visit(node: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
-        yield node, list(stack)
+        yield node, stack
         stack.append(node)
         for child in ast.iter_child_nodes(node):
             yield from _visit(child)

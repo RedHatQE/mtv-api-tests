@@ -1,23 +1,31 @@
 # Grandfathered findings for issue #610. Format: path:content_fingerprint. Shrink when fixing.
-cli/mtv_api_tests/common.py:762a0332b304f1dd  # L449: except Exception as exc:; L611: except Exception as exc:
-cli/mtv_api_tests/common.py:e9dc52bf3963abec  # L671: except Exception:
-conftest.py:e05a05669ca87bdf  # L1164: except Exception as e:
-conftest.py:e9dc52bf3963abec  # L1232: except Exception:
-libs/providers/openstack.py:e05a05669ca87bdf  # L494: except Exception as e:; L558: except Exception as e:; L582: except Exception as e:
-libs/providers/rhv.py:e05a05669ca87bdf  # L455: except Exception as e:
-libs/providers/vmware.py:e05a05669ca87bdf  # L1156: except Exception as e:; L1971: except Exception as e:
-libs/providers/vmware.py:e9dc52bf3963abec  # L208: except Exception:; L466: except Exception:
-tests/hooks/test_post_hook_retain_failed_vm.py:e05a05669ca87bdf  # L211: except Exception as e:
-utilities/esxi.py:e05a05669ca87bdf  # L85: except Exception as e:; L151: except Exception as e:
-utilities/migration_utils.py:762a0332b304f1dd  # L100: except Exception as exc:; L110: except Exception as exc:; L130: except Exception as exc:; L151: except Exception as exc:
-utilities/must_gather.py:987bdd49127dbded  # L186: except Exception as ex:
-utilities/post_migration.py:1ff0541a46a8c312  # L1121: except Exception as template_error:
-utilities/post_migration.py:7097c059595f796c  # L1636: except Exception as exp:; L1669: except Exception as exp:; L1675: except Exception as exp:; L1687: except Exception as exp:; L1713: except Exception as exp:; L1728: except Exception as exp:; L1742: except Exception as exp:; L1751: except Exception as exp:; L1760: except Exception as exp:; L1773: except Exception as exp:; L1788: except Exception as exp:; L1795: except Exception as exp:; L1800: except Exception as exp:; L1811: except Exception as exp:; L1818: except Exception as exp:; L1831: except Exception as exp:; L1844: except Exception as exp:; L1851: except Exception as exp:; L1856: except Exception as exp:; L1863: except Exception as exp:
-utilities/post_migration.py:e05a05669ca87bdf  # L696: except Exception as e:
-utilities/pytest_utils.py:762a0332b304f1dd  # L172: except Exception as exc:; L181: except Exception as exc:; L190: except Exception as exc:; L199: except Exception as exc:; L208: except Exception as exc:; L221: except Exception as exc:; L232: except Exception as exc:; L241: except Exception as exc:; L250: except Exception as exc:; L263: except Exception as exc:; L273: except Exception as exc:; L280: except Exception as exc:; L298: except Exception as exc:; L310: except Exception as exc:; L317: except Exception as exc:; L330: except Exception as exc:; L356: except Exception as exc:; L362: except Exception as exc:; L385: except Exception as exc:; L390: except Exception as exc:; L408: except Exception as exc:; L413: except Exception as exc:; L437: except Exception as exc:
-utilities/pytest_utils.py:987bdd49127dbded  # L104: except Exception as ex:; L494: except Exception as ex:
-utilities/ssh_utils.py:e05a05669ca87bdf  # L106: except Exception as e:; L448: except Exception as e:
-utilities/utils.py:e9dc52bf3963abec  # L878: except Exception:
-utilities/virtctl.py:e05a05669ca87bdf  # L156: except Exception as e:; L175: except Exception as e:; L193: except Exception as e:
-utilities/vmware_guest_operations.py:e9dc52bf3963abec  # L126: except Exception:
-utilities/worker_node_selection.py:e05a05669ca87bdf  # L52: except Exception as e:; L183: except Exception as e:
+cli/mtv_api_tests/common.py:22d8392dcd7ccd03  # L671: except Exception:
+cli/mtv_api_tests/common.py:6393c1f10aa655d5  # L449: except Exception as exc:; L611: except Exception as exc:
+conftest.py:15e163770b296945  # L1164: except Exception as e:
+conftest.py:8032a46595666fbd  # L1232: except Exception:
+libs/providers/openstack.py:99b852e0729c2ff2  # L494: except Exception as e:; L558: except Exception as e:; L582: except Exception as e:
+libs/providers/rhv.py:99b852e0729c2ff2  # L455: except Exception as e:
+libs/providers/vmware.py:013bb15e59f62af9  # L208: except Exception:
+libs/providers/vmware.py:016903a67db23141  # L466: except Exception:
+libs/providers/vmware.py:15e163770b296945  # L1156: except Exception as e:
+libs/providers/vmware.py:99b852e0729c2ff2  # L1971: except Exception as e:
+tests/hooks/test_post_hook_retain_failed_vm.py:ea1b45b9747e1c44  # L211: except Exception as e:
+utilities/esxi.py:ea1b45b9747e1c44  # L85: except Exception as e:; L151: except Exception as e:
+utilities/migration_utils.py:10ec98e3e60ae493  # L110: except Exception as exc:; L130: except Exception as exc:; L151: except Exception as exc:
+utilities/migration_utils.py:6393c1f10aa655d5  # L100: except Exception as exc:
+utilities/must_gather.py:3ac2300236b36923  # L186: except Exception as ex:
+utilities/post_migration.py:06b1a32eeb3d4d28  # L1675: except Exception as exp:; L1687: except Exception as exp:; L1742: except Exception as exp:; L1751: except Exception as exp:; L1760: except Exception as exp:; L1773: except Exception as exp:; L1795: except Exception as exp:; L1800: except Exception as exp:; L1818: except Exception as exp:; L1851: except Exception as exp:; L1856: except Exception as exp:; L1863: except Exception as exp:
+utilities/post_migration.py:2ff8c99f5a9dab79  # L1636: except Exception as exp:; L1669: except Exception as exp:
+utilities/post_migration.py:99b852e0729c2ff2  # L696: except Exception as e:
+utilities/post_migration.py:b120a24e2fada483  # L1713: except Exception as exp:; L1728: except Exception as exp:; L1788: except Exception as exp:; L1811: except Exception as exp:; L1831: except Exception as exp:; L1844: except Exception as exp:
+utilities/post_migration.py:ccaa1b008e96b87c  # L1121: except Exception as template_error:
+utilities/pytest_utils.py:2a51da525550ed58  # L298: except Exception as exc:; L356: except Exception as exc:; L385: except Exception as exc:; L408: except Exception as exc:
+utilities/pytest_utils.py:3ac2300236b36923  # L494: except Exception as ex:
+utilities/pytest_utils.py:3e9968cb4c8682b1  # L104: except Exception as ex:
+utilities/pytest_utils.py:6393c1f10aa655d5  # L172: except Exception as exc:; L181: except Exception as exc:; L190: except Exception as exc:; L199: except Exception as exc:; L208: except Exception as exc:; L221: except Exception as exc:; L232: except Exception as exc:; L241: except Exception as exc:; L250: except Exception as exc:; L263: except Exception as exc:; L273: except Exception as exc:; L280: except Exception as exc:; L310: except Exception as exc:; L317: except Exception as exc:; L330: except Exception as exc:; L362: except Exception as exc:; L390: except Exception as exc:; L413: except Exception as exc:; L437: except Exception as exc:
+utilities/ssh_utils.py:99b852e0729c2ff2  # L106: except Exception as e:
+utilities/ssh_utils.py:ea1b45b9747e1c44  # L448: except Exception as e:
+utilities/utils.py:22d8392dcd7ccd03  # L878: except Exception:
+utilities/virtctl.py:8d53ea2562bbf005  # L156: except Exception as e:; L175: except Exception as e:; L193: except Exception as e:
+utilities/vmware_guest_operations.py:013bb15e59f62af9  # L126: except Exception:
+utilities/worker_node_selection.py:8d53ea2562bbf005  # L52: except Exception as e:; L183: except Exception as e:
