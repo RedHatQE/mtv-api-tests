@@ -121,7 +121,7 @@ def is_baselined(
         if lines is None:
             lines = resolved.read_text(encoding="utf-8").splitlines()
             _LINE_CACHE[resolved] = lines
-    except OSError:
+    except (OSError, UnicodeError):
         return False
     if lineno < 1 or lineno > len(lines):
         return False

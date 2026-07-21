@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -74,16 +75,20 @@ def iter_py_files(paths: list[str]) -> Iterator[Path]:
 def _walk_py_files(root: Path) -> Iterator[Path]:
     """Recursively yield ``*.py`` files under ``root``, skipping excluded dirs.
 
+    Uses ``os.walk`` and prunes ``dirnames`` in-place so excluded directories
+    (``.venv``, ``.git``, ``docs/``, caches, etc.) are never descended into.
+
     Args:
         root (Path): Directory to walk.
 
     Yields:
         Path: Python source files.
     """
-    for path in sorted(root.rglob("*.py")):
-        if any(part in _SKIP_DIR_NAMES for part in path.parts):
-            continue
-        yield path
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(name for name in dirnames if name not in _SKIP_DIR_NAMES)
+        for filename in sorted(filenames):
+            if filename.endswith(".py"):
+                yield Path(dirpath) / filename
 
 
 def parse_file(path: Path, collector: FindingCollector) -> ast.AST | None:
@@ -99,11 +104,11 @@ def parse_file(path: Path, collector: FindingCollector) -> ast.AST | None:
     """
     try:
         source = path.read_text(encoding="utf-8")
-    except OSError as err:
+    except (OSError, UnicodeError) as err:
         collector.report(
             path,
             0,
-            f"failed to read: OSError: {err}",
+            f"failed to read: {type(err).__name__}: {err}",
         )
         return None
 
