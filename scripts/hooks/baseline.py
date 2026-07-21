@@ -122,13 +122,22 @@ def load_baseline_for_check(
 def repo_relative_posix(path: Path) -> str:
     """Return ``path`` as a repo-root-relative POSIX string.
 
+    Paths outside the repository root do not raise: ``relative_to`` raises
+    ``ValueError`` in that case, and this function returns
+    ``path.resolve().as_posix()`` instead.
+
     Args:
         path (Path): Absolute or cwd-relative source path.
 
     Returns:
-        str: Path relative to the repository root using ``/`` separators.
+        str: Path relative to the repository root using ``/`` separators, or
+        the resolved absolute POSIX path when ``path`` is outside the repo.
     """
-    return path.resolve().relative_to(_REPO_ROOT).as_posix()
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
 
 
 def is_baselined(
@@ -140,10 +149,10 @@ def is_baselined(
 
     Reads the current file line (cached per resolved path for the process),
     fingerprints its normalized content, and checks
-    ``(repo_relative_posix(path), fingerprint)`` against ``baseline``. Matching
+    ``(repo-relative path, fingerprint)`` against ``baseline``. Matching
     ignores lineno, so line drift from refactors still suppresses the same
-    content. Content changes are not suppressed. Missing or unreadable lines
-    return False (do not suppress).
+    content. Content changes are not suppressed. Missing or unreadable lines,
+    and paths outside the repository, return False (do not suppress).
 
     Args:
         path (Path): Source file path for the finding.
@@ -155,6 +164,10 @@ def is_baselined(
     """
     try:
         resolved = path.resolve()
+        rel_posix = resolved.relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return False
+    try:
         lines = _LINE_CACHE.get(resolved)
         if lines is None:
             lines = resolved.read_text(encoding="utf-8").splitlines()
@@ -164,4 +177,4 @@ def is_baselined(
     if lineno < 1 or lineno > len(lines):
         return False
     fingerprint = _content_fingerprint(lines[lineno - 1])
-    return (repo_relative_posix(path), fingerprint) in baseline
+    return (rel_posix, fingerprint) in baseline

@@ -27,6 +27,7 @@ class FindingCollector:
     """Collect and print path:lineno findings for hook scripts."""
 
     def __init__(self) -> None:
+        """Initialize an empty findings list."""
         self.findings: list[tuple[Path, int, str]] = []
 
     def report(self, path: Path, lineno: int, msg: str) -> None:
@@ -41,9 +42,19 @@ class FindingCollector:
         print(f"{path}:{lineno}: {msg}")
 
     def __bool__(self) -> bool:
+        """Return True if any findings have been recorded.
+
+        Returns:
+            bool: Whether the collector has one or more findings.
+        """
         return bool(self.findings)
 
     def __len__(self) -> int:
+        """Return the number of recorded findings.
+
+        Returns:
+            int: Count of findings.
+        """
         return len(self.findings)
 
 

@@ -22,10 +22,7 @@ def _is_tests_root_test_file(path: Path) -> bool:
     Returns:
         bool: Whether the file is a disallowed root-level test module.
     """
-    try:
-        rel = Path(repo_relative_posix(path))
-    except ValueError:
-        return False
+    rel = Path(repo_relative_posix(path))
     return rel.parent == Path("tests") and rel.name.startswith("test_") and rel.suffix == ".py"
 
 

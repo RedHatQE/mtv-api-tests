@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from functools import partial
 from pathlib import Path
 
 from _ast_utils import (
@@ -83,10 +84,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
     if baseline is None:
         return
 
-    def _check_file(path: Path, tree: ast.AST, file_collector: FindingCollector) -> None:
-        check_file(path, tree, file_collector, baseline)
-
-    for_each_parsed_file(paths, collector, _check_file)
+    for_each_parsed_file(paths, collector, partial(check_file, baseline=baseline))
 
 
 if __name__ == "__main__":
