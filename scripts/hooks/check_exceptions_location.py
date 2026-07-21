@@ -10,7 +10,12 @@ from pathlib import Path
 from _ast_utils import FindingCollector, for_each_parsed_file, main_runner, walk_with_stack
 from baseline import is_baselined, load_baseline, repo_relative_posix
 
-_EXCEPTION_BASE_NAMES: frozenset[str] = frozenset({"Exception", "BaseException"})
+_EXCEPTION_BASE_NAMES: frozenset[str] = frozenset({
+    "Exception",
+    "BaseException",
+    "ExceptionGroup",
+    "BaseExceptionGroup",
+})
 _BASELINE = load_baseline("check_exceptions_location")
 
 
@@ -43,7 +48,10 @@ def _base_identifier(base: ast.expr) -> str | None:
 
 
 def _base_is_exception_like(base: ast.expr) -> bool:
-    """Return True if ``base`` is Exception, BaseException, or *Error.
+    """Return True if ``base`` is a known exception base or ends with Error.
+
+    Recognizes ``Exception``, ``BaseException``, ``ExceptionGroup``,
+    ``BaseExceptionGroup``, and names ending with ``Error``.
 
     Args:
         base (ast.expr): A ClassDef base expression.
