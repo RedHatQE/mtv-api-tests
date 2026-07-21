@@ -108,7 +108,7 @@ def check_file(
                     continue
                 if _is_allowed_exceptions_module(alias.name):
                     continue
-                if is_baselined(path, node.lineno, baseline):
+                if is_baselined(path, node.lineno, baseline, end_lineno=node.end_lineno):
                     continue
                 collector.report(
                     path,
@@ -124,7 +124,7 @@ def check_file(
             continue
         if _is_allowed_dynamic_exceptions_from(node):
             continue
-        if is_baselined(path, node.lineno, baseline):
+        if is_baselined(path, node.lineno, baseline, end_lineno=node.end_lineno):
             continue
         collector.report(
             path,

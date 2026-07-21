@@ -14,23 +14,63 @@ _ALLOWED_FIXTURE_NAME = "autouse_fixtures"
 _ALLOWED_FILENAME = "conftest.py"
 
 
-def _decorator_is_fixture(dec: ast.expr) -> bool:
+def _collect_fixture_aliases(tree: ast.AST) -> tuple[frozenset[str], frozenset[str]]:
+    """Collect pytest module and fixture name aliases from imports.
+
+    Always includes ``pytest`` and ``fixture`` so bare ``@pytest.fixture`` /
+    ``@fixture`` keep working even when the import is not scanned (e.g. star
+    imports). Also records:
+
+    - ``import pytest as <alias>`` → ``<alias>.fixture``
+    - ``from pytest import fixture`` / ``from pytest import fixture as <alias>``
+
+    Args:
+        tree (ast.AST): Parsed module AST.
+
+    Returns:
+        tuple[frozenset[str], frozenset[str]]:
+        ``(pytest_module_aliases, fixture_name_aliases)``.
+    """
+    pytest_aliases: set[str] = {"pytest"}
+    fixture_aliases: set[str] = {"fixture"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "pytest":
+                    pytest_aliases.add(alias.asname or "pytest")
+        elif isinstance(node, ast.ImportFrom) and node.module == "pytest":
+            for alias in node.names:
+                if alias.name == "fixture":
+                    fixture_aliases.add(alias.asname or "fixture")
+    return frozenset(pytest_aliases), frozenset(fixture_aliases)
+
+
+def _decorator_is_fixture(
+    dec: ast.expr,
+    pytest_aliases: frozenset[str],
+    fixture_aliases: frozenset[str],
+) -> bool:
     """Return True if ``dec`` is a pytest fixture decorator (bare or call).
+
+    Recognizes ``@fixture`` / ``@<fixture_alias>``, ``@pytest.fixture``, and
+    ``@<pytest_alias>.fixture``, with or without a call.
 
     Args:
         dec (ast.expr): Decorator expression.
+        pytest_aliases (frozenset[str]): Names bound to the pytest module.
+        fixture_aliases (frozenset[str]): Names bound to ``pytest.fixture``.
 
     Returns:
-        bool: Whether this is ``fixture`` / ``pytest.fixture`` (with or without call).
+        bool: Whether this is a fixture decorator (with or without call).
     """
     target = dec.func if isinstance(dec, ast.Call) else dec
-    if isinstance(target, ast.Name) and target.id == "fixture":
+    if isinstance(target, ast.Name) and target.id in fixture_aliases:
         return True
     return (
         isinstance(target, ast.Attribute)
         and target.attr == "fixture"
         and isinstance(target.value, ast.Name)
-        and target.value.id == "pytest"
+        and target.value.id in pytest_aliases
     )
 
 
@@ -85,13 +125,14 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
     """
+    pytest_aliases, fixture_aliases = _collect_fixture_aliases(tree)
     for node, _stack in walk_with_stack(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
 
         has_autouse = False
         for dec in node.decorator_list:
-            if _decorator_is_fixture(dec) and _fixture_has_autouse_enabled(dec):
+            if _decorator_is_fixture(dec, pytest_aliases, fixture_aliases) and _fixture_has_autouse_enabled(dec):
                 has_autouse = True
                 break
 

@@ -86,7 +86,7 @@ def check_file(
         if not isinstance(node, ast.ClassDef):
             continue
         if any(_base_is_exception_like(base) for base in node.bases):
-            if is_baselined(path, node.lineno, baseline):
+            if is_baselined(path, node.lineno, baseline, end_lineno=node.end_lineno):
                 continue
             collector.report(
                 path,

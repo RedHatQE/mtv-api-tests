@@ -62,7 +62,7 @@ def check_file(
             continue
         if is_pytest_hook_in_conftest(path, stack):
             continue
-        if is_baselined(path, node.lineno, baseline):
+        if is_baselined(path, node.lineno, baseline, end_lineno=node.end_lineno):
             continue
         collector.report(
             path,

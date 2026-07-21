@@ -2,7 +2,7 @@
 
 Baselines live in ``scripts/hooks/baselines/<hook_id>.txt`` with one finding per
 line as ``relative/posix/path:<16-char-sha256-hex>`` of the normalized source
-line at the finding. Optional trailing ``#`` comments are allowed. See
+span at the finding. Optional trailing ``#`` comments are allowed. See
 ``scripts/hooks/README.md``.
 """
 
@@ -40,17 +40,63 @@ def _normalize_line(line: str) -> str:
     return line.rstrip("\r\n")
 
 
-def _content_fingerprint(line: str) -> str:
-    """Return the 16-char SHA-256 hex fingerprint of a normalized source line.
+def _fingerprint_text(text: str) -> str:
+    """Return the 16-char SHA-256 hex fingerprint of ``text``.
 
     Args:
-        line (str): Raw source line.
+        text (str): Already-normalized text (single line or joined span).
 
     Returns:
-        str: First 16 hex characters of ``sha256(_normalize_line(line))``.
+        str: First 16 hex characters of ``sha256(text)``.
     """
-    normalized = _normalize_line(line)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _span_fingerprint(lines: list[str], lineno: int, end_lineno: int | None = None) -> str | None:
+    """Fingerprint a source span for baseline matching.
+
+    Each line is normalized with :func:`_normalize_line` (strip trailing CR/LF
+    only). When ``end_lineno`` is set and greater than ``lineno``, normalized
+    lines ``lines[lineno-1:end_lineno]`` are joined with ``\\n`` and hashed.
+    Otherwise only the single line at ``lineno`` is hashed (same as the
+    historical single-line scheme).
+
+    Args:
+        lines (list[str]): File lines from ``str.splitlines()`` (no newlines).
+        lineno (int): 1-based start line.
+        end_lineno (int | None): Optional 1-based inclusive end line from the
+            AST node (``node.end_lineno``).
+
+    Returns:
+        str | None: 16-char hex fingerprint, or ``None`` if the span is out of
+        range.
+    """
+    if lineno < 1 or lineno > len(lines):
+        return None
+    end = end_lineno if end_lineno is not None and end_lineno > lineno else lineno
+    if end > len(lines):
+        return None
+    span = "\n".join(_normalize_line(line) for line in lines[lineno - 1 : end])
+    return _fingerprint_text(span)
+
+
+def _cached_lines(resolved: Path) -> list[str] | None:
+    """Return cached source lines for ``resolved``, or ``None`` on I/O error.
+
+    Args:
+        resolved (Path): Absolute path to the source file.
+
+    Returns:
+        list[str] | None: Lines from ``splitlines()``, or ``None`` if unreadable.
+    """
+    try:
+        lines = _LINE_CACHE.get(resolved)
+        if lines is None:
+            lines = resolved.read_text(encoding="utf-8").splitlines()
+            _LINE_CACHE[resolved] = lines
+        return lines
+    except (OSError, UnicodeError):
+        return None
 
 
 def load_baseline(
@@ -144,20 +190,29 @@ def is_baselined(
     path: Path,
     lineno: int,
     baseline: set[tuple[str, str]],
+    end_lineno: int | None = None,
 ) -> bool:
-    """Return True if the source line at ``path:lineno`` matches a baseline entry.
+    """Return True if the source span at ``path:lineno`` matches a baseline entry.
 
-    Reads the current file line (cached per resolved path for the process),
-    fingerprints its normalized content, and checks
-    ``(repo-relative path, fingerprint)`` against ``baseline``. Matching
+    Reads the current file (cached per resolved path for the process),
+    fingerprints the normalized span (see :func:`_span_fingerprint`), and
+    checks ``(repo-relative path, fingerprint)`` against ``baseline``. Matching
     ignores lineno, so line drift from refactors still suppresses the same
-    content. Content changes are not suppressed. Missing or unreadable lines,
+    content. Content changes are not suppressed. Missing or unreadable spans,
     and paths outside the repository, return False (do not suppress).
+
+    When ``end_lineno`` is provided and greater than ``lineno``, the fingerprint
+    covers the full AST node span (e.g. multi-line ``raise``, ``import``,
+    ``except`` handler body, or ``class`` body). Callers should pass
+    ``node.end_lineno`` for nodes that report findings.
 
     Args:
         path (Path): Source file path for the finding.
-        lineno (int): 1-based line number of the finding.
+        lineno (int): 1-based start line number of the finding.
         baseline (set[tuple[str, str]]): Loaded baseline entries.
+        end_lineno (int | None): Optional 1-based inclusive end line
+            (``node.end_lineno``). When omitted or ``<= lineno``, only the
+            single start line is fingerprinted.
 
     Returns:
         bool: Whether this finding is grandfathered.
@@ -167,14 +222,10 @@ def is_baselined(
         rel_posix = resolved.relative_to(_REPO_ROOT).as_posix()
     except ValueError:
         return False
-    try:
-        lines = _LINE_CACHE.get(resolved)
-        if lines is None:
-            lines = resolved.read_text(encoding="utf-8").splitlines()
-            _LINE_CACHE[resolved] = lines
-    except (OSError, UnicodeError):
+    lines = _cached_lines(resolved)
+    if lines is None:
         return False
-    if lineno < 1 or lineno > len(lines):
+    fingerprint = _span_fingerprint(lines, lineno, end_lineno)
+    if fingerprint is None:
         return False
-    fingerprint = _content_fingerprint(lines[lineno - 1])
     return (rel_posix, fingerprint) in baseline

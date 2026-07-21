@@ -34,14 +34,16 @@ Current baselines:
 - `check_no_runtimeerror.txt`
 
 - Format: one `relative/posix/path:<16-char-sha256-hex>` per line, where the
-  fingerprint is `sha256(_normalize_line(source_line))[:16]` and
-  `_normalize_line` strips only trailing `\n`/`\r` (leading and internal
-  whitespace are preserved). Optional trailing `#` comments are allowed
-  (e.g. `# L10: except Exception as e:`). Blank lines and full-line `#`
-  comments are ignored.
+  fingerprint is `sha256(span)[:16]`. Each source line is normalized by
+  stripping only trailing `\n`/`\r` (leading and internal whitespace are
+  preserved). For a single-line finding the span is that line; for a
+  multi-line AST node (`end_lineno > lineno`) the span is the normalized
+  lines `lines[lineno-1:end_lineno]` joined with `\n`. Optional trailing `#`
+  comments are allowed (e.g. `# L10: except Exception as e:`). Blank lines
+  and full-line `#` comments are ignored.
 - Matching keys on **path + content fingerprint**, not lineno. Line drift from
-  refactors still suppresses the same content; editing the baselined line
-  (including whitespace inside it) does not.
+  refactors still suppresses the same content; editing any line in the
+  baselined span (including whitespace) does not.
 - **Shrink** the baseline when you fix a violation (remove that line).
 - **Do not expand** baselines casually; only add lines via a deliberate process
   (e.g. issue #610 grandfathering). New path/fingerprint pairs not in the

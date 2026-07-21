@@ -1,2 +1,2 @@
 # Grandfathered findings for issue #610. Format: path:content_fingerprint. Shrink when fixing.
-utilities/esxi.py:8adf12459b61907d  # L8: class ESXiError(Exception):
+utilities/esxi.py:0f1616bf54807671  # L8: class ESXiError(Exception):
