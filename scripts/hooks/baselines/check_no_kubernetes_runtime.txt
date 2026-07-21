@@ -1,0 +1,8 @@
+# Grandfathered findings for issue #610. Do not add new lines; shrink when fixing violations.
+libs/forklift_inventory.py:6
+libs/providers/openshift.py:8
+libs/providers/vmware.py:10
+utilities/migration_utils.py:7
+utilities/ssh_utils.py:16
+utilities/utils.py:16
+utilities/virtctl.py:10

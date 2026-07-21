@@ -1,0 +1,2 @@
+# Grandfathered findings for issue #610. Do not add new lines; shrink when fixing violations.
+utilities/esxi.py:8

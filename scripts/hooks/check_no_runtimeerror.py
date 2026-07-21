@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Ban raise RuntimeError outside pytest hooks in conftest.py."""
+
+from __future__ import annotations
+
+import ast
+import sys
+from pathlib import Path
+
+from _ast_utils import (
+    FindingCollector,
+    is_pytest_hook_in_conftest,
+    iter_py_files,
+    main_runner,
+    parse_file,
+    walk_with_stack,
+)
+from baseline import is_baselined, load_baseline
+
+_BASELINE = load_baseline("check_no_runtimeerror")
+
+
+def _is_runtime_error_raise(node: ast.Raise) -> bool:
+    """Return True if ``node`` raises RuntimeError (call or bare name).
+
+    Args:
+        node (ast.Raise): Raise AST node.
+
+    Returns:
+        bool: Whether the raised exception is RuntimeError.
+    """
+    exc = node.exc
+    if exc is None:
+        return False
+
+    if isinstance(exc, ast.Call):
+        func = exc.func
+        if isinstance(func, ast.Name) and func.id == "RuntimeError":
+            return True
+        return isinstance(func, ast.Attribute) and func.attr == "RuntimeError"
+
+    if isinstance(exc, ast.Name) and exc.id == "RuntimeError":
+        return True
+    return isinstance(exc, ast.Attribute) and exc.attr == "RuntimeError"
+
+
+def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+    """Flag non-allowlisted ``raise RuntimeError`` in one file.
+
+    Args:
+        path (Path): Source file path.
+        tree (ast.AST): Parsed AST.
+        collector (FindingCollector): Finding sink.
+    """
+    for node, stack in walk_with_stack(tree):
+        if not isinstance(node, ast.Raise):
+            continue
+        if not _is_runtime_error_raise(node):
+            continue
+        if is_pytest_hook_in_conftest(path, stack):
+            continue
+        if is_baselined(path, node.lineno, _BASELINE):
+            continue
+        collector.report(
+            path,
+            node.lineno,
+            "forbidden 'raise RuntimeError'; use ValueError/custom exceptions "
+            "(allowed only in pytest_* hooks in conftest.py)",
+        )
+
+
+def run_check(paths: list[str], collector: FindingCollector) -> None:
+    """Run the RuntimeError raise check on the given paths.
+
+    Args:
+        paths (list[str]): File paths from pre-commit (empty = whole repo).
+        collector (FindingCollector): Finding sink.
+    """
+    for path in iter_py_files(paths):
+        tree = parse_file(path, collector)
+        if tree is None:
+            continue
+        check_file(path, tree, collector)
+
+
+if __name__ == "__main__":
+    sys.exit(main_runner(run_check))

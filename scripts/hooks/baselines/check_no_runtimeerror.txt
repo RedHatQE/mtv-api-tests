@@ -1,0 +1,11 @@
+# Grandfathered findings for issue #610. Do not add new lines; shrink when fixing violations.
+utilities/ssh_utils.py:233
+utilities/ssh_utils.py:240
+utilities/ssh_utils.py:261
+utilities/ssh_utils.py:264
+utilities/ssh_utils.py:287
+utilities/ssh_utils.py:330
+utilities/virtctl.py:157
+utilities/virtctl.py:176
+utilities/virtctl.py:187
+utilities/virtctl.py:194

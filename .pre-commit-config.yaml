@@ -72,3 +72,48 @@ repos:
       - id: markdownlint-cli2
         args: ["--fix"]
         exclude: ^docs/
+
+  - repo: local
+    hooks:
+      - id: check-no-kubernetes-runtime
+        name: ban kubernetes runtime imports (except dynamic.exceptions)
+        entry: scripts/hooks/check_no_kubernetes_runtime.py
+        language: python
+        types: [python]
+      - id: check-no-dynamicclient-construct
+        name: ban DynamicClient() construction
+        entry: scripts/hooks/check_no_dynamicclient_construct.py
+        language: python
+        types: [python]
+      - id: check-no-except-exception
+        name: ban except Exception (except pytest_* in conftest.py)
+        entry: scripts/hooks/check_no_except_exception.py
+        language: python
+        types: [python]
+      - id: check-no-module-load-source-providers
+        name: ban module-level load_source_providers in tests/
+        entry: scripts/hooks/check_no_module_load_source_providers.py
+        language: python
+        types: [python]
+        files: ^tests/
+      - id: check-exceptions-location
+        name: require Exception subclasses in exceptions/exceptions.py
+        entry: scripts/hooks/check_exceptions_location.py
+        language: python
+        types: [python]
+      - id: check-test-file-location
+        name: ban test_*.py directly under tests/
+        entry: scripts/hooks/check_test_file_location.py
+        language: python
+        types: [python]
+        files: ^tests/
+      - id: check-autouse-fixtures
+        name: only autouse_fixtures may use autouse=True
+        entry: scripts/hooks/check_autouse_fixtures.py
+        language: python
+        types: [python]
+      - id: check-no-runtimeerror
+        name: ban raise RuntimeError (except pytest_* in conftest.py)
+        entry: scripts/hooks/check_no_runtimeerror.py
+        language: python
+        types: [python]
