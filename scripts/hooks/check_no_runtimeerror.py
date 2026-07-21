@@ -14,9 +14,7 @@ from _ast_utils import (
     main_runner,
     walk_with_stack,
 )
-from baseline import is_baselined, load_baseline
-
-_BASELINE = load_baseline("check_no_runtimeerror")
+from baseline import is_baselined, load_baseline_for_check
 
 
 def _is_runtime_error_raise(node: ast.Raise) -> bool:
@@ -43,13 +41,19 @@ def _is_runtime_error_raise(node: ast.Raise) -> bool:
     return isinstance(exc, ast.Attribute) and exc.attr == "RuntimeError"
 
 
-def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def check_file(
+    path: Path,
+    tree: ast.AST,
+    collector: FindingCollector,
+    baseline: set[tuple[str, str]],
+) -> None:
     """Flag non-allowlisted ``raise RuntimeError`` in one file.
 
     Args:
         path (Path): Source file path.
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
+        baseline (set[tuple[str, str]]): Grandfathered path/fingerprint pairs.
     """
     for node, stack in walk_with_stack(tree):
         if not isinstance(node, ast.Raise):
@@ -58,7 +62,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
             continue
         if is_pytest_hook_in_conftest(path, stack):
             continue
-        if is_baselined(path, node.lineno, _BASELINE):
+        if is_baselined(path, node.lineno, baseline):
             continue
         collector.report(
             path,
@@ -75,7 +79,14 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for_each_parsed_file(paths, collector, check_file)
+    baseline = load_baseline_for_check("check_no_runtimeerror", collector.report)
+    if baseline is None:
+        return
+
+    def _check_file(path: Path, tree: ast.AST, file_collector: FindingCollector) -> None:
+        check_file(path, tree, file_collector, baseline)
+
+    for_each_parsed_file(paths, collector, _check_file)
 
 
 if __name__ == "__main__":

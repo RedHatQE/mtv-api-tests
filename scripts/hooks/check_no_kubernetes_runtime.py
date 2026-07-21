@@ -14,9 +14,7 @@ from _ast_utils import (
     main_runner,
     walk_with_stack,
 )
-from baseline import is_baselined, load_baseline
-
-_BASELINE = load_baseline("check_no_kubernetes_runtime")
+from baseline import is_baselined, load_baseline_for_check
 
 
 def _is_allowed_exceptions_module(module: str) -> bool:
@@ -82,13 +80,19 @@ def _inside_type_checking(stack: list[ast.AST], node: ast.AST) -> bool:
     return False
 
 
-def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def check_file(
+    path: Path,
+    tree: ast.AST,
+    collector: FindingCollector,
+    baseline: set[tuple[str, str]],
+) -> None:
     """Flag forbidden runtime kubernetes imports in one file.
 
     Args:
         path (Path): Source file path.
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
+        baseline (set[tuple[str, str]]): Grandfathered path/fingerprint pairs.
     """
     for node, stack in walk_with_stack(tree):
         if not isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -103,7 +107,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
                     continue
                 if _is_allowed_exceptions_module(alias.name):
                     continue
-                if is_baselined(path, node.lineno, _BASELINE):
+                if is_baselined(path, node.lineno, baseline):
                     continue
                 collector.report(
                     path,
@@ -119,7 +123,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
             continue
         if _is_allowed_dynamic_exceptions_from(node):
             continue
-        if is_baselined(path, node.lineno, _BASELINE):
+        if is_baselined(path, node.lineno, baseline):
             continue
         collector.report(
             path,
@@ -136,7 +140,14 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for_each_parsed_file(paths, collector, check_file)
+    baseline = load_baseline_for_check("check_no_kubernetes_runtime", collector.report)
+    if baseline is None:
+        return
+
+    def _check_file(path: Path, tree: ast.AST, file_collector: FindingCollector) -> None:
+        check_file(path, tree, file_collector, baseline)
+
+    for_each_parsed_file(paths, collector, _check_file)
 
 
 if __name__ == "__main__":

@@ -14,9 +14,7 @@ from _ast_utils import (
     main_runner,
     walk_with_stack,
 )
-from baseline import is_baselined, load_baseline
-
-_BASELINE = load_baseline("check_no_except_exception")
+from baseline import is_baselined, load_baseline_for_check
 
 
 def _type_contains_exception(typ: ast.expr | None) -> bool:
@@ -42,13 +40,19 @@ def _type_contains_exception(typ: ast.expr | None) -> bool:
     return False
 
 
-def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def check_file(
+    path: Path,
+    tree: ast.AST,
+    collector: FindingCollector,
+    baseline: set[tuple[str, str]],
+) -> None:
     """Flag non-allowlisted ``except Exception`` handlers in one file.
 
     Args:
         path (Path): Source file path.
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
+        baseline (set[tuple[str, str]]): Grandfathered path/fingerprint pairs.
     """
     for node, stack in walk_with_stack(tree):
         if not isinstance(node, ast.ExceptHandler):
@@ -57,7 +61,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
             continue
         if is_pytest_hook_in_conftest(path, stack):
             continue
-        if is_baselined(path, node.lineno, _BASELINE):
+        if is_baselined(path, node.lineno, baseline):
             continue
         collector.report(
             path,
@@ -74,7 +78,14 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for_each_parsed_file(paths, collector, check_file)
+    baseline = load_baseline_for_check("check_no_except_exception", collector.report)
+    if baseline is None:
+        return
+
+    def _check_file(path: Path, tree: ast.AST, file_collector: FindingCollector) -> None:
+        check_file(path, tree, file_collector, baseline)
+
+    for_each_parsed_file(paths, collector, _check_file)
 
 
 if __name__ == "__main__":

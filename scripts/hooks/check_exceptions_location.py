@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from _ast_utils import FindingCollector, for_each_parsed_file, main_runner, walk_with_stack
-from baseline import is_baselined, load_baseline, repo_relative_posix
+from baseline import is_baselined, load_baseline_for_check, repo_relative_posix
 
 _EXCEPTION_BASE_NAMES: frozenset[str] = frozenset({
     "Exception",
@@ -16,7 +16,6 @@ _EXCEPTION_BASE_NAMES: frozenset[str] = frozenset({
     "ExceptionGroup",
     "BaseExceptionGroup",
 })
-_BASELINE = load_baseline("check_exceptions_location")
 
 
 def _is_allowed_file(path: Path) -> bool:
@@ -65,13 +64,19 @@ def _base_is_exception_like(base: ast.expr) -> bool:
     return name in _EXCEPTION_BASE_NAMES or name.endswith("Error")
 
 
-def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def check_file(
+    path: Path,
+    tree: ast.AST,
+    collector: FindingCollector,
+    baseline: set[tuple[str, str]],
+) -> None:
     """Flag exception-like subclasses defined outside exceptions/exceptions.py.
 
     Args:
         path (Path): Source file path.
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
+        baseline (set[tuple[str, str]]): Grandfathered path/fingerprint pairs.
     """
     if _is_allowed_file(path):
         return
@@ -80,7 +85,7 @@ def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
         if not isinstance(node, ast.ClassDef):
             continue
         if any(_base_is_exception_like(base) for base in node.bases):
-            if is_baselined(path, node.lineno, _BASELINE):
+            if is_baselined(path, node.lineno, baseline):
                 continue
             collector.report(
                 path,
@@ -96,7 +101,14 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for_each_parsed_file(paths, collector, check_file)
+    baseline = load_baseline_for_check("check_exceptions_location", collector.report)
+    if baseline is None:
+        return
+
+    def _check_file(path: Path, tree: ast.AST, file_collector: FindingCollector) -> None:
+        check_file(path, tree, file_collector, baseline)
+
+    for_each_parsed_file(paths, collector, _check_file)
 
 
 if __name__ == "__main__":

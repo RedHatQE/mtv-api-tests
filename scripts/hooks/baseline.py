@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent
@@ -52,33 +53,69 @@ def _content_fingerprint(line: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
 
-def load_baseline(hook_id: str) -> set[tuple[str, str]]:
+def load_baseline(
+    hook_id: str,
+) -> tuple[set[tuple[str, str]], list[tuple[Path, int, str]]]:
     """Load grandfathered findings for ``hook_id``.
+
+    Never raises on malformed lines. Callers should report ``errors`` via
+    ``FindingCollector`` and abort the check (exit 1) when the list is
+    non-empty.
 
     Args:
         hook_id (str): Hook identifier (baseline filename stem, e.g.
             ``check_no_except_exception``).
 
     Returns:
-        set[tuple[str, str]]: Set of ``(repo-relative posix path, fingerprint)``
-        pairs. Empty if the baseline file does not exist.
-
-    Raises:
-        ValueError: If a non-comment baseline line is malformed.
+        tuple[set[tuple[str, str]], list[tuple[Path, int, str]]]:
+        ``(entries, errors)`` where ``entries`` is the set of
+        ``(repo-relative posix path, fingerprint)`` pairs (empty if the
+        baseline file does not exist), and ``errors`` is a list of
+        ``(baseline_path, 1-based lineno, message)`` for each malformed
+        non-comment line. Valid lines before/after malformed ones are still
+        included in ``entries``.
     """
     path = _BASELINES_DIR / f"{hook_id}.txt"
     if not path.is_file():
-        return set()
+        return set(), []
 
     entries: set[tuple[str, str]] = set()
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    errors: list[tuple[Path, int, str]] = []
+    for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
         match = _ENTRY_RE.match(line)
         if match is None:
-            raise ValueError(f"Malformed baseline entry in {path}: {raw_line!r}")
+            errors.append((path, lineno, f"malformed baseline entry: {raw_line!r}"))
+            continue
         entries.add((match.group("path"), match.group("fp")))
+    return entries, errors
+
+
+def load_baseline_for_check(
+    hook_id: str,
+    report: Callable[[Path, int, str], None],
+) -> set[tuple[str, str]] | None:
+    """Load a baseline for a hook run, reporting malformed lines via ``report``.
+
+    Args:
+        hook_id (str): Hook identifier (baseline filename stem).
+        report (Callable[[Path, int, str], None]): Callback invoked as
+            ``report(path, lineno, msg)`` for each malformed baseline line
+            (typically ``FindingCollector.report``).
+
+    Returns:
+        set[tuple[str, str]] | None: Baseline entries when the file is clean
+        (or missing). ``None`` when any malformed entries were reported; the
+        caller should abort the rest of the check so the hook exits 1 without
+        a traceback.
+    """
+    entries, errors = load_baseline(hook_id)
+    for path, lineno, msg in errors:
+        report(path, lineno, msg)
+    if errors:
+        return None
     return entries
 
 
