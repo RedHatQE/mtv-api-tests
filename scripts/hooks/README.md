@@ -33,8 +33,15 @@ Current baselines:
 - `check_no_kubernetes_runtime.txt`
 - `check_no_runtimeerror.txt`
 
-- Format: one `relative/posix/path:lineno` per line (`#` comments and blanks OK).
+- Format: one `relative/posix/path:<16-char-sha256-hex>` per line, where the
+  fingerprint is `sha256(normalize(source_line))[:16]` and normalize is
+  `" ".join(line.split())` (strip + collapse whitespace). Optional trailing
+  `#` comments are allowed (e.g. `# L10: except Exception as e:`). Blank lines
+  and full-line `#` comments are ignored.
+- Matching keys on **path + content fingerprint**, not lineno. Line drift from
+  refactors still suppresses the same content; editing the baselined line does
+  not.
 - **Shrink** the baseline when you fix a violation (remove that line).
 - **Do not expand** baselines casually; only add lines via a deliberate process
-  (e.g. issue #610 grandfathering). New `path:lineno` pairs not in the baseline
-  must fail the hook.
+  (e.g. issue #610 grandfathering). New path/fingerprint pairs not in the
+  baseline must fail the hook.

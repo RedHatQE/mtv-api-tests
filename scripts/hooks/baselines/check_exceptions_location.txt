@@ -1,2 +1,2 @@
-# Grandfathered findings for issue #610. Do not add new lines; shrink when fixing violations.
-utilities/esxi.py:8
+# Grandfathered findings for issue #610. Format: path:content_fingerprint. Shrink when fixing.
+utilities/esxi.py:8adf12459b61907d  # L8: class ESXiError(Exception):

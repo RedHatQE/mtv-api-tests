@@ -1,8 +1,8 @@
-# Grandfathered findings for issue #610. Do not add new lines; shrink when fixing violations.
-libs/forklift_inventory.py:6
-libs/providers/openshift.py:8
-libs/providers/vmware.py:10
-utilities/migration_utils.py:7
-utilities/ssh_utils.py:16
-utilities/utils.py:16
-utilities/virtctl.py:10
+# Grandfathered findings for issue #610. Format: path:content_fingerprint. Shrink when fixing.
+libs/forklift_inventory.py:502087fb75439bca  # L6: from kubernetes.dynamic.client import DynamicClient
+libs/providers/openshift.py:2507a06c8af64a16  # L8: from kubernetes.client.exceptions import ApiException
+libs/providers/vmware.py:2507a06c8af64a16  # L10: from kubernetes.client.exceptions import ApiException
+utilities/migration_utils.py:1c063ef8ed58737a  # L7: from kubernetes.dynamic import DynamicClient
+utilities/ssh_utils.py:1c063ef8ed58737a  # L16: from kubernetes.dynamic import DynamicClient
+utilities/utils.py:1c063ef8ed58737a  # L16: from kubernetes.dynamic import DynamicClient
+utilities/virtctl.py:1c063ef8ed58737a  # L10: from kubernetes.dynamic import DynamicClient

@@ -1,11 +1,10 @@
-# Grandfathered findings for issue #610. Do not add new lines; shrink when fixing violations.
-utilities/ssh_utils.py:233
-utilities/ssh_utils.py:240
-utilities/ssh_utils.py:261
-utilities/ssh_utils.py:264
-utilities/ssh_utils.py:287
-utilities/ssh_utils.py:330
-utilities/virtctl.py:157
-utilities/virtctl.py:176
-utilities/virtctl.py:187
-utilities/virtctl.py:194
+# Grandfathered findings for issue #610. Format: path:content_fingerprint. Shrink when fixing.
+utilities/ssh_utils.py:74372927e7058e07  # L261: raise RuntimeError(f"Port-forward setup failed: {e}")
+utilities/ssh_utils.py:980552612c6ca604  # L287: raise RuntimeError(f"Connection test failed: {err}")
+utilities/ssh_utils.py:e661e5eeb60eebe1  # L264: raise RuntimeError("Port-forward failed to establish")
+utilities/ssh_utils.py:ed494350db60b3df  # L240: raise RuntimeError("SSH connection not established"); L330: raise RuntimeError("SSH connection not established")
+utilities/ssh_utils.py:f2bd30f63570d5eb  # L233: raise RuntimeError(f"Failed to establish working port-forward after {max_retr...
+utilities/virtctl.py:61c55d7d2da9a5fb  # L176: raise RuntimeError(f"Failed to extract {archive_file_path}: {e}") from e
+utilities/virtctl.py:9f7fe63640679b82  # L157: raise RuntimeError(f"Failed to download virtctl from {download_url}: {e}") fr...
+utilities/virtctl.py:bf06d0ffc51bae90  # L194: raise RuntimeError(f"Failed to make {virtctl_binary} executable: {e}") from e
+utilities/virtctl.py:f65f8863e070b6ec  # L187: raise RuntimeError(f"virtctl binary not found in {download_dir} after extract...

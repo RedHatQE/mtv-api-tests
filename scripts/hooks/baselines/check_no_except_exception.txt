@@ -1,78 +1,23 @@
-# Grandfathered findings for issue #610. Do not add new lines; shrink when fixing violations.
-cli/mtv_api_tests/common.py:449
-cli/mtv_api_tests/common.py:611
-cli/mtv_api_tests/common.py:671
-conftest.py:1164
-conftest.py:1232
-libs/providers/openstack.py:494
-libs/providers/openstack.py:558
-libs/providers/openstack.py:582
-libs/providers/rhv.py:455
-libs/providers/vmware.py:208
-libs/providers/vmware.py:466
-libs/providers/vmware.py:1156
-libs/providers/vmware.py:1971
-tests/hooks/test_post_hook_retain_failed_vm.py:211
-utilities/esxi.py:85
-utilities/esxi.py:151
-utilities/migration_utils.py:100
-utilities/migration_utils.py:110
-utilities/migration_utils.py:130
-utilities/migration_utils.py:151
-utilities/must_gather.py:186
-utilities/post_migration.py:696
-utilities/post_migration.py:1121
-utilities/post_migration.py:1636
-utilities/post_migration.py:1669
-utilities/post_migration.py:1675
-utilities/post_migration.py:1687
-utilities/post_migration.py:1713
-utilities/post_migration.py:1728
-utilities/post_migration.py:1742
-utilities/post_migration.py:1751
-utilities/post_migration.py:1760
-utilities/post_migration.py:1773
-utilities/post_migration.py:1788
-utilities/post_migration.py:1795
-utilities/post_migration.py:1800
-utilities/post_migration.py:1811
-utilities/post_migration.py:1818
-utilities/post_migration.py:1831
-utilities/post_migration.py:1844
-utilities/post_migration.py:1851
-utilities/post_migration.py:1856
-utilities/post_migration.py:1863
-utilities/pytest_utils.py:104
-utilities/pytest_utils.py:172
-utilities/pytest_utils.py:181
-utilities/pytest_utils.py:190
-utilities/pytest_utils.py:199
-utilities/pytest_utils.py:208
-utilities/pytest_utils.py:221
-utilities/pytest_utils.py:232
-utilities/pytest_utils.py:241
-utilities/pytest_utils.py:250
-utilities/pytest_utils.py:263
-utilities/pytest_utils.py:273
-utilities/pytest_utils.py:280
-utilities/pytest_utils.py:298
-utilities/pytest_utils.py:310
-utilities/pytest_utils.py:317
-utilities/pytest_utils.py:330
-utilities/pytest_utils.py:356
-utilities/pytest_utils.py:362
-utilities/pytest_utils.py:385
-utilities/pytest_utils.py:390
-utilities/pytest_utils.py:408
-utilities/pytest_utils.py:413
-utilities/pytest_utils.py:437
-utilities/pytest_utils.py:494
-utilities/ssh_utils.py:106
-utilities/ssh_utils.py:448
-utilities/utils.py:878
-utilities/virtctl.py:156
-utilities/virtctl.py:175
-utilities/virtctl.py:193
-utilities/vmware_guest_operations.py:126
-utilities/worker_node_selection.py:52
-utilities/worker_node_selection.py:183
+# Grandfathered findings for issue #610. Format: path:content_fingerprint. Shrink when fixing.
+cli/mtv_api_tests/common.py:762a0332b304f1dd  # L449: except Exception as exc:; L611: except Exception as exc:
+cli/mtv_api_tests/common.py:e9dc52bf3963abec  # L671: except Exception:
+conftest.py:e05a05669ca87bdf  # L1164: except Exception as e:
+conftest.py:e9dc52bf3963abec  # L1232: except Exception:
+libs/providers/openstack.py:e05a05669ca87bdf  # L494: except Exception as e:; L558: except Exception as e:; L582: except Exception as e:
+libs/providers/rhv.py:e05a05669ca87bdf  # L455: except Exception as e:
+libs/providers/vmware.py:e05a05669ca87bdf  # L1156: except Exception as e:; L1971: except Exception as e:
+libs/providers/vmware.py:e9dc52bf3963abec  # L208: except Exception:; L466: except Exception:
+tests/hooks/test_post_hook_retain_failed_vm.py:e05a05669ca87bdf  # L211: except Exception as e:
+utilities/esxi.py:e05a05669ca87bdf  # L85: except Exception as e:; L151: except Exception as e:
+utilities/migration_utils.py:762a0332b304f1dd  # L100: except Exception as exc:; L110: except Exception as exc:; L130: except Exception as exc:; L151: except Exception as exc:
+utilities/must_gather.py:987bdd49127dbded  # L186: except Exception as ex:
+utilities/post_migration.py:1ff0541a46a8c312  # L1121: except Exception as template_error:
+utilities/post_migration.py:7097c059595f796c  # L1636: except Exception as exp:; L1669: except Exception as exp:; L1675: except Exception as exp:; L1687: except Exception as exp:; L1713: except Exception as exp:; L1728: except Exception as exp:; L1742: except Exception as exp:; L1751: except Exception as exp:; L1760: except Exception as exp:; L1773: except Exception as exp:; L1788: except Exception as exp:; L1795: except Exception as exp:; L1800: except Exception as exp:; L1811: except Exception as exp:; L1818: except Exception as exp:; L1831: except Exception as exp:; L1844: except Exception as exp:; L1851: except Exception as exp:; L1856: except Exception as exp:; L1863: except Exception as exp:
+utilities/post_migration.py:e05a05669ca87bdf  # L696: except Exception as e:
+utilities/pytest_utils.py:762a0332b304f1dd  # L172: except Exception as exc:; L181: except Exception as exc:; L190: except Exception as exc:; L199: except Exception as exc:; L208: except Exception as exc:; L221: except Exception as exc:; L232: except Exception as exc:; L241: except Exception as exc:; L250: except Exception as exc:; L263: except Exception as exc:; L273: except Exception as exc:; L280: except Exception as exc:; L298: except Exception as exc:; L310: except Exception as exc:; L317: except Exception as exc:; L330: except Exception as exc:; L356: except Exception as exc:; L362: except Exception as exc:; L385: except Exception as exc:; L390: except Exception as exc:; L408: except Exception as exc:; L413: except Exception as exc:; L437: except Exception as exc:
+utilities/pytest_utils.py:987bdd49127dbded  # L104: except Exception as ex:; L494: except Exception as ex:
+utilities/ssh_utils.py:e05a05669ca87bdf  # L106: except Exception as e:; L448: except Exception as e:
+utilities/utils.py:e9dc52bf3963abec  # L878: except Exception:
+utilities/virtctl.py:e05a05669ca87bdf  # L156: except Exception as e:; L175: except Exception as e:; L193: except Exception as e:
+utilities/vmware_guest_operations.py:e9dc52bf3963abec  # L126: except Exception:
+utilities/worker_node_selection.py:e05a05669ca87bdf  # L52: except Exception as e:; L183: except Exception as e:

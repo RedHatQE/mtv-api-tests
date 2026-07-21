@@ -1,20 +1,54 @@
 """Baseline (grandfather) support for AGENTS.md pre-commit hooks.
 
 Baselines live in ``scripts/hooks/baselines/<hook_id>.txt`` with one finding per
-line as ``relative/posix/path:lineno``. Comments (``#``) and blank lines are
-ignored. See ``scripts/hooks/README.md``.
+line as ``relative/posix/path:<16-char-sha256-hex>`` of the normalized source
+line at the finding. Optional trailing ``#`` comments are allowed. See
+``scripts/hooks/README.md``.
 """
 
 from __future__ import annotations
 
+import hashlib
+import re
 from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent
 _BASELINES_DIR = _HOOKS_DIR / "baselines"
 _REPO_ROOT = _HOOKS_DIR.parent.parent
 
+# path:16-hex, optional whitespace and # comment
+_ENTRY_RE = re.compile(r"^(?P<path>[^:#\s][^:#]*):(?P<fp>[0-9a-f]{16})(?:\s*(?:#.*)?)?$")
 
-def load_baseline(hook_id: str) -> set[tuple[str, int]]:
+
+def normalize_line(line: str) -> str:
+    """Normalize a source line for fingerprinting.
+
+    Strips leading/trailing whitespace and collapses internal whitespace to
+    single spaces via ``" ".join(line.split())``.
+
+    Args:
+        line (str): Raw source line (with or without trailing newline).
+
+    Returns:
+        str: Normalized line content.
+    """
+    return " ".join(line.split())
+
+
+def content_fingerprint(line: str) -> str:
+    """Return the 16-char SHA-256 hex fingerprint of a normalized source line.
+
+    Args:
+        line (str): Raw source line.
+
+    Returns:
+        str: First 16 hex characters of ``sha256(normalize_line(line))``.
+    """
+    normalized = normalize_line(line)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+
+def load_baseline(hook_id: str) -> set[tuple[str, str]]:
     """Load grandfathered findings for ``hook_id``.
 
     Args:
@@ -22,7 +56,7 @@ def load_baseline(hook_id: str) -> set[tuple[str, int]]:
             ``check_no_except_exception``).
 
     Returns:
-        set[tuple[str, int]]: Set of ``(repo-relative posix path, lineno)``
+        set[tuple[str, str]]: Set of ``(repo-relative posix path, fingerprint)``
         pairs. Empty if the baseline file does not exist.
 
     Raises:
@@ -32,17 +66,15 @@ def load_baseline(hook_id: str) -> set[tuple[str, int]]:
     if not path.is_file():
         return set()
 
-    entries: set[tuple[str, int]] = set()
+    entries: set[tuple[str, str]] = set()
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        if ":" not in line:
+        match = _ENTRY_RE.match(line)
+        if match is None:
             raise ValueError(f"Malformed baseline entry in {path}: {raw_line!r}")
-        rel_path, lineno_str = line.rsplit(":", 1)
-        if not rel_path or not lineno_str.isdigit():
-            raise ValueError(f"Malformed baseline entry in {path}: {raw_line!r}")
-        entries.add((rel_path, int(lineno_str)))
+        entries.add((match.group("path"), match.group("fp")))
     return entries
 
 
@@ -61,16 +93,29 @@ def repo_relative_posix(path: Path) -> str:
 def is_baselined(
     path: Path,
     lineno: int,
-    baseline: set[tuple[str, int]],
+    baseline: set[tuple[str, str]],
 ) -> bool:
-    """Return True if ``path:lineno`` is listed in ``baseline``.
+    """Return True if the source line at ``path:lineno`` matches a baseline entry.
+
+    Reads the current file line, fingerprints its normalized content, and checks
+    ``(repo_relative_posix(path), fingerprint)`` against ``baseline``. Matching
+    ignores lineno, so line drift from refactors still suppresses the same
+    content. Content changes are not suppressed. Missing or unreadable lines
+    return False (do not suppress).
 
     Args:
         path (Path): Source file path for the finding.
-        lineno (int): 1-based line number.
-        baseline (set[tuple[str, int]]): Loaded baseline entries.
+        lineno (int): 1-based line number of the finding.
+        baseline (set[tuple[str, str]]): Loaded baseline entries.
 
     Returns:
         bool: Whether this finding is grandfathered.
     """
-    return (repo_relative_posix(path), lineno) in baseline
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    if lineno < 1 or lineno > len(lines):
+        return False
+    fingerprint = content_fingerprint(lines[lineno - 1])
+    return (repo_relative_posix(path), fingerprint) in baseline
