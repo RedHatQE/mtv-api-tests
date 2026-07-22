@@ -345,7 +345,8 @@ class VMWareProvider(BaseProvider):
 
         Raises:
             VmCloneError: If the VM has no runtime host, is not in a
-                ClusterComputeResource, or if the DRS reconfigure task fails.
+                ClusterComputeResource, per-VM DRS overrides are disabled on
+                the cluster, or if the DRS reconfigure task fails.
         """
         host = vm.runtime.host
         if host is None:
@@ -353,6 +354,17 @@ class VMWareProvider(BaseProvider):
         cluster = host.parent
         if not isinstance(cluster, vim.ClusterComputeResource):
             raise VmCloneError(f"VM '{vm.name}' host is not in a ClusterComputeResource; cannot disable DRS per-VM")
+        configuration_ex = cluster.configurationEx
+        if configuration_ex is None:
+            raise VmCloneError(f"Cluster '{cluster.name}' has no configurationEx — cannot verify per-VM DRS overrides")
+        drs_config = configuration_ex.drsConfig
+        if drs_config is None:
+            raise VmCloneError(f"Cluster '{cluster.name}' has no drsConfig — cannot verify per-VM DRS overrides")
+        if not drs_config.enableVmBehaviorOverrides:
+            raise VmCloneError(
+                f"Per-VM DRS overrides are disabled on cluster '{cluster.name}' "
+                f"(enableVmBehaviorOverrides=False); drsVmConfigSpec would be ignored"
+            )
         drs_vm_config = vim.cluster.DrsVmConfigInfo(key=vm, enabled=False)
         vm_config_spec = vim.cluster.DrsVmConfigSpec(
             info=drs_vm_config,

@@ -878,16 +878,16 @@ tests_params: dict = {
 
 **Plan Configuration Options:**
 
-| Option                | Required | Description                                           |
-| --------------------- | -------- | ----------------------------------------------------- |
-| `warm_migration`      | No       | True for warm migration                               |
-| `preserve_static_ips` | No       | True to preserve static IP addresses after migration  |
-| `copyoffload`         | No       | True to enable copy-offload (XCOPY) migration         |
-| `xfs_compatibility`   | No       | True to enable XFS v4 filesystem compatibility        |
-| `migrate_shared_disks`| No       | True to enable shared disk migration at plan level    |
-| `inventory_timeout`   | No       | Per-VM Forklift inventory wait timeout, in seconds    |
-| `clone_to_same_host`  | No       | True to pin all VMs to the same ESXi host             |
-| `disable_drs_for_vms` | No       | True to disable vSphere DRS per VM after cloning      |
+| Option                 | Required | Description                                                                    |
+| ---------------------- | -------- | ------------------------------------------------------------------------------ |
+| `warm_migration`       | No       | True for warm migration                                                        |
+| `preserve_static_ips`  | No       | True to preserve static IP addresses after migration                           |
+| `copyoffload`          | No       | True to enable copy-offload (XCOPY) migration                                  |
+| `xfs_compatibility`    | No       | True to enable XFS v4 filesystem compatibility                                 |
+| `migrate_shared_disks` | No       | True to enable shared disk migration at plan level                             |
+| `inventory_timeout`    | No       | Per-VM Forklift inventory wait timeout, in seconds                             |
+| `clone_to_same_host`   | No       | True to default VM2+ to VM1's ESXi host; explicit `target_esxi_host` overrides |
+| `disable_drs_for_vms`  | No       | True to disable vSphere DRS per VM after cloning                               |
 
 **Test Verification Configuration:**
 
