@@ -1,0 +1,34 @@
+{
+  "ai_provider": "cursor",
+  "ai_model": "cursor:cursor-grok-4.5-high-fast",
+  "ai_call_timeout": 90,
+  "max_concurrent_ai_calls": 3,
+  "peer_ai_configs": [
+    {
+      "ai_provider": "claude",
+      "ai_model": "claude-opus-4-6-1m"
+    },
+    {
+      "ai_provider": "cursor",
+      "ai_model": "cursor:composer-2.5-fast"
+    }
+  ],
+  "peer_analysis_max_rounds": 3,
+  "additional_repos": [
+    {
+      "name": "mtv_product_code",
+      "url": "https://github.com/kubev2v/forklift",
+      "ref": "main"
+    },
+    {
+      "name": "mtv_deploy_code",
+      "url": "https://gitlab.cee.redhat.com/migrationqe/mtv-autodeploy",
+      "ref": "master"
+    },
+    {
+      "name": "mtv_jenkins_code",
+      "url": "https://gitlab.cee.redhat.com/ccit/jenkins-csb-customers/mtv-qe-casc-main",
+      "ref": "main"
+    }
+  ]
+}
