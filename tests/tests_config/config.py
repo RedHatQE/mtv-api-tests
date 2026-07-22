@@ -776,7 +776,6 @@ tests_params: dict = {
                 "name": "mtv-tests-di-rhel8",
             },
         ],
-        "deep_inspection": True,
     },
 }
 
