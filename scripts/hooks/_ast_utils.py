@@ -232,23 +232,6 @@ def enclosing_function_name(stack: list[ast.AST]) -> str | None:
     return None
 
 
-def is_module_level(stack: list[ast.AST]) -> bool:
-    """Return True if the current node is at module scope (not in a function).
-
-    Nested under module-level ``If`` / ``With`` / ``Try`` / ``ClassDef`` still
-    counts as module-level: class bodies run at import time. Only
-    ``FunctionDef``, ``AsyncFunctionDef``, and ``Lambda`` nest out of module
-    scope.
-
-    Args:
-        stack (list[ast.AST]): Nodes visited from root to parent of current.
-
-    Returns:
-        bool: Whether the current position is module-level.
-    """
-    return not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) for node in stack)
-
-
 def is_import_time_expression(stack: list[ast.AST], node: ast.AST) -> bool:
     """Return True if ``node`` evaluates at import or definition time.
 
