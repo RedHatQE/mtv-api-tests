@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Ban runtime kubernetes package imports except kubernetes.dynamic.exceptions."""
+"""Ban runtime kubernetes package imports except allowed exceptions forms.
+
+Allowed outside TYPE_CHECKING:
+
+- ``import kubernetes.dynamic.exceptions`` / ``from kubernetes.dynamic.exceptions import ...``
+- ``from kubernetes.dynamic import exceptions``
+"""
 
 from __future__ import annotations
 
@@ -129,7 +135,9 @@ def check_file(
                     path,
                     node.lineno,
                     f"forbidden runtime import of '{alias.name}' "
-                    "(only kubernetes.dynamic.exceptions is allowed outside TYPE_CHECKING)",
+                    "(only kubernetes.dynamic.exceptions and "
+                    "'from kubernetes.dynamic import exceptions' are allowed "
+                    "outside TYPE_CHECKING)",
                 )
             continue
 
@@ -145,7 +153,9 @@ def check_file(
             path,
             node.lineno,
             f"forbidden runtime import from '{node.module}' "
-            "(only kubernetes.dynamic.exceptions is allowed outside TYPE_CHECKING)",
+            "(only kubernetes.dynamic.exceptions and "
+            "'from kubernetes.dynamic import exceptions' are allowed "
+            "outside TYPE_CHECKING)",
         )
 
 

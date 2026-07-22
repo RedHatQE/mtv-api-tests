@@ -76,7 +76,7 @@ repos:
   - repo: local
     hooks:
       - id: check-no-kubernetes-runtime
-        name: ban kubernetes runtime imports (except dynamic.exceptions)
+        name: ban kubernetes runtime imports (except kubernetes.dynamic.exceptions and from kubernetes.dynamic import exceptions)
         entry: scripts/hooks/check_no_kubernetes_runtime.py
         language: python
         types: [python]

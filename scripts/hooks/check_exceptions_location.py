@@ -17,6 +17,7 @@ _EXCEPTION_BASE_NAMES: frozenset[str] = frozenset({
     "BaseException",
     "ExceptionGroup",
     "BaseExceptionGroup",
+    "Warning",
 })
 
 
@@ -49,10 +50,11 @@ def _base_identifier(base: ast.expr) -> str | None:
 
 
 def _base_is_exception_like(base: ast.expr) -> bool:
-    """Return True if ``base`` is a known exception base or ends with Error/Exception.
+    """Return True if ``base`` is a known exception base or ends with Error/Exception/Warning.
 
     Recognizes ``Exception``, ``BaseException``, ``ExceptionGroup``,
-    ``BaseExceptionGroup``, and names ending with ``Error`` or ``Exception``.
+    ``BaseExceptionGroup``, ``Warning``, and names ending with ``Error``,
+    ``Exception``, or ``Warning``.
 
     Args:
         base (ast.expr): A ClassDef base expression.
@@ -63,7 +65,7 @@ def _base_is_exception_like(base: ast.expr) -> bool:
     name = _base_identifier(base)
     if name is None:
         return False
-    return name in _EXCEPTION_BASE_NAMES or name.endswith(("Error", "Exception"))
+    return name in _EXCEPTION_BASE_NAMES or name.endswith(("Error", "Exception", "Warning"))
 
 
 def check_file(

@@ -28,7 +28,9 @@ def _collect_dynamic_client_bindings(
     Scans module imports once and returns:
 
     - class names from ``from kubernetes.dynamic[.client] import DynamicClient [as X]``
-    - module aliases from ``import kubernetes.dynamic[.client] as X``
+    - module aliases from ``import kubernetes.dynamic[.client] as X``,
+      ``from kubernetes import dynamic [as X]``, and
+      ``from kubernetes.dynamic import client [as X]``
     - package aliases from ``import kubernetes [as X]`` (and dotted imports that
       bind the top-level ``kubernetes`` package)
 
@@ -58,10 +60,17 @@ def _collect_dynamic_client_bindings(
                 elif name.startswith("kubernetes.") and alias.asname is None:
                     # Dotted imports without ``as`` bind the top-level package.
                     package_aliases.add("kubernetes")
-        elif isinstance(node, ast.ImportFrom) and node.module in _DYNAMIC_CLIENT_MODULES:
-            for alias in node.names:
-                if alias.name == "DynamicClient":
-                    class_names.add(alias.asname or "DynamicClient")
+        elif isinstance(node, ast.ImportFrom):
+            if node.module in _DYNAMIC_CLIENT_MODULES:
+                for alias in node.names:
+                    if alias.name == "DynamicClient":
+                        class_names.add(alias.asname or "DynamicClient")
+                    elif node.module == "kubernetes.dynamic" and alias.name == "client":
+                        module_aliases.add(alias.asname or "client")
+            elif node.module == "kubernetes":
+                for alias in node.names:
+                    if alias.name == "dynamic":
+                        module_aliases.add(alias.asname or "dynamic")
 
     return frozenset(class_names), frozenset(module_aliases), frozenset(package_aliases)
 
@@ -100,6 +109,8 @@ def _is_kubernetes_dynamic_client_call(
 
     - bare / aliased class: ``DynamicClient(...)``, ``DC(...)``
     - module alias: ``kd.DynamicClient(...)``, ``kdc.DynamicClient(...)``
+    - dynamic-module alias nested: ``kd.client.DynamicClient(...)`` when
+      ``kd`` aliases ``kubernetes.dynamic``
     - package nested: ``kubernetes.dynamic.DynamicClient(...)``,
       ``k8s.dynamic.client.DynamicClient(...)``
 
@@ -121,6 +132,10 @@ def _is_kubernetes_dynamic_client_call(
 
     # ``kd.DynamicClient`` / ``kdc.DynamicClient``
     if len(parts) == 2 and parts[0] in module_aliases:
+        return True
+
+    # ``kd.client.DynamicClient`` when ``kd`` aliases ``kubernetes.dynamic``
+    if len(parts) == 3 and parts[0] in module_aliases and parts[1] == "client":
         return True
 
     # ``kubernetes.dynamic.DynamicClient`` / ``k8s.dynamic.DynamicClient``
