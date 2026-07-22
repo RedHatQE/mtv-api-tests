@@ -13,7 +13,8 @@ libs/providers/vmware.py:e25e38a16088a3fd  # L208: except Exception:
 libs/providers/vmware.py:ec7adeaf2313ec22  # L466: except Exception:
 libs/providers/vmware.py:f2ab6edf31359481  # L1971: except Exception as e:
 tests/hooks/test_post_hook_retain_failed_vm.py:4f949e279cc3dd18  # L211: except Exception as e:
-utilities/esxi.py:d55266cbfd88f0d2  # L85: except Exception as e:; L151: except Exception as e:
+utilities/esxi.py:d55266cbfd88f0d2  # L85: except Exception as e:
+utilities/esxi.py:d55266cbfd88f0d2  # L151: except Exception as e:
 utilities/migration_utils.py:0cd52998632b9dda  # L130: except Exception as exc:
 utilities/migration_utils.py:2e06aede54c52ba3  # L151: except Exception as exc:
 utilities/migration_utils.py:4c79910c2c637d4b  # L100: except Exception as exc:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from collections import Counter
 from functools import partial
 from pathlib import Path
 
@@ -97,7 +98,7 @@ def check_file(
     path: Path,
     tree: ast.AST,
     collector: FindingCollector,
-    baseline: set[tuple[str, str]],
+    baseline: Counter[tuple[str, str]],
 ) -> None:
     """Flag forbidden runtime kubernetes imports in one file.
 
@@ -105,7 +106,8 @@ def check_file(
         path (Path): Source file path.
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
-        baseline (set[tuple[str, str]]): Grandfathered path/fingerprint pairs.
+        baseline (Counter[tuple[str, str]]): Grandfathered path/fingerprint
+            occurrence counts.
     """
     typing_aliases, type_checking_names = collect_typing_aliases(tree)
     for node, stack in walk_with_stack(tree):

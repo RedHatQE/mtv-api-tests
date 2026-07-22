@@ -2,7 +2,8 @@
 
 Baselines live in ``scripts/hooks/baselines/<hook_id>.txt`` with one finding per
 line as ``relative/posix/path:<16-char-sha256-hex>`` of the normalized source
-span at the finding. Optional trailing ``#`` comments are allowed. See
+span at the finding. Optional trailing ``#`` comments are allowed. Duplicate
+identical rows are allowed and count as separate occurrences. See
 ``scripts/hooks/README.md``.
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -101,37 +103,40 @@ def _cached_lines(resolved: Path) -> list[str] | None:
 
 def load_baseline(
     hook_id: str,
-) -> tuple[set[tuple[str, str]], list[tuple[Path, int, str]]]:
+) -> tuple[Counter[tuple[str, str]], list[tuple[Path, int, str]]]:
     """Load grandfathered findings for ``hook_id``.
 
     Never raises on malformed lines or unreadable baseline files. Callers
     should report ``errors`` via ``FindingCollector`` and abort the check
     (exit 1) when the list is non-empty.
 
+    Duplicate identical ``path:fingerprint`` rows increment the occurrence
+    count so each grandfathered finding consumes one occurrence at match time.
+
     Args:
         hook_id (str): Hook identifier (baseline filename stem, e.g.
             ``check_no_except_exception``).
 
     Returns:
-        tuple[set[tuple[str, str]], list[tuple[Path, int, str]]]:
-        ``(entries, errors)`` where ``entries`` is the set of
-        ``(repo-relative posix path, fingerprint)`` pairs (empty if the
-        baseline file does not exist or cannot be read), and ``errors`` is a
-        list of ``(baseline_path, 1-based lineno, message)`` for each
-        malformed non-comment line or a single read-failure finding at
-        lineno 1. Valid lines before/after malformed ones are still included
-        in ``entries``.
+        tuple[Counter[tuple[str, str]], list[tuple[Path, int, str]]]:
+        ``(entries, errors)`` where ``entries`` maps
+        ``(repo-relative posix path, fingerprint)`` to occurrence counts
+        (empty if the baseline file does not exist or cannot be read), and
+        ``errors`` is a list of ``(baseline_path, 1-based lineno, message)``
+        for each malformed non-comment line or a single read-failure finding
+        at lineno 1. Valid lines before/after malformed ones are still
+        included in ``entries``.
     """
     path = _BASELINES_DIR / f"{hook_id}.txt"
     if not path.is_file():
-        return set(), []
+        return Counter(), []
 
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as err:
-        return set(), [(path, 1, f"failed to read baseline: {err}")]
+        return Counter(), [(path, 1, f"failed to read baseline: {err}")]
 
-    entries: set[tuple[str, str]] = set()
+    entries: Counter[tuple[str, str]] = Counter()
     errors: list[tuple[Path, int, str]] = []
     for lineno, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.strip()
@@ -141,14 +146,14 @@ def load_baseline(
         if match is None:
             errors.append((path, lineno, f"malformed baseline entry: {raw_line!r}"))
             continue
-        entries.add((match.group("path"), match.group("fp")))
+        entries[(match.group("path"), match.group("fp"))] += 1
     return entries, errors
 
 
 def load_baseline_for_check(
     hook_id: str,
     report: Callable[[Path, int, str], None],
-) -> set[tuple[str, str]] | None:
+) -> Counter[tuple[str, str]] | None:
     """Load a baseline for a hook run, reporting malformed lines via ``report``.
 
     Args:
@@ -158,10 +163,10 @@ def load_baseline_for_check(
             (typically ``FindingCollector.report``).
 
     Returns:
-        set[tuple[str, str]] | None: Baseline entries when the file is clean
-        (or missing). ``None`` when any malformed entries were reported; the
-        caller should abort the rest of the check so the hook exits 1 without
-        a traceback.
+        Counter[tuple[str, str]] | None: Baseline occurrence counts when the
+        file is clean (or missing). ``None`` when any malformed entries were
+        reported; the caller should abort the rest of the check so the hook
+        exits 1 without a traceback.
     """
     entries, errors = load_baseline(hook_id)
     for path, lineno, msg in errors:
@@ -195,14 +200,16 @@ def repo_relative_posix(path: Path) -> str:
 def is_baselined(
     path: Path,
     lineno: int,
-    baseline: set[tuple[str, str]],
+    baseline: Counter[tuple[str, str]],
     end_lineno: int | None = None,
 ) -> bool:
-    """Return True if the source span at ``path:lineno`` matches a baseline entry.
+    """Return True if the source span at ``path:lineno`` consumes a baseline occurrence.
 
     Reads the current file (cached per resolved path for the process),
     fingerprints the normalized span (see :func:`_span_fingerprint`), and
-    checks ``(repo-relative path, fingerprint)`` against ``baseline``. Matching
+    looks up ``(repo-relative path, fingerprint)`` in ``baseline``. When a
+    count is available (``> 0``), decrements it by one and returns True.
+    Returns False when the count is exhausted or the key is absent. Matching
     ignores lineno, so line drift from refactors still suppresses the same
     content. Content changes are not suppressed. Missing or unreadable spans,
     and paths outside the repository, return False (do not suppress).
@@ -215,13 +222,14 @@ def is_baselined(
     Args:
         path (Path): Source file path for the finding.
         lineno (int): 1-based start line number of the finding.
-        baseline (set[tuple[str, str]]): Loaded baseline entries.
+        baseline (Counter[tuple[str, str]]): Loaded baseline occurrence counts
+            (mutated in place when a count is consumed).
         end_lineno (int | None): Optional 1-based inclusive end line
             (``node.end_lineno``). When omitted or ``<= lineno``, only the
             single start line is fingerprinted.
 
     Returns:
-        bool: Whether this finding is grandfathered.
+        bool: Whether this finding is grandfathered (one occurrence consumed).
     """
     try:
         resolved = path.resolve()
@@ -234,4 +242,8 @@ def is_baselined(
     fingerprint = _span_fingerprint(lines, lineno, end_lineno)
     if fingerprint is None:
         return False
-    return (rel_posix, fingerprint) in baseline
+    key = (rel_posix, fingerprint)
+    if baseline[key] <= 0:
+        return False
+    baseline[key] -= 1
+    return True

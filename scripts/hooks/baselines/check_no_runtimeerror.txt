@@ -2,7 +2,8 @@
 scripts/hooks/_regen_baselines.py:3cbb26b4544f65ce  # L65: raise RuntimeError(f"unreadable: {path}")
 scripts/hooks/_regen_baselines.py:e9d160f6f0b303d4  # L68: raise RuntimeError(f"bad span {path}:{lineno}-{end_lineno}")
 utilities/ssh_utils.py:1dff1b5245233125  # L287: raise RuntimeError(f"Connection test failed: {err}")
-utilities/ssh_utils.py:b298d8a6d607cca4  # L240: raise RuntimeError("SSH connection not established"); L330: raise RuntimeError("SSH connection not established")
+utilities/ssh_utils.py:b298d8a6d607cca4  # L240: raise RuntimeError("SSH connection not established")
+utilities/ssh_utils.py:b298d8a6d607cca4  # L330: raise RuntimeError("SSH connection not established")
 utilities/ssh_utils.py:d50578f5bcba9642  # L261: raise RuntimeError(f"Port-forward setup failed: {e}")
 utilities/ssh_utils.py:d5e631c63d7e734a  # L233: raise RuntimeError(f"Failed to establish working port-forward after {...
 utilities/ssh_utils.py:e27fbb2cfb7ab6c2  # L264: raise RuntimeError("Port-forward failed to establish")

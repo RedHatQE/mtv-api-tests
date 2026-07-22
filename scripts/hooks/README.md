@@ -41,9 +41,12 @@ Current baselines:
   lines `lines[lineno-1:end_lineno]` joined with `\n`. Optional trailing `#`
   comments are allowed (e.g. `# L10: except Exception as e:`). Blank lines
   and full-line `#` comments are ignored.
-- Matching keys on **path + content fingerprint**, not lineno. Line drift from
-  refactors still suppresses the same content; editing any line in the
-  baselined span (including whitespace) does not.
+- Matching keys on **path + content fingerprint with occurrence counts**, not
+  lineno. Each baseline row grants one suppression; duplicate identical
+  violations need duplicate baseline rows. Newly added identical violations
+  fail when counts are exhausted. Line drift from refactors still suppresses
+  the same content; editing any line in the baselined span (including
+  whitespace) does not.
 - **Shrink** the baseline when you fix a violation (remove that line).
 - **Do not expand** baselines casually; only add lines via a deliberate process
   (e.g. issue #610 grandfathering). New path/fingerprint pairs not in the

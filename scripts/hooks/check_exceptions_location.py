@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from collections import Counter
 from functools import partial
 from pathlib import Path
 
@@ -48,10 +49,10 @@ def _base_identifier(base: ast.expr) -> str | None:
 
 
 def _base_is_exception_like(base: ast.expr) -> bool:
-    """Return True if ``base`` is a known exception base or ends with Error.
+    """Return True if ``base`` is a known exception base or ends with Error/Exception.
 
     Recognizes ``Exception``, ``BaseException``, ``ExceptionGroup``,
-    ``BaseExceptionGroup``, and names ending with ``Error``.
+    ``BaseExceptionGroup``, and names ending with ``Error`` or ``Exception``.
 
     Args:
         base (ast.expr): A ClassDef base expression.
@@ -62,14 +63,14 @@ def _base_is_exception_like(base: ast.expr) -> bool:
     name = _base_identifier(base)
     if name is None:
         return False
-    return name in _EXCEPTION_BASE_NAMES or name.endswith("Error")
+    return name in _EXCEPTION_BASE_NAMES or name.endswith(("Error", "Exception"))
 
 
 def check_file(
     path: Path,
     tree: ast.AST,
     collector: FindingCollector,
-    baseline: set[tuple[str, str]],
+    baseline: Counter[tuple[str, str]],
 ) -> None:
     """Flag exception-like subclasses defined outside exceptions/exceptions.py.
 
@@ -77,7 +78,8 @@ def check_file(
         path (Path): Source file path.
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
-        baseline (set[tuple[str, str]]): Grandfathered path/fingerprint pairs.
+        baseline (Counter[tuple[str, str]]): Grandfathered path/fingerprint
+            occurrence counts.
     """
     if _is_allowed_file(path):
         return

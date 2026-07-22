@@ -280,6 +280,21 @@ def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
     stack: list[ast.AST] = []
 
     def _visit(node: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
+        """Yield ``node`` with the live ancestor stack, then recurse into children.
+
+        The shared ``stack`` lists ancestors from the walk root to the parent of
+        the current node (excluding ``node`` itself). Before descending,
+        ``node`` is appended; after all children are visited, it is popped.
+        Callers must treat the yielded list as read-only and valid only for the
+        current iteration.
+
+        Args:
+            node (ast.AST): Current AST node to yield and recurse into.
+
+        Yields:
+            tuple[ast.AST, list[ast.AST]]: ``(node, stack)`` where ``stack`` is
+            the live ancestor list (root → parent) shared across the walk.
+        """
         yield node, stack
         stack.append(node)
         for child in ast.iter_child_nodes(node):

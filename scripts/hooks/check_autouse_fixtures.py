@@ -15,7 +15,11 @@ _ALLOWED_FILENAME = "conftest.py"
 
 
 def _collect_fixture_aliases(tree: ast.AST) -> tuple[frozenset[str], frozenset[str]]:
-    """Collect pytest module and fixture name aliases from imports.
+    """Collect pytest module and fixture name aliases from module-level imports.
+
+    Only scans ``Import`` / ``ImportFrom`` nodes in ``tree.body`` (module
+    scope). Nested imports inside functions or classes are ignored so
+    function-local aliases cannot broaden detection incorrectly.
 
     Always includes ``pytest`` and ``fixture`` so bare ``@pytest.fixture`` /
     ``@fixture`` keep working even when the import is not scanned (e.g. star
@@ -33,7 +37,8 @@ def _collect_fixture_aliases(tree: ast.AST) -> tuple[frozenset[str], frozenset[s
     """
     pytest_aliases: set[str] = {"pytest"}
     fixture_aliases: set[str] = {"fixture"}
-    for node in ast.walk(tree):
+    body = getattr(tree, "body", ())
+    for node in body:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "pytest":
@@ -79,9 +84,9 @@ def _fixture_has_autouse_enabled(dec: ast.expr) -> bool:
 
     Flags ``autouse=<truthy Constant>`` (``True``, ``1``, ``"yes"``, etc.) and
     any non-Constant ``autouse=`` expression (treated as a potential enable).
-    Does not flag ``autouse=False``, ``autouse=0``, or other falsy constants,
-    and does not flag a bare ``@fixture`` / ``@pytest.fixture`` with no
-    ``autouse`` keyword.
+    Also fail-closed on ``**kwargs`` (``keyword.arg is None``). Does not flag
+    ``autouse=False``, ``autouse=0``, or other falsy constants, and does not
+    flag a bare ``@fixture`` / ``@pytest.fixture`` with no ``autouse`` keyword.
 
     Args:
         dec (ast.expr): Decorator expression.
@@ -92,6 +97,9 @@ def _fixture_has_autouse_enabled(dec: ast.expr) -> bool:
     if not isinstance(dec, ast.Call):
         return False
     for keyword in dec.keywords:
+        # ``**kwargs`` / bare ``**`` — fail closed (treat as potentially enabled)
+        if keyword.arg is None:
+            return True
         if keyword.arg != "autouse":
             continue
         value = keyword.value
