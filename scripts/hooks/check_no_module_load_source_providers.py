@@ -43,7 +43,7 @@ def _is_load_source_providers_call(node: ast.Call) -> bool:
     return isinstance(func, ast.Attribute) and func.attr == "load_source_providers"
 
 
-def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def _check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
     """Flag import-time load_source_providers calls in one tests/ file.
 
     Args:
@@ -75,7 +75,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole tests/).
         collector (FindingCollector): Finding sink.
     """
-    for_each_parsed_file(paths if paths else ["tests"], collector, check_file)
+    for_each_parsed_file(paths if paths else ["tests"], collector, _check_file)
 
 
 if __name__ == "__main__":

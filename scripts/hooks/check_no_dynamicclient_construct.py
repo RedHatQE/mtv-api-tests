@@ -203,7 +203,7 @@ def _is_kubernetes_dynamic_client_call(
     return len(parts) == 4 and parts[0] in package_aliases and parts[1] == "dynamic" and parts[2] == "client"
 
 
-def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def _check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
     """Flag kubernetes DynamicClient(...) constructions in one file.
 
     Args:
@@ -244,7 +244,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for_each_parsed_file(paths, collector, check_file)
+    for_each_parsed_file(paths, collector, _check_file)
 
 
 if __name__ == "__main__":

@@ -125,7 +125,7 @@ def _is_allowlisted(path: Path, func_name: str) -> bool:
     return func_name == _ALLOWED_FIXTURE_NAME and repo_relative_posix(path) == _ALLOWED_FILENAME
 
 
-def check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def _check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
     """Flag enabled autouse fixtures that are not autouse_fixtures in conftest.py.
 
     Args:
@@ -165,7 +165,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = whole repo).
         collector (FindingCollector): Finding sink.
     """
-    for_each_parsed_file(paths, collector, check_file)
+    for_each_parsed_file(paths, collector, _check_file)
 
 
 if __name__ == "__main__":

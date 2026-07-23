@@ -42,7 +42,7 @@ def _type_contains_exception(typ: ast.expr | None) -> bool:
     return False
 
 
-def check_file(
+def _check_file(
     path: Path,
     tree: ast.AST,
     collector: FindingCollector,
@@ -85,7 +85,7 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
     if baseline is None:
         return
 
-    for_each_parsed_file(paths, collector, partial(check_file, baseline=baseline))
+    for_each_parsed_file(paths, collector, partial(_check_file, baseline=baseline))
 
 
 if __name__ == "__main__":
