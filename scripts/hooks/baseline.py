@@ -26,6 +26,32 @@ _LINE_CACHE: dict[Path, list[str]] = {}
 _ENTRY_RE = re.compile(r"^(?P<path>[^:#\s][^:#]*):(?P<fp>[0-9a-f]{16})(?:\s*(?:#.*)?)?$")
 
 
+def _baseline_path_error(rel_path: str) -> str | None:
+    """Return an error message if ``rel_path`` is not a valid baseline path key.
+
+    Baseline keys must be repo-root-relative POSIX paths (no absolute paths,
+    backslashes, ``.`` / ``..`` components, or ``./`` prefix) so they can match
+    keys produced by :func:`is_baselined`.
+
+    Args:
+        rel_path (str): Path portion of a baseline entry.
+
+    Returns:
+        str | None: Human-readable error, or ``None`` when the path is valid.
+    """
+    if not rel_path:
+        return "baseline path is empty"
+    if "\\" in rel_path:
+        return f"baseline path must use POSIX separators (/), got {rel_path!r}"
+    if rel_path.startswith("/") or (len(rel_path) >= 2 and rel_path[1] == ":"):
+        return f"baseline path must be repo-relative, not absolute: {rel_path!r}"
+    if rel_path.startswith("./"):
+        return f"baseline path must not start with './': {rel_path!r}"
+    if any(part in (".", "..") for part in rel_path.split("/")):
+        return f"baseline path must not contain '.' or '..' components: {rel_path!r}"
+    return None
+
+
 def _normalize_line(line: str) -> str:
     """Normalize a source line for fingerprinting.
 
@@ -146,7 +172,11 @@ def load_baseline(
         if match is None:
             errors.append((path, lineno, f"malformed baseline entry: {raw_line!r}"))
             continue
-        entries[(match.group("path"), match.group("fp"))] += 1
+        rel_path = match.group("path")
+        if path_err := _baseline_path_error(rel_path):
+            errors.append((path, lineno, path_err))
+            continue
+        entries[(rel_path, match.group("fp"))] += 1
     return entries, errors
 
 

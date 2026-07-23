@@ -14,18 +14,24 @@ from _ast_utils import (
     main_runner,
     walk_with_stack,
 )
+from baseline import repo_relative_posix
 
 
 def _is_under_tests(path: Path) -> bool:
-    """Return True if ``path`` is under a ``tests/`` directory.
+    """Return True if ``path`` is under the repo-root ``tests/`` tree.
+
+    Matches pre-commit ``files: ^tests/``: only paths whose repo-relative
+    POSIX form is ``tests`` or starts with ``tests/``. Nested ``*/tests/*``
+    directories elsewhere in the tree are out of scope.
 
     Args:
         path (Path): Source file path.
 
     Returns:
-        bool: Whether the path is inside tests/.
+        bool: Whether the path is inside repo-root tests/.
     """
-    return "tests" in path.parts
+    rel = repo_relative_posix(path)
+    return rel == "tests" or rel.startswith("tests/")
 
 
 def _is_load_source_providers_call(node: ast.Call) -> bool:
