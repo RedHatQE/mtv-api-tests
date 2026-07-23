@@ -899,16 +899,25 @@ structured properties (classification, details, suggested code fixes, bug report
 - A running [rootcoz](https://github.com/myk-org/rootcoz) server
 - `ROOTCOZ_SERVER_URL` environment variable set to the server URL
 
-**Environment variables:**
+**Environment variables (pytest client):**
 
 | Variable | Required | Default | Description |
 | -------- | -------- | ------- | ----------- |
 | `ROOTCOZ_SERVER_URL` | Yes | - | rootcoz server URL |
-| `ROOTCOZ_AI_PROVIDER` | No | `claude` | AI provider |
-| `ROOTCOZ_AI_MODEL` | No | `claude-opus-4-6[1m]` | AI model |
+| `ROOTCOZ_AI_PROVIDER` | No | from `.rootcoz/settings.json` via rootcoz | Optional override for AI provider |
+| `ROOTCOZ_AI_MODEL` | No | from `.rootcoz/settings.json` via rootcoz | Optional override for AI model |
 | `ROOTCOZ_TIMEOUT` | No | `600` | Request timeout in seconds |
 
 Environment variables can be set via a `.env` file in the project root (loaded automatically when the flag is used).
+Pytest does **not** read `.rootcoz/settings.json`. When `ROOTCOZ_AI_PROVIDER` /
+`ROOTCOZ_AI_MODEL` are unset, the request omits them and
+[rootcoz](https://github.com/myk-org/rootcoz) applies defaults from that file.
+
+**Repo settings for rootcoz (`.rootcoz/settings.json`):**
+
+This file is for the [rootcoz](https://github.com/myk-org/rootcoz) server/CLI when it analyzes this repository
+(provider/model defaults, peer configs, timeouts, `additional_repos`, and related options).
+rootcoz reads and applies it; pytest `--analyze-with-ai` only passes optional `ROOTCOZ_*` overrides when set.
 
 **Usage:**
 
@@ -923,6 +932,7 @@ uv run pytest -m tier0 -v --analyze-with-ai \
 - Requires `--junit-xml` (enabled by default in `pytest.ini`)
 - Skipped automatically during `--collectonly` and `--setupplan`
 - If `ROOTCOZ_SERVER_URL` is not set, the feature is disabled with a warning
+- If `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` are unset, rootcoz uses `.rootcoz/settings.json`
 - Original JUnit XML is preserved if enrichment fails
 
 ---

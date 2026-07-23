@@ -62,9 +62,10 @@ def prepare_base_path(base_path: Path) -> None:
 def setup_ai_analysis(session: pytest.Session) -> None:
     """Configure AI analysis for test failure reporting.
 
-    Loads environment variables, validates prerequisites, and sets defaults
-    for AI provider and model. Disables AI analysis if ROOTCOZ_SERVER_URL is missing
-    or if pytest was invoked with --collectonly or --setupplan.
+    Loads environment variables and validates prerequisites. Disables AI analysis
+    if ROOTCOZ_SERVER_URL is missing or if pytest was invoked with --collectonly
+    or --setupplan. Provider/model defaults live in `.rootcoz/settings.json` and
+    are applied by rootcoz, not by pytest.
 
     Args:
         session (pytest.Session): The pytest session object.
@@ -80,13 +81,6 @@ def setup_ai_analysis(session: pytest.Session) -> None:
     if not os.environ.get("ROOTCOZ_SERVER_URL"):
         LOGGER.warning("ROOTCOZ_SERVER_URL is not set. Analyze with AI features will be disabled.")
         session.config.option.analyze_with_ai = False
-
-    else:
-        if not os.environ.get("ROOTCOZ_AI_PROVIDER"):
-            os.environ["ROOTCOZ_AI_PROVIDER"] = "claude"
-
-        if not os.environ.get("ROOTCOZ_AI_MODEL"):
-            os.environ["ROOTCOZ_AI_MODEL"] = "claude-opus-4-6[1m]"
 
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:
@@ -464,12 +458,6 @@ def enrich_junit_xml(session: pytest.Session) -> None:
         )
         return
 
-    ai_provider = os.environ.get("ROOTCOZ_AI_PROVIDER")
-    ai_model = os.environ.get("ROOTCOZ_AI_MODEL")
-    if not ai_provider or not ai_model:
-        LOGGER.warning("ROOTCOZ_AI_PROVIDER and ROOTCOZ_AI_MODEL must be set, skipping AI analysis enrichment")
-        return
-
     server_url = os.environ["ROOTCOZ_SERVER_URL"]
     raw_xml = xml_path.read_text()
 
@@ -479,14 +467,17 @@ def enrich_junit_xml(session: pytest.Session) -> None:
         LOGGER.warning("Invalid ROOTCOZ_TIMEOUT value, using default 600 seconds")
         timeout_value = 600
 
+    # Optional overrides; when omitted, rootcoz uses .rootcoz/settings.json
+    payload: dict[str, str] = {"raw_xml": raw_xml}
+    if ai_provider := os.environ.get("ROOTCOZ_AI_PROVIDER"):
+        payload["ai_provider"] = ai_provider
+    if ai_model := os.environ.get("ROOTCOZ_AI_MODEL"):
+        payload["ai_model"] = ai_model
+
     try:
         response = requests.post(
             f"{server_url.rstrip('/')}/analyze-failures",
-            json={
-                "raw_xml": raw_xml,
-                "ai_provider": ai_provider,
-                "ai_model": ai_model,
-            },
+            json=payload,
             timeout=timeout_value,
         )
         response.raise_for_status()
