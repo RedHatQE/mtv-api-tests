@@ -1048,6 +1048,9 @@ def prepared_plan(
     # Override VM names from provider config if specified
     apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
 
+    if plan.get("disable_drs_for_vms", False) and source_provider.type == Provider.ProviderType.OVA:
+        raise ValueError("disable_drs_for_vms is not supported for OVA providers")
+
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
