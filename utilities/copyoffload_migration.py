@@ -1413,6 +1413,7 @@ def _verify_throttled_events_on_pod_logs(
     migration_uid: str,
     pod_logs: list[PopulatePodLogData],
     max_populator_inflight: int,
+    min_expected_throttled: int | None = None,
 ) -> None:
     """Verify PopulatorThrottled events on PVCs using cached pod log data.
 
@@ -1425,13 +1426,18 @@ def _verify_throttled_events_on_pod_logs(
         migration_uid (str): Migration UID for PVC label selector and error messages.
         pod_logs (list[PopulatePodLogData]): Cached populate pod log data.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        min_expected_throttled (int | None): Minimum expected PVCs with PopulatorThrottled
+            events. When None, defaults to ``pod_count - max_populator_inflight`` (parallel
+            disks). Pass an explicit value for sequential-VM migrations where the default
+            over-counts (e.g. MTV-777).
 
     Raises:
-        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
-            PopulatorThrottled events.
+        ValueError: If the minimum expected throttled count is not positive, or too few PVCs
+            have PopulatorThrottled events.
     """
     pod_count = len(pod_logs)
-    min_expected_throttled = pod_count - max_populator_inflight
+    if min_expected_throttled is None:
+        min_expected_throttled = pod_count - max_populator_inflight
     if min_expected_throttled <= 0:
         raise ValueError(
             f"Expected more populate pods ({pod_count}) than in-flight limit "
@@ -1478,6 +1484,7 @@ def verify_populator_throttling(
     max_concurrent_by_host: dict[str, int],
     fixture_store: dict[str, Any],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+    min_expected_throttled: int | None = None,
 ) -> str:
     """Verify MTV-696 populator throttling: labels, events, and peak concurrency.
 
@@ -1493,6 +1500,10 @@ def verify_populator_throttling(
             observed during migration.
         fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        min_expected_throttled (int | None): Minimum expected PVCs with PopulatorThrottled
+            events. When None, defaults to ``pod_count - max_populator_inflight``. Pass an
+            explicit value for sequential-VM migrations (e.g. MTV-777) where the default
+            over-counts.
 
     Returns:
         str: The shared sourceHost label value from all populate pods.
@@ -1514,13 +1525,14 @@ def verify_populator_throttling(
         migration_uid=migration_uid,
         pod_logs=pod_logs,
         max_populator_inflight=max_populator_inflight,
+        min_expected_throttled=min_expected_throttled,
     )
     if source_host not in max_concurrent_by_host:
         raise ValueError(
             f"No populator monitoring data for sourceHost {source_host!r}; "
             f"observed during migration: {sorted(max_concurrent_by_host)}"
         )
-    _verify_populator_inflight_observed(
+    verify_populator_inflight_observed(
         max_concurrent_by_host={source_host: max_concurrent_by_host[source_host]},
         max_populator_inflight=max_populator_inflight,
         disk_count=len(pod_logs),
@@ -1528,12 +1540,15 @@ def verify_populator_throttling(
     return source_host
 
 
-def _verify_populator_inflight_observed(
+def verify_populator_inflight_observed(
     max_concurrent_by_host: dict[str, int],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
     disk_count: int | None = None,
 ) -> None:
-    """Verify observed peak populator concurrency respects the configured in-flight limit.
+    """Verify observed peak concurrent populate pods per host respect the in-flight limit.
+
+    Peak-only check: validates concurrency ceilings (and optional minimum peak when
+    ``disk_count`` is set). Does not verify PopulatorThrottled events or sourceHost labels.
 
     When ``disk_count`` is provided, also verifies the limit was exercised: peak concurrency
     must reach ``min(max_populator_inflight, disk_count)``. For example, 5 disks with limit 2

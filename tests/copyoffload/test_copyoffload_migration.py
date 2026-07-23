@@ -5387,22 +5387,27 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
     """Copy-offload migration (MTV-777): combined VM and populator inflight throttling.
 
     Covers MTV-777:
-    - Set controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (2)
+    - Set controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and
+      controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (2)
     - Migrate 2 VMs with 3 disks each (1 OS + 2 additional) from the same ESXi host
-    - Verify peak concurrent VMs per host respects VM_INFLIGHT_LIMIT (VM throttling)
+    - Verify peak concurrent VMs per host respects VM_INFLIGHT_LIMIT
+    - Verify populator throttling: sourceHost labels, PopulatorThrottled events
+      (sequential-VM expected count), and peak concurrent populate pods
+      (VM_POPULATOR_INFLIGHT_LIMIT)
     - Verify XCOPY was used for all disks (populator log cache validates xcopy path)
     - Restore both limits after the class completes
 
     Note:
-        Requires all VMs to clone to the same ESXi host. Set 'copyoffload.esxi_host'
-        in providers.json to the target ESXi host FQDN/IP that maps to the same
-        vCenter-registered host for both clones.
+        Requires all VMs on the same ESXi host. Plan config uses
+        ``clone_to_same_host`` and ``disable_drs_for_vms`` so clones land on and
+        stay on VM1's host.
     """
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
     max_concurrent_vms_by_host: dict[str, int]
+    max_concurrent_populators_by_host: dict[str, int]
 
     def test_create_storagemap(
         self,
@@ -5547,7 +5552,7 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
             source_provider_inventory (ForkliftInventory): Inventory API for ESXi host lookup.
         """
         vm_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
-        vm_results, _ = execute_migration_monitoring_vm_and_populator_inflight(
+        vm_results, populator_results = execute_migration_monitoring_vm_and_populator_inflight(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
@@ -5558,26 +5563,51 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
             max_populator_inflight=VM_POPULATOR_INFLIGHT_LIMIT,
         )
         self.__class__.max_concurrent_vms_by_host = vm_results
+        self.__class__.max_concurrent_populators_by_host = populator_results
 
-    def test_verify_vm_populator_throttling(
-        self,
-        prepared_plan: dict[str, Any],
-    ) -> None:
-        """Verify VM inflight throttling was enforced.
-
-        PopulatorThrottled event verification is omitted: with VM_INFLIGHT_LIMIT=1,
-        VMs migrate sequentially and the expected event count is per-VM-batch
-        (disks_per_vm - limit), not total_pods - limit. Populator event coverage
-        is provided by TestCopyoffloadPopulatorThrottlingMigration (MTV-696).
+    def test_verify_vm_inflight_throttling(self, prepared_plan: dict[str, Any]) -> None:
+        """Verify peak concurrent VMs per ESXi host respects VM_INFLIGHT_LIMIT.
 
         Args:
             prepared_plan (dict[str, Any]): Prepared plan configuration (for VM count).
         """
-        vm_count = len(prepared_plan["virtual_machines"])
         verify_vm_inflight_throttling(
             max_concurrent_by_host=self.max_concurrent_vms_by_host,
-            vm_count=vm_count,
+            vm_count=len(prepared_plan["virtual_machines"]),
             max_vm_inflight=VM_INFLIGHT_LIMIT,
+        )
+
+    def test_verify_populator_throttling(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],
+    ) -> None:
+        """Verify sourceHost labels, PopulatorThrottled events, and peak concurrency.
+
+        With VM_INFLIGHT_LIMIT=1, VMs migrate sequentially, so the minimum expected
+        PopulatorThrottled count is per-VM-batch
+        (``vm_count * max(0, disks_per_vm - limit)``), not ``total_pods - limit``.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods and PVCs exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+            prepared_plan (dict[str, Any]): Prepared plan configuration (for VM/disk counts).
+        """
+        virtual_machines = prepared_plan["virtual_machines"]
+        vm_count = len(virtual_machines)
+        disks_per_vm = 1 + len(virtual_machines[0]["add_disks"])
+        min_expected_throttled = vm_count * max(0, disks_per_vm - VM_POPULATOR_INFLIGHT_LIMIT)
+        verify_populator_throttling(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            max_concurrent_by_host=self.max_concurrent_populators_by_host,
+            fixture_store=fixture_store,
+            max_populator_inflight=VM_POPULATOR_INFLIGHT_LIMIT,
+            min_expected_throttled=min_expected_throttled,
         )
 
     def test_check_xcopy_used(

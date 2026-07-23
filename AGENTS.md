@@ -823,6 +823,14 @@ class TestNameHere:
   `test_check_xcopy_used`. This step calls `verify_populator_throttling()` from `utilities/copyoffload_migration.py`
   to validate per-ESXi-host concurrency limits, `PopulatorThrottled` events, and `sourceHost` labels.
   Requires the `populator_inflight_forkliftcontroller` fixture.
+- **8-step copy-offload VM+populator throttling pattern**: storagemap -> networkmap -> plan -> migrate ->
+  `verify_vm_inflight_throttling` -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
+  Combined VM and populator inflight tests (MTV-777) split verification into two steps after
+  `test_migrate_vms`: `test_verify_vm_inflight_throttling` (peak concurrent VMs per host) then
+  `test_verify_populator_throttling` (sourceHost labels, `PopulatorThrottled` events, peak populate
+  pods). With sequential VMs (`VM_INFLIGHT_LIMIT=1`), pass `min_expected_throttled` to
+  `verify_populator_throttling()` as `vm_count * max(0, disks_per_vm - limit)` instead of the default
+  `pod_count - limit`. Requires the `vm_populator_inflight_forkliftcontroller` fixture.
 - **6-step LUKS pattern**: storagemap -> networkmap -> plan -> migrate -> verify_luks_encryption -> check_vms
   `test_verify_luks_encryption` calls `verify_luks_encryption()` from `utilities/post_migration.py`. LUKS
   secret setup is handled by the `luks_vm_specs` fixture in `tests/luks/conftest.py`, which resolves
@@ -838,6 +846,8 @@ class TestNameHere:
 `test_verify_shared_disk_data`, `test_check_vms`. Shared-disk Windows tests: `test_label_shared_disk`,
 then the base five through `test_migrate_vms`, then `test_verify_shared_disk_data`, `test_check_vms`. Copy-offload tests: same through `test_migrate_vms`, then
 `test_check_xcopy_used`, `test_check_vms`. Copy-offload throttling tests: same through `test_migrate_vms`, then
+`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. Copy-offload VM+populator
+throttling tests: same through `test_migrate_vms`, then `test_verify_vm_inflight_throttling`,
 `test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. LUKS tests: same through `test_migrate_vms`, then
 `test_verify_luks_encryption`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
 `test_verify_xfs_version`, `test_check_vms`.
