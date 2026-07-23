@@ -347,6 +347,7 @@ class VMWareProvider(BaseProvider):
             VmCloneError: If the VM has no runtime host, is not in a
                 ClusterComputeResource, per-VM DRS overrides are disabled on
                 the cluster, or if the DRS reconfigure task fails.
+            TimeoutExpiredError: If the DRS reconfiguration task times out.
         """
         host = vm.runtime.host
         if host is None:

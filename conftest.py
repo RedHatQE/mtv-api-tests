@@ -1126,7 +1126,7 @@ def prepared_plan(
             # Capture first VM's ESXi hostname for subsequent same-host clones.
             if plan.get("clone_to_same_host", False) and first_vm_esxi_host is None:
                 runtime_host = provider_vm_api.runtime.host
-                if not runtime_host or not runtime_host.name:
+                if runtime_host is None or not runtime_host.name:
                     raise ValueError(
                         f"clone_to_same_host=True but could not determine ESXi host "
                         f"for VM '{vm['name']}'. Cannot pin subsequent clones."
