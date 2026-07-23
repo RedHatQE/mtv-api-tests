@@ -1605,14 +1605,17 @@ def _build_vm_host_map(
     vm_names: list[str],
     source_provider_inventory: ForkliftInventory,
 ) -> dict[str, str]:
-    """Build a mapping of VM name to ESXi host identifier from the Forklift inventory.
+    """Build a mapping of VM name/id to ESXi host identifier from the Forklift inventory.
+
+    Keys include each VM's inventory name and, when present, its inventory id so Plan
+    status lookups can resolve a host by either field.
 
     Args:
         vm_names (list[str]): VM names to resolve.
         source_provider_inventory (ForkliftInventory): Inventory API client.
 
     Returns:
-        dict[str, str]: Mapping of VM name to ESXi host identifier.
+        dict[str, str]: Mapping of VM name (and id when available) to ESXi host identifier.
 
     Raises:
         ValueError: If any VM is missing a 'host' field in the inventory response.
@@ -1620,8 +1623,12 @@ def _build_vm_host_map(
     vm_host_map: dict[str, str] = {}
     for vm_name in vm_names:
         vm_data = source_provider_inventory.get_vm(vm_name)
-        vm_host_map[vm_name] = _get_vm_esxi_host(vm_data=vm_data, vm_name=vm_name)
-        LOGGER.info(f"VM '{vm_name}' is on ESXi host '{vm_host_map[vm_name]}'")
+        host = _get_vm_esxi_host(vm_data=vm_data, vm_name=vm_name)
+        vm_host_map[vm_name] = host
+        vm_id = vm_data.get("id")
+        if vm_id:
+            vm_host_map[str(vm_id)] = host
+        LOGGER.info(f"VM '{vm_name}' is on ESXi host '{host}'")
     return vm_host_map
 
 
@@ -1633,13 +1640,18 @@ def _count_active_vms_by_host(
 
     Mirrors the vSphere scheduler cost function for copy-offload migrations:
     cost=1 during disk transfer phases, cost=0 for CreateVM/PostHook/Completed/Canceled.
+    Resolves each active VM's host from ``vm_host_map`` by Plan status name first,
+    then by status id.
 
     Args:
         plan (Plan): The Plan CR resource (read live each poll).
-        vm_host_map (dict[str, str]): Pre-built mapping of VM name to ESXi host.
+        vm_host_map (dict[str, str]): Pre-built mapping of VM name/id to ESXi host.
 
     Returns:
         dict[str, int]: Count of in-flight VMs per ESXi host.
+
+    Raises:
+        ValueError: If an active VM cannot be resolved to a host in ``vm_host_map``.
     """
     counts: dict[str, int] = defaultdict(int)
     migration_status = getattr(plan.instance.status, "migration", None)
@@ -1647,14 +1659,19 @@ def _count_active_vms_by_host(
         return {}
     for vm_status in migration_status.vms or []:
         name = getattr(vm_status, "name", "")
+        vm_id = getattr(vm_status, "id", "")
         started = getattr(vm_status, "started", None)
         completed = getattr(vm_status, "completed", None)
         phase = getattr(vm_status, "phase", "")
         if not started or completed or phase in _ZERO_COST_VM_PHASES:
             continue
-        host = vm_host_map.get(name)
-        if host:
-            counts[host] += 1
+        host = vm_host_map.get(name) or vm_host_map.get(vm_id)
+        if not host:
+            raise ValueError(
+                f"Active VM status name={name!r} id={vm_id!r} could not be resolved "
+                f"to an ESXi host in vm_host_map. Known keys: {sorted(vm_host_map)}"
+            )
+        counts[host] += 1
     return dict(counts)
 
 
@@ -1671,7 +1688,7 @@ class _VmConcurrencyTracker:
 
         Args:
             plan (Plan): The Plan CR resource defining the migration configuration.
-            vm_host_map (dict[str, str]): Pre-built mapping of VM name to ESXi host.
+            vm_host_map (dict[str, str]): Pre-built mapping of VM name/id to ESXi host.
             max_vm_inflight (int): Expected ForkliftController VM in-flight limit.
         """
         self._plan = plan

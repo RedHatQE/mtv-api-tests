@@ -5569,7 +5569,6 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         VMs migrate sequentially and the expected event count is per-VM-batch
         (disks_per_vm - limit), not total_pods - limit. Populator event coverage
         is provided by TestCopyoffloadPopulatorThrottlingMigration (MTV-696).
-        Populator sourceHost labels and concurrency are validated via test_check_xcopy_used.
 
         Args:
             prepared_plan (dict[str, Any]): Prepared plan configuration (for VM count).

@@ -1094,6 +1094,11 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
+        if plan.get("disable_drs_for_vms", False) and not isinstance(clone_provider, VMWareProvider):
+            raise ValueError(
+                f"disable_drs_for_vms requires a VMware clone provider, got '{type(clone_provider).__name__}'"
+            )
+
         if plan.get("preserve_static_ips"):
             for vm in virtual_machines:
                 if vm.get("source_vm_power") != "on":
