@@ -292,7 +292,18 @@ class ForkliftInventory(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+    def vms_networks_mappings(self, vms: list[str], deduplicate: bool = True) -> list[dict[str, str]]:
+        """Get network mappings for the given VMs.
+
+        Args:
+            vms (list[str]): List of VM names to get network mappings for.
+            deduplicate (bool): When True (default), collapse repeated network
+                entries into a single mapping. When False, return one entry per
+                NIC even if multiple NICs share the same source network.
+
+        Returns:
+            list[dict[str, str]]: List of network mappings.
+        """
         pass
 
 
@@ -329,7 +340,7 @@ class OvirtForkliftInventory(ForkliftInventory):
 
         return _mappings
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+    def vms_networks_mappings(self, vms: list[str], deduplicate: bool = True) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
@@ -344,7 +355,9 @@ class OvirtForkliftInventory(ForkliftInventory):
                         _selfLink = _nic_profile["selfLink"].replace("providers/", "")
                         _network_id = self._request(url_path=_selfLink)["network"]
                         if _network_name_match := [_net["path"] for _net in self.networks if _network_id == _net["id"]]:
-                            if [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
+                            if deduplicate and [
+                                _map for _map in _mappings if _map.get("name") == _network_name_match[0]
+                            ]:
                                 continue
 
                             _mappings.append({"name": _network_name_match[0]})
@@ -392,7 +405,7 @@ class OpenstackForliftinventory(ForkliftInventory):
 
         return _mappings
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+    def vms_networks_mappings(self, vms: list[str], deduplicate: bool = True) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
@@ -400,7 +413,7 @@ class OpenstackForliftinventory(ForkliftInventory):
 
             for _name in _vm.get("addresses", {}).keys():
                 if _network_id_match := [_net["id"] for _net in self.networks if _name == _net["name"]]:
-                    if [_map for _map in _mappings if _map.get("id") == _network_id_match[0]]:
+                    if deduplicate and [_map for _map in _mappings if _map.get("id") == _network_id_match[0]]:
                         continue
 
                     _mappings.append({"id": _network_id_match[0], "name": _name})
@@ -547,7 +560,7 @@ class VsphereForkliftInventory(ForkliftInventory):
 
         return _mappings
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+    def vms_networks_mappings(self, vms: list[str], deduplicate: bool = True) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
@@ -555,7 +568,7 @@ class VsphereForkliftInventory(ForkliftInventory):
             for _nic in _vm.get("nics", []):
                 if _network_id := (_nic.get("network") or {}).get("id"):
                     if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
-                        if [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
+                        if deduplicate and [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
                             continue
 
                         _mappings.append({"name": _network_name_match[0]})
@@ -593,7 +606,7 @@ class OvaForkliftInventory(ForkliftInventory):
 
         return _mappings
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+    def vms_networks_mappings(self, vms: list[str], deduplicate: bool = True) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
@@ -602,7 +615,7 @@ class OvaForkliftInventory(ForkliftInventory):
             for _network in _vm.get("networks", []):
                 if _network_id := _network.get("ID"):
                     if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
-                        if [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
+                        if deduplicate and [_map for _map in _mappings if _map.get("name") == _network_name_match[0]]:
                             continue
 
                         _mappings.append({"name": _network_name_match[0]})
@@ -648,7 +661,7 @@ class OpenshiftForkliftInventory(ForkliftInventory):
 
         return _mappings
 
-    def vms_networks_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+    def vms_networks_mappings(self, vms: list[str], deduplicate: bool = True) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
 
         for vm in vms:
@@ -664,7 +677,7 @@ class OpenshiftForkliftInventory(ForkliftInventory):
                     _network_map = {"type": "pod"}
 
                 if _network_map:
-                    if [_map for _map in _mappings if _map == _network_map]:
+                    if deduplicate and [_map for _map in _mappings if _map == _network_map]:
                         continue
 
                     _mappings.append(_network_map)

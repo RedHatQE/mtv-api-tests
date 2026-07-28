@@ -231,6 +231,10 @@ def get_per_nic_networks(
 ) -> list[dict[str, str]]:
     """Collect one network entry per NIC across all VMs without deduplication.
 
+    Delegates to the provider-specific ``vms_networks_mappings()`` with
+    ``deduplicate=False`` so each NIC produces its own entry — even when
+    multiple NICs share the same source network.
+
     Args:
         source_provider_inventory (ForkliftInventory): Source provider inventory.
         vms (list[str]): VM names to query.
@@ -239,25 +243,9 @@ def get_per_nic_networks(
         list[dict[str, str]]: Network entries, one per NIC (may contain duplicates).
 
     Raises:
-        ValueError: If a VM has no NICs, a NIC has no network ID, or a network ID is unresolvable.
+        ValueError: If no network mappings found for the given VMs.
     """
-    networks: list[dict[str, str]] = []
-    network_names = {net["id"]: net["name"] for net in source_provider_inventory.networks}
-    for vm_name in vms:
-        vm_data = source_provider_inventory.get_vm(name=vm_name)
-        nics = vm_data.get("nics", [])
-        if not nics:
-            raise ValueError(f"VM '{vm_name}' has no NICs in the inventory")
-        for nic in nics:
-            network_id = (nic.get("network") or {}).get("id")
-            if not network_id:
-                raise ValueError(f"NIC in VM '{vm_name}' has no network ID")
-            if network_id not in network_names:
-                raise ValueError(f"Network ID '{network_id}' not found in provider inventory for VM '{vm_name}'")
-            networks.append({"name": network_names[network_id]})
-    if not networks:
-        raise ValueError(f"Networks not found for vms {vms}")
-    return networks
+    return source_provider_inventory.vms_networks_mappings(vms=vms, deduplicate=False)
 
 
 def gen_network_map_list(
@@ -282,7 +270,7 @@ def gen_network_map_list(
         list[dict[str, dict[str, str]]]: Network map entries.
 
     Raises:
-        ValueError: If no networks are found or a NIC has no resolvable network.
+        ValueError: If no networks are found for the given VMs.
     """
     network_map_list: list[dict[str, dict[str, str]]] = []
     _destination_pod: dict[str, str] = {"type": "pod"}

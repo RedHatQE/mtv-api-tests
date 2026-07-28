@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING, Any
+
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -10,6 +12,12 @@ from utilities.mtv_migration import (
     get_storage_migration_map,
 )
 from utilities.utils import populate_vm_ids
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
+    from libs.base_provider import BaseProvider
+    from libs.forklift_inventory import ForkliftInventory
+    from libs.providers.openshift import OCPProvider
 
 
 @pytest.mark.vsphere
@@ -52,14 +60,14 @@ class TestColdDualNicSameNetworkPlanValidation:
 
     def test_create_storagemap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: "BaseProvider",
+        destination_provider: "BaseProvider",
+        source_provider_inventory: "ForkliftInventory",
+        target_namespace: str,
+    ) -> None:
         """Create StorageMap resource.
 
         Expected result: StorageMap is created successfully and stored as class attribute.
@@ -78,15 +86,15 @@ class TestColdDualNicSameNetworkPlanValidation:
 
     def test_create_networkmap(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        multus_network_name,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: "BaseProvider",
+        destination_provider: "BaseProvider",
+        source_provider_inventory: "ForkliftInventory",
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
         """Create NetworkMap with per-NIC mappings allowing duplicate source network entries.
 
         Creates a NetworkMap where both VM NICs (connected to the same source network) are mapped
@@ -111,14 +119,14 @@ class TestColdDualNicSameNetworkPlanValidation:
 
     def test_create_plan(
         self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        target_namespace,
-        source_provider_inventory,
-    ):
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: "BaseProvider",
+        destination_provider: "OCPProvider",
+        target_namespace: str,
+        source_provider_inventory: "ForkliftInventory",
+    ) -> None:
         """Create Plan using NetworkMap with duplicate source network entries.
 
         Creates an MTV Plan CR referencing the NetworkMap with duplicate source network entries

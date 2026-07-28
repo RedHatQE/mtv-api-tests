@@ -1123,6 +1123,17 @@ def prepared_plan(
 
         skip_clone = plan.get("skip_clone", False)
 
+        if skip_clone:
+            conflicting = [
+                flag for flag in ("preserve_static_ips", "disable_drs_for_vms", "clone_to_same_host") if plan.get(flag)
+            ]
+            if has_shared_disk_config:
+                conflicting.append("migrate_shared_disks")
+            if conflicting:
+                raise ValueError(
+                    f"skip_clone=True is incompatible with {conflicting}; these options require the cloning phase."
+                )
+
         if not skip_clone:
             for vm in virtual_machines:
                 clone_options = {**vm, "enable_ctk": warm_migration}
