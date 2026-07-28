@@ -1134,14 +1134,26 @@ def prepared_plan(
             conflicting = [
                 flag for flag in ("preserve_static_ips", "disable_drs_for_vms", "clone_to_same_host") if plan.get(flag)
             ]
-            if any(vm.get("source_vm_power") is not None for vm in virtual_machines):
-                conflicting.append("source_vm_power")
             if has_shared_disk_config:
                 conflicting.append("migrate_shared_disks")
             if conflicting:
                 raise ValueError(
                     f"skip_clone=True is incompatible with {conflicting}; these options require the cloning phase."
                 )
+
+        if skip_clone:
+            for vm in virtual_machines:
+                source_vm_power = vm.get("source_vm_power")
+                if source_vm_power:
+                    provider_vm_api = source_provider.get_vm_by_name(vm["name"])
+                    if source_vm_power == "on":
+                        source_provider.start_vm(provider_vm_api)
+                        if source_provider.type == Provider.ProviderType.VSPHERE:
+                            source_provider.wait_for_vmware_guest_info(
+                                provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                            )
+                    elif source_vm_power == "off":
+                        source_provider.stop_vm(provider_vm_api)
 
         if not skip_clone:
             for vm in virtual_machines:
