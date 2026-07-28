@@ -877,7 +877,14 @@ def multus_network_name(
 
     # Calculate how many multus NADs we need
     if class_plan_config.get("per_nic_network_map", False):
-        multus_count = len(get_per_nic_networks(source_provider_inventory=source_provider_inventory, vms=vms)) - 1
+        multus_count = (
+            len(
+                get_per_nic_networks(
+                    source_provider=source_provider, source_provider_inventory=source_provider_inventory, vms=vms
+                )
+            )
+            - 1
+        )
     else:
         multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
 
@@ -1127,6 +1134,8 @@ def prepared_plan(
             conflicting = [
                 flag for flag in ("preserve_static_ips", "disable_drs_for_vms", "clone_to_same_host") if plan.get(flag)
             ]
+            if any(vm.get("source_vm_power") is not None for vm in virtual_machines):
+                conflicting.append("source_vm_power")
             if has_shared_disk_config:
                 conflicting.append("migrate_shared_disks")
             if conflicting:

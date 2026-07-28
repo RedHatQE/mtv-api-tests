@@ -645,6 +645,7 @@ def get_network_migration_map(
         raise ValueError("destination_provider.ocp_resource is not set")
 
     network_map_list = gen_network_map_list(
+        source_provider=source_provider,
         target_namespace=target_namespace,
         source_provider_inventory=source_provider_inventory,
         multus_network_name=multus_network_name,

@@ -411,12 +411,15 @@ class OpenstackForliftinventory(ForkliftInventory):
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
 
-            for _name in _vm.get("addresses", {}).keys():
+            for _name, _ports in _vm.get("addresses", {}).items():
                 if _network_id_match := [_net["id"] for _net in self.networks if _name == _net["name"]]:
-                    if deduplicate and [_map for _map in _mappings if _map.get("id") == _network_id_match[0]]:
-                        continue
-
-                    _mappings.append({"id": _network_id_match[0], "name": _name})
+                    if deduplicate:
+                        if [_map for _map in _mappings if _map.get("id") == _network_id_match[0]]:
+                            continue
+                        _mappings.append({"id": _network_id_match[0], "name": _name})
+                    else:
+                        for _ in _ports:
+                            _mappings.append({"id": _network_id_match[0], "name": _name})
 
         if not _mappings:
             raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
