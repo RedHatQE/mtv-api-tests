@@ -333,6 +333,17 @@ class VMWareProvider(BaseProvider):
         if vm.runtime.powerState == vm.runtime.powerState.poweredOn:
             self.wait_task(task=vm.PowerOff(), action_name=f"Stopping VM {vm.name}")
 
+    def is_vm_powered_on(self, vm: vim.VirtualMachine) -> bool:
+        """Check whether a VM is currently powered on.
+
+        Args:
+            vm (vim.VirtualMachine): The VM to check
+
+        Returns:
+            bool: True if the VM is powered on, False otherwise
+        """
+        return bool(vm.runtime.powerState == vm.runtime.powerState.poweredOn)
+
     def disable_drs_for_vm(self, vm: vim.VirtualMachine) -> None:
         """Disable DRS for a specific VM to prevent relocation after cloning.
 

@@ -175,6 +175,17 @@ class OvirtProvider(BaseProvider):
                 condition_func=lambda: vm_service.get().status == types.VmStatus.DOWN,
             )
 
+    def is_vm_powered_on(self, vm: types.Vm) -> bool:
+        """Check whether a VM is currently powered on.
+
+        Args:
+            vm (types.Vm): The VM to check
+
+        Returns:
+            bool: True if the VM is powered on, False otherwise
+        """
+        return self.vms_services.vm_service(vm.id).get().status == VmStatus.UP
+
     def vm_dict(self, **kwargs: Any) -> dict[str, Any]:
         # If VM object already provided, use it directly (avoids re-searching for cloned VMs)
         source_vm = kwargs.get("provider_vm_api")

@@ -1064,6 +1064,10 @@ def prepared_plan(
     if plan.get("disable_drs_for_vms", False) and source_provider.type == Provider.ProviderType.OVA:
         raise ValueError("disable_drs_for_vms is not supported for OVA providers")
 
+    # Original power states of skip_clone VMs, restored in teardown below since these are
+    # shared, real VMs (not disposable clones) that other tests may depend on.
+    original_power_states: list[tuple[str, str]] = []
+
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
@@ -1146,6 +1150,10 @@ def prepared_plan(
                 source_vm_power = vm.get("source_vm_power")
                 if source_vm_power:
                     provider_vm_api = source_provider.get_vm_by_name(vm["name"])
+                    original_power_states.append((
+                        vm["name"],
+                        "on" if source_provider.is_vm_powered_on(provider_vm_api) else "off",
+                    ))
                     if source_vm_power == "on":
                         source_provider.start_vm(provider_vm_api)
                         if source_provider.type == Provider.ProviderType.VSPHERE:
@@ -1285,6 +1293,15 @@ def prepared_plan(
     create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 
     yield plan
+
+    # Restore original power states of skip_clone VMs. Unlike cloned VMs (disposable), these
+    # are real, shared VMs that other tests may depend on.
+    for vm_name, original_power in original_power_states:
+        provider_vm_api = source_provider.get_vm_by_name(vm_name)
+        if original_power == "on":
+            source_provider.start_vm(provider_vm_api)
+        else:
+            source_provider.stop_vm(provider_vm_api)
 
     # Reattach orphaned VMDKs to consumer clones so normal VM deletion cleans them up.
     # During relink, consumer clones' shared disks are redirected to the owner's VMDK,

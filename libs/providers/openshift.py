@@ -107,6 +107,18 @@ class OCPProvider(BaseProvider):
         if vm_api.ready:
             vm_api.stop(vmi_delete_timeout=600, wait=True)
 
+    @staticmethod
+    def is_vm_powered_on(vm_api: VirtualMachine) -> bool:
+        """Check whether a VM is currently powered on.
+
+        Args:
+            vm_api (VirtualMachine): The VM to check
+
+        Returns:
+            bool: True if the VM is ready (running), False otherwise
+        """
+        return bool(vm_api.ready)
+
     def vm_dict(
         self, *, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any
     ) -> dict[str, Any]:

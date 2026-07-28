@@ -583,6 +583,17 @@ class OpenStackProvider(BaseProvider):
             LOGGER.error(f"An error occurred while starting VM '{vm.name}': {e}")
             raise
 
+    def is_vm_powered_on(self, vm: OSP_Server) -> bool:
+        """Check whether a VM is currently powered on.
+
+        Args:
+            vm (OSP_Server): The server object to check
+
+        Returns:
+            bool: True if the VM is running (ACTIVE), False otherwise
+        """
+        return self.api.compute.get_server(vm.id).status == "ACTIVE"
+
     def get_vm_or_template_networks(
         self,
         names: list[str],
