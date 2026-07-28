@@ -411,7 +411,12 @@ class OpenstackForliftinventory(ForkliftInventory):
         for _vm_name in vms:
             _vm = self.get_vm(name=_vm_name)
 
-            for _name, _ports in _vm.get("addresses", {}).items():
+            addresses = _vm.get("addresses", {})
+            if not isinstance(addresses, dict):
+                raise TypeError(
+                    f"Expected 'addresses' to be a mapping for VM '{_vm_name}', got {type(addresses).__name__}"
+                )
+            for _name, _ports in addresses.items():
                 if _network_id_match := [_net["id"] for _net in self.networks if _name == _net["name"]]:
                     if deduplicate:
                         if [_map for _map in _mappings if _map.get("id") == _network_id_match[0]]:

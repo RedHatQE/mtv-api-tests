@@ -376,23 +376,26 @@ class OvirtProvider(BaseProvider):
         names: list[str],
         inventory: ForkliftInventory,
     ) -> list[dict[str, str]]:
-        """Use existing get_template_networks() for RHV templates.
+        """Resolve network mappings for RHV VMs or templates.
+
+        RHV entities are either VMs (present in Forklift inventory after
+        cloning) or templates (absent from inventory). This method checks
+        inventory membership to determine the entity type and routes to
+        the correct data source.
 
         Args:
-            names: List of template names to query
-            inventory: Forklift inventory instance (ignored for RHV, uses direct template API)
+            names (list[str]): VM or template names to query.
+            inventory (ForkliftInventory): Forklift inventory instance.
 
         Returns:
-            List of network mappings
+            list[dict[str, str]]: Network mappings.
 
         Raises:
-            ValueError: If no networks found for any of the templates
-
-        Note:
-            The inventory parameter is required for API compatibility but is ignored for RHV.
-            RHV uses direct template API instead of Forklift inventory.
+            ValueError: If no networks found for the given names.
         """
-        # Inventory is ignored for RHV - we use direct template API
+        inventory_vms = set(inventory.vms_names)
+        if all(name in inventory_vms for name in names):
+            return inventory.vms_networks_mappings(vms=names)
         return self.get_template_networks(template_names=names)
 
     def clone_vm(
