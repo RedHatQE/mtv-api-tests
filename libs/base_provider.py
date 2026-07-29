@@ -122,3 +122,11 @@ class BaseProvider(abc.ABC):
             List of network mappings in format [{"name": "network1"}, ...]
         """
         pass
+
+    def supports_skip_clone(self) -> bool:
+        """Whether this provider supports skipping the cloning phase for plan-readiness tests.
+
+        Returns:
+            bool: True if VMs can be used directly without cloning, False otherwise.
+        """
+        return True

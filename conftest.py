@@ -1135,8 +1135,11 @@ def prepared_plan(
         skip_clone = plan.get("skip_clone", False)
 
         if skip_clone:
-            if source_provider.type == Provider.ProviderType.RHV:
-                raise ValueError("skip_clone=True is not supported for RHV; VMs must be cloned from templates.")
+            if not source_provider.supports_skip_clone():
+                raise ValueError(
+                    f"skip_clone=True is not supported for provider type '{source_provider.type}'; "
+                    "VMs must be cloned from templates."
+                )
             conflicting = [
                 flag for flag in ("preserve_static_ips", "disable_drs_for_vms", "clone_to_same_host") if plan.get(flag)
             ]

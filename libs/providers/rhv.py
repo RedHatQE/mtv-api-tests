@@ -378,6 +378,14 @@ class OvirtProvider(BaseProvider):
     ) -> list[dict[str, str]]:
         return self.get_template_networks(template_names=names)
 
+    def supports_skip_clone(self) -> bool:
+        """RHV plan names are templates, not deployable VMs, so cloning cannot be skipped.
+
+        Returns:
+            bool: Always False for RHV.
+        """
+        return False
+
     def clone_vm(
         self,
         source_vm_name: str,
