@@ -348,17 +348,6 @@ class OvirtProvider(BaseProvider):
         return templates[0]
 
     def get_template_networks(self, template_names: list[str]) -> list[dict[str, str]]:
-        """Get unique network mappings for RHV templates.
-
-        Args:
-            template_names: List of template names to query
-
-        Returns:
-            List of network mappings in format [{"name": "network1"}, {"name": "network2"}]
-
-        Raises:
-            ValueError: If no networks found for any of the templates
-        """
         networks_seen = set()
         mappings = []
 
@@ -387,26 +376,6 @@ class OvirtProvider(BaseProvider):
         names: list[str],
         inventory: ForkliftInventory,
     ) -> list[dict[str, str]]:
-        """Resolve network mappings for RHV VMs or templates.
-
-        RHV entities are either VMs (present in Forklift inventory after
-        cloning) or templates (absent from inventory). This method checks
-        inventory membership to determine the entity type and routes to
-        the correct data source.
-
-        Args:
-            names (list[str]): VM or template names to query.
-            inventory (ForkliftInventory): Forklift inventory instance.
-
-        Returns:
-            list[dict[str, str]]: Network mappings.
-
-        Raises:
-            ValueError: If no networks found for the given names.
-        """
-        inventory_vms = set(inventory.vms_names)
-        if all(name in inventory_vms for name in names):
-            return inventory.vms_networks_mappings(vms=names)
         return self.get_template_networks(template_names=names)
 
     def clone_vm(

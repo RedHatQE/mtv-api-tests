@@ -308,7 +308,7 @@ def gen_network_map_list(
             source_provider=source_provider, source_provider_inventory=source_provider_inventory, vms=vms
         )
     else:
-        networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)
+        networks = source_provider_inventory.vms_networks_mappings(vms=vms)
 
     for index, network in enumerate(networks):
         if pod_only or index == 0:
