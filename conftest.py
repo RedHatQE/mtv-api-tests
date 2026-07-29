@@ -877,13 +877,14 @@ def multus_network_name(
 
     # Calculate how many multus NADs we need
     if class_plan_config.get("per_nic_network_map", False):
-        multus_count = (
+        multus_count = max(
+            0,
             len(
                 get_per_nic_networks(
                     source_provider=source_provider, source_provider_inventory=source_provider_inventory, vms=vms
                 )
             )
-            - 1
+            - 1,
         )
     else:
         multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
