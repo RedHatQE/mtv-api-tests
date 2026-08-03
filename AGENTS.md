@@ -705,6 +705,7 @@ When intentionally deleting a resource mid-test (e.g., testing plan archive+dele
 from teardown to prevent session cleanup from operating on a missing resource:
 
 ```python
+# Assumes Plan, Migration, archive_plan, get_migration_for_plan are already imported
 from utilities.resources import unregister_teardown_resource
 
 migration_name = get_migration_for_plan(plan).name
