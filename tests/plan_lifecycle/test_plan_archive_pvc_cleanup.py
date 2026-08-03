@@ -316,15 +316,15 @@ class TestPlanArchivePvcCleanup:
                 func=get_orphan_resource_names,
                 client=ocp_admin_client,
                 namespace=vm_namespace,
+                partial_name=session_uuid,
             ):
-                # Filter to resources from this test run only
-                scoped = [name for name in sample if session_uuid in name]
-                if not scoped:
+                if not sample:
                     return
         except TimeoutExpiredError:
-            all_names = get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace)
-            scoped = [name for name in all_names if session_uuid in name]
+            orphan_names = get_orphan_resource_names(
+                client=ocp_admin_client, namespace=vm_namespace, partial_name=session_uuid
+            )
             raise AssertionError(
                 f"Orphan resources with session '{session_uuid}' remain in "
-                f"namespace '{vm_namespace}' after plan archive+delete: {scoped}"
+                f"namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
             )
