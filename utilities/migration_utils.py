@@ -183,3 +183,18 @@ def get_cutover_value(current_cutover: bool = False) -> datetime:
         return datetime_utc
 
     return datetime_utc + timedelta(minutes=int(py_config["mins_before_cutover"]))
+
+
+def get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[str]:
+    """List remaining DV and PVC names in a namespace.
+
+    Args:
+        client (DynamicClient): OpenShift client.
+        namespace (str): Namespace to check.
+
+    Returns:
+        list[str]: Names of remaining DVs and PVCs, empty if none.
+    """
+    remaining_pvcs = list(PersistentVolumeClaim.get(client=client, namespace=namespace))
+    remaining_dvs = list(DataVolume.get(client=client, namespace=namespace))
+    return [pvc.name for pvc in remaining_pvcs] + [dv.name for dv in remaining_dvs]
