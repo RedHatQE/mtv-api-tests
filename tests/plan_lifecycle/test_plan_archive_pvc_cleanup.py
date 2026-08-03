@@ -249,8 +249,9 @@ class TestPlanArchivePvcCleanup:
         validate_hook_failure_and_check_vms(self.plan_resource, prepared_plan)
 
         # Verify migration created resources before we archive+delete
-        failed_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=target_namespace))
-        failed_dvs = list(DataVolume.get(client=ocp_admin_client, namespace=target_namespace))
+        vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
+        failed_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=vm_namespace))
+        failed_dvs = list(DataVolume.get(client=ocp_admin_client, namespace=vm_namespace))
         assert failed_pvcs or failed_dvs, (
             "Post-hook failure did not create any PVCs or DataVolumes — "
             "the archive+delete cleanup assertion would be vacuous"

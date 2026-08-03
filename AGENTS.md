@@ -598,6 +598,15 @@ with ResourceEditor(node) as editor:
 
 ## Critical Constraints
 
+### Test Execution Requirements (MUST)
+
+Tests interact with live OpenShift clusters and source providers. Before running tests:
+
+- **Cluster access:** A dedicated test cluster with `kubeadmin` or equivalent credentials is required
+- **Provider credentials:** A valid `.providers.json` with source provider connection details
+- **Isolation:** Tests create unique namespaces per session (`session_uuid`) — multiple parallel runs are safe
+- **Cleanup:** Tests clean up resources via `fixture_store` teardown — use `--skip-teardown` to preserve resources for debugging
+
 ### No Module-Level Provider Loading (MUST)
 
 `load_source_providers()` must only be called within the pytest ecosystem (fixtures, hooks).
