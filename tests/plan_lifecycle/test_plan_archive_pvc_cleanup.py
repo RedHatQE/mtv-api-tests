@@ -281,6 +281,7 @@ class TestPlanArchivePvcCleanup:
     def test_verify_pvc_cleanup(
         self,
         prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
         ocp_admin_client: DynamicClient,
         target_namespace: str,
     ) -> None:
@@ -293,6 +294,7 @@ class TestPlanArchivePvcCleanup:
 
         Args:
             prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Target namespace for migration.
 
@@ -306,6 +308,7 @@ class TestPlanArchivePvcCleanup:
             if vm_obj.exists:
                 vm_obj.clean_up(wait=True)
 
+        session_uuid = fixture_store["session_uuid"]
         try:
             for sample in TimeoutSampler(
                 wait_timeout=_ORPHAN_RESOURCE_WAIT_TIMEOUT,
@@ -314,11 +317,14 @@ class TestPlanArchivePvcCleanup:
                 client=ocp_admin_client,
                 namespace=vm_namespace,
             ):
-                if not sample:
+                # Filter to resources from this test run only
+                scoped = [name for name in sample if session_uuid in name]
+                if not scoped:
                     return
-        except TimeoutExpiredError as err:
-            orphan_names = get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace)
-            if orphan_names:
-                raise AssertionError(
-                    f"Orphan resources remain in namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
-                ) from err
+        except TimeoutExpiredError:
+            all_names = get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace)
+            scoped = [name for name in all_names if session_uuid in name]
+            raise AssertionError(
+                f"Orphan resources with session '{session_uuid}' remain in "
+                f"namespace '{vm_namespace}' after plan archive+delete: {scoped}"
+            )
