@@ -598,13 +598,6 @@ with ResourceEditor(node) as editor:
 
 ## Critical Constraints
 
-### Test Execution Prohibition
-
-AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live clusters, provider connections, and credentials.
-
-AI can: Read/analyze/write/fix tests, suggest improvements, review structure
-AI cannot: Execute tests, validate by running
-
 ### No Module-Level Provider Loading (MUST)
 
 `load_source_providers()` must only be called within the pytest ecosystem (fixtures, hooks).
@@ -706,6 +699,19 @@ namespace = create_and_store_resource(
 # Wrong - bypasses tracking
 namespace = Namespace(client=ocp_admin_client, name="my-namespace")
 namespace.deploy()
+```
+
+When intentionally deleting a resource mid-test (e.g., testing plan archive+delete), unregister it
+from teardown to prevent session cleanup from operating on a missing resource:
+
+```python
+from utilities.resources import unregister_teardown_resource
+
+migration_name = get_migration_for_plan(plan).name
+archive_plan(plan=self.plan_resource)
+self.plan_resource.clean_up(wait=True)
+unregister_teardown_resource(fixture_store=fixture_store, kind=Plan.kind, name=self.plan_resource.name)
+unregister_teardown_resource(fixture_store=fixture_store, kind=Migration.kind, name=migration_name)
 ```
 
 ## Test Structure Pattern
