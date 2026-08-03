@@ -604,7 +604,10 @@ Tests interact with live OpenShift clusters and source providers. Before running
 
 - **Cluster access:** A dedicated test cluster with `kubeadmin` or equivalent credentials is required
 - **Provider credentials:** A valid `.providers.json` with source provider connection details
-- **Isolation:** Tests create unique namespaces per session (`session_uuid`) — multiple parallel runs are safe
+- **Isolation:** Tests create unique namespaces per session (`session_uuid`) to prevent OCP resource collisions between parallel runs
+- **Parallel safety:** Namespace isolation does not prevent source-provider VM conflicts when multiple
+  runs share the same source VM names — use separate provider configurations or VM cloning for true
+  parallel safety
 - **Cleanup:** Tests clean up resources via `fixture_store` teardown — use `--skip-teardown` to preserve resources for debugging
 
 ### No Module-Level Provider Loading (MUST)
