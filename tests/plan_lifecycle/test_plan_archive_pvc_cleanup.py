@@ -45,6 +45,10 @@ if TYPE_CHECKING:
     from libs.providers.openshift import OCPProvider
 
 
+_ORPHAN_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for async DV/PVC garbage collection
+_ORPHAN_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
+
+
 def _get_orphan_resource_names(ocp_admin_client: DynamicClient, target_namespace: str) -> list[str]:
     """List remaining DV and PVC names in the target namespace.
 
@@ -205,7 +209,7 @@ class TestPlanArchivePvcCleanup:
             network_map=self.network_map,
             virtual_machines_list=prepared_plan["virtual_machines"],
             target_namespace=target_namespace,
-            warm_migration=prepared_plan["warm_migration"],
+            warm_migration=prepared_plan.get("warm_migration", False),
             target_power_state=prepared_plan["target_power_state"],
             after_hook_name=prepared_plan["_post_hook_name"],
             after_hook_namespace=prepared_plan["_post_hook_namespace"],
@@ -243,6 +247,14 @@ class TestPlanArchivePvcCleanup:
             )
 
         validate_hook_failure_and_check_vms(self.plan_resource, prepared_plan)
+
+        # Verify migration created resources before we archive+delete
+        failed_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=target_namespace))
+        failed_dvs = list(DataVolume.get(client=ocp_admin_client, namespace=target_namespace))
+        assert failed_pvcs or failed_dvs, (
+            "Post-hook failure did not create any PVCs or DataVolumes — "
+            "the archive+delete cleanup assertion would be vacuous"
+        )
 
     def test_archive_and_delete_plan(self, fixture_store: dict[str, Any]) -> None:
         """Archive and delete the failed migration plan.
@@ -300,8 +312,8 @@ class TestPlanArchivePvcCleanup:
 
         try:
             for sample in TimeoutSampler(
-                wait_timeout=120,
-                sleep=5,
+                wait_timeout=_ORPHAN_RESOURCE_WAIT_TIMEOUT,
+                sleep=_ORPHAN_RESOURCE_POLL_INTERVAL,
                 func=_get_orphan_resource_names,
                 ocp_admin_client=ocp_admin_client,
                 target_namespace=vm_namespace,
