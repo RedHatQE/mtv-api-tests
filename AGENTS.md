@@ -1089,11 +1089,13 @@ When multiple issues exist, address them in this order:
 
 ## Parallel Execution (pytest-xdist)
 
-Tests are parallel-safe because:
+Tests are parallel-safe for OpenShift resources because:
 
 - Unique namespaces per session via `session_uuid`
 - Each worker has isolated `fixture_store`
 - `create_and_store_resource()` generates unique names
+
+**Note:** Namespace isolation does not prevent source-provider VM conflicts — see Test Execution Requirements above.
 
 Rules:
 
