@@ -60,11 +60,11 @@ def _get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[st
         namespace (str): Namespace to check.
 
     Returns:
-        list[str]: Names of remaining DVs and PVCs, empty if none.
+        list[str]: Prefixed names (PVC/name, DV/name) of remaining resources, empty if none.
     """
     remaining_pvcs = list(PersistentVolumeClaim.get(client=client, namespace=namespace))
     remaining_dvs = list(DataVolume.get(client=client, namespace=namespace))
-    return [pvc.name for pvc in remaining_pvcs] + [dv.name for dv in remaining_dvs]
+    return [f"PVC/{pvc.name}" for pvc in remaining_pvcs] + [f"DV/{dv.name}" for dv in remaining_dvs]
 
 
 @pytest.mark.vsphere
