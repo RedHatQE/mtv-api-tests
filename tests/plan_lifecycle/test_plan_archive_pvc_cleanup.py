@@ -25,7 +25,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import MigrationPlanExecError
 from utilities.hooks import validate_hook_failure_and_check_vms
-from utilities.migration_utils import archive_plan, get_orphan_resource_names
+from utilities.migration_utils import archive_plan
 from utilities.mtv_migration import (
     create_plan_resource,
     execute_migration,
@@ -47,6 +47,25 @@ if TYPE_CHECKING:
 
 _ORPHAN_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for async DV/PVC garbage collection
 _ORPHAN_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
+
+
+def _get_orphan_resource_names(client: DynamicClient, namespace: str, partial_name: str = "") -> list[str]:
+    """List remaining DV and PVC names in a namespace, optionally filtered.
+
+    Args:
+        client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace to check.
+        partial_name (str): If set, only return names containing this substring.
+
+    Returns:
+        list[str]: Names of remaining DVs and PVCs, empty if none.
+    """
+    remaining_pvcs = list(PersistentVolumeClaim.get(client=client, namespace=namespace))
+    remaining_dvs = list(DataVolume.get(client=client, namespace=namespace))
+    names = [pvc.name for pvc in remaining_pvcs] + [dv.name for dv in remaining_dvs]
+    if partial_name:
+        return [name for name in names if partial_name in name]
+    return names
 
 
 @pytest.mark.vsphere
@@ -313,7 +332,7 @@ class TestPlanArchivePvcCleanup:
             for sample in TimeoutSampler(
                 wait_timeout=_ORPHAN_RESOURCE_WAIT_TIMEOUT,
                 sleep=_ORPHAN_RESOURCE_POLL_INTERVAL,
-                func=get_orphan_resource_names,
+                func=_get_orphan_resource_names,
                 client=ocp_admin_client,
                 namespace=vm_namespace,
                 partial_name=session_uuid,
@@ -321,7 +340,7 @@ class TestPlanArchivePvcCleanup:
                 if not sample:
                     return
         except TimeoutExpiredError:
-            orphan_names = get_orphan_resource_names(
+            orphan_names = _get_orphan_resource_names(
                 client=ocp_admin_client, namespace=vm_namespace, partial_name=session_uuid
             )
             if not orphan_names:
