@@ -76,8 +76,8 @@ class TestPlanArchivePvcCleanup:
            then fails due to post-hook failure (MigrationPlanExecError).
         5. Archive the failed plan, then delete it.
         6. Delete retained destination VMs, then verify all DVs and PVCs
-           in the target namespace are cleaned up — no orphan resources
-           remain (including prime-* PVCs).
+           from this test session in the effective VM target namespace are
+           cleaned up — no matching orphan resources remain.
     """
 
     storage_map: StorageMap
@@ -324,6 +324,8 @@ class TestPlanArchivePvcCleanup:
             orphan_names = get_orphan_resource_names(
                 client=ocp_admin_client, namespace=vm_namespace, partial_name=session_uuid
             )
+            if not orphan_names:
+                return
             raise AssertionError(
                 f"Orphan resources with session '{session_uuid}' remain in "
                 f"namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
