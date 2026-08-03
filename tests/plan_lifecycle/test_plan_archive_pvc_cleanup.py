@@ -49,23 +49,22 @@ _ORPHAN_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for async DV/PVC garbage 
 _ORPHAN_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
 
 
-def _get_orphan_resource_names(client: DynamicClient, namespace: str, partial_name: str = "") -> list[str]:
-    """List remaining DV and PVC names in a namespace, optionally filtered.
+def _get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[str]:
+    """List remaining DV and PVC names in a namespace.
+
+    The target namespace is unique per session (named after session_uuid),
+    so all PVCs/DVs in it belong to this test run.
 
     Args:
         client (DynamicClient): OpenShift admin client.
         namespace (str): Namespace to check.
-        partial_name (str): If set, only return names containing this substring.
 
     Returns:
         list[str]: Names of remaining DVs and PVCs, empty if none.
     """
     remaining_pvcs = list(PersistentVolumeClaim.get(client=client, namespace=namespace))
     remaining_dvs = list(DataVolume.get(client=client, namespace=namespace))
-    names = [pvc.name for pvc in remaining_pvcs] + [dv.name for dv in remaining_dvs]
-    if partial_name:
-        return [name for name in names if partial_name in name]
-    return names
+    return [pvc.name for pvc in remaining_pvcs] + [dv.name for dv in remaining_dvs]
 
 
 @pytest.mark.vsphere
@@ -253,22 +252,15 @@ class TestPlanArchivePvcCleanup:
         validate_hook_failure_and_check_vms(self.plan_resource, prepared_plan)
 
         # Verify migration created resources before we archive+delete.
-        # Filter by session_uuid to scope to resources from this test run,
-        # avoiding false positives if vm_target_namespace is shared.
+        # The target namespace is unique per session (named after session_uuid),
+        # so all PVCs/DVs in it belong to this test run. Forklift creates PVCs
+        # using source disk UUIDs (not session_uuid), so name filtering is wrong.
         vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
-        session_uuid = fixture_store["session_uuid"]
-        migration_pvcs = [
-            pvc
-            for pvc in PersistentVolumeClaim.get(client=ocp_admin_client, namespace=vm_namespace)
-            if session_uuid in pvc.name
-        ]
-        migration_dvs = [
-            dv for dv in DataVolume.get(client=ocp_admin_client, namespace=vm_namespace) if session_uuid in dv.name
-        ]
+        migration_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=vm_namespace))
+        migration_dvs = list(DataVolume.get(client=ocp_admin_client, namespace=vm_namespace))
         assert migration_pvcs or migration_dvs, (
-            f"No PVCs or DataVolumes with session '{session_uuid}' found in "
-            f"namespace '{vm_namespace}' after post-hook failure — "
-            "the archive+delete cleanup assertion would be vacuous"
+            f"No PVCs or DataVolumes found in namespace '{vm_namespace}' after "
+            "post-hook failure — the archive+delete cleanup assertion would be vacuous"
         )
 
     def test_archive_and_delete_plan(self, fixture_store: dict[str, Any]) -> None:
@@ -300,7 +292,6 @@ class TestPlanArchivePvcCleanup:
     def test_verify_pvc_cleanup(
         self,
         prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
         ocp_admin_client: DynamicClient,
         target_namespace: str,
     ) -> None:
@@ -313,7 +304,6 @@ class TestPlanArchivePvcCleanup:
 
         Args:
             prepared_plan (dict[str, Any]): The prepared migration plan.
-            fixture_store (dict[str, Any]): Fixture store for resource tracking.
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Target namespace for migration.
 
@@ -327,7 +317,6 @@ class TestPlanArchivePvcCleanup:
             if vm_obj.exists:
                 vm_obj.clean_up(wait=True)
 
-        session_uuid = fixture_store["session_uuid"]
         try:
             for sample in TimeoutSampler(
                 wait_timeout=_ORPHAN_RESOURCE_WAIT_TIMEOUT,
@@ -335,17 +324,13 @@ class TestPlanArchivePvcCleanup:
                 func=_get_orphan_resource_names,
                 client=ocp_admin_client,
                 namespace=vm_namespace,
-                partial_name=session_uuid,
             ):
                 if not sample:
                     return
         except TimeoutExpiredError:
-            orphan_names = _get_orphan_resource_names(
-                client=ocp_admin_client, namespace=vm_namespace, partial_name=session_uuid
-            )
+            orphan_names = _get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace)
             if not orphan_names:
                 return
             raise AssertionError(
-                f"Orphan resources with session '{session_uuid}' remain in "
-                f"namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
+                f"Orphan resources remain in namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
             )
