@@ -70,6 +70,27 @@ def create_and_store_resource(
     return _resource
 
 
+def unregister_teardown_resource(fixture_store: dict[str, Any], kind: str, name: str) -> None:
+    """Remove a resource entry from fixture_store teardown tracking.
+
+    Use after intentionally deleting a resource mid-test so session teardown
+    does not operate on a missing object.
+
+    Args:
+        fixture_store (dict[str, Any]): Fixture store for resource tracking.
+        kind (str): Resource kind key in fixture_store["teardown"].
+        name (str): Resource name to unregister.
+
+    Raises:
+        ValueError: If no matching resource entry is found for kind/name.
+    """
+    resources = fixture_store["teardown"][kind]
+    remaining = [resource for resource in resources if resource["name"] != name]
+    if len(remaining) == len(resources):
+        raise ValueError(f"Resource '{name}' of kind '{kind}' not found in fixture_store teardown")
+    fixture_store["teardown"][kind] = remaining
+
+
 def get_or_create_namespace(
     fixture_store: dict[str, Any],
     ocp_admin_client: "DynamicClient",
