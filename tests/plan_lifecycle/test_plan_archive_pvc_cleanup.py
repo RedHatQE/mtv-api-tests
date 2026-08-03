@@ -291,9 +291,10 @@ class TestPlanArchivePvcCleanup:
         Raises:
             AssertionError: If orphan resources remain after 120s timeout.
         """
+        vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
         for vm in prepared_plan["virtual_machines"]:
             vm_name = resolve_destination_vm_name(vm)
-            vm_obj = VirtualMachine(client=ocp_admin_client, name=vm_name, namespace=target_namespace)
+            vm_obj = VirtualMachine(client=ocp_admin_client, name=vm_name, namespace=vm_namespace)
             if vm_obj.exists:
                 vm_obj.clean_up(wait=True)
 
@@ -303,16 +304,13 @@ class TestPlanArchivePvcCleanup:
                 sleep=5,
                 func=_get_orphan_resource_names,
                 ocp_admin_client=ocp_admin_client,
-                target_namespace=target_namespace,
+                target_namespace=vm_namespace,
             ):
                 if not sample:
                     return
         except TimeoutExpiredError as err:
-            orphan_names = _get_orphan_resource_names(
-                ocp_admin_client=ocp_admin_client, target_namespace=target_namespace
-            )
+            orphan_names = _get_orphan_resource_names(ocp_admin_client=ocp_admin_client, target_namespace=vm_namespace)
             if orphan_names:
                 raise AssertionError(
-                    f"Orphan resources remain in namespace '{target_namespace}' "
-                    f"after plan archive+delete: {orphan_names}"
+                    f"Orphan resources remain in namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
                 ) from err

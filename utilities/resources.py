@@ -74,21 +74,20 @@ def unregister_teardown_resource(fixture_store: dict[str, Any], kind: str, name:
     """Remove a resource entry from fixture_store teardown tracking.
 
     Use after intentionally deleting a resource mid-test so session teardown
-    does not operate on a missing object.
+    does not operate on a missing object. Safe to call even if the entry
+    does not exist — logs a warning instead of raising.
 
     Args:
         fixture_store (dict[str, Any]): Fixture store for resource tracking.
         kind (str): Resource kind key in fixture_store["teardown"].
         name (str): Resource name to unregister.
-
-    Raises:
-        ValueError: If no matching resource entry is found for kind/name.
     """
-    resources = fixture_store["teardown"][kind]
+    resources = fixture_store["teardown"].get(kind, [])
     remaining = [resource for resource in resources if resource["name"] != name]
     if len(remaining) == len(resources):
-        raise ValueError(f"Resource '{name}' of kind '{kind}' not found in fixture_store teardown")
-    fixture_store["teardown"][kind] = remaining
+        LOGGER.warning(f"Resource '{name}' of kind '{kind}' not found in fixture_store teardown — already removed?")
+    else:
+        fixture_store["teardown"][kind] = remaining
 
 
 def get_or_create_namespace(
