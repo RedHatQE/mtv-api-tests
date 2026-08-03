@@ -479,6 +479,55 @@
               }
             }
           ]
+        },
+        {
+          "description": "Hyper-V provider: Microsoft Hyper-V with WinRM/PSRP and SMB support.",
+          "allOf": [
+            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "type": "object",
+              "required": ["type", "version", "fqdn", "api_url", "username", "password", "smb_url"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "hyperv",
+                  "description": "Provider type determining the virtualization platform."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider platform version."
+                },
+                "fqdn": {
+                  "type": "string",
+                  "description": "Hyper-V host address (e.g., '192.168.1.100' or 'hyperv-host.example.com')."
+                },
+                "api_url": {
+                  "type": "string",
+                  "description": "Hyper-V host address (e.g., '192.168.1.100' or 'hyperv-host.example.com')."
+                },
+                "username": {
+                  "type": "string",
+                  "description": "Username for authenticating with the Hyper-V host."
+                },
+                "password": {
+                  "type": "string",
+                  "description": "Password for authenticating with the Hyper-V host."
+                },
+                "smb_url": {
+                  "type": "string",
+                  "description": "SMB share URL for VM disk transfer (e.g., '//hyperv-host.example.com/VMShare')."
+                },
+                "smb_user": {
+                  "type": "string",
+                  "description": "Optional SMB username if different from provider credentials."
+                },
+                "smb_password": {
+                  "type": "string",
+                  "description": "Optional SMB password if different from provider credentials."
+                }
+              }
+            }
+          ]
         }
       ]
     }

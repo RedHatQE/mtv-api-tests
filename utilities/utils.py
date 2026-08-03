@@ -36,6 +36,7 @@ from libs.providers.openstack import OpenStackProvider
 from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
+from libs.providers.hyperv import HyperVProvider
 from exceptions.exceptions import ProviderEmptyContentError
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.resources import create_and_store_resource
@@ -137,12 +138,37 @@ def ocp_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.OPENSHIFT
 
 
-def generate_ca_cert_file(provider_fqdn: str, cert_file: Path) -> Path:
+def hyperv_provider(provider_data: dict[str, Any]) -> bool:
+    """Check if provider data is for a Hyper-V provider.
+
+    Args:
+        provider_data (dict[str, Any]): Provider configuration dictionary.
+
+    Returns:
+        bool: True if the provider type is Hyper-V.
+    """
+    return provider_data["type"] == Provider.ProviderType.HYPERV
+
+
+def generate_ca_cert_file(provider_fqdn: str, cert_file: Path, port: int = 443) -> Path:
+    """Fetch CA certificate from provider FQDN and save to file.
+
+    Args:
+        provider_fqdn (str): Fully qualified domain name of the provider.
+        cert_file (Path): Path where the certificate will be saved.
+        port (int): Port to connect to (default: 443 for HTTPS).
+
+    Returns:
+        Path: Path to the certificate file.
+
+    Raises:
+        ValueError: If the certificate cannot be fetched or is invalid.
+    """
     cert = check_output(
         [
             "/bin/sh",
             "-c",
-            f"openssl s_client -connect {provider_fqdn}:443 -showcerts < /dev/null",
+            f"openssl s_client -connect {provider_fqdn}:{port} -showcerts < /dev/null",
         ],
         stderr=STDOUT,
     )
@@ -161,6 +187,7 @@ def _fetch_and_store_cacert(
     tmp_dir: pytest.TempPathFactory | None,
     session_uuid: str,
     ca_cert_key: str = "cacert",
+    port: int = 443,
 ) -> Path:
     """Fetch CA certificate from provider and store in secret data.
 
@@ -171,6 +198,7 @@ def _fetch_and_store_cacert(
         session_uuid (str): Session UUID for unique filename.
         ca_cert_key (str): Secret field name for the CA certificate. Defaults to "cacert".
             Use "ca.crt" for the standard Kubernetes convention (MTV-4561).
+        port (int): Port to connect to for certificate retrieval (default: 443).
 
     Returns:
         Path: Path to the certificate file.
@@ -185,6 +213,7 @@ def _fetch_and_store_cacert(
     cert_file = generate_ca_cert_file(
         provider_fqdn=source_provider_data["fqdn"],
         cert_file=tmp_dir.mktemp(source_provider_type.upper()) / f"{source_provider_type}_{session_uuid}_cert.crt",
+        port=port,
     )
     secret_string_data[ca_cert_key] = cert_file.read_text()
     return cert_file
@@ -457,6 +486,22 @@ def create_source_provider(
         # Add CA certificate for SSL verification
         if not insecure:
             _fetch_and_store_cacert(source_provider_data_copy, secret_string_data, tmp_dir, session_uuid, ca_cert_key)
+
+    elif hyperv_provider(provider_data=source_provider_data_copy):
+        source_provider = HyperVProvider
+        provider_args["host"] = source_provider_data_copy["fqdn"]
+        secret_string_data["username"] = source_provider_data_copy["username"]
+        secret_string_data["password"] = source_provider_data_copy["password"]
+        secret_string_data["smbUrl"] = source_provider_data_copy["smb_url"]
+        if smb_user := source_provider_data_copy.get("smb_user"):
+            secret_string_data["smbUser"] = smb_user
+        if smb_password := source_provider_data_copy.get("smb_password"):
+            secret_string_data["smbPassword"] = smb_password
+
+        if not insecure:
+            _fetch_and_store_cacert(
+                source_provider_data_copy, secret_string_data, tmp_dir, session_uuid, ca_cert_key, port=5986
+            )
 
     elif ova_provider(provider_data=source_provider_data_copy):
         source_provider = OVAProvider

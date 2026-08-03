@@ -26,6 +26,7 @@ def _register_inventory_classes() -> None:
         Provider.ProviderType.VSPHERE: VsphereForkliftInventory,
         Provider.ProviderType.OPENSHIFT: OpenshiftForkliftInventory,
         Provider.ProviderType.OPENSTACK: OpenstackForliftinventory,
+        Provider.ProviderType.HYPERV: HypervForkliftInventory,
     })
 
 
@@ -586,6 +587,100 @@ class OpenshiftForkliftInventory(ForkliftInventory):
                         continue
 
                     _mappings.append(_network_map)
+
+        if not _mappings:
+            raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+
+class HypervForkliftInventory(ForkliftInventory):
+    def __init__(self, client: DynamicClient, provider_name: str, namespace: str) -> None:
+        """Initialize Hyper-V Forklift Inventory instance.
+
+        Args:
+            client (DynamicClient): OpenShift admin client
+            provider_name (str): Name of the provider resource
+            namespace (str): MTV operator namespace
+
+        Raises:
+            TimeoutExpiredError: If provider doesn't appear in inventory within timeout
+        """
+        self.provider_type = Provider.ProviderType.HYPERV
+        super().__init__(
+            client=client, provider_name=provider_name, mtv_namespace=namespace, provider_type=self.provider_type
+        )
+
+    @property
+    def storages(self) -> list[dict[str, Any]]:
+        """Retrieve storage list from Hyper-V provider inventory.
+
+        Returns:
+            list[dict[str, Any]]: Storage objects from the provider's /storages endpoint
+
+        Raises:
+            ValueError: If storages endpoint returns invalid data
+            ConnectionError: If unable to connect to inventory API
+            TimeoutError: If request times out
+        """
+        return self._request(url_path=f"{self.provider_url_path}/storages")
+
+    def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
+        """Get storage mappings for Hyper-V VMs based on disk datastores.
+
+        Args:
+            vms (list[str]): List of VM names to get storage mappings for
+
+        Returns:
+            list[dict[str, str]]: List of storage mappings with 'name' key
+
+        Raises:
+            ValueError: If no storages found for the provider or VMs
+        """
+        _mappings: list[dict[str, str]] = []
+        _storages = self.storages
+
+        if not _storages:
+            raise ValueError(f"Storages not found for provider {self.provider_type}")
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+            for _disk in _vm.get("disks", []):
+                if _storage_id := _disk.get("datastore", {}).get("id"):
+                    if _storage_name_match := [_stg["name"] for _stg in _storages if _storage_id == _stg["id"]]:
+                        _mappings.append({"name": _storage_name_match[0]})
+
+        if not _mappings:
+            raise ValueError(f"Storages not found for VMs {vms} on provider {self.provider_type}")
+
+        return _mappings
+
+    def vms_networks_mappings(self, vms: list[str], deduplicate: bool = True) -> list[dict[str, str]]:
+        """Get network mappings for Hyper-V VMs based on NIC networks.
+
+        Args:
+            vms (list[str]): List of VM names to get network mappings for
+            deduplicate (bool): When True (default), collapse repeated network
+                entries into a single mapping. When False, return one entry per
+                NIC even if multiple NICs share the same source network.
+
+        Returns:
+            list[dict[str, str]]: List of network mappings with 'id' and 'name' keys
+
+        Raises:
+            ValueError: If no networks found for the VMs
+        """
+        _mappings: list[dict[str, str]] = []
+
+        for _vm_name in vms:
+            _vm = self.get_vm(name=_vm_name)
+            for _nic in _vm.get("nics", []):
+                if _network_id := (_nic.get("network") or {}).get("id"):
+                    if _network_name_match := [_net["name"] for _net in self.networks if _network_id == _net["id"]]:
+                        if deduplicate and [_map for _map in _mappings if _map.get("id") == _network_id]:
+                            continue
+
+                        _mappings.append({"id": _network_id, "name": _network_name_match[0]})
 
         if not _mappings:
             raise ValueError(f"Networks not found for vms {vms} on provider {self.provider_type}")

@@ -81,7 +81,6 @@ from utilities.utils import (
     extract_vm_from_plan,
     generate_class_hash_prefix,
     get_cluster_client,
-    get_cluster_version,
     get_cluster_version_str,
     get_per_nic_networks,
     get_value_from_py_config,
@@ -316,6 +315,7 @@ def pytest_collection_modifyitems(session, config, items):
                 Provider.ProviderType.OPENSTACK,
                 Provider.ProviderType.OPENSHIFT,
                 Provider.ProviderType.OVA,
+                Provider.ProviderType.HYPERV,
             )
             if source_provider_type in warm_unsupported:
                 warm_skip = pytest.mark.skip(reason=f"{source_provider_type} warm migration is not supported.")
@@ -1191,9 +1191,10 @@ def prepared_plan(
                     f"skip_clone=True is not supported for provider type '{source_provider.type}'; "
                     "VMs must be cloned from templates."
                 )
-            conflicting = [
-                flag for flag in ("preserve_static_ips", "disable_drs_for_vms", "clone_to_same_host") if plan.get(flag)
-            ]
+            skip_clone_incompatible = ["disable_drs_for_vms", "clone_to_same_host"]
+            if source_provider.type != Provider.ProviderType.HYPERV:
+                skip_clone_incompatible.append("preserve_static_ips")
+            conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]
             if has_shared_disk_config:
                 conflicting.append("migrate_shared_disks")
             if has_add_nic_config:
@@ -1218,8 +1219,21 @@ def prepared_plan(
                             source_provider.wait_for_vmware_guest_info(
                                 provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
                             )
+                        elif source_provider.type == Provider.ProviderType.HYPERV:
+                            source_provider.wait_for_guest_network_config(
+                                vm_name=vm["name"],
+                                timeout=class_plan_config.get("guest_agent_timeout", 120),
+                            )
                     elif source_vm_power == "off":
                         source_provider.stop_vm(provider_vm_api)
+
+                if plan.get("preserve_static_ips"):
+                    source_vm_details = source_provider.vm_dict(
+                        provider_vm_api=provider_vm_api,
+                        name=vm["name"],
+                        namespace=source_vms_namespace,
+                    )
+                    plan["source_vms_data"][vm["name"]] = source_vm_details
 
         if not skip_clone:
             for vm in virtual_machines:
@@ -1270,10 +1284,14 @@ def prepared_plan(
                 source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
                 if source_vm_power == "on":
                     source_provider.start_vm(provider_vm_api)
-                    # Wait for guest info to become available (VMware only)
                     if source_provider.type == Provider.ProviderType.VSPHERE:
                         source_provider.wait_for_vmware_guest_info(
                             provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                        )
+                    elif source_provider.type == Provider.ProviderType.HYPERV:
+                        source_provider.wait_for_guest_network_config(
+                            vm_name=vm["name"],
+                            timeout=class_plan_config.get("guest_agent_timeout", 120),
                         )
                 elif source_vm_power == "off":
                     source_provider.stop_vm(provider_vm_api)

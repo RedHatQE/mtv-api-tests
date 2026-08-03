@@ -937,6 +937,26 @@ uv run pytest -m tier0 -v --analyze-with-ai \
 
 ---
 
+## Known Limitations
+
+### Hyper-V KVP DHCP Detection (RHEL 9)
+
+The `preserve_static_ips` feature relies on Hyper-V KVP `DHCPEnabled` to distinguish static from DHCP-assigned IPs.
+This field is unreliable on RHEL 9 guests using NetworkManager keyfiles (the default configuration).
+The Linux `hv_kvp_daemon` determines DHCP status by checking `/etc/sysconfig/network-scripts/ifcfg-*` files —
+on RHEL 9+ (which uses keyfiles in `/etc/NetworkManager/system-connections/`), no ifcfg file is found,
+causing all NICs to report `DHCPEnabled = False` regardless of actual DHCP state.
+
+**Impact:** DHCP-assigned IPs are incorrectly treated as static, causing `preserve_static_ips` post-migration verification to fail.
+
+**Workarounds:**
+
+- Use RHEL 10 guests (patched `hv_kvp_daemon` queries NetworkManager directly)
+- Use RHEL 9 guests with ifcfg-style network configuration
+- Ensure Hyper-V test VMs use only static IPs on NICs being verified
+
+---
+
 ## Troubleshooting
 
 ### Error: "pytest: command not found"

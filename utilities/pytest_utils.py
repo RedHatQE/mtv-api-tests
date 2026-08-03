@@ -25,6 +25,7 @@ from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
+from libs.providers.hyperv import HyperVProvider
 from libs.providers.openstack import OpenStackProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
@@ -151,6 +152,7 @@ def teardown_resources(
     vmware_cloned_vms = session_teardown_resources.get(Provider.ProviderType.VSPHERE, [])
     openstack_cloned_vms = session_teardown_resources.get(Provider.ProviderType.OPENSTACK, [])
     rhv_cloned_vms = session_teardown_resources.get(Provider.ProviderType.RHV, [])
+    hyperv_cloned_vms = session_teardown_resources.get(Provider.ProviderType.HYPERV, [])
     openstack_volume_snapshots = session_teardown_resources.get("VolumeSnapshot", [])
 
     # Resources that was created by running migration
@@ -407,6 +409,28 @@ def teardown_resources(
         except Exception as exc:
             LOGGER.error(f"Failed to connect to RHV provider for cleanup: {exc}")
             leftovers.setdefault(Provider.ProviderType.RHV, rhv_cloned_vms)
+
+    if hyperv_cloned_vms:
+        try:
+            source_provider_data = session_store["source_provider_data"]
+
+            with HyperVProvider(
+                host=source_provider_data["fqdn"],
+                username=source_provider_data["username"],
+                password=source_provider_data["password"],
+            ) as hyperv_provider:
+                for _vm in hyperv_cloned_vms:
+                    _cloned_vm_name = _vm["name"]
+                    try:
+                        hyperv_provider.delete_vm(vm_name=_cloned_vm_name)
+                    except Exception as exc:
+                        LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
+                        leftovers.setdefault(hyperv_provider.type, []).append({
+                            "cloned_vm_name": _cloned_vm_name,
+                        })
+        except Exception as exc:
+            LOGGER.error(f"Failed to connect to Hyper-V provider for cleanup: {exc}")
+            leftovers.setdefault(Provider.ProviderType.HYPERV, []).extend(hyperv_cloned_vms)
 
     if openstack_volume_snapshots:
         try:

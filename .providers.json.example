@@ -179,5 +179,20 @@
     "api_url": "<NFS SHARE URL>",
     "username": "<USERNAME>",
     "password": ""  # pragma: allowlist secret
+  },
+  "hyperv": {
+    "type": "hyperv",
+    "version": "2025",
+    "fqdn": "hyperv-host.example.com",
+    "api_url": "hyperv-host.example.com",
+    "username": "Administrator",
+    "password": "password",  # pragma: allowlist secret
+    "smb_url": "//hyperv-host.example.com/VMShare",
+    "smb_user": "",  # Optional: SMB username if different from provider credentials
+    "smb_password": "",  # pragma: allowlist secret  # Optional: SMB password if different from provider credentials
+    "guest_vm_linux_user": "root",
+    "guest_vm_linux_password": "password",  # pragma: allowlist secret
+    "guest_vm_win_user": "Administrator",
+    "guest_vm_win_password": "password"  # pragma: allowlist secret
   }
 }

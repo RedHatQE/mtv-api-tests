@@ -44,6 +44,9 @@ KUBERNETES_MAX_GENERATE_NAME_PREFIX_LENGTH: int = 58
 
 _LUKS_FSTYPE = "crypto_LUKS"  # lsblk filesystem-type identifier for LUKS partitions
 
+# Providers supporting static IP preservation verification.
+_STATIC_IP_PROVIDERS: tuple[str, ...] = (Provider.ProviderType.VSPHERE, Provider.ProviderType.HYPERV)
+
 _VBS_STATUS_RUNNING = "2"
 _NESTED_VIRT_DISABLED_FEATURES: list[dict[str, str]] = [
     {"name": "vmx", "policy": "disable"},
@@ -644,7 +647,7 @@ def check_static_ip_preservation(
     if not static_interfaces:
         raise ValueError(
             f"preserve_static_ips is enabled but no static IP interfaces found for VM {vm_name}. "
-            "Ensure the source VM is powered on so VMware guest tools can report IP origin information."
+            "Ensure the source VM is powered on so guest tools can report IP origin information."
         )
 
     LOGGER.info(f"Found {len(static_interfaces)} static IP interfaces to verify")
@@ -886,7 +889,19 @@ def check_vbs_status(
 
 
 def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
-    assert source_vm["memory_in_mb"] == destination_vm["memory_in_mb"]
+    """Verify source and destination VM memory match.
+
+    Args:
+        source_vm: Source VM data dictionary.
+        destination_vm: Destination VM data dictionary.
+
+    Raises:
+        ValueError: If memory values differ.
+    """
+    source_mem = source_vm["memory_in_mb"]
+    dest_mem = destination_vm["memory_in_mb"]
+    if source_mem != dest_mem:
+        raise ValueError(f"Memory mismatch: source={source_mem}MB, destination={dest_mem}MB")
 
 
 def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, Any]:
@@ -1866,22 +1881,19 @@ def check_vms(
             except Exception as exp:
                 res[vm_name].append(f"check_ssh_connectivity - {str(exp)}")
 
-            # Static IP preservation check - for VMs with preserve_static_ips enabled, migrated from VSPHERE
+            # Static IP preservation check - for VMs with preserve_static_ips enabled, migrated from a
+            # provider in _STATIC_IP_PROVIDERS
             source_vm_data = plan.get("source_vms_data", {}).get(vm["name"], {})
 
-            # Fail fast: if preserve_static_ips is requested for vSphere, source_vms_data must exist
-            if plan.get("preserve_static_ips") and source_provider.type == Provider.ProviderType.VSPHERE:
+            # Fail fast: if preserve_static_ips is requested, source_vms_data must exist
+            if plan.get("preserve_static_ips") and source_provider.type in _STATIC_IP_PROVIDERS:
                 if not source_vm_data:
                     raise ValueError(
                         f"preserve_static_ips is enabled but source_vms_data is missing for VM '{vm['name']}'. "
                         "Ensure the prepared_plan fixture populates source_vms_data for static IP verification."
                     )
 
-            if (
-                source_vm_data
-                and plan.get("preserve_static_ips")
-                and source_provider.type == Provider.ProviderType.VSPHERE
-            ):
+            if source_vm_data and plan.get("preserve_static_ips") and source_provider.type in _STATIC_IP_PROVIDERS:
                 try:
                     check_static_ip_preservation(
                         vm_name=destination_vm_name,
@@ -1980,7 +1992,7 @@ def check_vms(
                 res[vm_name].append(f"check_memory - {str(exp)}")
 
             # TODO: Remove when OCP to OCP migration is done with 2 clusters
-            if source_provider.type != Provider.ProviderType.OPENSHIFT:
+            if source_provider.type != Provider.ProviderType.OPENSHIFT and not plan.get("per_nic_network_map"):
                 try:
                     check_network(
                         source_vm=source_vm,
