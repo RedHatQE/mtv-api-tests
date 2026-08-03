@@ -25,7 +25,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import MigrationPlanExecError
 from utilities.hooks import validate_hook_failure_and_check_vms
-from utilities.migration_utils import archive_plan
+from utilities.migration_utils import archive_plan, get_orphan_resource_names
 from utilities.mtv_migration import (
     create_plan_resource,
     execute_migration,
@@ -47,21 +47,6 @@ if TYPE_CHECKING:
 
 _ORPHAN_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for async DV/PVC garbage collection
 _ORPHAN_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
-
-
-def _get_orphan_resource_names(ocp_admin_client: DynamicClient, target_namespace: str) -> list[str]:
-    """List remaining DV and PVC names in the target namespace.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        target_namespace (str): Namespace to check.
-
-    Returns:
-        list[str]: Names of remaining DVs and PVCs, empty if none.
-    """
-    remaining_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=target_namespace))
-    remaining_dvs = list(DataVolume.get(client=ocp_admin_client, namespace=target_namespace))
-    return [pvc.name for pvc in remaining_pvcs] + [dv.name for dv in remaining_dvs]
 
 
 @pytest.mark.vsphere
@@ -325,14 +310,14 @@ class TestPlanArchivePvcCleanup:
             for sample in TimeoutSampler(
                 wait_timeout=_ORPHAN_RESOURCE_WAIT_TIMEOUT,
                 sleep=_ORPHAN_RESOURCE_POLL_INTERVAL,
-                func=_get_orphan_resource_names,
-                ocp_admin_client=ocp_admin_client,
-                target_namespace=vm_namespace,
+                func=get_orphan_resource_names,
+                client=ocp_admin_client,
+                namespace=vm_namespace,
             ):
                 if not sample:
                     return
         except TimeoutExpiredError as err:
-            orphan_names = _get_orphan_resource_names(ocp_admin_client=ocp_admin_client, target_namespace=vm_namespace)
+            orphan_names = get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace)
             if orphan_names:
                 raise AssertionError(
                     f"Orphan resources remain in namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
