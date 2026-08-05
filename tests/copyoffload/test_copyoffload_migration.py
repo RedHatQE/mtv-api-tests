@@ -1572,7 +1572,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
             copyoffload=prepared_plan.get("copyoffload", False),
-            rdm_as_lun=prepared_plan.get("rdm_as_lun", False),
+            rdm_as_lun=prepared_plan["rdm_as_lun"],
         )
         assert self.plan_resource, "Plan creation failed"
 
@@ -1629,9 +1629,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
         )
-        verify_rdm_disk_bus_types(
-            destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
-        )
+        verify_rdm_disk_bus_types(destination_provider=destination_provider, plan=prepared_plan)
 
 
 @pytest.mark.vsphere
@@ -1752,7 +1750,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
             copyoffload=prepared_plan.get("copyoffload", False),
-            rdm_as_lun=prepared_plan.get("rdm_as_lun", False),
+            rdm_as_lun=prepared_plan["rdm_as_lun"],
         )
         assert self.plan_resource, "Plan creation failed"
 
@@ -1814,9 +1812,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
         )
-        verify_rdm_disk_bus_types(
-            destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
-        )
+        verify_rdm_disk_bus_types(destination_provider=destination_provider, plan=prepared_plan)
 
 
 @pytest.mark.vsphere

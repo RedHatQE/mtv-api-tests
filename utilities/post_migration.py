@@ -1650,7 +1650,6 @@ def _verify_warm_vsphere_di(
 def verify_rdm_disk_bus_types(
     destination_provider: OCPProvider,
     plan: dict[str, Any],
-    target_namespace: str,
 ) -> None:
     """Verify that migrated RDM disks have LUN device type with SCSI bus.
 
@@ -1660,22 +1659,23 @@ def verify_rdm_disk_bus_types(
     Args:
         destination_provider: OCP destination provider instance.
         plan: Test plan dictionary containing VM configuration.
-        target_namespace: Namespace where migrated VMs reside.
 
     Raises:
         AssertionError: If disk bus types don't match expected configuration.
+        ValueError: If destination_provider.ocp_resource is not set.
     """
+    if not destination_provider.ocp_resource:
+        raise ValueError("destination_provider.ocp_resource is not set")
+
     for vm_config in plan["virtual_machines"]:
         vm_name = vm_config["name"]
+        dest_vm_name = resolve_destination_vm_name(vm_config)
         LOGGER.info(f"Verifying RDM disk bus types for migrated VM '{vm_name}'")
-
-        if not destination_provider.ocp_resource:
-            raise ValueError(f"destination_provider.ocp_resource is not set for VM '{vm_name}'")
 
         migrated_vm = VirtualMachine(
             client=destination_provider.ocp_resource.client,
-            name=vm_name,
-            namespace=target_namespace,
+            name=dest_vm_name,
+            namespace=plan["_vm_target_namespace"],
             ensure_exists=True,
         )
         disks: list[dict[str, Any]] = migrated_vm.instance.spec.template.spec.domain.devices.disks
