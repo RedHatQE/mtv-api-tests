@@ -205,6 +205,7 @@ tests_params: dict = {
         ],
         "warm_migration": False,
         "copyoffload": True,
+        "rdm_as_lun": True,
     },
     "test_copyoffload_rdm_physical_disk_migration": {
         "virtual_machines": [
@@ -219,6 +220,7 @@ tests_params: dict = {
         ],
         "warm_migration": False,
         "copyoffload": True,
+        "rdm_as_lun": True,
     },
     "test_copyoffload_warm_rdm_virtual_disk_migration": {
         "virtual_machines": [

@@ -5,7 +5,7 @@ import ipaddress
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import go_template
 import jc
@@ -16,6 +16,7 @@ from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
+from ocp_resources.virtual_machine import VirtualMachine
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
 from pyhelper_utils.exceptions import CommandExecFailed
 from pytest_testconfig import py_config
@@ -30,6 +31,9 @@ from utilities.naming import resolve_destination_vm_name
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection, run_cmd_in_vm
 from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
 from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
+
+if TYPE_CHECKING:
+    from libs.providers.openshift import OCPProvider
 
 LOGGER = get_logger(name=__name__)
 
@@ -1641,6 +1645,64 @@ def _verify_warm_vsphere_di(
         )
     expected_vm_names = {vm["name"] for vm in plan["virtual_machines"]}
     verify_captured_di_results(di_results=di_results, plan_name=plan_resource.name, expected_vm_names=expected_vm_names)
+
+
+def verify_rdm_disk_bus_types(
+    destination_provider: OCPProvider,
+    plan: dict[str, Any],
+) -> None:
+    """Verify that migrated RDM disks have LUN device type with SCSI bus.
+
+    When rdmAsLun=true is set on the migration plan, RDM disks should be mapped as
+    KubeVirt LUN devices (lun.bus: scsi) instead of regular disk devices (disk.bus: virtio).
+
+    Args:
+        destination_provider: OCP destination provider instance.
+        plan: Test plan dictionary containing VM configuration.
+
+    Raises:
+        AssertionError: If disk bus types don't match expected configuration.
+        ValueError: If destination_provider.ocp_resource is not set.
+    """
+    if not destination_provider.ocp_resource:
+        raise ValueError("destination_provider.ocp_resource is not set")
+
+    for vm_config in plan["virtual_machines"]:
+        vm_name = vm_config["name"]
+        dest_vm_name = resolve_destination_vm_name(vm_config)
+        LOGGER.info(f"Verifying RDM disk bus types for migrated VM '{vm_name}'")
+
+        migrated_vm = VirtualMachine(
+            client=destination_provider.ocp_resource.client,
+            name=dest_vm_name,
+            namespace=plan["_vm_target_namespace"],
+            ensure_exists=True,
+        )
+        disks: list[dict[str, Any]] = migrated_vm.instance.spec.template.spec.domain.devices.disks
+
+        lun_disks = [d for d in disks if d.get("lun")]
+        regular_disks = [d for d in disks if d.get("disk")]
+
+        assert lun_disks, (
+            f"No LUN-type disks found on VM '{vm_name}'. Expected at least one RDM disk mapped as LUN. Disks: {disks}"
+        )
+
+        for lun_disk in lun_disks:
+            bus = lun_disk["lun"].get("bus")
+            assert bus == "scsi", (
+                f"LUN disk '{lun_disk.get('name')}' on VM '{vm_name}' has bus '{bus}', expected 'scsi'"
+            )
+
+        for reg_disk in regular_disks:
+            bus = reg_disk["disk"].get("bus")
+            assert bus == "virtio", (
+                f"Regular disk '{reg_disk.get('name')}' on VM '{vm_name}' has bus '{bus}', expected 'virtio'"
+            )
+
+        LOGGER.info(
+            f"VM '{vm_name}': {len(lun_disks)} LUN disk(s) with SCSI bus, "
+            f"{len(regular_disks)} regular disk(s) with virtio bus — verified"
+        )
 
 
 def check_vms(

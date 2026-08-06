@@ -56,7 +56,7 @@ from utilities.mtv_migration import (
     wait_for_migration_complate,
 )
 from utilities.naming import sanitize_kubernetes_name
-from utilities.post_migration import check_vms, verify_data_integrity
+from utilities.post_migration import check_vms, verify_data_integrity, verify_rdm_disk_bus_types
 from utilities.vmware_guest_operations import create_data_integrity_marker
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager
@@ -1572,6 +1572,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
             copyoffload=prepared_plan.get("copyoffload", False),
+            rdm_as_lun=prepared_plan["rdm_as_lun"],
         )
         assert self.plan_resource, "Plan creation failed"
 
@@ -1628,6 +1629,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
         )
+        verify_rdm_disk_bus_types(destination_provider=destination_provider, plan=prepared_plan)
 
 
 @pytest.mark.vsphere
@@ -1748,6 +1750,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
             copyoffload=prepared_plan.get("copyoffload", False),
+            rdm_as_lun=prepared_plan["rdm_as_lun"],
         )
         assert self.plan_resource, "Plan creation failed"
 
@@ -1809,6 +1812,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
         )
+        verify_rdm_disk_bus_types(destination_provider=destination_provider, plan=prepared_plan)
 
 
 @pytest.mark.vsphere

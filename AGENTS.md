@@ -902,6 +902,7 @@ tests_params: dict = {
 | `disable_drs_for_vms`  | No       | True to disable vSphere DRS per VM after cloning; not supported for OVA; requires a VMware clone provider |
 | `per_nic_network_map`  | No       | True to create per-NIC network mappings (allows duplicate source network entries in NetworkMap)           |
 | `skip_clone`           | No       | True to skip VM cloning in prepared_plan fixture (for plan-readiness tests that use existing VMs)         |
+| `rdm_as_lun`           | No       | True to map RDM disks as LUN devices with SCSI bus instead of default virtio                              |
 
 **Test Verification Configuration:**
 
