@@ -64,28 +64,42 @@ def validate_hook_config(hook_config: dict[str, Any], hook_type: str) -> None:
         hook_type (str): "pre" or "post" for error messages
 
     Raises:
-        TypeError: If hook_config is not a dict
-        ValueError: If expected_result and playbook_base64 are both specified,
-                   or if neither is specified
+        TypeError: If hook_config is not a dict.
+        ValueError: If more than one of 'expected_result', 'playbook_base64',
+                   or 'aap_job_template_id' is specified, or if none is specified,
+                   or if 'aap_job_template_id' is not a positive integer.
     """
     if not isinstance(hook_config, dict):
         raise TypeError(f"Invalid {hook_type} hook config: expected dict, got {type(hook_config).__name__}")
 
     expected_result = hook_config.get("expected_result")
     custom_playbook = hook_config.get("playbook_base64")
+    aap_job_template_id = hook_config.get("aap_job_template_id")
 
-    # Validate mutual exclusivity
-    if expected_result is not None and custom_playbook is not None:
+    modes_specified = sum(x is not None for x in (expected_result, custom_playbook, aap_job_template_id))
+
+    if modes_specified > 1:
         raise ValueError(
-            f"Invalid {hook_type} hook config: 'expected_result' and 'playbook_base64' are "
-            f"mutually exclusive. Use 'expected_result' for predefined playbooks, or "
-            f"'playbook_base64' for custom playbooks."
+            f"Invalid {hook_type} hook config: 'expected_result', 'playbook_base64', and "
+            f"'aap_job_template_id' are mutually exclusive. Specify exactly one."
         )
 
-    if expected_result is None and custom_playbook is None:
+    if modes_specified == 0:
         raise ValueError(
-            f"Invalid {hook_type} hook config: must specify either 'expected_result' or 'playbook_base64'."
+            f"Invalid {hook_type} hook config: must specify exactly one of 'expected_result', "
+            f"'playbook_base64', or 'aap_job_template_id'."
         )
+
+    if aap_job_template_id is not None:
+        if (
+            isinstance(aap_job_template_id, bool)
+            or not isinstance(aap_job_template_id, int)
+            or aap_job_template_id <= 0
+        ):
+            raise ValueError(
+                f"Invalid {hook_type} hook config: 'aap_job_template_id' must be a positive integer, "
+                f"got: {aap_job_template_id!r}"
+            )
 
     # Reject empty strings for both expected_result and custom_playbook
     if isinstance(expected_result, str) and expected_result.strip() == "":
@@ -140,9 +154,14 @@ def create_hook_for_plan(
 ) -> tuple[str, str]:
     """Create a Hook CR based on plan configuration.
 
+    Supports three mutually exclusive modes:
+        - expected_result: predefined success/fail playbooks
+        - playbook_base64: custom base64-encoded Ansible playbook
+        - aap_job_template_id: AWX job template reference (AAP hook)
+
     Args:
-        hook_config (dict[str, Any]): Hook configuration with either
-            'expected_result' OR 'playbook_base64' (mutually exclusive)
+        hook_config (dict[str, Any]): Hook configuration with exactly one of
+            'expected_result', 'playbook_base64', or 'aap_job_template_id'
         hook_type (str): "pre" or "post" for logging
         fixture_store (dict[str, Any]): Fixture store for resource tracking
         ocp_admin_client (DynamicClient): OpenShift admin client
@@ -153,22 +172,31 @@ def create_hook_for_plan(
 
     Raises:
         TypeError: If hook_config is not a dict
-        ValueError: If expected_result is invalid or playbook is invalid base64
+        ValueError: If expected_result is invalid, playbook is invalid base64,
+                   or aap_job_template_id is not a positive integer
     """
-    # Validate configuration
     validate_hook_config(hook_config, hook_type)
+
+    aap_job_template_id = hook_config.get("aap_job_template_id")
+    if aap_job_template_id is not None:
+        LOGGER.info(f"Creating AAP {hook_type} hook with job template ID {aap_job_template_id}")
+        hook = create_and_store_resource(
+            client=ocp_admin_client,
+            fixture_store=fixture_store,
+            resource=Hook,
+            namespace=target_namespace,
+            aap={"jobTemplateId": aap_job_template_id},
+        )
+        return hook.name, hook.namespace
 
     expected_result = hook_config.get("expected_result")
     custom_playbook = hook_config.get("playbook_base64")
 
-    # Determine playbook based on mode
     if custom_playbook:
-        # Custom playbook mode - validate base64, UTF-8, and YAML syntax
         validate_custom_playbook(custom_playbook, hook_type)
         playbook = custom_playbook
         LOGGER.info(f"Using custom {hook_type} hook playbook")
     else:
-        # Predefined playbook mode
         if expected_result not in ("succeed", "fail"):
             raise ValueError(
                 f"Invalid {hook_type} hook 'expected_result': must be 'succeed' or 'fail', got: '{expected_result}'"
@@ -176,14 +204,13 @@ def create_hook_for_plan(
         playbook = HOOK_PLAYBOOK_FAIL if expected_result == "fail" else HOOK_PLAYBOOK_SUCCESS
         LOGGER.info(f"Using predefined {hook_type} hook playbook for expected_result='{expected_result}'")
 
-    # Create the Hook CR
     hook = create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
         resource=Hook,
         namespace=target_namespace,
-        playbook=playbook,
         image="quay.io/konveyor/hook-runner:latest",
+        playbook=playbook,
     )
 
     return hook.name, hook.namespace
@@ -218,7 +245,7 @@ def validate_all_vms_same_step(plan_name: str, failed_steps: dict[str, str]) -> 
         raise VmMigrationStepMismatchError(plan_name, failed_steps)
 
     common_step = unique_steps.pop()
-    LOGGER.info("All VMs failed at step '%s'", common_step)
+    LOGGER.info(f"All VMs failed at step '{common_step}'")
     return common_step
 
 
@@ -263,7 +290,7 @@ def validate_expected_hook_failure(
             f"Migration failed at step '{actual_failed_step}' but expected to fail at '{expected_step}'"
         )
 
-    LOGGER.info("Migration correctly failed at expected step '%s'", expected_step)
+    LOGGER.info(f"Migration correctly failed at expected step '{expected_step}'")
 
 
 def validate_hook_failure_and_check_vms(

@@ -704,6 +704,17 @@ tests_params: dict = {
         "post_hook": {"expected_result": "fail"},
         "expected_migration_result": "fail",
     },
+    "test_aap_hook_migration": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "off",
+    },
     "test_shared_disk_rhel_migration": {
         "virtual_machines": [
             {
