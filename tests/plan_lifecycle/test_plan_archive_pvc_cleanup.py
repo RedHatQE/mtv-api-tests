@@ -315,7 +315,9 @@ class TestPlanArchivePvcCleanup:
             vm_name = resolve_destination_vm_name(vm)
             vm_obj = VirtualMachine(client=ocp_admin_client, name=vm_name, namespace=vm_namespace)
             if vm_obj.exists:
-                vm_obj.clean_up(wait=True)
+                assert vm_obj.clean_up(wait=True), (
+                    f"Failed to delete destination VM '{vm_name}' in namespace '{vm_namespace}'"
+                )
 
         try:
             for sample in TimeoutSampler(
