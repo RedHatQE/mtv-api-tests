@@ -263,6 +263,24 @@ class OCPProvider(BaseProvider):
             else False
         )
 
+        def _all_interfaces_named() -> bool:
+            interfaces = cnv_vm.vmi.interfaces
+            if interfaces is None:
+                return False
+            return all(iface.get("interfaceName") for iface in interfaces)
+
+        if result_vm_info["guest_agent_running"]:
+            try:
+                for sample in TimeoutSampler(
+                    wait_timeout=60,
+                    sleep=5,
+                    func=_all_interfaces_named,
+                ):
+                    if sample:
+                        break
+            except TimeoutExpiredError:
+                LOGGER.warning(f"Guest agent on VM {cnv_vm_name} did not report interfaceName for all NICs within 60s")
+
         # Node name - where the VM is scheduled (collected after VM start)
         try:
             result_vm_info["node_name"] = cnv_vm.vmi.instance.status.nodeName
