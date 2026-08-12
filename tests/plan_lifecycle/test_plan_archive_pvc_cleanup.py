@@ -104,8 +104,8 @@ class TestPlanArchivePvcCleanup:
 
     def test_create_storagemap(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
         ocp_admin_client: DynamicClient,
         source_provider: BaseProvider,
         destination_provider: OCPProvider,
@@ -140,8 +140,8 @@ class TestPlanArchivePvcCleanup:
 
     def test_create_networkmap(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
         ocp_admin_client: DynamicClient,
         source_provider: BaseProvider,
         destination_provider: OCPProvider,
@@ -179,8 +179,8 @@ class TestPlanArchivePvcCleanup:
 
     def test_create_plan(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
         ocp_admin_client: DynamicClient,
         source_provider: BaseProvider,
         destination_provider: OCPProvider,
@@ -221,8 +221,8 @@ class TestPlanArchivePvcCleanup:
 
     def test_migrate_vms(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
         ocp_admin_client: DynamicClient,
         target_namespace: str,
     ) -> None:
@@ -267,7 +267,10 @@ class TestPlanArchivePvcCleanup:
             f"No prime PVC found in namespace '{vm_namespace}' after post-hook failure"
         )
 
-    def test_archive_and_delete_plan(self, fixture_store: dict[str, Any]) -> None:
+    def test_archive_and_delete_plan(
+        self,
+        fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
+    ) -> None:
         """Archive and delete the failed migration plan.
 
         Args:
@@ -295,7 +298,7 @@ class TestPlanArchivePvcCleanup:
 
     def test_verify_pvc_cleanup(
         self,
-        prepared_plan: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
         ocp_admin_client: DynamicClient,
         target_namespace: str,
     ) -> None:
