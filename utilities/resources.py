@@ -70,7 +70,11 @@ def create_and_store_resource(
     return _resource
 
 
-def unregister_teardown_resource(fixture_store: dict[str, Any], kind: str, name: str) -> None:
+def unregister_teardown_resource(
+    fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
+    kind: str,
+    name: str,
+) -> None:
     """Remove a resource entry from fixture_store teardown tracking.
 
     Use after intentionally deleting a resource mid-test so session teardown
