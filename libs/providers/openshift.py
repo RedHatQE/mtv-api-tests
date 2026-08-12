@@ -264,8 +264,14 @@ class OCPProvider(BaseProvider):
         )
 
         def _all_interfaces_named() -> bool:
+            """Return whether the current VMI interfaces are ready.
+
+            Returns:
+                bool: True when each interface has a non-empty
+                    ``interfaceName`` value.
+            """
             interfaces = cnv_vm.vmi.interfaces
-            if interfaces is None:
+            if not interfaces:
                 return False
             return all(iface.get("interfaceName") for iface in interfaces)
 
