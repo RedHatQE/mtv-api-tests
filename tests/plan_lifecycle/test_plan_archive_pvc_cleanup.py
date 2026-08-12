@@ -258,9 +258,13 @@ class TestPlanArchivePvcCleanup:
         vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
         migration_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=vm_namespace))
         migration_dvs = list(DataVolume.get(client=ocp_admin_client, namespace=vm_namespace))
-        assert migration_pvcs or migration_dvs, (
-            f"No PVCs or DataVolumes found in namespace '{vm_namespace}' after "
-            "post-hook failure — the archive+delete cleanup assertion would be vacuous"
+        pvc_names = [pvc.name for pvc in migration_pvcs]
+        assert migration_dvs, f"No DataVolumes found in namespace '{vm_namespace}' after post-hook failure"
+        assert any(not name.startswith("prime-") for name in pvc_names), (
+            f"No regular PVC found in namespace '{vm_namespace}' after post-hook failure"
+        )
+        assert any(name.startswith("prime-") for name in pvc_names), (
+            f"No prime PVC found in namespace '{vm_namespace}' after post-hook failure"
         )
 
     def test_archive_and_delete_plan(self, fixture_store: dict[str, Any]) -> None:
