@@ -1,12 +1,12 @@
 {
   "ai_provider": "cursor",
-  "ai_model": "cursor:cursor-grok-4.5-high",
+  "ai_model": "cursor:cursor-grok-4.6-high",
   "ai_call_timeout": 90,
   "max_concurrent_ai_calls": 3,
   "peer_ai_configs": [
     {
       "ai_provider": "cursor",
-      "ai_model": "cursor:cursor-grok-4.5-high"
+      "ai_model": "cursor:cursor-grok-4.6-high"
     },
     {
       "ai_provider": "cursor",
