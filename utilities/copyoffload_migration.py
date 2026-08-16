@@ -566,6 +566,29 @@ def wait_for_cloud_init(
             LOGGER.info(f"Leaving VM {vm_name} powered on")
 
 
+def _get_plan_migration_status(plan: Plan) -> Any:
+    """Extract migration status block from Plan CR status.
+
+    Args:
+        plan (Plan): The Plan CR resource.
+
+    Returns:
+        Any: Migration status block from Plan CR (dynamic Kubernetes object).
+
+    Raises:
+        ValueError: If plan has no status or no migration status.
+    """
+    plan_status = plan.instance.status
+    if plan_status is None:
+        raise ValueError(f"Plan '{plan.name}' has no status")
+
+    migration_status = plan_status.migration
+    if migration_status is None:
+        raise ValueError(f"Plan '{plan.name}' has no migration status")
+
+    return migration_status
+
+
 def get_migration_uid(plan: Plan) -> str:
     """Extract the migration UID from a completed Plan's migration history.
 
@@ -581,13 +604,7 @@ def get_migration_uid(plan: Plan) -> str:
     Raises:
         ValueError: If plan status, migration, history, or UID is missing.
     """
-    plan_status = plan.instance.status
-    if plan_status is None:
-        raise ValueError(f"Plan '{plan.name}' has no status")
-
-    migration = plan_status.migration
-    if migration is None:
-        raise ValueError(f"Plan '{plan.name}' has no migration in status")
+    migration = _get_plan_migration_status(plan=plan)
 
     migration_history = migration.history
     if not migration_history:
@@ -900,15 +917,8 @@ def _get_disk_transfer_tasks(plan: Plan) -> list[Any]:
     Raises:
         ValueError: If plan has no migration status, no VMs, or no DiskTransfer tasks.
     """
-    plan_status = plan.instance.status
-    if plan_status is None:
-        raise ValueError(f"Plan '{plan.name}' has no status")
-
-    migration_status = getattr(plan_status, "migration", None)
-    if migration_status is None:
-        raise ValueError(f"Plan '{plan.name}' has no migration status")
-
-    vms: list[Any] = getattr(migration_status, "vms", None) or []
+    migration_status = _get_plan_migration_status(plan=plan)
+    vms: list[Any] = migration_status.vms or []
     if not vms:
         raise ValueError(f"Plan '{plan.name}' has no VMs in migration status")
 
@@ -950,9 +960,31 @@ def _get_xcopy_used_annotation(task: Any, plan_name: str) -> str:
     return xcopy_used
 
 
+def _verify_disk_transfer_task_count(plan: Plan, expected_task_count: int) -> list[Any]:
+    """Verify Plan DiskTransfer task count matches verified populate pod count.
+
+    Args:
+        plan (Plan): The Plan CR resource with completed migration status.
+        expected_task_count (int): Number of populate pods verified from logs.
+
+    Returns:
+        list[Any]: DiskTransfer tasks from Plan CR migration status.
+
+    Raises:
+        ValueError: If task count differs from expected_task_count or tasks are missing.
+    """
+    tasks = _get_disk_transfer_tasks(plan=plan)
+    if len(tasks) != expected_task_count:
+        raise ValueError(
+            f"Plan has {len(tasks)} DiskTransfer task(s) but {expected_task_count} populate pod(s) were verified"
+        )
+    return tasks
+
+
 def _verify_xcopy_plan_annotations(
     plan: Plan,
-    expected_xcopy_used: int,
+    expected_xcopy_used: bool,
+    expected_task_count: int,
 ) -> None:
     """Verify xcopyUsed annotations on Plan CR DiskTransfer tasks.
 
@@ -961,14 +993,17 @@ def _verify_xcopy_plan_annotations(
 
     Args:
         plan (Plan): The Plan CR resource with completed migration status.
-        expected_xcopy_used (int): Expected xcopyUsed annotation value (1 or 0).
+        expected_xcopy_used (bool): Expected XCOPY usage (True -> xcopyUsed="1", False -> xcopyUsed="0").
+        expected_task_count (int): Number of populate pods verified from logs; must match
+            DiskTransfer task count on the Plan.
 
     Raises:
-        ValueError: If plan has no DiskTransfer tasks or annotations are missing.
+        ValueError: If DiskTransfer task count differs from expected_task_count, tasks are
+            missing, or annotations are missing.
         AssertionError: If any task's xcopyUsed annotation doesn't match expected.
     """
-    tasks = _get_disk_transfer_tasks(plan=plan)
-    expected_str = str(expected_xcopy_used)
+    tasks = _verify_disk_transfer_task_count(plan=plan, expected_task_count=expected_task_count)
+    expected_str = "1" if expected_xcopy_used else "0"
 
     LOGGER.info(
         f"Verifying xcopyUsed Plan CR annotations: expecting '{expected_str}' on {len(tasks)} DiskTransfer task(s)"
@@ -1009,10 +1044,39 @@ def _parse_datastore_name_from_task_name(task_name: str) -> str:
     return match.group(1)
 
 
+def _build_expected_by_display_name(
+    expected_xcopy_by_datastore_id: dict[str, bool],
+    datastore_names_by_id: dict[str, str],
+) -> dict[str, bool]:
+    """Build per-display-name XCOPY expectations from MoRef ID mappings.
+
+    Args:
+        expected_xcopy_by_datastore_id (dict[str, bool]): Maps each datastore MoRef ID to
+            whether XCOPY is expected.
+        datastore_names_by_id (dict[str, str]): Maps each MoRef ID to its vSphere display name.
+
+    Returns:
+        dict[str, bool]: Maps each datastore display name to expected XCOPY usage.
+
+    Raises:
+        ValueError: If duplicate display names map to different datastore IDs.
+    """
+    expected_by_display_name: dict[str, bool] = {}
+    for ds_id, display_name in datastore_names_by_id.items():
+        if display_name in expected_by_display_name:
+            matching_ids: list[str] = [
+                datastore_id for datastore_id, name in datastore_names_by_id.items() if name == display_name
+            ]
+            raise ValueError(f"Datastore display name '{display_name}' matches multiple configured IDs: {matching_ids}")
+        expected_by_display_name[display_name] = expected_xcopy_by_datastore_id[ds_id]
+    return expected_by_display_name
+
+
 def _verify_xcopy_plan_annotations_per_datastore(
     plan: Plan,
     expected_xcopy_by_datastore_id: dict[str, bool],
     datastore_names_by_id: dict[str, str],
+    expected_task_count: int,
 ) -> None:
     """Verify per-datastore xcopyUsed annotations on Plan CR DiskTransfer tasks.
 
@@ -1026,17 +1090,21 @@ def _verify_xcopy_plan_annotations_per_datastore(
             whether XCOPY is expected (True -> xcopyUsed="1", False -> xcopyUsed="0").
         datastore_names_by_id (dict[str, str]): Maps each MoRef ID to its vSphere display
             name for correlating task names.
+        expected_task_count (int): Number of populate pods verified from logs; must match
+            DiskTransfer task count on the Plan.
 
     Raises:
-        ValueError: If plan has no DiskTransfer tasks, annotations are missing, or a
-            task's datastore cannot be matched.
+        ValueError: If DiskTransfer task count differs from expected_task_count, tasks are
+            missing, annotations are missing, display names are duplicated, or a task's
+            datastore cannot be matched.
         AssertionError: If any task's xcopyUsed annotation doesn't match its datastore
             expectation.
     """
-    expected_by_display_name: dict[str, bool] = {
-        display_name: expected_xcopy_by_datastore_id[ds_id] for ds_id, display_name in datastore_names_by_id.items()
-    }
-    tasks = _get_disk_transfer_tasks(plan=plan)
+    expected_by_display_name = _build_expected_by_display_name(
+        expected_xcopy_by_datastore_id=expected_xcopy_by_datastore_id,
+        datastore_names_by_id=datastore_names_by_id,
+    )
+    tasks = _verify_disk_transfer_task_count(plan=plan, expected_task_count=expected_task_count)
 
     LOGGER.info(f"Verifying per-datastore xcopyUsed Plan CR annotations on {len(tasks)} DiskTransfer task(s)")
 
@@ -1128,7 +1196,11 @@ def verify_xcopy_used(
             f"got xcopyUsed={xcopy_used}; log: {xcopy_log_line}"
         )
 
-    _verify_xcopy_plan_annotations(plan=plan, expected_xcopy_used=expected_value)
+    _verify_xcopy_plan_annotations(
+        plan=plan,
+        expected_xcopy_used=expected_xcopy_used,
+        expected_task_count=len(pod_logs),
+    )
 
 
 def _resolve_datastore_id_from_display_name(
@@ -1271,6 +1343,7 @@ def verify_xcopy_used_per_datastore(
         plan=plan,
         expected_xcopy_by_datastore_id=expected_xcopy_by_datastore_id,
         datastore_names_by_id=datastore_names_by_id,
+        expected_task_count=len(pod_logs),
     )
 
 
