@@ -976,7 +976,7 @@ def _verify_disk_transfer_task_count(plan: Plan, expected_task_count: int) -> li
     tasks = _get_disk_transfer_tasks(plan=plan)
     if len(tasks) != expected_task_count:
         raise ValueError(
-            f"Plan has {len(tasks)} DiskTransfer task(s) but {expected_task_count} populate pod(s) were verified"
+            f"Plan '{plan.name}' has {len(tasks)} DiskTransfer task(s) but {expected_task_count} populate pod(s) were verified"
         )
     return tasks
 
