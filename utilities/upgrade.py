@@ -42,6 +42,7 @@ def run_mtv_upgrade(
         "CLUSTER_USERNAME": py_config["cluster_username"],
         "CLUSTER_PASSWORD": py_config["cluster_password"],
         "CLUSTER_API_URL": py_config["cluster_host"],
+        "DEBUG": "true",
     })
 
     LOGGER.info(f"Running MTV upgrade: {script_path} (version={mtv_version}, source={mtv_source}, index={image_index})")
