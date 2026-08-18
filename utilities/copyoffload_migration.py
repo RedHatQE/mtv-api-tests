@@ -1036,8 +1036,11 @@ def _parse_datastore_name_from_task_name(task_name: str) -> str:
         str: Datastore display name extracted from brackets.
 
     Raises:
-        ValueError: If task name does not contain a bracketed datastore name.
+        ValueError: If task name is missing, empty, not a string, or does not contain
+            a bracketed datastore name.
     """
+    if not isinstance(task_name, str) or not task_name:
+        raise ValueError(f"Cannot parse datastore name from DiskTransfer task name: '{task_name}'")
     match = re.match(r"\[([^\]]+)\]", task_name)
     if not match:
         raise ValueError(f"Cannot parse datastore name from DiskTransfer task name: '{task_name}'")
