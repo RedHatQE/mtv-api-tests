@@ -247,7 +247,10 @@ class VMWareProvider(BaseProvider):
         target_vm = None
         try:
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
-        except ValueError:
+        except ValueError as err:
+            if "not found" not in str(err):
+                raise
+
             if clone_vm:
                 # Remove clone_name from options before passing to clone_vm
                 clone_vm_options = {k: v for k, v in clone_options.items() if k != "clone_name"}
@@ -274,8 +277,7 @@ class VMWareProvider(BaseProvider):
                         f"Failed to clone VM '{target_vm_name}' by cloning from '{query}' on host [{self.host}]",
                     )
             else:
-                # Re-raise the original error if cloning is not enabled
-                raise
+                raise VmNotFoundError(f"VM '{target_vm_name}' not found on host [{self.host}]") from err
 
         if not target_vm:
             raise VmNotFoundError(f"VM {target_vm_name} not found on host [{self.host}]")

@@ -4,11 +4,16 @@ from typing import Any
 
 from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
+from ovirtsdk4 import NotFoundError as OvirtNotFoundError
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError
 
+from exceptions.exceptions import VmNotFoundError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory, VsphereForkliftInventory
+from libs.providers.openstack import OpenStackProvider
+from libs.providers.rhv import OvirtProvider
+from libs.providers.vmware import VMWareProvider
 from utilities.copyoffload_datastore import resolve_datastore_moid_from_disk_config
 
 LOGGER = get_logger(__name__)
@@ -183,3 +188,43 @@ def wait_for_cloned_vms_in_forklift_inventory(
     # Non-vSphere or workaround inactive — plain wait per VM
     for vm_name in cloned_vm_names:
         source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+
+
+def validate_source_vms_exist(source_provider: BaseProvider, vm_names: list[str]) -> None:
+    """Validate that all source VMs/templates exist on the provider before cloning.
+
+    For RHV, validates template names (RHV clones from templates, not VMs).
+    For VMware and OpenStack, validates VM names.
+
+    Args:
+        source_provider: Source provider instance (VMware, RHV, or OpenStack).
+        vm_names: VM or template names to check on the source provider.
+
+    Raises:
+        VmNotFoundError: If one or more VMs/templates are not found on the source provider.
+    """
+    missing: list[str] = []
+
+    if isinstance(source_provider, OvirtProvider):
+        for name in vm_names:
+            try:
+                source_provider.get_template_by_name(name=name)
+            except OvirtNotFoundError:
+                missing.append(name)
+        entity_type = "templates"
+    elif isinstance(source_provider, (VMWareProvider, OpenStackProvider)):
+        for name in vm_names:
+            try:
+                source_provider.get_vm_by_name(query=name)
+            except VmNotFoundError:
+                missing.append(name)
+        entity_type = "VMs"
+    else:
+        raise TypeError(f"Unsupported provider type for VM validation: {type(source_provider).__name__}")
+
+    if missing:
+        raise VmNotFoundError(
+            f"Source {entity_type} not found on {source_provider.type} provider [{source_provider.host}]: "
+            f"{', '.join(missing)}. "
+            f"Verify names in the test config match {entity_type} on the source provider."
+        )

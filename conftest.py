@@ -54,7 +54,7 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.provider_inventory import wait_for_cloned_vms_in_forklift_inventory
+from utilities.provider_inventory import validate_source_vms_exist, wait_for_cloned_vms_in_forklift_inventory
 from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
@@ -991,9 +991,36 @@ def class_plan_config(request: pytest.FixtureRequest) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="class")
+def validated_source_vms(
+    class_plan_config: dict[str, Any],
+    source_provider: Any,
+) -> None:
+    """Validate that source VMs/templates exist on the provider before any test setup.
+
+    Runs once per test class as early as possible to fail fast before cloning,
+    namespace creation, or other expensive setup.
+
+    Args:
+        class_plan_config (dict[str, Any]): Plan configuration from parametrization.
+        source_provider: Source provider instance.
+
+    Raises:
+        VmNotFoundError: If one or more VMs/templates are not found.
+    """
+    if source_provider.type not in (Provider.ProviderType.OVA, Provider.ProviderType.OPENSHIFT):
+        virtual_machines = [dict(vm) for vm in class_plan_config["virtual_machines"]]
+        apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
+        validate_source_vms_exist(
+            source_provider=source_provider,
+            vm_names=[vm["name"] for vm in virtual_machines],
+        )
+
+
+@pytest.fixture(scope="class")
 def prepared_plan(
     request: pytest.FixtureRequest,
     class_plan_config: dict[str, Any],
+    validated_source_vms: None,
     fixture_store: dict[str, Any],
     source_provider: Any,
     source_vms_namespace: str,
@@ -1020,6 +1047,7 @@ def prepared_plan(
     Args:
         request (pytest.FixtureRequest): Pytest fixture request
         class_plan_config (dict[str, Any]): Plan configuration from parametrization
+        validated_source_vms (None): Ensures source VMs/templates exist before setup
         fixture_store (dict[str, Any]): Fixture store for resource tracking
         source_provider: Source provider instance (VMWareProvider, OvirtProvider, etc.)
         source_vms_namespace (str): Source VMs namespace
