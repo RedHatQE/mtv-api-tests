@@ -9,6 +9,7 @@ and verify AAP hook execution after migration.
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -27,6 +28,7 @@ from ocp_resources.route import Route
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
 
+from utilities.lock_dir import ensure_secure_shared_lock_dir
 from utilities.resources import create_and_store_resource
 
 if TYPE_CHECKING:
@@ -165,43 +167,80 @@ def deploy_awx_via_helm() -> None:
     )
 
 
-def _awx_shared_dir() -> Path:
-    """Return the shared temp directory used for AWX xdist coordination.
+def _awx_coordination_key(client: DynamicClient) -> str:
+    """Return a filesystem-safe key isolating AWX lifecycle state.
+
+    Combines the target API server with the pytest-xdist testrun id (or the
+    parent pid when xdist is not used) so xdist workers of one run against one
+    cluster share state, while other clusters and other pytest sessions do not.
+
+    Args:
+        client (DynamicClient): OpenShift client for the cluster under test.
 
     Returns:
-        Path: Directory under the process temp dir.
+        str: Hex digest used as a subdirectory name.
+
+    Raises:
+        ValueError: If the client has no API server host.
     """
-    lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-awx"
-    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    host = client.configuration.host
+    if not host:
+        raise ValueError("OpenShift client has no API server host; cannot isolate AWX lifecycle state")
+    testrun = os.environ.get("PYTEST_XDIST_TESTRUNUID") or str(os.getppid())
+    return hashlib.sha256(f"{host}\0{testrun}".encode()).hexdigest()[:16]
+
+
+def _awx_shared_dir(coordination_key: str) -> Path:
+    """Return the shared temp directory used for AWX xdist coordination.
+
+    Args:
+        coordination_key (str): Cluster-and-session isolation key.
+
+    Returns:
+        Path: Secured directory under the process temp dir.
+    """
+    parent = Path(tempfile.gettempdir()) / "pytest-shared-awx"
+    ensure_secure_shared_lock_dir(lock_dir=parent)
+    lock_dir = parent / coordination_key
+    ensure_secure_shared_lock_dir(lock_dir=lock_dir)
     return lock_dir
 
 
-def get_awx_lifecycle_lock_path() -> Path:
+def _get_awx_lifecycle_lock_path(coordination_key: str) -> Path:
     """Return the cross-worker lock path for AWX Helm install and uninstall.
 
+    Args:
+        coordination_key (str): Cluster-and-session isolation key.
+
     Returns:
-        Path: File lock path under a shared temp directory.
+        Path: File lock path under a secured shared temp directory.
     """
-    return _awx_shared_dir() / "awx-lifecycle.lock"
+    return _awx_shared_dir(coordination_key) / "awx-lifecycle.lock"
 
 
-def _awx_owner_path() -> Path:
+def _awx_owner_path(coordination_key: str) -> Path:
     """Return the sentinel file path that marks this session as Helm owner.
+
+    Args:
+        coordination_key (str): Cluster-and-session isolation key.
 
     Returns:
         Path: Owner sentinel path.
     """
-    return _awx_shared_dir() / "awx-owner"
+    return _awx_shared_dir(coordination_key) / "awx-owner"
 
 
-def _awx_lease_dir() -> Path:
+def _awx_lease_dir(coordination_key: str) -> Path:
     """Return the directory of live worker lease files.
 
+    Args:
+        coordination_key (str): Cluster-and-session isolation key.
+
     Returns:
-        Path: Lease directory.
+        Path: Secured lease directory.
     """
-    lease_dir = _awx_shared_dir() / "leases"
-    lease_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lease_dir = _awx_shared_dir(coordination_key) / "leases"
+    ensure_secure_shared_lock_dir(lock_dir=lease_dir)
     return lease_dir
 
 
@@ -210,9 +249,6 @@ def _prune_stale_awx_leases(lease_dir: Path) -> None:
 
     Args:
         lease_dir (Path): Directory of ``<pid>.lease`` files.
-
-    Returns:
-        None
     """
     for lease in lease_dir.glob("*.lease"):
         try:
@@ -222,13 +258,16 @@ def _prune_stale_awx_leases(lease_dir: Path) -> None:
             continue
         try:
             os.kill(pid, 0)
-        except OSError:
+        except ProcessLookupError:
             lease.unlink(missing_ok=True)
 
 
 @contextmanager
-def awx_lifecycle_lock() -> Generator[None, None, None]:
+def awx_lifecycle_lock(client: DynamicClient) -> Generator[None, None, None]:
     """Serialize AWX Helm install and uninstall across pytest-xdist workers.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes the lock.
 
     Yields:
         None
@@ -236,8 +275,9 @@ def awx_lifecycle_lock() -> Generator[None, None, None]:
     Raises:
         TimeoutError: If the lock cannot be acquired within
             ``_AWX_LIFECYCLE_LOCK_TIMEOUT`` seconds.
+        ValueError: If the client has no API server host.
     """
-    lock_path = get_awx_lifecycle_lock_path()
+    lock_path = _get_awx_lifecycle_lock_path(_awx_coordination_key(client))
     try:
         with filelock.FileLock(lock_path, timeout=_AWX_LIFECYCLE_LOCK_TIMEOUT):
             yield
@@ -248,7 +288,7 @@ def awx_lifecycle_lock() -> Generator[None, None, None]:
         ) from err
 
 
-def register_awx_worker() -> None:
+def register_awx_worker(client: DynamicClient) -> None:
     """Record this process as a live user of the shared AWX Helm release.
 
     Must be called while holding ``awx_lifecycle_lock``. If no other workers
@@ -256,34 +296,39 @@ def register_awx_worker() -> None:
     the last worker can tear the release down. Leftover owner files from a
     crashed session are discarded when AWX is already installed.
 
-    Returns:
-        None
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes the leases.
     """
-    lease_dir = _awx_lease_dir()
+    coordination_key = _awx_coordination_key(client)
+    lease_dir = _awx_lease_dir(coordination_key)
     _prune_stale_awx_leases(lease_dir)
     if not any(lease_dir.glob("*.lease")):
         if is_awx_installed():
-            _awx_owner_path().unlink(missing_ok=True)
+            _awx_owner_path(coordination_key).unlink(missing_ok=True)
         else:
-            _awx_owner_path().write_text("1")
+            _awx_owner_path(coordination_key).write_text("1")
     (lease_dir / f"{os.getpid()}.lease").write_text("")
 
 
-def unregister_awx_worker() -> bool:
+def unregister_awx_worker(client: DynamicClient) -> bool:
     """Drop this process's AWX lease.
 
     Must be called while holding ``awx_lifecycle_lock``.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes the leases.
 
     Returns:
         bool: True if this was the last live worker and this session owns the
             Helm install, so the caller should run ``teardown_awx()``.
     """
-    lease_dir = _awx_lease_dir()
+    coordination_key = _awx_coordination_key(client)
+    lease_dir = _awx_lease_dir(coordination_key)
     (lease_dir / f"{os.getpid()}.lease").unlink(missing_ok=True)
     _prune_stale_awx_leases(lease_dir)
     if any(lease_dir.glob("*.lease")):
         return False
-    owner_path = _awx_owner_path()
+    owner_path = _awx_owner_path(coordination_key)
     owned = owner_path.exists()
     owner_path.unlink(missing_ok=True)
     return owned

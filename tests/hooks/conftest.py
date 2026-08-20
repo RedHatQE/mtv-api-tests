@@ -77,8 +77,8 @@ def awx_deployment(
     """
     registered = False
     try:
-        with awx_lifecycle_lock():
-            register_awx_worker()
+        with awx_lifecycle_lock(client=ocp_admin_client):
+            register_awx_worker(client=ocp_admin_client)
             registered = True
             deploy_awx_via_helm()
             create_awx_instance(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
@@ -89,8 +89,8 @@ def awx_deployment(
         yield awx_url
     finally:
         if registered:
-            with awx_lifecycle_lock():
-                if unregister_awx_worker():
+            with awx_lifecycle_lock(client=ocp_admin_client):
+                if unregister_awx_worker(client=ocp_admin_client):
                     teardown_awx()
 
 
