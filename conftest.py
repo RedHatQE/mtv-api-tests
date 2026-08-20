@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING, Any
 import filelock
 import pytest
 from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
+from xdist.workermanage import WorkerController
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
-    from xdist.workermanage import WorkerController
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -264,8 +264,8 @@ def pytest_sessionfinish(session, exitstatus):
 
     try:
         maybe_teardown_awx_at_session_end(session.config)
-    except Exception as exp:
-        LOGGER.error(f"AWX session teardown failed: {exp}")
+    except (TimeoutError, ValueError) as exp:
+        LOGGER.exception(f"AWX session teardown failed: {exp}")
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -393,9 +393,6 @@ def pytest_xdist_node_collection_finished(node: WorkerController, ids: list[str]
     Args:
         node (WorkerController): xdist worker node that finished collection.
         ids (list[str]): Node ids collected by that worker.
-
-    Returns:
-        None
 
     Raises:
         TimeoutError: If the AWX lifecycle lock cannot be acquired.
