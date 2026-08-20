@@ -173,7 +173,7 @@ class TestPlanArchivePvcCleanup:
             target_namespace=target_namespace,
             vms=vms,
         )
-        assert self.storage_map, "StorageMap creation failed"
+        assert self.__class__.storage_map, "StorageMap creation failed"
 
     def test_create_networkmap(
         self,
@@ -215,7 +215,7 @@ class TestPlanArchivePvcCleanup:
             multus_network_name=multus_network_name,
             vms=vms,
         )
-        assert self.network_map, "NetworkMap creation failed"
+        assert self.__class__.network_map, "NetworkMap creation failed"
 
     def test_create_plan(
         self,
@@ -251,8 +251,8 @@ class TestPlanArchivePvcCleanup:
             fixture_store=fixture_store,
             source_provider=source_provider,
             destination_provider=destination_provider,
-            storage_map=self.storage_map,
-            network_map=self.network_map,
+            storage_map=self.__class__.storage_map,
+            network_map=self.__class__.network_map,
             virtual_machines_list=prepared_plan["virtual_machines"],
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
@@ -260,7 +260,7 @@ class TestPlanArchivePvcCleanup:
             after_hook_name=prepared_plan["_post_hook_name"],
             after_hook_namespace=prepared_plan["_post_hook_namespace"],
         )
-        assert self.plan_resource, "Plan creation failed"
+        assert self.__class__.plan_resource, "Plan creation failed"
 
     def test_migrate_vms(
         self,
@@ -291,11 +291,11 @@ class TestPlanArchivePvcCleanup:
             execute_migration(
                 ocp_admin_client=ocp_admin_client,
                 fixture_store=fixture_store,
-                plan=self.plan_resource,
+                plan=self.__class__.plan_resource,
                 target_namespace=target_namespace,
             )
 
-        validate_hook_failure_and_check_vms(self.plan_resource, prepared_plan)
+        validate_hook_failure_and_check_vms(self.__class__.plan_resource, prepared_plan)
 
         # Verify migration created resources before we archive+delete.
         # The target namespace is unique per session (named after session_uuid),
@@ -336,7 +336,7 @@ class TestPlanArchivePvcCleanup:
         Raises:
             AssertionError: If plan is not archived or deletion fails.
         """
-        plan = self.plan_resource
+        plan = self.__class__.plan_resource
         migration = get_migration_for_plan(plan)
 
         archive_plan(plan=plan)
