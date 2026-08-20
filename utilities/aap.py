@@ -237,6 +237,9 @@ def _prune_stale_awx_leases(lease_dir: Path) -> None:
 
     Args:
         lease_dir (Path): Directory of ``<pid>.lease`` files.
+
+    Returns:
+        None
     """
     for lease in lease_dir.glob("*.lease"):
         try:
@@ -286,6 +289,9 @@ def register_awx_worker(client: DynamicClient) -> None:
 
     Args:
         client (DynamicClient): OpenShift client whose API host scopes the leases.
+
+    Returns:
+        None
     """
     coordination_key = _awx_coordination_key(client)
     lease_dir = _awx_lease_dir(coordination_key)
