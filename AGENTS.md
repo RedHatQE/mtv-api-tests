@@ -720,11 +720,14 @@ from teardown to prevent session cleanup from operating on a missing resource:
 # Assumes Plan, Migration, archive_plan, get_migration_for_plan are already imported
 from utilities.resources import unregister_teardown_resource
 
-migration_name = get_migration_for_plan(plan).name
-archive_plan(plan=self.plan_resource)
-self.plan_resource.clean_up(wait=True)
-unregister_teardown_resource(fixture_store=fixture_store, kind=Plan.kind, name=self.plan_resource.name)
-unregister_teardown_resource(fixture_store=fixture_store, kind=Migration.kind, name=migration_name)
+plan = self.plan_resource
+migration = get_migration_for_plan(plan)
+archive_plan(plan=plan)
+plan.clean_up(wait=True)
+unregister_teardown_resource(fixture_store=fixture_store, kind=Plan.kind, name=plan.name, namespace=plan.namespace)
+unregister_teardown_resource(
+    fixture_store=fixture_store, kind=Migration.kind, name=migration.name, namespace=migration.namespace
+)
 ```
 
 ## Test Structure Pattern
