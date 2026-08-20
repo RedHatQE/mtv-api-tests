@@ -7,7 +7,6 @@ to use it. Class-scoped fixtures create AAP Hook CRs for each test class.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generator
 
 import pytest
@@ -25,7 +24,6 @@ from utilities.aap import (
     AWX_PREHOOK_TEMPLATE_NAME,
     AWX_PROJECT_NAME,
     awx_lifecycle_lock,
-    clear_awx_install_owner,
     create_aap_token_secret,
     create_awx_auth_token,
     create_awx_instance,
@@ -37,15 +35,12 @@ from utilities.aap import (
     get_awx_route_url,
     mark_awx_install_owner,
     register_awx_worker,
-    teardown_awx,
     unregister_awx_worker,
     wait_for_awx_api_ready,
     wait_for_awx_project_sync,
     wait_for_awx_ready,
 )
 from utilities.hooks import create_hook_for_plan
-from utilities.pytest_utils import is_dry_run
-from utilities.utils import get_cluster_client
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -55,60 +50,6 @@ LOGGER = get_logger(__name__)
 FORKLIFT_CONTROLLER_NAME: str = (
     "forklift-controller"  # Well-known name of the ForkliftController CR created by MTV operator
 )
-_AWX_CONTROLLER_REGISTERED_ATTR = "_mtv_awx_controller_registered"
-
-
-def _is_xdist_worker(config: pytest.Config) -> bool:
-    """Return True when this pytest process is an xdist worker.
-
-    Args:
-        config (pytest.Config): Pytest config for this process.
-
-    Returns:
-        bool: True for xdist workers, False for the controller or a non-xdist run.
-    """
-    return getattr(config, "workerinput", None) is not None
-
-
-def _session_includes_hooks_tests(items: list[pytest.Item]) -> bool:
-    """Return True when collected items include tests under tests/hooks.
-
-    Args:
-        items (list[pytest.Item]): Collected pytest items.
-
-    Returns:
-        bool: True if at least one item lives under the hooks test directory.
-    """
-    return any("hooks" in Path(str(getattr(item, "path", item.fspath))).parts for item in items)
-
-
-def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Register the controller process as an AWX session participant.
-
-    xdist workers request ``awx_deployment`` lazily. A controller lease opened
-    during collection stays alive until ``pytest_sessionfinish``, so a worker
-    that finishes hooks tests cannot treat an empty lease set as "no future
-    fixture users."
-    """
-    if _is_xdist_worker(config) or is_dry_run(config) or not _session_includes_hooks_tests(items):
-        return
-    client = get_cluster_client()
-    with awx_lifecycle_lock(client=client):
-        register_awx_worker(client=client)
-    setattr(config, _AWX_CONTROLLER_REGISTERED_ATTR, True)
-
-
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Tear down AWX after the full pytest session when this run owns it."""
-    if not getattr(session.config, _AWX_CONTROLLER_REGISTERED_ATTR, False):
-        return
-    client = get_cluster_client()
-    with awx_lifecycle_lock(client=client):
-        should_teardown = unregister_awx_worker(client=client)
-        if not should_teardown or session.config.getoption("skip_teardown"):
-            return
-        if teardown_awx():
-            clear_awx_install_owner(client=client)
 
 
 @pytest.fixture(scope="session")
@@ -122,8 +63,9 @@ def awx_deployment(
     at runtime — cleanup is handled by namespace deletion in teardown_awx().
 
     Helm install is serialized across pytest-xdist workers with a file lock
-    and PID leases. The pytest controller registers before tests start and
-    tears AWX down in ``pytest_sessionfinish`` after every worker finishes.
+    and PID leases. The pytest controller registers during collection in the
+    root conftest and tears AWX down in root ``pytest_sessionfinish`` after
+    every worker finishes.
 
     Args:
         ocp_admin_client: OpenShift admin client.

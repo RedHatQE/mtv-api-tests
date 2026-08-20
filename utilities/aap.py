@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import filelock
+import pytest
 import requests
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.pod import Pod
@@ -30,6 +31,7 @@ from simple_logger.logger import get_logger
 
 from utilities.lock_dir import ensure_secure_shared_lock_dir
 from utilities.resources import create_and_store_resource
+from utilities.utils import get_cluster_client
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -56,9 +58,11 @@ AWX_PROJECTS_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AWX_POSTGRES_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AAP_TOKEN_SECRET_NAME: str = "awx-aap"  # Arbitrary name; referenced by ForkliftController aap_token_secret_name
 _AWX_SHELL_TIMEOUT = 600  # Per helm/oc invocation, including helm install --wait
-# deploy_awx_via_helm holds the lock across helm list, repo add, repo update, and install.
-_AWX_LOCKED_DEPLOY_SHELL_CALLS = 4
+# Locked install path: mark_awx_install_owner helm list, then deploy_awx_via_helm
+# helm list, repo add, repo update, and install.
+_AWX_LOCKED_DEPLOY_SHELL_CALLS = 5
 _AWX_LIFECYCLE_LOCK_TIMEOUT = _AWX_SHELL_TIMEOUT * _AWX_LOCKED_DEPLOY_SHELL_CALLS
+_AWX_CONTROLLER_REGISTERED_ATTR = "_mtv_awx_controller_registered"
 
 
 def _awx_api_request(
@@ -171,11 +175,11 @@ def deploy_awx_via_helm() -> None:
 
 
 def _awx_coordination_key(client: DynamicClient) -> str:
-    """Return a filesystem-safe key isolating AWX lifecycle state.
+    """Return a filesystem-safe key isolating AWX lifecycle state per cluster.
 
-    Combines the target API server with the pytest-xdist testrun id (or the
-    parent pid when xdist is not used) so xdist workers of one run against one
-    cluster share state, while other clusters and other pytest sessions do not.
+    AWX is a cluster singleton. Owner and lease files are keyed by API host so a
+    later pytest session can retry cleanup after a failed uninstall. Concurrent
+    sessions still serialize through live PID leases; stale PIDs are pruned.
 
     Args:
         client (DynamicClient): OpenShift client for the cluster under test.
@@ -189,15 +193,14 @@ def _awx_coordination_key(client: DynamicClient) -> str:
     host = client.configuration.host
     if not host:
         raise ValueError("OpenShift client has no API server host; cannot isolate AWX lifecycle state")
-    testrun = os.environ.get("PYTEST_XDIST_TESTRUNUID") or str(os.getppid())
-    return hashlib.sha256(f"{host}\0{testrun}".encode()).hexdigest()[:16]
+    return hashlib.sha256(host.encode()).hexdigest()[:16]
 
 
 def _awx_shared_dir(coordination_key: str) -> Path:
     """Return the shared temp directory used for AWX xdist coordination.
 
     Args:
-        coordination_key (str): Cluster-and-session isolation key.
+        coordination_key (str): Cluster isolation key.
 
     Returns:
         Path: Secured directory under the process temp dir.
@@ -210,10 +213,10 @@ def _awx_shared_dir(coordination_key: str) -> Path:
 
 
 def _awx_owner_path(coordination_key: str) -> Path:
-    """Return the sentinel file path that marks this session as Helm owner.
+    """Return the sentinel file path that marks Helm install ownership.
 
     Args:
-        coordination_key (str): Cluster-and-session isolation key.
+        coordination_key (str): Cluster isolation key.
 
     Returns:
         Path: Owner sentinel path.
@@ -225,7 +228,7 @@ def _awx_lease_dir(coordination_key: str) -> Path:
     """Return the directory of live worker lease files.
 
     Args:
-        coordination_key (str): Cluster-and-session isolation key.
+        coordination_key (str): Cluster isolation key.
 
     Returns:
         Path: Secured lease directory.
@@ -254,6 +257,8 @@ def _prune_stale_awx_leases(lease_dir: Path) -> None:
             os.kill(pid, 0)
         except ProcessLookupError:
             lease.unlink(missing_ok=True)
+        except PermissionError:
+            continue
 
 
 @contextmanager
@@ -350,6 +355,72 @@ def clear_awx_install_owner(client: DynamicClient) -> None:
         None
     """
     _awx_owner_path(_awx_coordination_key(client)).unlink(missing_ok=True)
+
+
+def maybe_register_awx_controller_lease(
+    config: pytest.Config,
+    items: list[pytest.Item] | None = None,
+    nodeids: list[str] | None = None,
+) -> None:
+    """Register the pytest controller as an AWX lifecycle participant.
+
+    Nested ``tests/hooks`` collection hooks do not run in the xdist controller.
+    Call this from the root ``pytest_collection_modifyitems`` and
+    ``pytest_xdist_node_collection_finished`` hooks so the controller PID lease
+    outlives every worker fixture.
+
+    Args:
+        config (pytest.Config): Pytest config for this process.
+        items (list[pytest.Item] | None): Collected pytest items.
+        nodeids (list[str] | None): Collected node ids from an xdist worker.
+
+    Returns:
+        None
+
+    Raises:
+        TimeoutError: If the AWX lifecycle lock cannot be acquired.
+        ValueError: If the OpenShift client has no API server host.
+    """
+    if getattr(config, _AWX_CONTROLLER_REGISTERED_ATTR, False):
+        return
+    if getattr(config, "workerinput", None) is not None:
+        return
+    if items is not None:
+        has_hooks_tests = any("hooks" in Path(str(getattr(item, "path", item.fspath))).parts for item in items)
+    elif nodeids is not None:
+        has_hooks_tests = any("/hooks/" in nodeid.replace("\\", "/") for nodeid in nodeids)
+    else:
+        has_hooks_tests = False
+    if not has_hooks_tests:
+        return
+    client = get_cluster_client()
+    with awx_lifecycle_lock(client=client):
+        register_awx_worker(client=client)
+    setattr(config, _AWX_CONTROLLER_REGISTERED_ATTR, True)
+
+
+def maybe_teardown_awx_at_session_end(config: pytest.Config) -> None:
+    """Unregister the controller lease and tear down AWX when this run owns it.
+
+    Args:
+        config (pytest.Config): Pytest config for this process.
+
+    Returns:
+        None
+
+    Raises:
+        TimeoutError: If the AWX lifecycle lock cannot be acquired.
+        ValueError: If the OpenShift client has no API server host.
+    """
+    if not getattr(config, _AWX_CONTROLLER_REGISTERED_ATTR, False):
+        return
+    client = get_cluster_client()
+    with awx_lifecycle_lock(client=client):
+        should_teardown = unregister_awx_worker(client=client)
+        if not should_teardown or config.getoption("skip_teardown"):
+            return
+        if teardown_awx():
+            clear_awx_install_owner(client=client)
 
 
 def create_awx_instance(
