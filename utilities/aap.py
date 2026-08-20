@@ -239,14 +239,15 @@ def _awx_lease_dir(coordination_key: str) -> Path:
 
 
 def _process_start_ticks(pid: int) -> str | None:
-    """Return kernel starttime ticks for ``pid``, or None if it is gone.
+    """Return kernel starttime ticks for ``pid``.
 
     Args:
         pid (int): Process id to inspect.
 
     Returns:
         str | None: The ``/proc/<pid>/stat`` starttime field, or None when the
-            process cannot be read.
+            process is gone, ``/proc`` cannot be read, or the stat line is
+            malformed.
     """
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
