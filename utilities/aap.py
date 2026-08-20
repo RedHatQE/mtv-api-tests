@@ -9,11 +9,17 @@ and verify AAP hook execution after migration.
 from __future__ import annotations
 
 import base64
+import os
 import subprocess
+import tempfile
 import time
 import urllib.parse
+from collections.abc import Generator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import filelock
 import requests
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.pod import Pod
@@ -47,6 +53,7 @@ AWX_HELM_RELEASE_NAME: str = "awx-operator"
 AWX_PROJECTS_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AWX_POSTGRES_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AAP_TOKEN_SECRET_NAME: str = "awx-aap"  # Arbitrary name; referenced by ForkliftController aap_token_secret_name
+_AWX_LIFECYCLE_LOCK_TIMEOUT = 600  # Helm install --wait is 5m; include buffer for lock wait
 
 
 def _awx_api_request(
@@ -156,6 +163,130 @@ def deploy_awx_via_helm() -> None:
         f"helm install {AWX_HELM_RELEASE_NAME} {AWX_HELM_REPO_NAME}/awx-operator "
         f"--namespace {AWX_NAMESPACE} --create-namespace --wait --timeout 5m"
     )
+
+
+def _awx_shared_dir() -> Path:
+    """Return the shared temp directory used for AWX xdist coordination.
+
+    Returns:
+        Path: Directory under the process temp dir.
+    """
+    lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-awx"
+    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return lock_dir
+
+
+def get_awx_lifecycle_lock_path() -> Path:
+    """Return the cross-worker lock path for AWX Helm install and uninstall.
+
+    Returns:
+        Path: File lock path under a shared temp directory.
+    """
+    return _awx_shared_dir() / "awx-lifecycle.lock"
+
+
+def _awx_owner_path() -> Path:
+    """Return the sentinel file path that marks this session as Helm owner.
+
+    Returns:
+        Path: Owner sentinel path.
+    """
+    return _awx_shared_dir() / "awx-owner"
+
+
+def _awx_lease_dir() -> Path:
+    """Return the directory of live worker lease files.
+
+    Returns:
+        Path: Lease directory.
+    """
+    lease_dir = _awx_shared_dir() / "leases"
+    lease_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return lease_dir
+
+
+def _prune_stale_awx_leases(lease_dir: Path) -> None:
+    """Remove lease files whose owning process is no longer alive.
+
+    Args:
+        lease_dir (Path): Directory of ``<pid>.lease`` files.
+
+    Returns:
+        None
+    """
+    for lease in lease_dir.glob("*.lease"):
+        try:
+            pid = int(lease.stem)
+        except ValueError:
+            lease.unlink(missing_ok=True)
+            continue
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            lease.unlink(missing_ok=True)
+
+
+@contextmanager
+def awx_lifecycle_lock() -> Generator[None, None, None]:
+    """Serialize AWX Helm install and uninstall across pytest-xdist workers.
+
+    Yields:
+        None
+
+    Raises:
+        TimeoutError: If the lock cannot be acquired within
+            ``_AWX_LIFECYCLE_LOCK_TIMEOUT`` seconds.
+    """
+    lock_path = get_awx_lifecycle_lock_path()
+    try:
+        with filelock.FileLock(lock_path, timeout=_AWX_LIFECYCLE_LOCK_TIMEOUT):
+            yield
+    except filelock.Timeout as err:
+        raise TimeoutError(
+            f"Timeout ({_AWX_LIFECYCLE_LOCK_TIMEOUT}s) waiting for AWX lifecycle lock at {lock_path}. "
+            "Another worker may be installing or tearing down AWX."
+        ) from err
+
+
+def register_awx_worker() -> None:
+    """Record this process as a live user of the shared AWX Helm release.
+
+    Must be called while holding ``awx_lifecycle_lock``. If no other workers
+    hold a lease and AWX is not installed, this session is marked as owner so
+    the last worker can tear the release down. Leftover owner files from a
+    crashed session are discarded when AWX is already installed.
+
+    Returns:
+        None
+    """
+    lease_dir = _awx_lease_dir()
+    _prune_stale_awx_leases(lease_dir)
+    if not any(lease_dir.glob("*.lease")):
+        if is_awx_installed():
+            _awx_owner_path().unlink(missing_ok=True)
+        else:
+            _awx_owner_path().write_text("1")
+    (lease_dir / f"{os.getpid()}.lease").write_text("")
+
+
+def unregister_awx_worker() -> bool:
+    """Drop this process's AWX lease.
+
+    Must be called while holding ``awx_lifecycle_lock``.
+
+    Returns:
+        bool: True if this was the last live worker and this session owns the
+            Helm install, so the caller should run ``teardown_awx()``.
+    """
+    lease_dir = _awx_lease_dir()
+    (lease_dir / f"{os.getpid()}.lease").unlink(missing_ok=True)
+    _prune_stale_awx_leases(lease_dir)
+    if any(lease_dir.glob("*.lease")):
+        return False
+    owner_path = _awx_owner_path()
+    owned = owner_path.exists()
+    owner_path.unlink(missing_ok=True)
+    return owned
 
 
 def create_awx_instance(

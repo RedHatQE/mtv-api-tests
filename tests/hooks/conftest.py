@@ -23,6 +23,7 @@ from utilities.aap import (
     AWX_PREHOOK_PLAYBOOK,
     AWX_PREHOOK_TEMPLATE_NAME,
     AWX_PROJECT_NAME,
+    awx_lifecycle_lock,
     create_aap_token_secret,
     create_awx_auth_token,
     create_awx_instance,
@@ -31,9 +32,10 @@ from utilities.aap import (
     create_awx_project,
     deploy_awx_via_helm,
     get_awx_admin_password,
-    is_awx_installed,
     get_awx_route_url,
+    register_awx_worker,
     teardown_awx,
+    unregister_awx_worker,
     wait_for_awx_api_ready,
     wait_for_awx_project_sync,
     wait_for_awx_ready,
@@ -60,24 +62,36 @@ def awx_deployment(
     and waits for all pods to be ready. AWX is a third-party CRD installed
     at runtime — cleanup is handled by namespace deletion in teardown_awx().
 
+    Helm install and uninstall are serialized across pytest-xdist workers
+    with a file lock and a PID lease. Only the last worker tears AWX down,
+    and only when this session installed the Helm release.
+
     Args:
         ocp_admin_client: OpenShift admin client.
 
     Yields:
         str: AWX web route URL (https://...).
+
+    Raises:
+        TimeoutError: If the cross-worker AWX lifecycle lock cannot be acquired.
     """
-    created_by_us = not is_awx_installed()
+    registered = False
     try:
-        deploy_awx_via_helm()
-        create_awx_instance(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
+        with awx_lifecycle_lock():
+            register_awx_worker()
+            registered = True
+            deploy_awx_via_helm()
+            create_awx_instance(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
         wait_for_awx_ready(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
         awx_url = get_awx_route_url(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
         password = get_awx_admin_password(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
         wait_for_awx_api_ready(awx_url=awx_url, username=AWX_ADMIN_USERNAME, password=password)
         yield awx_url
     finally:
-        if created_by_us:
-            teardown_awx()
+        if registered:
+            with awx_lifecycle_lock():
+                if unregister_awx_worker():
+                    teardown_awx()
 
 
 @pytest.fixture(scope="session")
