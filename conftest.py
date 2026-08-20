@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING, Any
 import filelock
 import pytest
 from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
-from xdist.workermanage import WorkerController
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from xdist.workermanage import WorkerController
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
