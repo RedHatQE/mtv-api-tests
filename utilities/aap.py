@@ -238,12 +238,35 @@ def _awx_lease_dir(coordination_key: str) -> Path:
     return lease_dir
 
 
-def _prune_stale_awx_leases(lease_dir: Path) -> None:
-    """Remove lease files whose owning process is no longer alive.
+def _process_start_ticks(pid: int) -> str | None:
+    """Return kernel starttime ticks for ``pid``, or None if it is gone.
 
-    Also drops leases whose PID is inaccessible. The lease directory is owned
-    by the current user, so those PIDs cannot be live pytest workers from this
-    session.
+    Args:
+        pid (int): Process id to inspect.
+
+    Returns:
+        str | None: The ``/proc/<pid>/stat`` starttime field, or None when the
+            process cannot be read.
+    """
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
+        return None
+    close_paren = stat.rfind(")")
+    if close_paren == -1:
+        return None
+    fields = stat[close_paren + 2 :].split()
+    # Field 22 (starttime) is index 19 after the comm field is removed.
+    if len(fields) < 20:
+        return None
+    return fields[19]
+
+
+def _prune_stale_awx_leases(lease_dir: Path) -> None:
+    """Remove lease files whose process is dead or whose PID was reused.
+
+    Lease files store ``/proc/<pid>/stat`` starttime ticks. A live PID with a
+    different starttime is treated as reuse, not as the original worker.
 
     Args:
         lease_dir (Path): Directory of ``<pid>.lease`` files.
@@ -258,8 +281,12 @@ def _prune_stale_awx_leases(lease_dir: Path) -> None:
             lease.unlink(missing_ok=True)
             continue
         try:
-            os.kill(pid, 0)
-        except (ProcessLookupError, PermissionError):
+            expected = lease.read_text().strip()
+        except OSError:
+            lease.unlink(missing_ok=True)
+            continue
+        actual = _process_start_ticks(pid)
+        if not expected or actual is None or actual != expected:
             lease.unlink(missing_ok=True)
 
 
@@ -292,18 +319,25 @@ def awx_lifecycle_lock(client: DynamicClient) -> Generator[None, None, None]:
 def register_awx_worker(client: DynamicClient) -> None:
     """Record this process as a live user of the shared AWX Helm release.
 
-    Must be called while holding ``awx_lifecycle_lock``. Adds a PID lease only;
-    ownership is recorded separately by ``mark_awx_install_owner``.
+    Must be called while holding ``awx_lifecycle_lock``. Adds a PID lease that
+    records ``/proc`` starttime ticks so PID reuse cannot keep a stale lease.
+    Ownership is recorded separately by ``mark_awx_install_owner``.
 
     Args:
         client (DynamicClient): OpenShift client whose API host scopes the leases.
 
     Returns:
         None
+
+    Raises:
+        ValueError: If ``/proc/<pid>/stat`` cannot be read for this process.
     """
     lease_dir = _awx_lease_dir(_awx_coordination_key(client))
     _prune_stale_awx_leases(lease_dir)
-    (lease_dir / f"{os.getpid()}.lease").write_text("")
+    start_ticks = _process_start_ticks(os.getpid())
+    if start_ticks is None:
+        raise ValueError(f"Cannot read /proc/{os.getpid()}/stat starttime for AWX lease")
+    (lease_dir / f"{os.getpid()}.lease").write_text(start_ticks)
 
 
 def mark_awx_install_owner(client: DynamicClient) -> None:
