@@ -47,6 +47,41 @@ if TYPE_CHECKING:
 
 _ORPHAN_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for async DV/PVC garbage collection
 _ORPHAN_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
+_FAILED_MIGRATION_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for DVs/PVCs after Plan FAILED
+_FAILED_MIGRATION_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
+
+
+def _namespace_dv_and_pvc_names(client: DynamicClient, namespace: str) -> tuple[list[str], list[str]]:
+    """List PVC and DataVolume names in a namespace.
+
+    Args:
+        client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace to list.
+
+    Returns:
+        tuple[list[str], list[str]]: PVC names, then DataVolume names.
+    """
+    pvc_names = [pvc.name for pvc in PersistentVolumeClaim.get(client=client, namespace=namespace)]
+    dv_names = [dv.name for dv in DataVolume.get(client=client, namespace=namespace)]
+    return pvc_names, dv_names
+
+
+def _failed_migration_resources_ready(client: DynamicClient, namespace: str) -> bool:
+    """Return whether a failed migration left a DV, a regular PVC, and a prime PVC.
+
+    Args:
+        client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace to inspect.
+
+    Returns:
+        bool: True when all three resource types are visible.
+    """
+    pvc_names, dv_names = _namespace_dv_and_pvc_names(client=client, namespace=namespace)
+    return (
+        bool(dv_names)
+        and any(not name.startswith("prime-") for name in pvc_names)
+        and any(name.startswith("prime-") for name in pvc_names)
+    )
 
 
 def _get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[str]:
@@ -62,9 +97,8 @@ def _get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[st
     Returns:
         list[str]: Prefixed names (PVC/name, DV/name) of remaining resources, empty if none.
     """
-    remaining_pvcs = list(PersistentVolumeClaim.get(client=client, namespace=namespace))
-    remaining_dvs = list(DataVolume.get(client=client, namespace=namespace))
-    return [f"PVC/{pvc.name}" for pvc in remaining_pvcs] + [f"DV/{dv.name}" for dv in remaining_dvs]
+    pvc_names, dv_names = _namespace_dv_and_pvc_names(client=client, namespace=namespace)
+    return [f"PVC/{name}" for name in pvc_names] + [f"DV/{name}" for name in dv_names]
 
 
 @pytest.mark.vsphere
@@ -123,6 +157,9 @@ class TestPlanArchivePvcCleanup:
             source_provider_inventory (ForkliftInventory): Source provider inventory.
             target_namespace (str): Target namespace for migration.
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If StorageMap creation fails.
         """
@@ -161,6 +198,9 @@ class TestPlanArchivePvcCleanup:
             target_namespace (str): Target namespace for migration.
             multus_network_name (dict[str, str]): Name of the multus network.
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If NetworkMap creation fails.
         """
@@ -197,6 +237,9 @@ class TestPlanArchivePvcCleanup:
             destination_provider (OCPProvider): Destination provider instance.
             target_namespace (str): Target namespace for migration.
             source_provider_inventory (ForkliftInventory): Source provider inventory.
+
+        Returns:
+            None
 
         Raises:
             AssertionError: If Plan creation fails.
@@ -238,6 +281,9 @@ class TestPlanArchivePvcCleanup:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Target namespace for migration.
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If migration does not fail at PostHook as expected.
         """
@@ -255,17 +301,25 @@ class TestPlanArchivePvcCleanup:
         # The target namespace is unique per session (named after session_uuid),
         # so all PVCs/DVs in it belong to this test run. Forklift creates PVCs
         # using source disk UUIDs (not session_uuid), so name filtering is wrong.
+        # execute_migration() returns when Plan is FAILED and does not wait for
+        # DV/PVC objects to be visible, so poll until they appear.
         vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
-        migration_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=vm_namespace))
-        migration_dvs = list(DataVolume.get(client=ocp_admin_client, namespace=vm_namespace))
-        pvc_names = [pvc.name for pvc in migration_pvcs]
-        assert migration_dvs, f"No DataVolumes found in namespace '{vm_namespace}' after post-hook failure"
-        assert any(not name.startswith("prime-") for name in pvc_names), (
-            f"No regular PVC found in namespace '{vm_namespace}' after post-hook failure"
-        )
-        assert any(name.startswith("prime-") for name in pvc_names), (
-            f"No prime PVC found in namespace '{vm_namespace}' after post-hook failure"
-        )
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=_FAILED_MIGRATION_RESOURCE_WAIT_TIMEOUT,
+                sleep=_FAILED_MIGRATION_RESOURCE_POLL_INTERVAL,
+                func=_failed_migration_resources_ready,
+                client=ocp_admin_client,
+                namespace=vm_namespace,
+            ):
+                if sample:
+                    break
+        except TimeoutExpiredError as exc:
+            pvc_names, dv_names = _namespace_dv_and_pvc_names(client=ocp_admin_client, namespace=vm_namespace)
+            raise AssertionError(
+                f"Failed-migration DVs/PVCs not visible in namespace '{vm_namespace}' "
+                f"within {_FAILED_MIGRATION_RESOURCE_WAIT_TIMEOUT}s. PVCs={pvc_names} DVs={dv_names}"
+            ) from exc
 
     def test_archive_and_delete_plan(
         self,
@@ -276,11 +330,14 @@ class TestPlanArchivePvcCleanup:
         Args:
             fixture_store (dict[str, Any]): Fixture store for resource tracking.
 
+        Returns:
+            None
+
         Raises:
             AssertionError: If plan is not archived or deletion fails.
         """
         plan = self.plan_resource
-        migration_name = get_migration_for_plan(plan).name
+        migration = get_migration_for_plan(plan)
 
         archive_plan(plan=plan)
         conditions = plan.instance.status.conditions or []
@@ -293,8 +350,15 @@ class TestPlanArchivePvcCleanup:
 
         # Plan was deleted intentionally; unregister so session_teardown does not
         # call archive_plan() on a missing Plan and abort the rest of cleanup.
-        unregister_teardown_resource(fixture_store=fixture_store, kind=Plan.kind, name=plan.name)
-        unregister_teardown_resource(fixture_store=fixture_store, kind=Migration.kind, name=migration_name)
+        unregister_teardown_resource(
+            fixture_store=fixture_store, kind=Plan.kind, name=plan.name, namespace=plan.namespace
+        )
+        unregister_teardown_resource(
+            fixture_store=fixture_store,
+            kind=Migration.kind,
+            name=migration.name,
+            namespace=migration.namespace,
+        )
 
     def test_verify_pvc_cleanup(
         self,
@@ -313,6 +377,9 @@ class TestPlanArchivePvcCleanup:
             prepared_plan (dict[str, Any]): The prepared migration plan.
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Target namespace for migration.
+
+        Returns:
+            None
 
         Raises:
             AssertionError: If orphan resources remain after 120s timeout.
@@ -336,10 +403,10 @@ class TestPlanArchivePvcCleanup:
             ):
                 if not sample:
                     return
-        except TimeoutExpiredError:
+        except TimeoutExpiredError as exc:
             orphan_names = _get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace)
             if not orphan_names:
                 return
             raise AssertionError(
                 f"Orphan resources remain in namespace '{vm_namespace}' after plan archive+delete: {orphan_names}"
-            )
+            ) from exc
