@@ -19,6 +19,7 @@ from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from xdist.workermanage import WorkerController
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -261,7 +262,10 @@ def pytest_sessionfinish(session, exitstatus):
             if not session.config.getoption("skip_data_collector"):
                 run_must_gather(data_collector_path=_data_collector_path)
 
-    maybe_teardown_awx_at_session_end(session.config)
+    try:
+        maybe_teardown_awx_at_session_end(session.config)
+    except Exception as exp:
+        LOGGER.error(f"AWX session teardown failed: {exp}")
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -380,11 +384,22 @@ def pytest_collection_modifyitems(session, config, items):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
-def pytest_xdist_node_collection_finished(node, ids):
+def pytest_xdist_node_collection_finished(node: WorkerController, ids: list[str]) -> None:
     """Register the AWX controller lease after an xdist worker collects tests.
 
     The xdist controller does not run ``pytest_collection_modifyitems`` with the
     worker item list. This hook runs on the controller with the collected node ids.
+
+    Args:
+        node (WorkerController): xdist worker node that finished collection.
+        ids (list[str]): Node ids collected by that worker.
+
+    Returns:
+        None
+
+    Raises:
+        TimeoutError: If the AWX lifecycle lock cannot be acquired.
+        ValueError: If the OpenShift client has no API server host.
     """
     if is_dry_run(node.config):
         return
