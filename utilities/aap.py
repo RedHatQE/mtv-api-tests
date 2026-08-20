@@ -241,6 +241,10 @@ def _awx_lease_dir(coordination_key: str) -> Path:
 def _prune_stale_awx_leases(lease_dir: Path) -> None:
     """Remove lease files whose owning process is no longer alive.
 
+    Also drops leases whose PID is inaccessible. The lease directory is owned
+    by the current user, so those PIDs cannot be live pytest workers from this
+    session.
+
     Args:
         lease_dir (Path): Directory of ``<pid>.lease`` files.
 
@@ -255,10 +259,8 @@ def _prune_stale_awx_leases(lease_dir: Path) -> None:
             continue
         try:
             os.kill(pid, 0)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             lease.unlink(missing_ok=True)
-        except PermissionError:
-            continue
 
 
 @contextmanager
