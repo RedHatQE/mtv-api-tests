@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import ExitStack
 from pathlib import Path
 
 
@@ -34,7 +35,8 @@ def ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
             f"({err}). This may indicate a hijack attempt."
         ) from err
 
-    try:
+    with ExitStack() as stack:
+        stack.callback(os.close, dir_fd)
         dir_stat = os.fstat(dir_fd)
         current_uid = os.getuid()
         if dir_stat.st_uid != current_uid:
@@ -43,5 +45,3 @@ def ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
                 f"expected current user uid {current_uid}. This may indicate a hijack attempt."
             )
         os.fchmod(dir_fd, 0o700)
-    finally:
-        os.close(dir_fd)

@@ -206,18 +206,6 @@ def _awx_shared_dir(coordination_key: str) -> Path:
     return lock_dir
 
 
-def _get_awx_lifecycle_lock_path(coordination_key: str) -> Path:
-    """Return the cross-worker lock path for AWX Helm install and uninstall.
-
-    Args:
-        coordination_key (str): Cluster-and-session isolation key.
-
-    Returns:
-        Path: File lock path under a secured shared temp directory.
-    """
-    return _awx_shared_dir(coordination_key) / "awx-lifecycle.lock"
-
-
 def _awx_owner_path(coordination_key: str) -> Path:
     """Return the sentinel file path that marks this session as Helm owner.
 
@@ -277,7 +265,7 @@ def awx_lifecycle_lock(client: DynamicClient) -> Generator[None, None, None]:
             ``_AWX_LIFECYCLE_LOCK_TIMEOUT`` seconds.
         ValueError: If the client has no API server host.
     """
-    lock_path = _get_awx_lifecycle_lock_path(_awx_coordination_key(client))
+    lock_path = _awx_shared_dir(_awx_coordination_key(client)) / "awx-lifecycle.lock"
     try:
         with filelock.FileLock(lock_path, timeout=_AWX_LIFECYCLE_LOCK_TIMEOUT):
             yield
