@@ -55,7 +55,10 @@ AWX_HELM_RELEASE_NAME: str = "awx-operator"
 AWX_PROJECTS_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AWX_POSTGRES_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AAP_TOKEN_SECRET_NAME: str = "awx-aap"  # Arbitrary name; referenced by ForkliftController aap_token_secret_name
-_AWX_LIFECYCLE_LOCK_TIMEOUT = 600  # Helm install --wait is 5m; include buffer for lock wait
+_AWX_SHELL_TIMEOUT = 600  # Per helm/oc invocation, including helm install --wait
+# deploy_awx_via_helm holds the lock across helm list, repo add, repo update, and install.
+_AWX_LOCKED_DEPLOY_SHELL_CALLS = 4
+_AWX_LIFECYCLE_LOCK_TIMEOUT = _AWX_SHELL_TIMEOUT * _AWX_LOCKED_DEPLOY_SHELL_CALLS
 
 
 def _awx_api_request(
@@ -105,7 +108,7 @@ def _awx_api_request(
     return {}
 
 
-def _run_shell(command: str, timeout: int = 600) -> str:
+def _run_shell(command: str, timeout: int = _AWX_SHELL_TIMEOUT) -> str:
     """Run a shell command and return stdout.
 
     Args:
@@ -282,10 +285,8 @@ def awx_lifecycle_lock(client: DynamicClient) -> Generator[None, None, None]:
 def register_awx_worker(client: DynamicClient) -> None:
     """Record this process as a live user of the shared AWX Helm release.
 
-    Must be called while holding ``awx_lifecycle_lock``. If no other workers
-    hold a lease and AWX is not installed, this session is marked as owner so
-    the last worker can tear the release down. Leftover owner files from a
-    crashed session are discarded when AWX is already installed.
+    Must be called while holding ``awx_lifecycle_lock``. Adds a PID lease only;
+    ownership is recorded separately by ``mark_awx_install_owner``.
 
     Args:
         client (DynamicClient): OpenShift client whose API host scopes the leases.
@@ -293,28 +294,42 @@ def register_awx_worker(client: DynamicClient) -> None:
     Returns:
         None
     """
-    coordination_key = _awx_coordination_key(client)
-    lease_dir = _awx_lease_dir(coordination_key)
+    lease_dir = _awx_lease_dir(_awx_coordination_key(client))
     _prune_stale_awx_leases(lease_dir)
-    if not any(lease_dir.glob("*.lease")):
-        if is_awx_installed():
-            _awx_owner_path(coordination_key).unlink(missing_ok=True)
-        else:
-            _awx_owner_path(coordination_key).write_text("1")
     (lease_dir / f"{os.getpid()}.lease").write_text("")
+
+
+def mark_awx_install_owner(client: DynamicClient) -> None:
+    """Mark this session as Helm owner when it will create the release.
+
+    Must be called while holding ``awx_lifecycle_lock``. A pre-existing install
+    without an owner file is left unowned so this session will not tear it down.
+    An existing owner file is kept so a later session can retry failed cleanup.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes ownership.
+
+    Returns:
+        None
+    """
+    coordination_key = _awx_coordination_key(client)
+    if is_awx_installed():
+        return
+    _awx_owner_path(coordination_key).write_text("1")
 
 
 def unregister_awx_worker(client: DynamicClient) -> bool:
     """Drop this process's AWX lease.
 
-    Must be called while holding ``awx_lifecycle_lock``.
+    Must be called while holding ``awx_lifecycle_lock``. Does not remove the
+    owner marker; the caller tears down only after cleanup succeeds.
 
     Args:
         client (DynamicClient): OpenShift client whose API host scopes the leases.
 
     Returns:
-        bool: True if this was the last live worker and this session owns the
-            Helm install, so the caller should run ``teardown_awx()``.
+        bool: True if no live leases remain and this session owns the Helm
+            install, so the caller should run ``teardown_awx()``.
     """
     coordination_key = _awx_coordination_key(client)
     lease_dir = _awx_lease_dir(coordination_key)
@@ -322,10 +337,19 @@ def unregister_awx_worker(client: DynamicClient) -> bool:
     _prune_stale_awx_leases(lease_dir)
     if any(lease_dir.glob("*.lease")):
         return False
-    owner_path = _awx_owner_path(coordination_key)
-    owned = owner_path.exists()
-    owner_path.unlink(missing_ok=True)
-    return owned
+    return _awx_owner_path(coordination_key).exists()
+
+
+def clear_awx_install_owner(client: DynamicClient) -> None:
+    """Remove the owner marker after AWX teardown succeeds.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes ownership.
+
+    Returns:
+        None
+    """
+    _awx_owner_path(_awx_coordination_key(client)).unlink(missing_ok=True)
 
 
 def create_awx_instance(
@@ -803,19 +827,26 @@ def create_aap_token_secret(
     )
 
 
-def teardown_awx() -> None:
+def teardown_awx() -> bool:
     """Remove AWX deployment via Helm and delete namespace.
 
     Attempts both Helm uninstall and namespace deletion. Logs
     failures but does not raise — teardown errors should not
     mark passing tests as failures.
+
+    Returns:
+        bool: True if Helm uninstall and namespace deletion both succeeded.
     """
     LOGGER.info("Tearing down AWX deployment")
+    succeeded = True
     try:
         _run_shell(f"helm uninstall {AWX_HELM_RELEASE_NAME} --namespace {AWX_NAMESPACE}")
-    except subprocess.CalledProcessError as e:
-        LOGGER.warning(f"Helm uninstall failed (stderr: {e.stderr}): {e}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        LOGGER.warning(f"Helm uninstall failed (stderr: {getattr(e, 'stderr', None)}): {e}")
+        succeeded = False
     try:
         _run_shell(f"oc delete namespace {AWX_NAMESPACE} --wait=false")
-    except subprocess.CalledProcessError as e:
-        LOGGER.warning(f"Failed to delete namespace '{AWX_NAMESPACE}' (stderr: {e.stderr}): {e}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        LOGGER.warning(f"Failed to delete namespace '{AWX_NAMESPACE}' (stderr: {getattr(e, 'stderr', None)}): {e}")
+        succeeded = False
+    return succeeded
