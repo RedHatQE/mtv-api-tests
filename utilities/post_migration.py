@@ -1404,6 +1404,40 @@ def check_boot_configuration(source_vm: dict[str, Any], destination_vm: dict[str
     )
 
 
+def check_disconnected_nic_state(destination_vm: dict[str, Any], expected_mac: str) -> None:
+    """Verify a NIC with StartConnected=False on the source has state=down on the migrated OCP VM.
+
+    Reads from the VM spec (not VMI status) because KubeVirt does not report
+    link-down interfaces in VMI status.interfaces.
+
+    Args:
+        destination_vm: Destination VM info dictionary containing provider_vm_api.
+        expected_mac: MAC address (lowercase) of the NIC expected to have state=down.
+
+    Raises:
+        AssertionError: If no interface with expected_mac is found, or its state is not 'down'.
+        ValueError: If destination_vm has no provider_vm_api.
+    """
+    cnv_vm = destination_vm.get("provider_vm_api")
+    if cnv_vm is None:
+        raise ValueError(f"destination_vm '{destination_vm.get('name')}' has no provider_vm_api")
+
+    interfaces: list[dict[str, Any]] = cnv_vm.instance.spec.template.spec.domain.devices.interfaces
+    matching = [iface for iface in interfaces if iface.get("macAddress", "").lower() == expected_mac]
+
+    assert matching, (
+        f"No interface with MAC '{expected_mac}' found on VM '{destination_vm['name']}'. "
+        f"Interfaces: {[iface.get('macAddress') for iface in interfaces]}"
+    )
+
+    state = matching[0].get("state")
+    assert state == "down", (
+        f"Interface with MAC '{expected_mac}' on VM '{destination_vm['name']}' "
+        f"has state={state!r}, expected 'down'"
+    )
+    LOGGER.info(f"Disconnected NIC state verified: MAC={expected_mac}, state=down on VM '{destination_vm['name']}'")
+
+
 def check_vm_node_placement(
     destination_vm: dict[str, Any],
     expected_node: str,
@@ -1955,6 +1989,15 @@ def check_vms(
                 check_boot_configuration(source_vm=source_vm, destination_vm=destination_vm)
             except Exception as exp:
                 res[vm_name].append(f"check_boot_configuration - {str(exp)}")
+
+            if disconnected_nic_mac := vm.get("disconnected_nic_mac"):
+                try:
+                    check_disconnected_nic_state(
+                        destination_vm=destination_vm,
+                        expected_mac=disconnected_nic_mac,
+                    )
+                except (AssertionError, ValueError) as exp:
+                    res[vm_name].append(f"check_disconnected_nic_state - {str(exp)}")
 
         # Group 4: RHV-specific checks
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):

@@ -969,6 +969,82 @@ class VMWareProvider(BaseProvider):
         self.wait_task(task=task, action_name=f"Adding RDM disk to VM {vm.name}", wait_timeout=120)
         LOGGER.info(f"Successfully added RDM disk to VM '{vm.name}'")
 
+    def add_disconnected_nic(self, vm: vim.VirtualMachine) -> str:
+        """Add a NIC with StartConnected=False to an existing VM and return its MAC address.
+
+        The NIC is attached to the same network as the VM's first existing NIC so that
+        the Forklift NetworkMap already covers it. After migration, forklift sets
+        state=down on the corresponding KubeVirt interface.
+
+        Args:
+            vm: The target VM object (must be a clone — not a shared source VM).
+
+        Returns:
+            str: The MAC address VMware assigned to the new NIC (lowercase).
+
+        Raises:
+            ValueError: If the VM has no existing NICs to derive the network from,
+                or if the reconfig task fails.
+        """
+        existing_nics = [dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualEthernetCard)]
+        if not existing_nics:
+            raise ValueError(f"VM '{vm.name}' has no existing NICs — cannot derive network for disconnected NIC")
+
+        existing_nic_keys = {dev.key for dev in existing_nics}
+
+        # Reuse the first NIC's network backing so the NetworkMap already covers this NIC.
+        # Must handle both standard (vSwitch) and DVS backing types without modifying the
+        # source NIC's backing object — we build a fresh backing of the same type.
+        source_nic = existing_nics[0]
+        source_backing = source_nic.backing
+
+        if isinstance(source_backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
+            # DVS portgroup — copy portgroup key and switch UUID exactly
+            network_backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
+            network_backing.port = vim.dvs.PortConnection()
+            network_backing.port.portgroupKey = source_backing.port.portgroupKey
+            network_backing.port.switchUuid = source_backing.port.switchUuid
+        elif isinstance(source_backing, vim.vm.device.VirtualEthernetCard.NetworkBackingInfo):
+            # Standard vSwitch portgroup
+            network_backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+            network_backing.deviceName = source_backing.deviceName
+            if source_backing.network:
+                network_backing.network = source_backing.network
+        else:
+            raise ValueError(
+                f"VM '{vm.name}' first NIC has unsupported backing type '{type(source_backing).__name__}'. "
+                "Cannot derive network for disconnected NIC."
+            )
+
+        nic = vim.vm.device.VirtualVmxnet3()
+        nic.backing = network_backing
+        nic.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+        nic.connectable.startConnected = False
+        nic.connectable.connected = False
+        nic.connectable.allowGuestControl = True
+
+        spec = vim.vm.device.VirtualDeviceSpec()
+        spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        spec.device = nic
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.deviceChange = [spec]
+
+        task = vm.ReconfigVM_Task(spec=config_spec)
+        self.wait_task(task=task, action_name=f"Adding disconnected NIC to VM '{vm.name}'", wait_timeout=120)
+
+        new_nics = [
+            dev
+            for dev in vm.config.hardware.device
+            if isinstance(dev, vim.vm.device.VirtualEthernetCard) and dev.key not in existing_nic_keys
+        ]
+        if not new_nics:
+            raise ValueError(f"Disconnected NIC was not found on VM '{vm.name}' after reconfig task completed")
+
+        mac = new_nics[0].macAddress.lower()
+        LOGGER.info(f"Added disconnected NIC to VM '{vm.name}': MAC={mac}")
+        return mac
+
     def change_disk_mode(
         self,
         vm: vim.VirtualMachine,

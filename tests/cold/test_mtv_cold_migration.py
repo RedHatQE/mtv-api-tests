@@ -3,7 +3,12 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
+from simple_logger.logger import get_logger
 
+from libs.base_provider import BaseProvider
+from libs.providers.vmware import VMWareProvider
+
+LOGGER = get_logger(__name__)
 from utilities.mtv_migration import (
     create_plan_resource,
     execute_migration,
@@ -38,6 +43,7 @@ class TestSanityColdMtvMigration:
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
+    disconnected_nic_mac: str
 
     def test_create_storagemap(
         self,
@@ -61,6 +67,30 @@ class TestSanityColdMtvMigration:
             vms=vms,
         )
         assert self.storage_map, "StorageMap creation failed"
+
+    def test_add_disconnected_nic(
+        self,
+        prepared_plan: dict,
+        source_provider: BaseProvider,
+    ) -> None:
+        """Add a disconnected NIC to the cloned VM before migration.
+
+        Skipped for non-vSphere providers. Stores the MAC address on the plan so
+        check_vms can verify the NIC migrates with state=down.
+        """
+        if not isinstance(source_provider, VMWareProvider):
+            pytest.skip("Disconnected NIC test is vSphere-only")
+            return
+        vm_name = prepared_plan["virtual_machines"][0]["name"]
+        cloned_vm = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
+        LOGGER.info(f"Adding disconnected NIC to cloned VM '{vm_name}' before migration")
+        mac = source_provider.add_disconnected_nic(cloned_vm)
+        LOGGER.info(
+            f"Disconnected NIC added to VM '{vm_name}': MAC={mac}. "
+            f"check_vms will verify this NIC has state=down on the OCP VM after migration."
+        )
+        self.__class__.disconnected_nic_mac = mac
+        prepared_plan["virtual_machines"][0]["disconnected_nic_mac"] = mac
 
     def test_create_networkmap(
         self,
