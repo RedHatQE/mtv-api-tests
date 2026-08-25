@@ -22,6 +22,7 @@ LOGGER = get_logger(name=__name__)
 _UPGRADE_TIMEOUT_SECONDS = 3600
 _PROCESS_GROUP_TERM_TIMEOUT_SECONDS = 15
 _PROCESS_GROUP_KILL_TIMEOUT_SECONDS = 15
+_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS = _PROCESS_GROUP_TERM_TIMEOUT_SECONDS + _PROCESS_GROUP_KILL_TIMEOUT_SECONDS
 
 
 def _read_upgrade_log(log_file: IO[bytes], password: str) -> str:
@@ -122,24 +123,33 @@ def run_mtv_upgrade(
             stderr=stderr_file,
         )
         timeout_exc: subprocess.TimeoutExpired | None = None
+        cleanup_exc: MtvUpgradeError | None = None
         try:
             returncode = proc.wait(timeout=_UPGRADE_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as exc:
             timeout_exc = exc
             returncode = None
         finally:
-            _stop_upgrade_process(proc)
+            try:
+                _stop_upgrade_process(proc)
+            except MtvUpgradeError as exc:
+                cleanup_exc = exc
 
         stdout = _read_upgrade_log(stdout_file, password)
         stderr = _read_upgrade_log(stderr_file, password)
+        cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
         if timeout_exc is not None:
             raise MtvUpgradeError(
-                f"MTV upgrade script timed out after {timeout_exc.timeout} seconds\nstdout: {stdout}\nstderr: {stderr}"
+                f"MTV upgrade script timed out after {timeout_exc.timeout} seconds "
+                f"(plus up to {_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS} seconds process-group cleanup)\n"
+                f"stdout: {stdout}\nstderr: {stderr}{cleanup_note}"
             ) from timeout_exc
         if returncode is None or returncode != 0:
             raise MtvUpgradeError(
-                f"MTV upgrade script failed with exit code {returncode}\nstdout: {stdout}\nstderr: {stderr}"
-            )
+                f"MTV upgrade script failed with exit code {returncode}\nstdout: {stdout}\nstderr: {stderr}{cleanup_note}"
+            ) from cleanup_exc
+        if cleanup_exc is not None:
+            raise cleanup_exc
 
     LOGGER.info(f"MTV upgrade stdout:\n{stdout}")
     if stderr:
