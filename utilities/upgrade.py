@@ -20,6 +20,8 @@ from exceptions.exceptions import MtvUpgradeError
 LOGGER = get_logger(name=__name__)
 
 _UPGRADE_TIMEOUT_SECONDS = 3600
+_PROCESS_GROUP_TERM_TIMEOUT_SECONDS = 15
+_PROCESS_GROUP_KILL_TIMEOUT_SECONDS = 15
 
 
 def _read_upgrade_log(log_file: IO[bytes], password: str) -> str:
@@ -38,56 +40,41 @@ def _read_upgrade_log(log_file: IO[bytes], password: str) -> str:
     return raw.decode("utf-8", errors="replace").replace(password, "***")
 
 
-def _kill_process_group(pgid: int) -> None:
-    """Terminate leftover children in the upgrade script process group.
+def _kill_process_group(pgid: int, sig: int) -> None:
+    """Send a signal to leftover children in the upgrade script process group.
 
     Args:
         pgid (int): Process group id (the upgrade script pid when using start_new_session).
+        sig (int): Signal to send (SIGTERM or SIGKILL).
     """
     try:
-        os.killpg(pgid, signal.SIGTERM)
+        os.killpg(pgid, sig)
     except ProcessLookupError:
         return
     except PermissionError:
         return
 
 
-def _run_upgrade_script(
-    script_path: str,
-    env: dict[str, str],
-    stdout_file: IO[bytes],
-    stderr_file: IO[bytes],
-) -> int:
-    """Run the upgrade script in its own session and reap leftover children.
+def _stop_upgrade_process(proc: subprocess.Popen[bytes]) -> None:
+    """Stop the upgrade process group with bounded SIGTERM then SIGKILL waits.
 
     Args:
-        script_path (str): Full path to the upgrade script.
-        env (dict[str, str]): Environment for the script.
-        stdout_file (IO[bytes]): Destination for stdout.
-        stderr_file (IO[bytes]): Destination for stderr.
-
-    Returns:
-        int: Process exit code.
+        proc (subprocess.Popen[bytes]): The upgrade script process (session leader).
 
     Raises:
-        subprocess.TimeoutExpired: If the script does not exit within the timeout.
+        MtvUpgradeError: If the process is still running after SIGKILL.
     """
-    proc = subprocess.Popen(
-        [script_path],
-        env=env,
-        cwd=os.path.dirname(script_path),
-        start_new_session=True,
-        stdout=stdout_file,
-        stderr=stderr_file,
-    )
+    _kill_process_group(proc.pid, signal.SIGTERM)
     try:
-        return proc.wait(timeout=_UPGRADE_TIMEOUT_SECONDS)
+        proc.wait(timeout=_PROCESS_GROUP_TERM_TIMEOUT_SECONDS)
+        return
     except subprocess.TimeoutExpired:
-        _kill_process_group(proc.pid)
-        proc.wait()
-        raise
-    finally:
-        _kill_process_group(proc.pid)
+        LOGGER.warning(f"Upgrade process group {proc.pid} did not exit after SIGTERM, sending SIGKILL")
+    _kill_process_group(proc.pid, signal.SIGKILL)
+    try:
+        proc.wait(timeout=_PROCESS_GROUP_KILL_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        raise MtvUpgradeError(f"Upgrade process group {proc.pid} did not exit after SIGTERM and SIGKILL") from exc
 
 
 def run_mtv_upgrade(
@@ -126,23 +113,30 @@ def run_mtv_upgrade(
         tempfile.NamedTemporaryFile(prefix="mtv-upgrade-stdout-", suffix=".log") as stdout_file,
         tempfile.NamedTemporaryFile(prefix="mtv-upgrade-stderr-", suffix=".log") as stderr_file,
     ):
+        proc = subprocess.Popen(
+            [script_path],
+            env=env,
+            cwd=os.path.dirname(script_path),
+            start_new_session=True,
+            stdout=stdout_file,
+            stderr=stderr_file,
+        )
+        timeout_exc: subprocess.TimeoutExpired | None = None
         try:
-            returncode = _run_upgrade_script(
-                script_path=script_path,
-                env=env,
-                stdout_file=stdout_file,
-                stderr_file=stderr_file,
-            )
+            returncode = proc.wait(timeout=_UPGRADE_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as exc:
-            stdout = _read_upgrade_log(stdout_file, password)
-            stderr = _read_upgrade_log(stderr_file, password)
-            raise MtvUpgradeError(
-                f"MTV upgrade script timed out after {exc.timeout} seconds\nstdout: {stdout}\nstderr: {stderr}"
-            ) from exc
+            timeout_exc = exc
+            returncode = None
+        finally:
+            _stop_upgrade_process(proc)
 
         stdout = _read_upgrade_log(stdout_file, password)
         stderr = _read_upgrade_log(stderr_file, password)
-        if returncode != 0:
+        if timeout_exc is not None:
+            raise MtvUpgradeError(
+                f"MTV upgrade script timed out after {timeout_exc.timeout} seconds\nstdout: {stdout}\nstderr: {stderr}"
+            ) from timeout_exc
+        if returncode is None or returncode != 0:
             raise MtvUpgradeError(
                 f"MTV upgrade script failed with exit code {returncode}\nstdout: {stdout}\nstderr: {stderr}"
             )
