@@ -1432,8 +1432,7 @@ def check_disconnected_nic_state(destination_vm: dict[str, Any], expected_mac: s
 
     state = matching[0].get("state")
     assert state == "down", (
-        f"Interface with MAC '{expected_mac}' on VM '{destination_vm['name']}' "
-        f"has state={state!r}, expected 'down'"
+        f"Interface with MAC '{expected_mac}' on VM '{destination_vm['name']}' has state={state!r}, expected 'down'"
     )
     LOGGER.info(f"Disconnected NIC state verified: MAC={expected_mac}, state=down on VM '{destination_vm['name']}'")
 

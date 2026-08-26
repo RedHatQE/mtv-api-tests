@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -70,7 +72,7 @@ class TestSanityColdMtvMigration:
 
     def test_add_disconnected_nic(
         self,
-        prepared_plan: dict,
+        prepared_plan: dict[str, Any],
         source_provider: BaseProvider,
     ) -> None:
         """Add a disconnected NIC to the cloned VM before migration.
