@@ -970,6 +970,16 @@ class VMWareProvider(BaseProvider):
         LOGGER.info(f"Successfully added RDM disk to VM '{vm.name}'")
 
     @staticmethod
+    def _get_vm_datacenter(vm: vim.VirtualMachine) -> vim.Datacenter:
+        """Walk up the VM's parent chain to find its containing Datacenter."""
+        obj = vm.parent
+        while obj is not None:
+            if isinstance(obj, vim.Datacenter):
+                return obj
+            obj = obj.parent
+        raise ValueError(f"Could not determine datacenter for VM '{vm.name}'")
+
+    @staticmethod
     def _get_nic_network_id(nic: vim.vm.device.VirtualEthernetCard) -> str:
         """Return a stable network identifier from a NIC's backing.
 
@@ -1041,18 +1051,21 @@ class VMWareProvider(BaseProvider):
                 f"(id={self._get_nic_network_id(secondary_nic)})"
             )
         else:
-            # Single-network VM — find any other network in vSphere.
+            # Single-network VM — find any other network in the VM's datacenter.
+            # Scoped to the datacenter (not rootFolder) to avoid picking networks
+            # from other datacenters that the VM's host cannot access.
             LOGGER.info(
                 f"VM '{vm.name}' has only one network (id='{pod_network_id}'); querying vSphere for a secondary network"
             )
+            datacenter = self._get_vm_datacenter(vm)
             network_backing = None
 
             dvs_container = self.view_manager.CreateContainerView(
-                self.content.rootFolder, [vim.dvs.DistributedVirtualPortgroup], True
+                datacenter, [vim.dvs.DistributedVirtualPortgroup], True
             )
             try:
                 for pg in dvs_container.view:  # type: ignore[attr-defined]
-                    if pg.key != pod_network_id:
+                    if pg.key != pod_network_id and not pg.config.uplinkPortgroup:
                         backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
                         backing.port = vim.dvs.PortConnection()
                         backing.port.portgroupKey = pg.key
@@ -1064,7 +1077,7 @@ class VMWareProvider(BaseProvider):
                 dvs_container.Destroy()
 
             if network_backing is None:
-                std_container = self.view_manager.CreateContainerView(self.content.rootFolder, [vim.Network], True)
+                std_container = self.view_manager.CreateContainerView(datacenter, [vim.Network], True)
                 try:
                     for net in std_container.view:  # type: ignore[attr-defined]
                         if net.name != pod_network_id:
@@ -1080,7 +1093,7 @@ class VMWareProvider(BaseProvider):
             if network_backing is None:
                 raise ValueError(
                     f"VM '{vm.name}' has only one network ('{pod_network_id}') and no other network "
-                    "exists in vSphere — cannot add disconnected NIC on a non-pod interface."
+                    "exists in its datacenter — cannot add disconnected NIC on a non-pod interface."
                 )
 
         nic = vim.vm.device.VirtualVmxnet3()
