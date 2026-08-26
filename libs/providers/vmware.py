@@ -972,9 +972,10 @@ class VMWareProvider(BaseProvider):
     def add_disconnected_nic(self, vm: vim.VirtualMachine) -> str:
         """Add a NIC with StartConnected=False to an existing VM and return its MAC address.
 
-        The NIC is attached to the same network as the VM's first existing NIC so that
-        the Forklift NetworkMap already covers it. After migration, forklift sets
-        state=down on the corresponding KubeVirt interface.
+        The NIC is attached to the same network as the VM's last existing NIC so that
+        the Forklift NetworkMap already covers it and the network maps to a non-pod
+        (multus) interface — KubeVirt only allows one pod-network interface per VM.
+        After migration, forklift sets state=down on the corresponding KubeVirt interface.
 
         Args:
             vm: The target VM object (must be a clone — not a shared source VM).
@@ -992,10 +993,12 @@ class VMWareProvider(BaseProvider):
 
         existing_nic_keys = {dev.key for dev in existing_nics}
 
-        # Reuse the first NIC's network backing so the NetworkMap already covers this NIC.
+        # Reuse the last NIC's network backing so the NetworkMap already covers this NIC.
+        # The last NIC is chosen because it maps to a non-pod (multus) network — using the
+        # first NIC's network would produce two pod-network interfaces, which KubeVirt rejects.
         # Must handle both standard (vSwitch) and DVS backing types without modifying the
         # source NIC's backing object — we build a fresh backing of the same type.
-        source_nic = existing_nics[0]
+        source_nic = existing_nics[-1]
         source_backing = source_nic.backing
 
         if isinstance(source_backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
