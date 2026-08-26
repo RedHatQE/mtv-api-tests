@@ -1080,6 +1080,10 @@ class VMWareProvider(BaseProvider):
                 std_container = self.view_manager.CreateContainerView(datacenter, [vim.Network], True)
                 try:
                     for net in std_container.view:  # type: ignore[attr-defined]
+                        # vim.Network is the base class — DVS portgroups also appear here.
+                        # Skip them; they require DistributedVirtualPortBackingInfo, not NetworkBackingInfo.
+                        if isinstance(net, vim.dvs.DistributedVirtualPortgroup):
+                            continue
                         if net.name != pod_network_id:
                             backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
                             backing.deviceName = net.name
