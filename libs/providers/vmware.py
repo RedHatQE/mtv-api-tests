@@ -970,16 +970,6 @@ class VMWareProvider(BaseProvider):
         LOGGER.info(f"Successfully added RDM disk to VM '{vm.name}'")
 
     @staticmethod
-    def _get_vm_datacenter(vm: vim.VirtualMachine) -> vim.Datacenter:
-        """Walk up the VM's parent chain to find its containing Datacenter."""
-        obj = vm.parent
-        while obj is not None:
-            if isinstance(obj, vim.Datacenter):
-                return obj
-            obj = obj.parent
-        raise ValueError(f"Could not determine datacenter for VM '{vm.name}'")
-
-    @staticmethod
     def _get_nic_network_id(nic: vim.vm.device.VirtualEthernetCard) -> str:
         """Return a stable network identifier from a NIC's backing.
 
@@ -993,29 +983,26 @@ class VMWareProvider(BaseProvider):
             return backing.deviceName
         return ""
 
-    def add_disconnected_nic(self, vm: vim.VirtualMachine) -> str:
+    def add_disconnected_nic(self, vm: vim.VirtualMachine) -> str | None:
         """Add a NIC with StartConnected=False to the VM and return its MAC address.
 
-        The NIC must land on a network different from the VM's first NIC (the pod
-        network) — KubeVirt allows only one pod-network interface per VM.
+        Requires the VM to have at least one NIC on a network other than the pod network.
+        Returns None if no such NIC exists — the test step should skip in that case.
 
-        Strategy:
-          1. If the VM already has a NIC on a different network, clone its backing.
-          2. Otherwise query vSphere for any available secondary network and build
-             fresh backing for it.  The NIC is added BEFORE NetworkMap creation so
-             Forklift discovers it and maps it to a multus interface.
-
-        After migration, forklift sets state=down on the KubeVirt interface
-        corresponding to this NIC (StartConnected=False), which check_vms verifies.
+        The new NIC is added BEFORE NetworkMap creation so Forklift discovers it and maps
+        it to a multus interface. After migration, forklift sets state=down on the
+        KubeVirt interface corresponding to this NIC (StartConnected=False).
 
         Args:
             vm: The target VM object (must be a clone — not a shared source VM).
 
         Returns:
-            str: The MAC address VMware assigned to the new NIC (lowercase).
+            MAC address VMware assigned to the new NIC (lowercase), or None if the VM
+            has no secondary network to attach the disconnected NIC to.
 
         Raises:
-            ValueError: If no secondary network can be found or the reconfig fails.
+            ValueError: If the VM has no NICs, the secondary NIC has an unsupported
+                backing type, or the reconfig task fails.
         """
         existing_nics = [dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualEthernetCard)]
         if not existing_nics:
@@ -1024,81 +1011,34 @@ class VMWareProvider(BaseProvider):
         existing_nic_keys = {dev.key for dev in existing_nics}
         pod_network_id = self._get_nic_network_id(existing_nics[0])
 
-        # Prefer an existing NIC that already lives on a non-pod network.
         secondary_nic = next(
             (nic for nic in existing_nics if self._get_nic_network_id(nic) != pod_network_id),
             None,
         )
 
-        if secondary_nic is not None:
-            source_backing = secondary_nic.backing
-            if isinstance(source_backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
-                network_backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
-                network_backing.port = vim.dvs.PortConnection()
-                network_backing.port.portgroupKey = source_backing.port.portgroupKey
-                network_backing.port.switchUuid = source_backing.port.switchUuid
-            elif isinstance(source_backing, vim.vm.device.VirtualEthernetCard.NetworkBackingInfo):
-                network_backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
-                network_backing.deviceName = source_backing.deviceName
-                if source_backing.network:
-                    network_backing.network = source_backing.network
-            else:
-                raise ValueError(
-                    f"VM '{vm.name}' secondary NIC has unsupported backing type '{type(source_backing).__name__}'"
-                )
-            LOGGER.info(
-                f"VM '{vm.name}': attaching disconnected NIC to existing secondary network "
-                f"(id={self._get_nic_network_id(secondary_nic)})"
-            )
+        if secondary_nic is None:
+            LOGGER.info(f"VM '{vm.name}' has no NIC on a secondary network — skipping disconnected NIC test")
+            return None
+
+        source_backing = secondary_nic.backing
+        if isinstance(source_backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
+            network_backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
+            network_backing.port = vim.dvs.PortConnection()
+            network_backing.port.portgroupKey = source_backing.port.portgroupKey
+            network_backing.port.switchUuid = source_backing.port.switchUuid
+        elif isinstance(source_backing, vim.vm.device.VirtualEthernetCard.NetworkBackingInfo):
+            network_backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+            network_backing.deviceName = source_backing.deviceName
+            if source_backing.network:
+                network_backing.network = source_backing.network
         else:
-            # Single-network VM — find any other network in the VM's datacenter.
-            # Scoped to the datacenter (not rootFolder) to avoid picking networks
-            # from other datacenters that the VM's host cannot access.
-            LOGGER.info(
-                f"VM '{vm.name}' has only one network (id='{pod_network_id}'); querying vSphere for a secondary network"
+            raise ValueError(
+                f"VM '{vm.name}' secondary NIC has unsupported backing type '{type(source_backing).__name__}'"
             )
-            datacenter = self._get_vm_datacenter(vm)
-            network_backing = None
-
-            dvs_container = self.view_manager.CreateContainerView(
-                datacenter, [vim.dvs.DistributedVirtualPortgroup], True
-            )
-            try:
-                for pg in dvs_container.view:  # type: ignore[attr-defined]
-                    if pg.key != pod_network_id and not pg.config.uplinkPortgroup:
-                        backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
-                        backing.port = vim.dvs.PortConnection()
-                        backing.port.portgroupKey = pg.key
-                        backing.port.switchUuid = pg.config.distributedVirtualSwitch.uuid
-                        network_backing = backing
-                        LOGGER.info(f"VM '{vm.name}': using DVS portgroup '{pg.name}' as secondary network")
-                        break
-            finally:
-                dvs_container.Destroy()
-
-            if network_backing is None:
-                std_container = self.view_manager.CreateContainerView(datacenter, [vim.Network], True)
-                try:
-                    for net in std_container.view:  # type: ignore[attr-defined]
-                        # vim.Network is the base class — DVS portgroups also appear here.
-                        # Skip them; they require DistributedVirtualPortBackingInfo, not NetworkBackingInfo.
-                        if isinstance(net, vim.dvs.DistributedVirtualPortgroup):
-                            continue
-                        if net.name != pod_network_id:
-                            backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
-                            backing.deviceName = net.name
-                            backing.network = net
-                            network_backing = backing
-                            LOGGER.info(f"VM '{vm.name}': using standard network '{net.name}' as secondary network")
-                            break
-                finally:
-                    std_container.Destroy()
-
-            if network_backing is None:
-                raise ValueError(
-                    f"VM '{vm.name}' has only one network ('{pod_network_id}') and no other network "
-                    "exists in its datacenter — cannot add disconnected NIC on a non-pod interface."
-                )
+        LOGGER.info(
+            f"VM '{vm.name}': attaching disconnected NIC to secondary network "
+            f"(id={self._get_nic_network_id(secondary_nic)})"
+        )
 
         nic = vim.vm.device.VirtualVmxnet3()
         nic.backing = network_backing

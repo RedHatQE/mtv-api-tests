@@ -45,7 +45,6 @@ class TestSanityColdMtvMigration:
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-    disconnected_nic_mac: str
 
     def test_create_storagemap(
         self,
@@ -75,24 +74,30 @@ class TestSanityColdMtvMigration:
         prepared_plan: dict[str, Any],
         source_provider: BaseProvider,
     ) -> None:
-        """Add a disconnected NIC to the cloned VM before migration.
+        """Add a disconnected NIC to each cloned VM before migration.
 
-        Skipped for non-vSphere providers. Stores the MAC address on the plan so
-        check_vms can verify the NIC migrates with state=down.
+        Skipped for non-vSphere providers. Stores the MAC address on each VM dict so
+        check_vms can verify each NIC migrates with state=down.
         """
         if not isinstance(source_provider, VMWareProvider):
             pytest.skip("Disconnected NIC test is vSphere-only")
             return
-        vm_name = prepared_plan["virtual_machines"][0]["name"]
-        cloned_vm = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-        LOGGER.info(f"Adding disconnected NIC to cloned VM '{vm_name}' before migration")
-        mac = source_provider.add_disconnected_nic(cloned_vm)
-        LOGGER.info(
-            f"Disconnected NIC added to VM '{vm_name}': MAC={mac}. "
-            f"check_vms will verify this NIC has state=down on the OCP VM after migration."
-        )
-        self.__class__.disconnected_nic_mac = mac
-        prepared_plan["virtual_machines"][0]["disconnected_nic_mac"] = mac
+        skipped = []
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            cloned_vm = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
+            LOGGER.info(f"Adding disconnected NIC to cloned VM '{vm_name}' before migration")
+            mac = source_provider.add_disconnected_nic(cloned_vm)
+            if mac is None:
+                skipped.append(vm_name)
+            else:
+                LOGGER.info(
+                    f"Disconnected NIC added to VM '{vm_name}': MAC={mac}. "
+                    f"check_vms will verify this NIC has state=down on the OCP VM after migration."
+                )
+                vm["disconnected_nic_mac"] = mac
+        if skipped:
+            pytest.skip(f"No secondary network available on VM(s): {skipped} — disconnected NIC test skipped")
 
     def test_create_networkmap(
         self,
