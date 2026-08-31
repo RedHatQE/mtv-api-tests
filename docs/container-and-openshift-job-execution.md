@@ -44,6 +44,7 @@ def load_source_providers() -> dict[str, dict[str, Any]]:
     if not providers_file.exists():
         return {}
 
+
 def get_cluster_client() -> DynamicClient:
     host = get_value_from_py_config("cluster_host")
     username = get_value_from_py_config("cluster_username")

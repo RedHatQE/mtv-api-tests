@@ -142,9 +142,7 @@ If the data collector is enabled and teardown hits a problem, the session then r
 The user-facing flag lives in `conftest.py`:
 
 ```python
-teardown_group.addoption(
-    "--skip-teardown", action="store_true", help="Do not teardown resource created by the tests"
-)
+teardown_group.addoption("--skip-teardown", action="store_true", help="Do not teardown resource created by the tests")
 ```
 
 The data-collector path is configurable too:
