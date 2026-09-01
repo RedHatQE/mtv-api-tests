@@ -893,7 +893,7 @@ tests_params: dict = {
 | `luks_passphrase`         | No       | Per-VM passphrase override               |
 | `migrate_shared_disks`    | No       | True for owner VM in shared disk tests   |
 | `add_nic`                 | No       | True to add a NIC (vSphere only)         |
-| `add_nic_start_connected` | No*      | NIC start-connected state (`add_nic`)    |
+| `add_nic_start_connected` | Yes*     | Required when `add_nic=True`; bool       |
 
 **Plan Configuration Options:**
 

@@ -1143,7 +1143,13 @@ def prepared_plan(
 
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config and not isinstance(source_provider, VMWareProvider):
-            raise ValueError(f"add_nic requested, but provider '{source_provider.type}' does not support adding NICs")
+            pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
+        if has_add_nic_config:
+            for vm in virtual_machines:
+                if vm.get("add_nic") and "add_nic_start_connected" not in vm:
+                    raise ValueError(
+                        f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+                    )
 
         if plan.get("disable_drs_for_vms", False) and not isinstance(clone_provider, VMWareProvider):
             raise ValueError(
@@ -1176,6 +1182,8 @@ def prepared_plan(
             ]
             if has_shared_disk_config:
                 conflicting.append("migrate_shared_disks")
+            if has_add_nic_config:
+                conflicting.append("add_nic")
             if conflicting:
                 raise ValueError(
                     f"skip_clone=True is incompatible with {conflicting}; these options require the cloning phase."
