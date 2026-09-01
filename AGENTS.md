@@ -149,6 +149,7 @@ Code must never result in `None` when `None` is not valid. Fail early with clear
 def get_vm_firmware(template):
     return template.spec.domain.get("firmware")
 
+
 # Correct - fail fast
 def get_vm_firmware(template):
     firmware = template.spec.domain.get("firmware")
@@ -170,8 +171,8 @@ def create_plan(
     source_provider_namespace: str,
     storage_map_name: str,
     storage_map_namespace: str,
-):
-    ...
+): ...
+
 
 create_plan(
     source_provider_name=provider.ocp_resource.name,
@@ -179,6 +180,7 @@ create_plan(
     storage_map_name=storage_map.name,
     storage_map_namespace=storage_map.namespace,
 )
+
 
 # Correct - passing objects
 def create_plan(
@@ -189,6 +191,7 @@ def create_plan(
     name = source_provider.ocp_resource.name
     namespace = source_provider.ocp_resource.namespace
     ...
+
 
 create_plan(
     source_provider=provider,
@@ -218,6 +221,7 @@ def compare_labels(expected_labels: dict, actual_labels: dict) -> bool:
     if expected_labels and actual_labels:
         return expected_labels == actual_labels
     return False
+
 
 # Correct
 def compare_labels(expected_labels: dict, actual_labels: dict) -> bool:
@@ -264,6 +268,7 @@ Avoid intermediate variables that add no clarity.
 def my_fixture():
     result = create_resource()
     yield result
+
 
 # Correct
 @pytest.fixture
@@ -1044,8 +1049,7 @@ This ensures discoverability and consistency with the markers applied to the cla
 @pytest.mark.tier0
 @pytest.mark.warm
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote cluster")
-class TestRemoteWarmMigration:
-    ...
+class TestRemoteWarmMigration: ...
 ```
 
 ### Fixture Scope Changes (MUST)

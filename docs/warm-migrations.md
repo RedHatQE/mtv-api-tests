@@ -261,9 +261,7 @@ check_vms(
     source_provider_inventory=source_provider_inventory,
     vm_ssh_connections=vm_ssh_connections,
 )
-verify_vm_disk_count(
-    destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
-)
+verify_vm_disk_count(destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace)
 ```
 
 That extra assertion matters for the copy-offload path because it confirms that the migrated VM still has the expected disk inventory after the accelerated transfer flow.

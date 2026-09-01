@@ -175,10 +175,10 @@ These options control where the migrated VM runs and what metadata MTV applies t
 A cold-migration example from `tests/test_cold_migration_comprehensive.py` shows the scheduling-related arguments passed into the Plan helper:
 
 ```python
-target_node_selector={labeled_worker_node["label_key"]: labeled_worker_node["label_value"]},
-target_labels=target_vm_labels["vm_labels"],
-target_affinity=prepared_plan["target_affinity"],
-vm_target_namespace=prepared_plan["vm_target_namespace"],
+target_node_selector = ({labeled_worker_node["label_key"]: labeled_worker_node["label_value"]},)
+target_labels = (target_vm_labels["vm_labels"],)
+target_affinity = (prepared_plan["target_affinity"],)
+vm_target_namespace = (prepared_plan["vm_target_namespace"],)
 ```
 
 ### Node selectors

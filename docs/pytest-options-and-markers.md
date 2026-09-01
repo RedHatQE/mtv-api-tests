@@ -291,9 +291,7 @@ data_collector_group.addoption(
     "--data-collector-path", help="Path to store collected data for failed tests", default=".data-collector"
 )
 
-teardown_group.addoption(
-    "--skip-teardown", action="store_true", help="Do not teardown resource created by the tests"
-)
+teardown_group.addoption("--skip-teardown", action="store_true", help="Do not teardown resource created by the tests")
 
 openshift_python_wrapper_group.addoption(
     "--openshift-python-wrapper-log-debug",

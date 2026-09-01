@@ -227,11 +227,7 @@ if vm_ssh_connections and destination_vm.get("power_state") == "on":
     # Static IP preservation check - only for Windows VMs with static IPs migrated from VSPHERE
     source_vm_data = plan.get("source_vms_data", {}).get(vm["name"], {})
 
-    if (
-        source_vm_data
-        and source_vm_data.get("win_os")
-        and source_provider.type == Provider.ProviderType.VSPHERE
-    ):
+    if source_vm_data and source_vm_data.get("win_os") and source_provider.type == Provider.ProviderType.VSPHERE:
         try:
             check_static_ip_preservation(
                 vm_name=vm_name,

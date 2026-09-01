@@ -190,10 +190,7 @@ OpenStack is also the strictest inventory-sync path. The suite does not treat â€
 
 ```python
 if self.provider_type == Provider.ProviderType.OPENSTACK:
-    if not (
-        self._check_openstack_volumes_synced(vm, name)
-        and self._check_openstack_networks_synced(vm, name)
-    ):
+    if not (self._check_openstack_volumes_synced(vm, name) and self._check_openstack_networks_synced(vm, name)):
         return None
 ```
 
