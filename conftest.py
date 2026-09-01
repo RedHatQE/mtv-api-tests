@@ -1146,10 +1146,16 @@ def prepared_plan(
             pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
         if has_add_nic_config:
             for vm in virtual_machines:
-                if vm.get("add_nic") and "add_nic_start_connected" not in vm:
-                    raise ValueError(
-                        f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
-                    )
+                if vm.get("add_nic"):
+                    if "add_nic_start_connected" not in vm:
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+                        )
+                    if not isinstance(vm["add_nic_start_connected"], bool):
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
+                            f"got {type(vm['add_nic_start_connected']).__name__!r}"
+                        )
 
         if plan.get("disable_drs_for_vms", False) and not isinstance(clone_provider, VMWareProvider):
             raise ValueError(
