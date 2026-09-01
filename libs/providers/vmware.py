@@ -983,22 +983,22 @@ class VMWareProvider(BaseProvider):
             return backing.deviceName
         return ""
 
-    def add_disconnected_nic(self, vm: vim.VirtualMachine) -> str | None:
-        """Add a NIC with StartConnected=False to the VM and return its MAC address.
+    def add_nic(self, vm: vim.VirtualMachine, connected: bool) -> str | None:
+        """Add a NIC to the VM on a secondary network and return its MAC address.
 
-        Requires the VM to have at least one NIC on a network other than the pod network.
-        Returns None if no such NIC exists — the test step should skip in that case.
+        The NIC is added on the same network as the first existing NIC not on the pod
+        network. Returns None if the VM has no secondary network available.
 
-        The new NIC is added BEFORE NetworkMap creation so Forklift discovers it and maps
-        it to a multus interface. After migration, forklift sets state=down on the
-        KubeVirt interface corresponding to this NIC (StartConnected=False).
+        The NIC must be added BEFORE NetworkMap creation so Forklift discovers it and
+        maps it to a multus interface.
 
         Args:
-            vm: The target VM object (must be a clone — not a shared source VM).
+            vm (vim.VirtualMachine): The target VM object (must be a clone).
+            connected (bool): Whether the NIC starts connected (startConnected flag).
 
         Returns:
-            MAC address VMware assigned to the new NIC (lowercase), or None if the VM
-            has no secondary network to attach the disconnected NIC to.
+            str | None: MAC address VMware assigned to the new NIC (lowercase), or None
+                if the VM has no secondary network to attach the NIC to.
 
         Raises:
             ValueError: If the VM has no NICs, the secondary NIC has an unsupported
@@ -1017,7 +1017,7 @@ class VMWareProvider(BaseProvider):
         )
 
         if secondary_nic is None:
-            LOGGER.info(f"VM '{vm.name}' has no NIC on a secondary network — skipping disconnected NIC test")
+            LOGGER.info(f"VM '{vm.name}' has no NIC on a secondary network — skipping add_nic setup")
             return None
 
         source_backing = secondary_nic.backing
@@ -1036,15 +1036,15 @@ class VMWareProvider(BaseProvider):
                 f"VM '{vm.name}' secondary NIC has unsupported backing type '{type(source_backing).__name__}'"
             )
         LOGGER.info(
-            f"VM '{vm.name}': attaching disconnected NIC to secondary network "
+            f"VM '{vm.name}': attaching NIC (connected={connected}) to secondary network "
             f"(id={self._get_nic_network_id(secondary_nic)})"
         )
 
         nic = vim.vm.device.VirtualVmxnet3()
         nic.backing = network_backing
         nic.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
-        nic.connectable.startConnected = False
-        nic.connectable.connected = False
+        nic.connectable.startConnected = connected
+        nic.connectable.connected = connected
         nic.connectable.allowGuestControl = True
 
         spec = vim.vm.device.VirtualDeviceSpec()
@@ -1055,7 +1055,7 @@ class VMWareProvider(BaseProvider):
         config_spec.deviceChange = [spec]
 
         task = vm.ReconfigVM_Task(spec=config_spec)
-        self.wait_task(task=task, action_name=f"Adding disconnected NIC to VM '{vm.name}'", wait_timeout=120)
+        self.wait_task(task=task, action_name=f"Adding NIC to VM '{vm.name}'", wait_timeout=120)
 
         new_nics = [
             dev
@@ -1063,10 +1063,10 @@ class VMWareProvider(BaseProvider):
             if isinstance(dev, vim.vm.device.VirtualEthernetCard) and dev.key not in existing_nic_keys
         ]
         if not new_nics:
-            raise ValueError(f"Disconnected NIC was not found on VM '{vm.name}' after reconfig task completed")
+            raise ValueError(f"NIC was not found on VM '{vm.name}' after reconfig task completed")
 
         mac = new_nics[0].macAddress.lower()
-        LOGGER.info(f"Added disconnected NIC to VM '{vm.name}': MAC={mac}")
+        LOGGER.info(f"Added NIC (connected={connected}) to VM '{vm.name}': MAC={mac}")
         return mac
 
     def change_disk_mode(

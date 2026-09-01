@@ -1,14 +1,9 @@
-from typing import Any
-
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
-
-from libs.base_provider import BaseProvider
-from libs.providers.vmware import VMWareProvider
 
 LOGGER = get_logger(__name__)
 from utilities.mtv_migration import (
@@ -68,36 +63,6 @@ class TestSanityColdMtvMigration:
             vms=vms,
         )
         assert self.storage_map, "StorageMap creation failed"
-
-    def test_add_disconnected_nic(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: BaseProvider,
-    ) -> None:
-        """Add a disconnected NIC to each cloned VM before migration.
-
-        Skipped for non-vSphere providers. Stores the MAC address on each VM dict so
-        check_vms can verify each NIC migrates with state=down.
-        """
-        if not isinstance(source_provider, VMWareProvider):
-            pytest.skip("Disconnected NIC test is vSphere-only")
-            return
-        skipped = []
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = vm["name"]
-            cloned_vm = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            LOGGER.info(f"Adding disconnected NIC to cloned VM '{vm_name}' before migration")
-            mac = source_provider.add_disconnected_nic(cloned_vm)
-            if mac is None:
-                skipped.append(vm_name)
-            else:
-                LOGGER.info(
-                    f"Disconnected NIC added to VM '{vm_name}': MAC={mac}. "
-                    f"check_vms will verify this NIC has state=down on the OCP VM after migration."
-                )
-                vm["disconnected_nic_mac"] = mac
-        if skipped:
-            pytest.skip(f"No secondary network available on VM(s): {skipped} — disconnected NIC test skipped")
 
     def test_create_networkmap(
         self,

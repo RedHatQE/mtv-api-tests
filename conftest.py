@@ -1141,6 +1141,10 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
+        has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+        if has_add_nic_config and not isinstance(source_provider, VMWareProvider):
+            raise ValueError(f"add_nic requested, but provider '{source_provider.type}' does not support adding NICs")
+
         if plan.get("disable_drs_for_vms", False) and not isinstance(clone_provider, VMWareProvider):
             raise ValueError(
                 f"disable_drs_for_vms requires a VMware clone provider, got '{type(clone_provider).__name__}'"
@@ -1260,6 +1264,13 @@ def prepared_plan(
                 vm["snapshots_before_migration"] = source_vm_details["snapshots_data"]
                 # Store complete source VM data separately (keeps virtual_machines clean for Plan CR serialization)
                 plan["source_vms_data"][vm["name"]] = source_vm_details
+
+                # Add NIC to cloned VM before inventory sync so Forklift discovers it during NetworkMap creation.
+                if vm.get("add_nic"):
+                    connected: bool = vm["add_nic_start_connected"]
+                    mac = source_provider.add_nic(provider_vm_api, connected=connected)
+                    if mac is not None:
+                        vm["disconnected_nic_mac" if not connected else "connected_nic_mac"] = mac
 
                 # Detect IP origins via Guest Operations for Linux VMs where VMware doesn't report origin
                 # (known open-vm-tools limitation: https://github.com/vmware/open-vm-tools/issues/694)
