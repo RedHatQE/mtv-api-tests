@@ -631,7 +631,12 @@ tests_params: dict = {
         "enable_nested_virtualization": False,
         "vm_target_namespace": f"mtv-vms-warm-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": "default",  # Cross-namespace NAD access
-        "pvc_name_template": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
+        # Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default";
+        # vsphere uses the vSphere-only .FileName variable, other providers use the neutral default.
+        "pvc_name_template": {
+            "vsphere": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
+            "default": "{{.VmName}}-disk-{{.DiskIndex}}",
+        },
         "pvc_name_template_use_generate_name": True,
         "target_labels": {
             "mtv-comprehensive-test": None,  # None = auto-generate with session_uuid
