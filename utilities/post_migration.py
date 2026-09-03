@@ -1014,16 +1014,15 @@ def check_pvc_names(
         LOGGER.info("No pvc_name_template specified, skipping PVC name verification")
         return
 
-    # Validate VMware-only wildcards
-    for wildcard in ["{{.FileName}}", "{{.DiskIndex}}"]:
-        if wildcard in pvc_name_template:
-            if not source_provider or source_provider.type != Provider.ProviderType.VSPHERE:
-                LOGGER.warning(
-                    f"{wildcard} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
-                    f"Current provider: {source_provider.type if source_provider else 'unknown'}. "
-                    f"Skipping PVC name verification."
-                )
-                return
+    # Validate VMware-only wildcard (requires VMDK filenames from vSphere inventory)
+    if "{{.FileName}}" in pvc_name_template:
+        if not source_provider or source_provider.type != Provider.ProviderType.VSPHERE:
+            LOGGER.warning(
+                "{{.FileName}} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
+                f"Current provider: {source_provider.type if source_provider else 'unknown'}. "
+                f"Skipping PVC name verification."
+            )
+            return
 
     # Get disk filenames from inventory (required for {{.FileName}} template)
     inventory_disk_files: dict[int, str] = {}
