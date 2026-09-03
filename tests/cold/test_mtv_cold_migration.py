@@ -86,6 +86,7 @@ class TestSanityColdMtvMigration:
             target_namespace=target_namespace,
             multus_network_name=multus_network_name,
             vms=vms,
+            per_nic_network_map=prepared_plan.get("per_nic_network_map", False),
         )
         assert self.network_map, "NetworkMap creation failed"
 
@@ -224,6 +225,7 @@ class TestColdRemoteOcp:
             target_namespace=target_namespace,
             multus_network_name=multus_network_name,
             vms=vms,
+            per_nic_network_map=prepared_plan.get("per_nic_network_map", False),
         )
         assert self.network_map, "NetworkMap creation failed"
 
