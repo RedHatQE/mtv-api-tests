@@ -1,11 +1,11 @@
 {
-  "ai_provider": "cursor",
+  "ai_provider": "cli-cursor",
   "ai_model": "cursor:cursor-grok-4.6-low",
   "ai_call_timeout": 90,
   "max_concurrent_ai_calls": 3,
   "peer_ai_configs": [
     {
-      "ai_provider": "cursor",
+      "ai_provider": "cli-cursor",
       "ai_model": "cursor:composer-2.5"
     }
   ],
