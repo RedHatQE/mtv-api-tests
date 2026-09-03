@@ -1142,9 +1142,9 @@ def prepared_plan(
             )
 
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
-        if has_add_nic_config and not isinstance(source_provider, VMWareProvider):
-            pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
         if has_add_nic_config:
+            if not isinstance(source_provider, VMWareProvider):
+                pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
             for vm in virtual_machines:
                 if vm.get("add_nic"):
                     if "add_nic_start_connected" not in vm:
