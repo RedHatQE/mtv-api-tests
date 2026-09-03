@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import ipaddress
 import json
+import re
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1014,8 +1015,10 @@ def check_pvc_names(
         LOGGER.info("No pvc_name_template specified, skipping PVC name verification")
         return
 
+    uses_file_name = re.search(r"\{\{-?\s*\.FileName\b", pvc_name_template) is not None
+
     # Validate VMware-only wildcard (requires VMDK filenames from vSphere inventory)
-    if "{{.FileName}}" in pvc_name_template:
+    if uses_file_name:
         if not source_provider or source_provider.type != Provider.ProviderType.VSPHERE:
             LOGGER.warning(
                 "{{.FileName}} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
@@ -1099,7 +1102,7 @@ def check_pvc_names(
             filename = inventory_disk_files.get(device_key, "")
 
         # Warn if FileName template is used but filename not found from inventory
-        if "{{.FileName}}" in pvc_name_template and not filename:
+        if uses_file_name and not filename:
             LOGGER.warning(
                 f"{{{{.FileName}}}} wildcard used but filename not found for disk with device_key={device_key}. "
                 f"Available inventory disk keys: {list(inventory_disk_files.keys())}"

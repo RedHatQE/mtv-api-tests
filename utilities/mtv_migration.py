@@ -120,25 +120,6 @@ def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[
     return failed_steps
 
 
-def _validate_pvc_name_template_value(value: str, key: str) -> str:
-    """Validate that a resolved PVC name template value is a non-empty string.
-
-    Args:
-        value (str): The candidate template value.
-        key (str): Identifier for the source of the value, used in error messages.
-
-    Returns:
-        str: The validated template value.
-
-    Raises:
-        ValueError: If ``value`` is not a non-empty string.
-    """
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"'pvc_name_template' value for '{key}' must be a non-empty string, got: {value!r}")
-
-    return value
-
-
 def resolve_pvc_name_template(
     pvc_name_template: str | dict[str, str],
     source_provider_type: str,
@@ -163,10 +144,9 @@ def resolve_pvc_name_template(
 
     Raises:
         ValueError: If the mapping contains a key that is not a valid
-            ``Provider.ProviderType`` value or ``"default"``, if the
+            ``Provider.ProviderType`` value or ``"default"``, or if the
             mapping has no entry matching ``source_provider_type`` and no
-            ``"default"`` key, or if the resolved template value is not a
-            non-empty string.
+            ``"default"`` key.
     """
     if isinstance(pvc_name_template, dict):
         valid_provider_types = {
@@ -183,17 +163,17 @@ def resolve_pvc_name_template(
             )
 
         if source_provider_type in pvc_name_template:
-            return _validate_pvc_name_template_value(pvc_name_template[source_provider_type], source_provider_type)
+            return pvc_name_template[source_provider_type]
 
         if "default" in pvc_name_template:
-            return _validate_pvc_name_template_value(pvc_name_template["default"], "default")
+            return pvc_name_template["default"]
 
         raise ValueError(
             f"No 'pvc_name_template' entry found for provider type '{source_provider_type}' and no "
             f"'default' key present; available keys: {sorted(pvc_name_template.keys())}"
         )
 
-    return _validate_pvc_name_template_value(pvc_name_template, "<root>")
+    return pvc_name_template
 
 
 def create_plan_resource(
