@@ -874,6 +874,7 @@ def multus_network_name(
         raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
 
     # Calculate how many multus NADs we need
+    extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic"))
     if class_plan_config.get("per_nic_network_map", False):
         multus_count = max(
             0,
@@ -882,7 +883,8 @@ def multus_network_name(
                     source_provider=source_provider, source_provider_inventory=source_provider_inventory, vms=vms
                 )
             )
-            - 1,
+            - 1
+            + extra_nics,
         )
     else:
         multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
