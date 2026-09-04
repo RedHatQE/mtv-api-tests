@@ -147,12 +147,17 @@ def _wait_for_inventory_mac_convergence(
     last_inventory_macs: set[str] = set()
 
     def _check_mac_convergence() -> bool:
+        """Return True once inventory NIC MACs match the live vCenter MACs.
+
+        A transient VM absence (ValueError from get_vm) counts as not-yet-converged so
+        polling continues; the last observed inventory MACs are kept for timeout diagnostics.
+        """
         nonlocal last_inventory_macs
-        last_inventory_macs = {
-            mac.lower()
-            for nic in source_provider_inventory.get_vm(name=vm_name).get("nics", [])
-            if (mac := nic.get("mac"))
-        }
+        try:
+            vm = source_provider_inventory.get_vm(name=vm_name)
+        except ValueError:
+            return False
+        last_inventory_macs = {mac.lower() for nic in vm.get("nics", []) if (mac := nic.get("mac"))}
         return last_inventory_macs == live_macs
 
     try:
@@ -249,7 +254,8 @@ def wait_for_cloned_vms_in_forklift_inventory(
         for vm_name in cloned_vm_names:
             source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
 
-    # MAC convergence safeguard (see _wait_for_inventory_mac_convergence).
+    # vSphere clones regenerate MACs and inventory can lag, so run convergence for all
+    # vSphere clones regardless of the MTV-6072 workaround gate above.
     if is_vsphere:
         for vm_name in cloned_vm_names:
             _wait_for_inventory_mac_convergence(
