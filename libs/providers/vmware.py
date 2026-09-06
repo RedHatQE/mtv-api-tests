@@ -989,8 +989,11 @@ class VMWareProvider(BaseProvider):
         The NIC is added on the same network as the first existing NIC not on the pod
         network. Returns None if the VM has no secondary network available.
 
-        The NIC must be added BEFORE NetworkMap creation so Forklift discovers it and
-        maps it to a multus interface.
+        This reconfigures the VM's hardware after it was already synced to the Forklift
+        inventory, so the caller must force an inventory refresh and wait for the new NIC
+        to appear before creating the NetworkMap (see
+        wait_for_added_nics_in_forklift_inventory). Otherwise the NetworkMap is built from
+        stale inventory and Forklift drops the added NIC during VM creation.
 
         Args:
             vm (vim.VirtualMachine): The target VM object (must be a clone).

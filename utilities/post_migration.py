@@ -894,19 +894,64 @@ def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, An
     return matched[0]
 
 
+def get_all_destinations(map_resource: NetworkMap, source_vm_nic: dict[str, Any]) -> list[str]:
+    """Return every destination network name a source NIC's network maps to.
+
+    A source network maps to multiple destination NADs when per-NIC network mapping is used
+    (two NICs on the same source network each get their own NAD). Forklift's NADPool decides
+    which NIC binds to which NAD at migration time, so a source NIC may land on any of them.
+    Returns all candidates so the caller can assert the destination NIC's NAD is one of them.
+
+    Args:
+        map_resource: NetworkMap resource whose spec.map is inspected.
+        source_vm_nic: Source VM NIC dict with a "network" name/id/dict.
+
+    Returns:
+        Destination network names (``"pod"`` for pod-type entries), one per matching map entry.
+    """
+    destinations: list[str] = []
+    for map_item in map_resource.instance.spec.map:
+        result_name = "pod" if map_item.destination.type == "pod" else map_item.destination.name
+
+        source_vm_network = source_vm_nic["network"]
+        if isinstance(source_vm_network, dict):
+            source_vm_network = source_vm_network.get("name", source_vm_network.get("id", None))
+
+        if map_item.source.type and map_item.source.type == source_vm_network:
+            destinations.append(result_name)
+            continue
+
+        if map_item.source.name:
+            name_to_compare = (
+                map_item.source.name.split("/")[1] if "/" in map_item.source.name else map_item.source.name
+            )
+            if name_to_compare == source_vm_network:
+                destinations.append(result_name)
+                continue
+
+        if map_item.source.id and map_item.source.id == source_vm_network:
+            destinations.append(result_name)
+
+    return destinations
+
+
 def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], network_migration_map: NetworkMap) -> None:
     for source_vm_nic in source_vm["network_interfaces"]:
-        expected_network = get_destination(network_migration_map, source_vm_nic)
+        expected_networks = get_all_destinations(network_migration_map, source_vm_nic)
 
-        assert expected_network, "Network not found in migration map"
-
-        expected_network_name = expected_network["name"]
+        assert expected_networks, f"Network '{source_vm_nic['network']}' not found in migration map"
 
         destination_vm_nic = get_nic_by_mac(
             nics=destination_vm["network_interfaces"], mac_address=source_vm_nic["macAddress"]
         )
 
-        assert destination_vm_nic["network"] == expected_network_name
+        # A source network may map to several destination NADs (per-NIC mapping); the destination
+        # NIC must be attached to one of them.
+        assert destination_vm_nic["network"] in expected_networks, (
+            f"NIC (MAC {source_vm_nic['macAddress']}) on source network '{source_vm_nic['network']}' "
+            f"landed on destination network '{destination_vm_nic['network']}', "
+            f"expected one of {expected_networks}"
+        )
 
 
 def check_nic_name_preservation(source_vm_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
