@@ -973,8 +973,14 @@ class VMWareProvider(BaseProvider):
     def _get_nic_network_id(nic: vim.vm.device.VirtualEthernetCard) -> str:
         """Return a stable network identifier from a NIC's backing.
 
-        Returns the DVS portgroup key or the standard network device name.
         Used to determine whether two NICs share the same network.
+
+        Args:
+            nic (vim.vm.device.VirtualEthernetCard): NIC whose backing is inspected.
+
+        Returns:
+            str: The DVS portgroup key (distributed backing) or the device name
+                (standard backing); an empty string for any other backing type.
         """
         backing = nic.backing
         if isinstance(backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
@@ -1007,6 +1013,7 @@ class VMWareProvider(BaseProvider):
             ValueError: If the VM has no NICs, the secondary NIC has an unsupported
                 backing type, or the reconfig task fails.
         """
+        # Network selection: pick the first NIC not on the pod network to clone the NIC onto.
         existing_nics = [dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualEthernetCard)]
         if not existing_nics:
             raise ValueError(f"VM '{vm.name}' has no existing NICs")
@@ -1023,6 +1030,7 @@ class VMWareProvider(BaseProvider):
             LOGGER.info(f"VM '{vm.name}' has no NIC on a secondary network — skipping add_nic setup")
             return None
 
+        # Backing construction: replicate the secondary NIC's backing (distributed or standard).
         source_backing = secondary_nic.backing
         if isinstance(source_backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
             network_backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
@@ -1043,6 +1051,7 @@ class VMWareProvider(BaseProvider):
             f"(id={self._get_nic_network_id(secondary_nic)})"
         )
 
+        # Device reconfiguration: build and apply the add-NIC reconfig task.
         nic = vim.vm.device.VirtualVmxnet3()
         nic.backing = network_backing
         nic.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
@@ -1060,6 +1069,7 @@ class VMWareProvider(BaseProvider):
         task = vm.ReconfigVM_Task(spec=config_spec)
         self.wait_task(task=task, action_name=f"Adding NIC to VM '{vm.name}'", wait_timeout=120)
 
+        # Result discovery: find the newly added NIC (the one whose key is new) and return its MAC.
         new_nics = [
             dev
             for dev in vm.config.hardware.device

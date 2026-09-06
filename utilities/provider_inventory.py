@@ -68,6 +68,10 @@ def wait_for_added_nics_in_forklift_inventory(
         timeout: Maximum time to wait for every VM to reach its expected NIC count.
         sleep: Seconds between inventory polls.
 
+    Returns:
+        None. Returning normally means every VM reached its expected NIC count; otherwise
+        TimeoutExpiredError is raised.
+
     Raises:
         ValueError: If source_provider.ocp_resource is not set.
         TimeoutExpiredError: If any VM does not reach its expected NIC count within the timeout.
@@ -79,8 +83,22 @@ def wait_for_added_nics_in_forklift_inventory(
     force_inventory_refresh(source_provider.ocp_resource)
 
     def _all_nics_present() -> bool:
+        """Return True once every expected VM shows at least its expected NIC count.
+
+        Returns False (not ready) as soon as any VM is missing NICs — or is temporarily
+        absent from the inventory, which get_vm() reports by raising ValueError. Treating
+        a missing VM as not-ready lets TimeoutSampler keep retrying while the forced
+        refresh reconciles, instead of aborting the whole setup.
+
+        Returns:
+            True if every VM has reached its expected NIC count; False otherwise.
+        """
         for vm_name, expected_count in expected_nic_counts.items():
-            actual_count = len(source_provider_inventory.get_vm(name=vm_name).get("nics", []))
+            try:
+                actual_count = len(source_provider_inventory.get_vm(name=vm_name).get("nics", []))
+            except ValueError:
+                LOGGER.info(f"VM '{vm_name}' not yet in inventory after refresh, retrying")
+                return False
             if actual_count < expected_count:
                 LOGGER.info(f"VM '{vm_name}' inventory has {actual_count} NIC(s), waiting for {expected_count}")
                 return False

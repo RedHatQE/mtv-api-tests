@@ -733,30 +733,58 @@ def check_static_ip_preservation(
     LOGGER.info(f"Static IP preservation verification completed for VM {vm_name}")
 
 
+def _normalize_source_network(source_vm_nic: dict[str, Any]) -> str | None:
+    """Extract a comparable source-network identifier from a source VM NIC.
+
+    The NIC's ``network`` field may be a plain name/id string or a dict carrying a
+    ``name`` and/or ``id`` (provider inventories differ). This collapses both shapes
+    to the single value used when matching against a migration map's source entries.
+
+    Args:
+        source_vm_nic: Source VM NIC dict with a "network" name/id/dict.
+
+    Returns:
+        The source network name or id, or None if a dict carried neither.
+    """
+    source_vm_network = source_vm_nic["network"]
+    if isinstance(source_vm_network, dict):
+        return source_vm_network.get("name", source_vm_network.get("id", None))
+    return source_vm_network
+
+
+def _map_item_matches_source_network(map_item: Any, source_vm_network: str | None) -> bool:
+    """Return True if a migration-map entry's source matches the given network.
+
+    Matches against the entry's source ``type``, ``name`` (stripping a
+    ``namespace/name`` prefix if present), or ``id`` — the same precedence used
+    across both single- and multi-destination lookups so they never diverge.
+
+    Args:
+        map_item: A single entry from ``map_resource.instance.spec.map``.
+        source_vm_network: Normalized source network identifier to match.
+
+    Returns:
+        True if this map entry's source refers to the given source network.
+    """
+    if map_item.source.type and map_item.source.type == source_vm_network:
+        return True
+
+    if map_item.source.name:
+        name_to_compare = map_item.source.name.split("/")[1] if "/" in map_item.source.name else map_item.source.name
+        if name_to_compare == source_vm_network:
+            return True
+
+    return bool(map_item.source.id and map_item.source.id == source_vm_network)
+
+
 def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[str, Any]) -> dict[str, Any]:
     """
     Get the source_name's (Network Or Storage) destination_name in a migration map.
     """
+    source_vm_network = _normalize_source_network(source_vm_nic)
     for map_item in map_resource.instance.spec.map:
-        result = {"name": "pod"} if map_item.destination.type == "pod" else map_item.destination
-
-        source_vm_network = source_vm_nic["network"]
-
-        if isinstance(source_vm_network, dict):
-            source_vm_network = source_vm_network.get("name", source_vm_network.get("id", None))
-
-        if map_item.source.type and map_item.source.type == source_vm_network:
-            return result
-
-        if map_item.source.name:
-            name_to_compare = (
-                map_item.source.name.split("/")[1] if "/" in map_item.source.name else map_item.source.name
-            )
-            if name_to_compare == source_vm_network:
-                return result
-
-        if map_item.source.id and map_item.source.id == source_vm_network:
-            return result
+        if _map_item_matches_source_network(map_item, source_vm_network):
+            return {"name": "pod"} if map_item.destination.type == "pod" else map_item.destination
 
     return {}
 
@@ -909,28 +937,11 @@ def get_all_destinations(map_resource: NetworkMap, source_vm_nic: dict[str, Any]
     Returns:
         Destination network names (``"pod"`` for pod-type entries), one per matching map entry.
     """
+    source_vm_network = _normalize_source_network(source_vm_nic)
     destinations: list[str] = []
     for map_item in map_resource.instance.spec.map:
-        result_name = "pod" if map_item.destination.type == "pod" else map_item.destination.name
-
-        source_vm_network = source_vm_nic["network"]
-        if isinstance(source_vm_network, dict):
-            source_vm_network = source_vm_network.get("name", source_vm_network.get("id", None))
-
-        if map_item.source.type and map_item.source.type == source_vm_network:
-            destinations.append(result_name)
-            continue
-
-        if map_item.source.name:
-            name_to_compare = (
-                map_item.source.name.split("/")[1] if "/" in map_item.source.name else map_item.source.name
-            )
-            if name_to_compare == source_vm_network:
-                destinations.append(result_name)
-                continue
-
-        if map_item.source.id and map_item.source.id == source_vm_network:
-            destinations.append(result_name)
+        if _map_item_matches_source_network(map_item, source_vm_network):
+            destinations.append("pod" if map_item.destination.type == "pod" else map_item.destination.name)
 
     return destinations
 
