@@ -52,7 +52,7 @@ from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
-from utilities.mtv_migration import get_vm_suffix
+from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
 from utilities.must_gather import run_must_gather
 from utilities.provider_inventory import validate_source_vms_exist, wait_for_cloned_vms_in_forklift_inventory
 from utilities.naming import (
@@ -1066,6 +1066,13 @@ def prepared_plan(
 
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
+
+    if "pvc_name_template" in plan:
+        plan["pvc_name_template"] = resolve_pvc_name_template(
+            pvc_name_template=plan["pvc_name_template"],
+            source_provider_type=source_provider.type,
+        )
+
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     warm_migration = plan.get("warm_migration", False)
 
