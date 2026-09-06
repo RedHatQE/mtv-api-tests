@@ -48,9 +48,10 @@ tests_params: dict = {
     },
     "test_sanity_cold_mtv_migration": {
         "virtual_machines": [
-            {"name": "mtv-tests-rhel8", "guest_agent": True},
+            {"name": "mtv-tests-rhel8", "guest_agent": True, "add_nic": True, "add_nic_start_connected": False},
         ],
         "warm_migration": False,
+        "per_nic_network_map": True,
     },
     "test_cold_remote_ocp": {
         "virtual_machines": [

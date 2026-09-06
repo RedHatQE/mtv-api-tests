@@ -6,7 +6,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
 from ovirtsdk4 import NotFoundError as OvirtNotFoundError
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutExpiredError
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmNotFoundError
 from libs.base_provider import BaseProvider
@@ -42,6 +42,78 @@ def force_inventory_refresh(provider: Provider) -> None:
     patch = {"spec": {"settings": {"_refresh": refresh_timestamp}}}
     ResourceEditor(patches={provider: patch}).update()
     provider.wait_for_condition(condition="Ready", status="True", timeout=_INVENTORY_REFRESH_READY_TIMEOUT)
+
+
+def wait_for_added_nics_in_forklift_inventory(
+    source_provider: BaseProvider,
+    source_provider_inventory: ForkliftInventory,
+    expected_nic_counts: dict[str, int],
+    timeout: int = _INVENTORY_REFRESH_READY_TIMEOUT,
+    sleep: int = 10,
+) -> None:
+    """Force a provider refresh and wait until added NICs appear in the Forklift inventory.
+
+    ``add_nic`` reconfigures the cloned source VM's hardware after it was already synced to
+    inventory. The cloned VM still exists in inventory, so ``wait_for_cloned_vms_in_forklift_inventory``
+    passes its quick check without forcing a refresh — leaving the inventory stale (missing the new
+    NIC). The NetworkMap is then built from that stale inventory and the added NIC is never mapped,
+    so Forklift drops it during VM creation. This forces a refresh and blocks until each VM's
+    inventory ``nics`` count reaches the expected total, guaranteeing NetworkMap creation sees the
+    added NIC.
+
+    Args:
+        source_provider: Source provider instance (must have ocp_resource set).
+        source_provider_inventory: Forklift inventory client for the source provider.
+        expected_nic_counts: Mapping of VM name -> expected total NIC count after add_nic.
+        timeout: Maximum time to wait for every VM to reach its expected NIC count.
+        sleep: Seconds between inventory polls.
+
+    Returns:
+        None. Returning normally means every VM reached its expected NIC count; otherwise
+        TimeoutExpiredError is raised.
+
+    Raises:
+        ValueError: If source_provider.ocp_resource is not set.
+        TimeoutExpiredError: If any VM does not reach its expected NIC count within the timeout.
+    """
+    if source_provider.ocp_resource is None:
+        raise ValueError("source_provider.ocp_resource is not set")
+
+    LOGGER.info(f"Forcing inventory refresh to sync added NICs for VMs: {list(expected_nic_counts)}")
+    force_inventory_refresh(source_provider.ocp_resource)
+
+    def _all_nics_present() -> bool:
+        """Return True once every expected VM shows at least its expected NIC count.
+
+        Returns False (not ready) as soon as any VM is missing NICs — or is temporarily
+        absent from the inventory (get_vm() reports this by raising ValueError), or its
+        inventory record has no usable ``nics`` list yet (the field is null or not a list
+        while the refresh is still reconciling). Treating all of these as not-ready lets
+        TimeoutSampler keep retrying while the forced refresh reconciles, instead of
+        aborting the whole setup.
+
+        Returns:
+            True if every VM has reached its expected NIC count; False otherwise.
+        """
+        for vm_name, expected_count in expected_nic_counts.items():
+            try:
+                nics = source_provider_inventory.get_vm(name=vm_name).get("nics")
+            except ValueError:
+                LOGGER.info(f"VM '{vm_name}' not yet in inventory after refresh, retrying")
+                return False
+            if not isinstance(nics, list):
+                LOGGER.info(f"VM '{vm_name}' inventory has no 'nics' list yet ({nics!r}), retrying")
+                return False
+            actual_count = len(nics)
+            if actual_count < expected_count:
+                LOGGER.info(f"VM '{vm_name}' inventory has {actual_count} NIC(s), waiting for {expected_count}")
+                return False
+        return True
+
+    for is_present in TimeoutSampler(wait_timeout=timeout, sleep=sleep, func=_all_nics_present):
+        if is_present:
+            LOGGER.info("All added NICs present in Forklift inventory")
+            return
 
 
 def collect_cross_datastore_ids(

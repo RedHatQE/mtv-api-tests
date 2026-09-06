@@ -54,7 +54,11 @@ from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix
 from utilities.must_gather import run_must_gather
-from utilities.provider_inventory import validate_source_vms_exist, wait_for_cloned_vms_in_forklift_inventory
+from utilities.provider_inventory import (
+    validate_source_vms_exist,
+    wait_for_added_nics_in_forklift_inventory,
+    wait_for_cloned_vms_in_forklift_inventory,
+)
 from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
@@ -874,6 +878,7 @@ def multus_network_name(
         raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
 
     # Calculate how many multus NADs we need
+    extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic"))
     if class_plan_config.get("per_nic_network_map", False):
         multus_count = max(
             0,
@@ -882,7 +887,8 @@ def multus_network_name(
                     source_provider=source_provider, source_provider_inventory=source_provider_inventory, vms=vms
                 )
             )
-            - 1,
+            - 1
+            + extra_nics,
         )
     else:
         multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
@@ -1141,6 +1147,22 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
+        has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+        if has_add_nic_config:
+            if not isinstance(source_provider, VMWareProvider):
+                pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
+            for vm in virtual_machines:
+                if vm.get("add_nic"):
+                    if "add_nic_start_connected" not in vm:
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+                        )
+                    if not isinstance(vm["add_nic_start_connected"], bool):
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
+                            f"got {type(vm['add_nic_start_connected']).__name__!r}"
+                        )
+
         if plan.get("disable_drs_for_vms", False) and not isinstance(clone_provider, VMWareProvider):
             raise ValueError(
                 f"disable_drs_for_vms requires a VMware clone provider, got '{type(clone_provider).__name__}'"
@@ -1158,6 +1180,9 @@ def prepared_plan(
         cloned_vm_objects: list[Any] = []
         cloned_vm_names: list[str] = []
         first_vm_esxi_host: str | None = None
+        # VM name -> expected total NIC count after add_nic; used to wait for a fresh inventory
+        # that includes the added NIC before NetworkMap creation.
+        added_nic_expected_counts: dict[str, int] = {}
 
         skip_clone = plan.get("skip_clone", False)
 
@@ -1172,6 +1197,8 @@ def prepared_plan(
             ]
             if has_shared_disk_config:
                 conflicting.append("migrate_shared_disks")
+            if has_add_nic_config:
+                conflicting.append("add_nic")
             if conflicting:
                 raise ValueError(
                     f"skip_clone=True is incompatible with {conflicting}; these options require the cloning phase."
@@ -1261,6 +1288,23 @@ def prepared_plan(
                 # Store complete source VM data separately (keeps virtual_machines clean for Plan CR serialization)
                 plan["source_vms_data"][vm["name"]] = source_vm_details
 
+                # Add a NIC to the cloned VM. This reconfigures the VM's hardware AFTER it was
+                # already synced to the Forklift inventory during cloning, so the inventory is now
+                # stale (missing the new NIC). A forced refresh + NIC-count wait runs after the loop
+                # (see wait_for_added_nics_in_forklift_inventory) to guarantee NetworkMap creation
+                # sees the added NIC — otherwise Forklift drops it during VM creation.
+                if vm.get("add_nic"):
+                    connected: bool = vm["add_nic_start_connected"]
+                    nic_count_before = sum(
+                        1
+                        for dev in provider_vm_api.config.hardware.device
+                        if isinstance(dev, vim.vm.device.VirtualEthernetCard)
+                    )
+                    mac = source_provider.add_nic(provider_vm_api, connected=connected)
+                    if mac is not None:
+                        vm["disconnected_nic_mac" if not connected else "connected_nic_mac"] = mac
+                        added_nic_expected_counts[vm["name"]] = nic_count_before + 1
+
                 # Detect IP origins via Guest Operations for Linux VMs where VMware doesn't report origin
                 # (known open-vm-tools limitation: https://github.com/vmware/open-vm-tools/issues/694)
                 if source_provider.type == Provider.ProviderType.VSPHERE and not source_vm_details.get("win_os"):
@@ -1304,6 +1348,18 @@ def prepared_plan(
                 inventory_timeout=inventory_timeout,
                 jira_issue_open=jira_issue_scope_session,
             )
+
+            # After add_nic, the cloned VM already existed in inventory so the quick check above
+            # passed without forcing a refresh — the inventory is stale and missing the new NIC.
+            # Force a refresh and block until each VM's NIC count reflects the added NIC, so
+            # NetworkMap creation (later in the test) maps every NIC and Forklift keeps it.
+            if added_nic_expected_counts:
+                wait_for_added_nics_in_forklift_inventory(
+                    source_provider=source_provider,
+                    source_provider_inventory=source_provider_inventory,
+                    expected_nic_counts=added_nic_expected_counts,
+                    timeout=inventory_timeout,
+                )
 
             # Relink shared disks between clones (VMware-specific)
             # When VMs with shared disks are cloned, each clone gets independent disk copies,

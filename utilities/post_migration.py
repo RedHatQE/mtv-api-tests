@@ -733,32 +733,48 @@ def check_static_ip_preservation(
     LOGGER.info(f"Static IP preservation verification completed for VM {vm_name}")
 
 
-def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[str, Any]) -> dict[str, Any]:
+def _normalize_source_network(source_vm_nic: dict[str, Any]) -> str | None:
+    """Extract a comparable source-network identifier from a source VM NIC.
+
+    The NIC's ``network`` field may be a plain name/id string or a dict carrying a
+    ``name`` and/or ``id`` (provider inventories differ). This collapses both shapes
+    to the single value used when matching against a migration map's source entries.
+
+    Args:
+        source_vm_nic: Source VM NIC dict with a "network" name/id/dict.
+
+    Returns:
+        The source network name or id, or None if a dict carried neither.
     """
-    Get the source_name's (Network Or Storage) destination_name in a migration map.
+    source_vm_network = source_vm_nic["network"]
+    if isinstance(source_vm_network, dict):
+        return source_vm_network.get("name", source_vm_network.get("id", None))
+    return source_vm_network
+
+
+def _map_item_matches_source_network(map_item: Any, source_vm_network: str | None) -> bool:
+    """Return True if a migration-map entry's source matches the given network.
+
+    Matches against the entry's source ``type``, ``name`` (stripping a
+    ``namespace/name`` prefix if present), or ``id`` — the same precedence used
+    across both single- and multi-destination lookups so they never diverge.
+
+    Args:
+        map_item: A single entry from ``map_resource.instance.spec.map``.
+        source_vm_network: Normalized source network identifier to match.
+
+    Returns:
+        True if this map entry's source refers to the given source network.
     """
-    for map_item in map_resource.instance.spec.map:
-        result = {"name": "pod"} if map_item.destination.type == "pod" else map_item.destination
+    if map_item.source.type and map_item.source.type == source_vm_network:
+        return True
 
-        source_vm_network = source_vm_nic["network"]
+    if map_item.source.name:
+        name_to_compare = map_item.source.name.split("/")[1] if "/" in map_item.source.name else map_item.source.name
+        if name_to_compare == source_vm_network:
+            return True
 
-        if isinstance(source_vm_network, dict):
-            source_vm_network = source_vm_network.get("name", source_vm_network.get("id", None))
-
-        if map_item.source.type and map_item.source.type == source_vm_network:
-            return result
-
-        if map_item.source.name:
-            name_to_compare = (
-                map_item.source.name.split("/")[1] if "/" in map_item.source.name else map_item.source.name
-            )
-            if name_to_compare == source_vm_network:
-                return result
-
-        if map_item.source.id and map_item.source.id == source_vm_network:
-            return result
-
-    return {}
+    return bool(map_item.source.id and map_item.source.id == source_vm_network)
 
 
 def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
@@ -894,19 +910,47 @@ def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, An
     return matched[0]
 
 
+def get_all_destinations(map_resource: NetworkMap, source_vm_nic: dict[str, Any]) -> list[str]:
+    """Return every destination network name a source NIC's network maps to.
+
+    A source network maps to multiple destination NADs when per-NIC network mapping is used
+    (two NICs on the same source network each get their own NAD). Forklift's NADPool decides
+    which NIC binds to which NAD at migration time, so a source NIC may land on any of them.
+    Returns all candidates so the caller can assert the destination NIC's NAD is one of them.
+
+    Args:
+        map_resource: NetworkMap resource whose spec.map is inspected.
+        source_vm_nic: Source VM NIC dict with a "network" name/id/dict.
+
+    Returns:
+        Destination network names (``"pod"`` for pod-type entries), one per matching map entry.
+    """
+    source_vm_network = _normalize_source_network(source_vm_nic)
+    destinations: list[str] = []
+    for map_item in map_resource.instance.spec.map:
+        if _map_item_matches_source_network(map_item, source_vm_network):
+            destinations.append("pod" if map_item.destination.type == "pod" else map_item.destination.name)
+
+    return destinations
+
+
 def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], network_migration_map: NetworkMap) -> None:
     for source_vm_nic in source_vm["network_interfaces"]:
-        expected_network = get_destination(network_migration_map, source_vm_nic)
+        expected_networks = get_all_destinations(network_migration_map, source_vm_nic)
 
-        assert expected_network, "Network not found in migration map"
-
-        expected_network_name = expected_network["name"]
+        assert expected_networks, f"Network '{source_vm_nic['network']}' not found in migration map"
 
         destination_vm_nic = get_nic_by_mac(
             nics=destination_vm["network_interfaces"], mac_address=source_vm_nic["macAddress"]
         )
 
-        assert destination_vm_nic["network"] == expected_network_name
+        # A source network may map to several destination NADs (per-NIC mapping); the destination
+        # NIC must be attached to one of them.
+        assert destination_vm_nic["network"] in expected_networks, (
+            f"NIC (MAC {source_vm_nic['macAddress']}) on source network '{source_vm_nic['network']}' "
+            f"landed on destination network '{destination_vm_nic['network']}', "
+            f"expected one of {expected_networks}"
+        )
 
 
 def check_nic_name_preservation(source_vm_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
@@ -1402,6 +1446,39 @@ def check_boot_configuration(source_vm: dict[str, Any], destination_vm: dict[str
         f"boot={dest_firmware['boot_firmware']}, secure_boot={dest_firmware['secure_boot']}, "
         f"tpm={dest_firmware['tpm_present']}"
     )
+
+
+def check_disconnected_nic_state(destination_vm: dict[str, Any], expected_mac: str) -> None:
+    """Verify a NIC with StartConnected=False on the source has state=down on the migrated OCP VM.
+
+    Reads from the VM spec (not VMI status) because KubeVirt does not report
+    link-down interfaces in VMI status.interfaces.
+
+    Args:
+        destination_vm: Destination VM info dictionary containing provider_vm_api.
+        expected_mac: MAC address (lowercase) of the NIC expected to have state=down.
+
+    Raises:
+        AssertionError: If no interface with expected_mac is found, or its state is not 'down'.
+        ValueError: If destination_vm has no provider_vm_api.
+    """
+    cnv_vm = destination_vm.get("provider_vm_api")
+    if cnv_vm is None:
+        raise ValueError(f"destination_vm '{destination_vm.get('name')}' has no provider_vm_api")
+
+    interfaces: list[dict[str, Any]] = cnv_vm.instance.spec.template.spec.domain.devices.interfaces
+    matching = [iface for iface in interfaces if iface.get("macAddress", "").lower() == expected_mac]
+
+    assert matching, (
+        f"No interface with MAC '{expected_mac}' found on VM '{destination_vm['name']}'. "
+        f"Interfaces: {[iface.get('macAddress') for iface in interfaces]}"
+    )
+
+    state = matching[0].get("state")
+    assert state == "down", (
+        f"Interface with MAC '{expected_mac}' on VM '{destination_vm['name']}' has state={state!r}, expected 'down'"
+    )
+    LOGGER.info(f"Disconnected NIC state verified: MAC={expected_mac}, state=down on VM '{destination_vm['name']}'")
 
 
 def check_vm_node_placement(
@@ -1955,6 +2032,15 @@ def check_vms(
                 check_boot_configuration(source_vm=source_vm, destination_vm=destination_vm)
             except Exception as exp:
                 res[vm_name].append(f"check_boot_configuration - {str(exp)}")
+
+            if disconnected_nic_mac := vm.get("disconnected_nic_mac"):
+                try:
+                    check_disconnected_nic_state(
+                        destination_vm=destination_vm,
+                        expected_mac=disconnected_nic_mac,
+                    )
+                except (AssertionError, ValueError) as exp:
+                    res[vm_name].append(f"check_disconnected_nic_state - {str(exp)}")
 
         # Group 4: RHV-specific checks
         if rhv_provider(source_provider_data) and isinstance(source_provider, OvirtProvider):

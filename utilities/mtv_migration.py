@@ -29,6 +29,14 @@ if TYPE_CHECKING:
 
 LOGGER = get_logger(__name__)
 
+_VM_DICT_TEST_ONLY_KEYS: frozenset[str] = frozenset({
+    "add_nic",
+    "add_nic_start_connected",
+    "connected_nic_mac",
+    "disconnected_nic_mac",
+    "snapshots_before_migration",
+})
+
 
 def get_migration_for_plan(plan: Plan) -> Migration:
     """Find Migration CR for Plan.
@@ -210,6 +218,8 @@ def create_plan_resource(
     for vm in vms_for_plan:
         if "migrate_shared_disks" in vm:
             vm["migrateSharedDisks"] = vm.pop("migrate_shared_disks")
+        for key in _VM_DICT_TEST_ONLY_KEYS:
+            vm.pop(key, None)
 
     plan_kwargs: dict[str, Any] = {
         "client": ocp_admin_client,

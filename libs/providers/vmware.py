@@ -969,6 +969,119 @@ class VMWareProvider(BaseProvider):
         self.wait_task(task=task, action_name=f"Adding RDM disk to VM {vm.name}", wait_timeout=120)
         LOGGER.info(f"Successfully added RDM disk to VM '{vm.name}'")
 
+    @staticmethod
+    def _get_nic_network_id(nic: vim.vm.device.VirtualEthernetCard) -> str:
+        """Return a stable network identifier from a NIC's backing.
+
+        Used to determine whether two NICs share the same network.
+
+        Args:
+            nic (vim.vm.device.VirtualEthernetCard): NIC whose backing is inspected.
+
+        Returns:
+            str: The DVS portgroup key (distributed backing) or the device name
+                (standard backing); an empty string for any other backing type.
+        """
+        backing = nic.backing
+        if isinstance(backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
+            return backing.port.portgroupKey
+        if isinstance(backing, vim.vm.device.VirtualEthernetCard.NetworkBackingInfo):
+            return backing.deviceName
+        return ""
+
+    def add_nic(self, vm: vim.VirtualMachine, connected: bool) -> str | None:
+        """Add a NIC to the VM on a secondary network and return its MAC address.
+
+        The NIC is added on the same network as the first existing NIC not on the pod
+        network. Returns None if the VM has no secondary network available.
+
+        This reconfigures the VM's hardware after it was already synced to the Forklift
+        inventory, so the caller must force an inventory refresh and wait for the new NIC
+        to appear before creating the NetworkMap (see
+        wait_for_added_nics_in_forklift_inventory). Otherwise the NetworkMap is built from
+        stale inventory and Forklift drops the added NIC during VM creation.
+
+        Args:
+            vm (vim.VirtualMachine): The target VM object (must be a clone).
+            connected (bool): Whether the NIC starts connected (startConnected flag).
+
+        Returns:
+            str | None: MAC address VMware assigned to the new NIC (lowercase), or None
+                if the VM has no secondary network to attach the NIC to.
+
+        Raises:
+            ValueError: If the VM has no NICs, the secondary NIC has an unsupported
+                backing type, or the reconfig task fails.
+        """
+        # Network selection: pick the first NIC not on the pod network to clone the NIC onto.
+        existing_nics = [dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualEthernetCard)]
+        if not existing_nics:
+            raise ValueError(f"VM '{vm.name}' has no existing NICs")
+
+        existing_nic_keys = {dev.key for dev in existing_nics}
+        pod_network_id = self._get_nic_network_id(existing_nics[0])
+
+        secondary_nic = next(
+            (nic for nic in existing_nics if self._get_nic_network_id(nic) != pod_network_id),
+            None,
+        )
+
+        if secondary_nic is None:
+            LOGGER.info(f"VM '{vm.name}' has no NIC on a secondary network — skipping add_nic setup")
+            return None
+
+        # Backing construction: replicate the secondary NIC's backing (distributed or standard).
+        source_backing = secondary_nic.backing
+        if isinstance(source_backing, vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo):
+            network_backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
+            network_backing.port = vim.dvs.PortConnection()
+            network_backing.port.portgroupKey = source_backing.port.portgroupKey
+            network_backing.port.switchUuid = source_backing.port.switchUuid
+        elif isinstance(source_backing, vim.vm.device.VirtualEthernetCard.NetworkBackingInfo):
+            network_backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+            network_backing.deviceName = source_backing.deviceName
+            if source_backing.network:
+                network_backing.network = source_backing.network
+        else:
+            raise ValueError(
+                f"VM '{vm.name}' secondary NIC has unsupported backing type '{type(source_backing).__name__}'"
+            )
+        LOGGER.info(
+            f"VM '{vm.name}': attaching NIC (connected={connected}) to secondary network "
+            f"(id={self._get_nic_network_id(secondary_nic)})"
+        )
+
+        # Device reconfiguration: build and apply the add-NIC reconfig task.
+        nic = vim.vm.device.VirtualVmxnet3()
+        nic.backing = network_backing
+        nic.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+        nic.connectable.startConnected = connected
+        nic.connectable.connected = connected
+        nic.connectable.allowGuestControl = True
+
+        spec = vim.vm.device.VirtualDeviceSpec()
+        spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        spec.device = nic
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.deviceChange = [spec]
+
+        task = vm.ReconfigVM_Task(spec=config_spec)
+        self.wait_task(task=task, action_name=f"Adding NIC to VM '{vm.name}'", wait_timeout=120)
+
+        # Result discovery: find the newly added NIC (the one whose key is new) and return its MAC.
+        new_nics = [
+            dev
+            for dev in vm.config.hardware.device
+            if isinstance(dev, vim.vm.device.VirtualEthernetCard) and dev.key not in existing_nic_keys
+        ]
+        if not new_nics:
+            raise ValueError(f"NIC was not found on VM '{vm.name}' after reconfig task completed")
+
+        mac = new_nics[0].macAddress.lower()
+        LOGGER.info(f"Added NIC (connected={connected}) to VM '{vm.name}': MAC={mac}")
+        return mac
+
     def change_disk_mode(
         self,
         vm: vim.VirtualMachine,
