@@ -19,6 +19,7 @@ from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from xdist.workermanage import WorkerController
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.namespace import Namespace
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -69,6 +70,7 @@ from utilities.pytest_utils import (
     session_teardown,
     setup_ai_analysis,
 )
+from utilities.aap import maybe_register_awx_controller_lease, maybe_teardown_awx_at_session_end
 from utilities.resources import create_and_store_resource, get_or_create_namespace
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.utils import (
@@ -260,6 +262,11 @@ def pytest_sessionfinish(session, exitstatus):
             if not session.config.getoption("skip_data_collector"):
                 run_must_gather(data_collector_path=_data_collector_path)
 
+    try:
+        maybe_teardown_awx_at_session_end(session.config)
+    except (TimeoutError, ValueError) as exp:
+        LOGGER.exception(f"AWX session teardown failed: {exp}")
+
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     reporter.summary_stats()
@@ -300,6 +307,7 @@ def pytest_collection_modifyitems(session, config, items):
     #        class TestMyFeature: ...
     # -------------------------------------------------------------------
     if not is_dry_run(config):
+        maybe_register_awx_controller_lease(config=config, items=items)
         providers_json_path = config.getoption("providers_json", default=None)
         providers = load_source_providers(providers_json_path=providers_json_path)
         # .get() with default is intentional: source_provider may not be configured (e.g., partial config),
@@ -374,6 +382,25 @@ def pytest_collection_modifyitems(session, config, items):
 
     if not is_dry_run(session.config):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
+
+
+def pytest_xdist_node_collection_finished(node: WorkerController, ids: list[str]) -> None:
+    """Register the AWX controller lease after an xdist worker collects tests.
+
+    The xdist controller does not run ``pytest_collection_modifyitems`` with the
+    worker item list. This hook runs on the controller with the collected node ids.
+
+    Args:
+        node (WorkerController): xdist worker node that finished collection.
+        ids (list[str]): Node ids collected by that worker.
+
+    Raises:
+        TimeoutError: If the AWX lifecycle lock cannot be acquired.
+        ValueError: If the OpenShift client has no API server host.
+    """
+    if is_dry_run(node.config):
+        return
+    maybe_register_awx_controller_lease(config=node.config, nodeids=ids)
 
 
 def pytest_exception_interact(node, call, report):

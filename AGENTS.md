@@ -603,12 +603,17 @@ with ResourceEditor(node) as editor:
 
 ## Critical Constraints
 
-### Test Execution Prohibition
+### Test Execution Requirements (MUST)
 
-AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live clusters, provider connections, and credentials.
+Tests interact with live OpenShift clusters and source providers. Before running tests:
 
-AI can: Read/analyze/write/fix tests, suggest improvements, review structure
-AI cannot: Execute tests, validate by running
+- **Cluster access:** A dedicated test cluster with `kubeadmin` or equivalent credentials is required
+- **Provider credentials:** A valid `.providers.json` with source provider connection details
+- **Isolation:** Tests create unique namespaces per session (`session_uuid`) to prevent OCP resource collisions between parallel runs
+- **Parallel safety:** Namespace isolation does not prevent source-provider VM conflicts when multiple
+  runs share the same source VM names — use separate provider configurations or VM cloning for true
+  parallel safety
+- **Cleanup:** Tests clean up resources via `fixture_store` teardown — use `--skip-teardown` to preserve resources for debugging
 
 ### No Module-Level Provider Loading (MUST)
 
@@ -713,6 +718,23 @@ namespace = Namespace(client=ocp_admin_client, name="my-namespace")
 namespace.deploy()
 ```
 
+When intentionally deleting a resource mid-test (e.g., testing plan archive+delete), unregister it
+from teardown to prevent session cleanup from operating on a missing resource:
+
+```python
+# Assumes Plan, Migration, archive_plan, get_migration_for_plan are already imported
+from utilities.resources import unregister_teardown_resource
+
+plan = self.__class__.plan_resource
+migration = get_migration_for_plan(plan)
+archive_plan(plan=plan)
+plan.clean_up(wait=True)
+unregister_teardown_resource(fixture_store=fixture_store, kind=Plan.kind, name=plan.name, namespace=plan.namespace)
+unregister_teardown_resource(
+    fixture_store=fixture_store, kind=Migration.kind, name=migration.name, namespace=migration.namespace
+)
+```
+
 ## Test Structure Pattern
 
 All tests follow a class-based structure with 5 base test methods:
@@ -795,6 +817,10 @@ class TestNameHere:
   Used when the feature under test is exercised during provider/plan creation (e.g., CA cert field
   validation). No migration is executed — plan readiness proves the feature works.
 - **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
+- **6-step plan-archive PVC cleanup pattern**: storagemap -> networkmap -> plan -> migrate (expected fail) -> archive_and_delete -> verify_pvc_cleanup
+  Plan-archive tests induce a failed migration (typically via post-hook), archive and delete the Plan,
+  then assert leftover DataVolumes and PVCs (including `prime-*`) are gone. There is no `test_check_vms`
+  step. Lives in `tests/plan_lifecycle/`.
 - **6-step shared-disk pattern (Linux)**: storagemap -> networkmap -> plan -> migrate -> verify_shared_disk_data -> check_vms
   Shared disk tests insert `test_verify_shared_disk_data` before `test_check_vms`. This step mounts,
   writes, and reads a shared disk from both VMs to verify bidirectional access after migration.
@@ -857,7 +883,9 @@ then the base five through `test_migrate_vms`, then `test_verify_shared_disk_dat
 throttling tests: same through `test_migrate_vms`, then `test_verify_vm_inflight_throttling`,
 `test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. LUKS tests: same through `test_migrate_vms`, then
 `test_verify_luks_encryption`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
-`test_verify_xfs_version`, `test_check_vms`.
+`test_verify_xfs_version`, `test_check_vms`. Plan-archive PVC cleanup tests: same through
+`test_migrate_vms` (expects `MigrationPlanExecError`), then `test_archive_and_delete_plan`,
+`test_verify_pvc_cleanup`.
 
 **Fixture parameters:** Each test method requests only the fixtures it needs. The example shows typical patterns.
 
@@ -922,7 +950,9 @@ tests_params: dict = {
 
 ### Test File Location (MUST)
 
-Test files must be placed in feature subdirectories under `tests/`, not directly in the `tests/` root. Each subdirectory groups related tests (e.g., `tests/cold/`, `tests/warm/`, `tests/copyoffload/`).
+Test files must be placed in feature subdirectories under `tests/`, not directly in the `tests/` root.
+Each subdirectory groups related tests (e.g., `tests/cold/`, `tests/warm/`, `tests/copyoffload/`,
+`tests/plan_lifecycle/`).
 
 ### conftest.py Structure and File Placement (MUST)
 
@@ -1074,11 +1104,13 @@ When multiple issues exist, address them in this order:
 
 ## Parallel Execution (pytest-xdist)
 
-Tests are parallel-safe because:
+Tests are parallel-safe for OpenShift resources because:
 
 - Unique namespaces per session via `session_uuid`
 - Each worker has isolated `fixture_store`
 - `create_and_store_resource()` generates unique names
+
+**Note:** Namespace isolation does not prevent source-provider VM conflicts — see Test Execution Requirements above.
 
 Rules:
 
