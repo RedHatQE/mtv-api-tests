@@ -86,19 +86,25 @@ def wait_for_added_nics_in_forklift_inventory(
         """Return True once every expected VM shows at least its expected NIC count.
 
         Returns False (not ready) as soon as any VM is missing NICs — or is temporarily
-        absent from the inventory, which get_vm() reports by raising ValueError. Treating
-        a missing VM as not-ready lets TimeoutSampler keep retrying while the forced
-        refresh reconciles, instead of aborting the whole setup.
+        absent from the inventory (get_vm() reports this by raising ValueError), or its
+        inventory record has no usable ``nics`` list yet (the field is null or not a list
+        while the refresh is still reconciling). Treating all of these as not-ready lets
+        TimeoutSampler keep retrying while the forced refresh reconciles, instead of
+        aborting the whole setup.
 
         Returns:
             True if every VM has reached its expected NIC count; False otherwise.
         """
         for vm_name, expected_count in expected_nic_counts.items():
             try:
-                actual_count = len(source_provider_inventory.get_vm(name=vm_name).get("nics", []))
+                nics = source_provider_inventory.get_vm(name=vm_name).get("nics")
             except ValueError:
                 LOGGER.info(f"VM '{vm_name}' not yet in inventory after refresh, retrying")
                 return False
+            if not isinstance(nics, list):
+                LOGGER.info(f"VM '{vm_name}' inventory has no 'nics' list yet ({nics!r}), retrying")
+                return False
+            actual_count = len(nics)
             if actual_count < expected_count:
                 LOGGER.info(f"VM '{vm_name}' inventory has {actual_count} NIC(s), waiting for {expected_count}")
                 return False
