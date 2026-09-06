@@ -6,7 +6,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
 from ovirtsdk4 import NotFoundError as OvirtNotFoundError
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutExpiredError
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmNotFoundError
 from libs.base_provider import BaseProvider
@@ -23,6 +23,9 @@ INVENTORY_SYNC_WORKAROUND_JIRA = "MTV-6072"
 # Short initial wait before triggering a provider refresh — avoids refresh overhead
 # when inventory syncs quickly on its own.
 _QUICK_CHECK_TIMEOUT = 30
+# Timeout for inventory MACs to converge with the live provider (see _wait_for_inventory_mac_convergence).
+_MAC_CONVERGENCE_TIMEOUT = 60
+_MAC_CONVERGENCE_SLEEP = 5
 
 
 def force_inventory_refresh(provider: Provider) -> None:
@@ -112,6 +115,67 @@ def _wait_for_vsphere_host_and_datastore_inventory(
         )
 
 
+def _wait_for_inventory_mac_convergence(
+    source_provider: BaseProvider,
+    source_provider_inventory: ForkliftInventory,
+    vm_name: str,
+) -> None:
+    """Wait until Forklift inventory NIC MACs match the live vCenter MACs.
+
+    vSphere clones regenerate MACs; vCenter finalizes them almost immediately, but
+    inventory can briefly lag, risking a stale destination NIC MAC if migrated too soon.
+
+    Args:
+        source_provider (BaseProvider): Live source provider used to read the current vCenter MAC.
+        source_provider_inventory (ForkliftInventory): Forklift inventory client for the source provider.
+        vm_name (str): Name of the cloned VM to check.
+
+    Raises:
+        ValueError: If no MACs are found in the live provider data, or if inventory and live
+            MACs do not converge within the timeout.
+    """
+    live_macs = {
+        mac.lower()
+        for nic in source_provider.vm_dict(name=vm_name).get("network_interfaces", [])
+        if (mac := nic.get("macAddress"))
+    }
+    if not live_macs:
+        raise ValueError(f"No MAC addresses found in live provider data for VM '{vm_name}'")
+
+    LOGGER.info(f"Waiting for inventory NIC MACs to converge with live vCenter for '{vm_name}'")
+
+    last_inventory_macs: set[str] = set()
+
+    def _check_mac_convergence() -> bool:
+        """Return True once inventory NIC MACs match the live vCenter MACs.
+
+        A transient VM absence (ValueError from get_vm) counts as not-yet-converged so
+        polling continues; the last observed inventory MACs are kept for timeout diagnostics.
+        """
+        nonlocal last_inventory_macs
+        try:
+            vm = source_provider_inventory.get_vm(name=vm_name)
+        except ValueError:
+            return False
+        last_inventory_macs = {mac.lower() for nic in vm.get("nics", []) if (mac := nic.get("mac"))}
+        return last_inventory_macs == live_macs
+
+    try:
+        for converged in TimeoutSampler(
+            wait_timeout=_MAC_CONVERGENCE_TIMEOUT,
+            sleep=_MAC_CONVERGENCE_SLEEP,
+            func=_check_mac_convergence,
+        ):
+            if converged:
+                return
+    except TimeoutExpiredError as timeout_error:
+        raise ValueError(
+            f"Inventory NIC MACs for VM '{vm_name}' did not converge with live vCenter MACs after "
+            f"{_MAC_CONVERGENCE_TIMEOUT}s. Inventory MACs: {sorted(last_inventory_macs)}, "
+            f"live vCenter MACs: {sorted(live_macs)}"
+        ) from timeout_error
+
+
 def wait_for_cloned_vms_in_forklift_inventory(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
@@ -132,6 +196,9 @@ def wait_for_cloned_vms_in_forklift_inventory(
     (returns None). This is an intentional fail-safe: workarounds stay enabled unless Jira
     explicitly reports the issue as resolved.
 
+    For vSphere, also waits for inventory NIC MACs to converge with live vCenter MACs before
+    returning (see ``_wait_for_inventory_mac_convergence``).
+
     Args:
         source_provider: Source provider instance
         source_provider_inventory: Forklift inventory for the source provider
@@ -143,12 +210,12 @@ def wait_for_cloned_vms_in_forklift_inventory(
 
     Raises:
         TypeError: If vSphere provider inventory is not VsphereForkliftInventory
-        ValueError: If source_provider.ocp_resource is not set when workaround is active
+        ValueError: If source_provider.ocp_resource is not set when workaround is active, or if
+            inventory/live NIC MACs do not converge within the timeout
         TimeoutExpiredError: If a VM does not appear in inventory within the timeout
     """
     workaround_active = jira_issue_open(INVENTORY_SYNC_WORKAROUND_JIRA) is not False
     is_vsphere = source_provider.type == Provider.ProviderType.VSPHERE
-    vsphere_inventory: VsphereForkliftInventory | None = None
 
     if is_vsphere and workaround_active:
         if not isinstance(source_provider_inventory, VsphereForkliftInventory):
@@ -182,12 +249,20 @@ def wait_for_cloned_vms_in_forklift_inventory(
             )
             for vm_name in failed_vm_names:
                 source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+    else:
+        # Non-vSphere or workaround inactive — plain wait per VM
+        for vm_name in cloned_vm_names:
+            source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
 
-        return
-
-    # Non-vSphere or workaround inactive — plain wait per VM
-    for vm_name in cloned_vm_names:
-        source_provider_inventory.wait_for_vm(name=vm_name, timeout=inventory_timeout)
+    # vSphere clones regenerate MACs and inventory can lag, so run convergence for all
+    # vSphere clones regardless of the MTV-6072 workaround gate above.
+    if is_vsphere:
+        for vm_name in cloned_vm_names:
+            _wait_for_inventory_mac_convergence(
+                source_provider=source_provider,
+                source_provider_inventory=source_provider_inventory,
+                vm_name=vm_name,
+            )
 
 
 def validate_source_vms_exist(source_provider: BaseProvider, vm_names: list[str]) -> None:
