@@ -777,18 +777,6 @@ def _map_item_matches_source_network(map_item: Any, source_vm_network: str | Non
     return bool(map_item.source.id and map_item.source.id == source_vm_network)
 
 
-def get_destination(map_resource: NetworkMap | StorageMap, source_vm_nic: dict[str, Any]) -> dict[str, Any]:
-    """
-    Get the source_name's (Network Or Storage) destination_name in a migration map.
-    """
-    source_vm_network = _normalize_source_network(source_vm_nic)
-    for map_item in map_resource.instance.spec.map:
-        if _map_item_matches_source_network(map_item, source_vm_network):
-            return {"name": "pod"} if map_item.destination.type == "pod" else map_item.destination
-
-    return {}
-
-
 def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
     failed_checks = {}
 
