@@ -9,11 +9,19 @@ and verify AAP hook execution after migration.
 from __future__ import annotations
 
 import base64
+import hashlib
+import os
 import subprocess
+import tempfile
 import time
 import urllib.parse
+from collections.abc import Generator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import filelock
+import pytest
 import requests
 from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.pod import Pod
@@ -21,7 +29,9 @@ from ocp_resources.route import Route
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
 
+from utilities.lock_dir import ensure_secure_shared_lock_dir
 from utilities.resources import create_and_store_resource
+from utilities.utils import get_cluster_client
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -47,6 +57,12 @@ AWX_HELM_RELEASE_NAME: str = "awx-operator"
 AWX_PROJECTS_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AWX_POSTGRES_STORAGE_CLASS: str = "ocs-storagecluster-cephfs"
 AAP_TOKEN_SECRET_NAME: str = "awx-aap"  # Arbitrary name; referenced by ForkliftController aap_token_secret_name
+_AWX_SHELL_TIMEOUT = 600  # Per helm/oc invocation, including helm install --wait
+# Locked install path: mark_awx_install_owner helm list, then deploy_awx_via_helm
+# helm list, repo add, repo update, and install.
+_AWX_LOCKED_DEPLOY_SHELL_CALLS = 5
+_AWX_LIFECYCLE_LOCK_TIMEOUT = _AWX_SHELL_TIMEOUT * _AWX_LOCKED_DEPLOY_SHELL_CALLS
+_AWX_CONTROLLER_REGISTERED_ATTR = "_mtv_awx_controller_registered"
 
 
 def _awx_api_request(
@@ -96,7 +112,7 @@ def _awx_api_request(
     return {}
 
 
-def _run_shell(command: str, timeout: int = 600) -> str:
+def _run_shell(command: str, timeout: int = _AWX_SHELL_TIMEOUT) -> str:
     """Run a shell command and return stdout.
 
     Args:
@@ -156,6 +172,292 @@ def deploy_awx_via_helm() -> None:
         f"helm install {AWX_HELM_RELEASE_NAME} {AWX_HELM_REPO_NAME}/awx-operator "
         f"--namespace {AWX_NAMESPACE} --create-namespace --wait --timeout 5m"
     )
+
+
+def _awx_coordination_key(client: DynamicClient) -> str:
+    """Return a filesystem-safe key isolating AWX lifecycle state per cluster.
+
+    AWX is a cluster singleton. Owner and lease files are keyed by API host so a
+    later pytest session can retry cleanup after a failed uninstall. Concurrent
+    sessions still serialize through live PID leases; stale PIDs are pruned.
+
+    Args:
+        client (DynamicClient): OpenShift client for the cluster under test.
+
+    Returns:
+        str: Hex digest used as a subdirectory name.
+
+    Raises:
+        ValueError: If the client has no API server host.
+    """
+    host = client.configuration.host
+    if not host:
+        raise ValueError("OpenShift client has no API server host; cannot isolate AWX lifecycle state")
+    return hashlib.sha256(host.encode()).hexdigest()[:16]
+
+
+def _awx_shared_dir(coordination_key: str) -> Path:
+    """Return the shared temp directory used for AWX xdist coordination.
+
+    Args:
+        coordination_key (str): Cluster isolation key.
+
+    Returns:
+        Path: Secured directory under the process temp dir.
+    """
+    parent = Path(tempfile.gettempdir()) / "pytest-shared-awx"
+    ensure_secure_shared_lock_dir(lock_dir=parent)
+    lock_dir = parent / coordination_key
+    ensure_secure_shared_lock_dir(lock_dir=lock_dir)
+    return lock_dir
+
+
+def _awx_owner_path(coordination_key: str) -> Path:
+    """Return the sentinel file path that marks Helm install ownership.
+
+    Args:
+        coordination_key (str): Cluster isolation key.
+
+    Returns:
+        Path: Owner sentinel path.
+    """
+    return _awx_shared_dir(coordination_key) / "awx-owner"
+
+
+def _awx_lease_dir(coordination_key: str) -> Path:
+    """Return the directory of live worker lease files.
+
+    Args:
+        coordination_key (str): Cluster isolation key.
+
+    Returns:
+        Path: Secured lease directory.
+    """
+    lease_dir = _awx_shared_dir(coordination_key) / "leases"
+    ensure_secure_shared_lock_dir(lock_dir=lease_dir)
+    return lease_dir
+
+
+def _process_start_ticks(pid: int) -> str | None:
+    """Return kernel starttime ticks for ``pid``.
+
+    Args:
+        pid (int): Process id to inspect.
+
+    Returns:
+        str | None: The ``/proc/<pid>/stat`` starttime field, or None when the
+            process is gone, ``/proc`` cannot be read, or the stat line is
+            malformed.
+    """
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
+        return None
+    close_paren = stat.rfind(")")
+    if close_paren == -1:
+        return None
+    fields = stat[close_paren + 2 :].split()
+    # Field 22 (starttime) is index 19 after the comm field is removed.
+    if len(fields) < 20:
+        return None
+    return fields[19]
+
+
+def _prune_stale_awx_leases(lease_dir: Path) -> None:
+    """Remove lease files whose process is dead or whose PID was reused.
+
+    Lease files store ``/proc/<pid>/stat`` starttime ticks. A live PID with a
+    different starttime is treated as reuse, not as the original worker.
+
+    Args:
+        lease_dir (Path): Directory of ``<pid>.lease`` files.
+
+    Returns:
+        None
+    """
+    for lease in lease_dir.glob("*.lease"):
+        try:
+            pid = int(lease.stem)
+        except ValueError:
+            lease.unlink(missing_ok=True)
+            continue
+        try:
+            expected = lease.read_text().strip()
+        except OSError:
+            lease.unlink(missing_ok=True)
+            continue
+        actual = _process_start_ticks(pid)
+        if not expected or actual is None or actual != expected:
+            lease.unlink(missing_ok=True)
+
+
+@contextmanager
+def awx_lifecycle_lock(client: DynamicClient) -> Generator[None, None, None]:
+    """Serialize AWX Helm install and uninstall across pytest-xdist workers.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes the lock.
+
+    Yields:
+        None
+
+    Raises:
+        TimeoutError: If the lock cannot be acquired within
+            ``_AWX_LIFECYCLE_LOCK_TIMEOUT`` seconds.
+        ValueError: If the client has no API server host.
+    """
+    lock_path = _awx_shared_dir(_awx_coordination_key(client)) / "awx-lifecycle.lock"
+    try:
+        with filelock.FileLock(lock_path, timeout=_AWX_LIFECYCLE_LOCK_TIMEOUT):
+            yield
+    except filelock.Timeout as err:
+        raise TimeoutError(
+            f"Timeout ({_AWX_LIFECYCLE_LOCK_TIMEOUT}s) waiting for AWX lifecycle lock at {lock_path}. "
+            "Another worker may be installing or tearing down AWX."
+        ) from err
+
+
+def register_awx_worker(client: DynamicClient) -> None:
+    """Record this process as a live user of the shared AWX Helm release.
+
+    Must be called while holding ``awx_lifecycle_lock``. Adds a PID lease that
+    records ``/proc`` starttime ticks so PID reuse cannot keep a stale lease.
+    Ownership is recorded separately by ``mark_awx_install_owner``.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes the leases.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``/proc/<pid>/stat`` cannot be read for this process.
+    """
+    lease_dir = _awx_lease_dir(_awx_coordination_key(client))
+    _prune_stale_awx_leases(lease_dir)
+    start_ticks = _process_start_ticks(os.getpid())
+    if start_ticks is None:
+        raise ValueError(f"Cannot read /proc/{os.getpid()}/stat starttime for AWX lease")
+    (lease_dir / f"{os.getpid()}.lease").write_text(start_ticks)
+
+
+def mark_awx_install_owner(client: DynamicClient) -> None:
+    """Mark this session as Helm owner when it will create the release.
+
+    Must be called while holding ``awx_lifecycle_lock``. A pre-existing install
+    without an owner file is left unowned so this session will not tear it down.
+    An existing owner file is kept so a later session can retry failed cleanup.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes ownership.
+
+    Returns:
+        None
+    """
+    coordination_key = _awx_coordination_key(client)
+    if is_awx_installed():
+        return
+    _awx_owner_path(coordination_key).write_text("1")
+
+
+def unregister_awx_worker(client: DynamicClient) -> bool:
+    """Drop this process's AWX lease.
+
+    Must be called while holding ``awx_lifecycle_lock``. Does not remove the
+    owner marker; the caller tears down only after cleanup succeeds.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes the leases.
+
+    Returns:
+        bool: True if no live leases remain and this session owns the Helm
+            install, so the caller should run ``teardown_awx()``.
+    """
+    coordination_key = _awx_coordination_key(client)
+    lease_dir = _awx_lease_dir(coordination_key)
+    (lease_dir / f"{os.getpid()}.lease").unlink(missing_ok=True)
+    _prune_stale_awx_leases(lease_dir)
+    if any(lease_dir.glob("*.lease")):
+        return False
+    return _awx_owner_path(coordination_key).exists()
+
+
+def clear_awx_install_owner(client: DynamicClient) -> None:
+    """Remove the owner marker after AWX teardown succeeds.
+
+    Args:
+        client (DynamicClient): OpenShift client whose API host scopes ownership.
+
+    Returns:
+        None
+    """
+    _awx_owner_path(_awx_coordination_key(client)).unlink(missing_ok=True)
+
+
+def maybe_register_awx_controller_lease(
+    config: pytest.Config,
+    items: list[pytest.Item] | None = None,
+    nodeids: list[str] | None = None,
+) -> None:
+    """Register the pytest controller as an AWX lifecycle participant.
+
+    Nested ``tests/hooks`` collection hooks do not run in the xdist controller.
+    Call this from the root ``pytest_collection_modifyitems`` and
+    ``pytest_xdist_node_collection_finished`` hooks so the controller PID lease
+    outlives every worker fixture.
+
+    Args:
+        config (pytest.Config): Pytest config for this process.
+        items (list[pytest.Item] | None): Collected pytest items.
+        nodeids (list[str] | None): Collected node ids from an xdist worker.
+
+    Returns:
+        None
+
+    Raises:
+        TimeoutError: If the AWX lifecycle lock cannot be acquired.
+        ValueError: If the OpenShift client has no API server host.
+    """
+    if getattr(config, _AWX_CONTROLLER_REGISTERED_ATTR, False):
+        return
+    if getattr(config, "workerinput", None) is not None:
+        return
+    if items is not None:
+        has_hooks_tests = any("hooks" in Path(str(getattr(item, "path", item.fspath))).parts for item in items)
+    elif nodeids is not None:
+        has_hooks_tests = any("/hooks/" in nodeid.replace("\\", "/") for nodeid in nodeids)
+    else:
+        has_hooks_tests = False
+    if not has_hooks_tests:
+        return
+    client = get_cluster_client()
+    with awx_lifecycle_lock(client=client):
+        register_awx_worker(client=client)
+    setattr(config, _AWX_CONTROLLER_REGISTERED_ATTR, True)
+
+
+def maybe_teardown_awx_at_session_end(config: pytest.Config) -> None:
+    """Unregister the controller lease and tear down AWX when this run owns it.
+
+    Args:
+        config (pytest.Config): Pytest config for this process.
+
+    Returns:
+        None
+
+    Raises:
+        TimeoutError: If the AWX lifecycle lock cannot be acquired.
+        ValueError: If the OpenShift client has no API server host.
+    """
+    if not getattr(config, _AWX_CONTROLLER_REGISTERED_ATTR, False):
+        return
+    client = get_cluster_client()
+    with awx_lifecycle_lock(client=client):
+        should_teardown = unregister_awx_worker(client=client)
+        if not should_teardown or config.getoption("skip_teardown"):
+            return
+        if teardown_awx():
+            clear_awx_install_owner(client=client)
 
 
 def create_awx_instance(
@@ -633,19 +935,26 @@ def create_aap_token_secret(
     )
 
 
-def teardown_awx() -> None:
+def teardown_awx() -> bool:
     """Remove AWX deployment via Helm and delete namespace.
 
     Attempts both Helm uninstall and namespace deletion. Logs
     failures but does not raise — teardown errors should not
     mark passing tests as failures.
+
+    Returns:
+        bool: True if Helm uninstall and namespace deletion both succeeded.
     """
     LOGGER.info("Tearing down AWX deployment")
+    succeeded = True
     try:
         _run_shell(f"helm uninstall {AWX_HELM_RELEASE_NAME} --namespace {AWX_NAMESPACE}")
-    except subprocess.CalledProcessError as e:
-        LOGGER.warning(f"Helm uninstall failed (stderr: {e.stderr}): {e}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        LOGGER.warning(f"Helm uninstall failed (stderr: {getattr(e, 'stderr', None)}): {e}")
+        succeeded = False
     try:
         _run_shell(f"oc delete namespace {AWX_NAMESPACE} --wait=false")
-    except subprocess.CalledProcessError as e:
-        LOGGER.warning(f"Failed to delete namespace '{AWX_NAMESPACE}' (stderr: {e.stderr}): {e}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        LOGGER.warning(f"Failed to delete namespace '{AWX_NAMESPACE}' (stderr: {getattr(e, 'stderr', None)}): {e}")
+        succeeded = False
+    return succeeded
