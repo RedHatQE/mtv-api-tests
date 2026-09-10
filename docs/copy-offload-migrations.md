@@ -139,6 +139,7 @@ That pattern works for the common storage credentials:
 - `COPYOFFLOAD_STORAGE_HOSTNAME`
 - `COPYOFFLOAD_STORAGE_USERNAME`
 - `COPYOFFLOAD_STORAGE_PASSWORD`
+- `COPYOFFLOAD_STORAGE_SKIP_SSL_VERIFICATION`
 
 It also works for vendor-specific and ESXi-specific values such as:
 
