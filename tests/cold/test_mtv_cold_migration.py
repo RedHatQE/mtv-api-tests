@@ -3,7 +3,9 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
+from simple_logger.logger import get_logger
 
+LOGGER = get_logger(__name__)
 from utilities.mtv_migration import (
     create_plan_resource,
     execute_migration,
@@ -84,6 +86,7 @@ class TestSanityColdMtvMigration:
             target_namespace=target_namespace,
             multus_network_name=multus_network_name,
             vms=vms,
+            per_nic_network_map=prepared_plan.get("per_nic_network_map", False),
         )
         assert self.network_map, "NetworkMap creation failed"
 
@@ -222,6 +225,7 @@ class TestColdRemoteOcp:
             target_namespace=target_namespace,
             multus_network_name=multus_network_name,
             vms=vms,
+            per_nic_network_map=prepared_plan.get("per_nic_network_map", False),
         )
         assert self.network_map, "NetworkMap creation failed"
 

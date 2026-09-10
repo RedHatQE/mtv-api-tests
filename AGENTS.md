@@ -882,16 +882,18 @@ tests_params: dict = {
 
 **VM Configuration Options:**
 
-| Option                 | Required | Values                                   |
-| ---------------------- | -------- | ---------------------------------------- |
-| `name`                 | Yes      | VM name in source provider               |
-| `source_vm_power`      | No       | "on" or "off"                            |
-| `guest_agent`          | No       | True if installed                        |
-| `clone`                | No       | True to clone before migration           |
-| `disk_type`            | No       | "thin", "thick-lazy", "thick-eager"      |
-| `luks`                 | No       | True if VM has LUKS-encrypted disk       |
-| `luks_passphrase`      | No       | Per-VM passphrase override               |
-| `migrate_shared_disks` | No       | True for owner VM in shared disk tests   |
+| Option                    | Required | Values                                   |
+| ------------------------- | -------- | ---------------------------------------- |
+| `name`                    | Yes      | VM name in source provider               |
+| `source_vm_power`         | No       | "on" or "off"                            |
+| `guest_agent`             | No       | True if installed                        |
+| `clone`                   | No       | True to clone before migration           |
+| `disk_type`               | No       | "thin", "thick-lazy", "thick-eager"      |
+| `luks`                    | No       | True if VM has LUKS-encrypted disk       |
+| `luks_passphrase`         | No       | Per-VM passphrase override               |
+| `migrate_shared_disks`    | No       | True for owner VM in shared disk tests   |
+| `add_nic`                 | No       | True to add a NIC (vSphere only)         |
+| `add_nic_start_connected` | Yes*     | Required when `add_nic=True`; bool       |
 
 **Plan Configuration Options:**
 
