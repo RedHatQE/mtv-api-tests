@@ -381,7 +381,7 @@ class OpenstackForliftinventory(ForkliftInventory):
         return self._request(url_path=f"{self.provider_url_path}/volumes")
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
-        """Get storage mappings for OpenStack VMs based on volume types."""
+        """Get storage mappings for OpenStack VMs based on volume types and Glance images."""
         _mappings: list[dict[str, str]] = []
 
         for _vm_name in vms:
@@ -399,6 +399,10 @@ class OpenstackForliftinventory(ForkliftInventory):
 
                 if volume_type and not any(m.get("name") == volume_type for m in _mappings):
                     _mappings.append({"name": volume_type})
+
+            # MTV requires a name-only glance mapping when the VM has a Glance imageID.
+            if _vm.get("imageID") and not any(m.get("name") == "glance" for m in _mappings):
+                _mappings.append({"name": "glance"})
 
         if not _mappings:
             raise ValueError(f"No storage volumes found for VMs {vms} on provider {self.provider_type}")
