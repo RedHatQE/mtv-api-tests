@@ -157,6 +157,10 @@ def resolve_pvc_name_template(
             mapping has no entry matching ``source_provider.type`` and no
             ``"default"`` key.
     """
+    # Unsupported providers reject pvcNameTemplate, so omit it instead of validating an inapplicable mapping.
+    if not source_provider.supports_pvc_name_template():
+        return None
+
     if isinstance(pvc_name_template, dict):
         valid_provider_types = {
             value
@@ -171,11 +175,6 @@ def resolve_pvc_name_template(
                 f"Unknown 'pvc_name_template' key(s): {sorted(unknown_keys)}; allowed keys: {sorted(allowed_keys)}"
             )
 
-    # Unsupported providers reject pvcNameTemplate, so omit it instead of validating an inapplicable mapping.
-    if not source_provider.supports_pvc_name_template():
-        return None
-
-    if isinstance(pvc_name_template, dict):
         if source_provider.type in pvc_name_template:
             return pvc_name_template[source_provider.type]
 
