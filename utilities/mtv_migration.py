@@ -23,7 +23,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.resources import create_and_store_resource
-from utilities.utils import gen_network_map_list
+from utilities.utils import gen_network_map_list, is_pvc_name_template_supported
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -131,7 +131,7 @@ def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[
 def resolve_pvc_name_template(
     pvc_name_template: str | dict[str, str],
     source_provider_type: str,
-) -> str:
+) -> str | None:
     """Resolve a provider-appropriate PVC name template.
 
     Accepts either a ready-to-use template string (returned unchanged) or a
@@ -148,7 +148,8 @@ def resolve_pvc_name_template(
             (e.g. ``Provider.ProviderType.VSPHERE``).
 
     Returns:
-        str: The resolved PVC name template string.
+        str | None: The resolved PVC name template string, or ``None`` when
+            the provider does not support pvcNameTemplate.
 
     Raises:
         ValueError: If the mapping contains a key that is not a valid
@@ -170,6 +171,10 @@ def resolve_pvc_name_template(
                 f"Unknown 'pvc_name_template' key(s): {sorted(unknown_keys)}; allowed keys: {sorted(allowed_keys)}"
             )
 
+    if not is_pvc_name_template_supported(provider_type=source_provider_type):
+        return None
+
+    if isinstance(pvc_name_template, dict):
         if source_provider_type in pvc_name_template:
             return pvc_name_template[source_provider_type]
 

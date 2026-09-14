@@ -633,7 +633,7 @@ tests_params: dict = {
         "vm_target_namespace": f"mtv-vms-warm-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": "default",  # Cross-namespace NAD access
         # Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default";
-        # vsphere uses the vSphere-only .FileName variable, other providers use the neutral default.
+        # rhv/oVirt does not support pvcNameTemplate.
         "pvc_name_template": {
             "vsphere": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
             "default": "{{.VmName}}-disk-{{.DiskIndex}}",
