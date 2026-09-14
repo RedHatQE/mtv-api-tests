@@ -29,7 +29,7 @@ from libs.providers.rhv import OvirtProvider
 from utilities.deep_inspection import verify_captured_di_results
 from utilities.naming import resolve_destination_vm_name
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection, run_cmd_in_vm
-from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
+from utilities.utils import get_cluster_version, get_value_from_py_config, is_pvc_name_template_supported, rhv_provider
 from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
 
 if TYPE_CHECKING:
@@ -1014,16 +1014,21 @@ def check_pvc_names(
         LOGGER.info("No pvc_name_template specified, skipping PVC name verification")
         return
 
+    if source_provider and not is_pvc_name_template_supported(provider_type=source_provider.type):
+        LOGGER.info(f"pvcNameTemplate is not supported for {source_provider.type}, skipping PVC name verification")
+        return
+
+    uses_file_name = re.search(r"\{\{-?\s*\.FileName\b", pvc_name_template) is not None
+
     # Validate VMware-only wildcards
     for wildcard in ["{{.FileName}}", "{{.DiskIndex}}"]:
-        if wildcard in pvc_name_template:
-            if not source_provider or source_provider.type != Provider.ProviderType.VSPHERE:
-                LOGGER.warning(
-                    f"{wildcard} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
-                    f"Current provider: {source_provider.type if source_provider else 'unknown'}. "
-                    f"Skipping PVC name verification."
-                )
-                return
+        if wildcard in pvc_name_template and (not source_provider or source_provider.type != Provider.ProviderType.VSPHERE):
+            LOGGER.warning(
+                f"{wildcard} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
+                f"Current provider: {source_provider.type if source_provider else 'unknown'}. "
+                "Skipping PVC name verification."
+            )
+            return
 
     # Get disk filenames from inventory (required for {{.FileName}} template)
     inventory_disk_files: dict[int, str] = {}

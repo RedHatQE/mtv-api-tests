@@ -43,6 +43,7 @@ from utilities.resources import create_and_store_resource
 LOGGER = get_logger(__name__)
 
 DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
+PVC_NAME_TEMPLATE_UNSUPPORTED_PROVIDERS: frozenset[str] = frozenset({Provider.ProviderType.RHV})
 
 
 def resolve_providers_json_path(cli_path: str | None = None) -> str:
@@ -123,6 +124,18 @@ def vmware_provider(provider_data: dict[str, Any]) -> bool:
 
 def rhv_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.RHV
+
+
+def is_pvc_name_template_supported(provider_type: str) -> bool:
+    """Check whether the source provider supports Plan pvcNameTemplate.
+
+    Args:
+        provider_type (str): Source provider type.
+
+    Returns:
+        bool: True when pvcNameTemplate is supported.
+    """
+    return provider_type not in PVC_NAME_TEMPLATE_UNSUPPORTED_PROVIDERS
 
 
 def openstack_provider(provider_data: dict[str, Any]) -> bool:
