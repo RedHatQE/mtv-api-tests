@@ -2013,6 +2013,7 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
     "vmware_cloud_init_ready",
     "multus_network_name",
     "copyoffload_config",
+    "multi_datastore_config",
     "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
@@ -2041,12 +2042,6 @@ class TestCopyoffloadMultiDatastoreMigration:
         datastore_id = copyoffload_config_data["datastore_id"]
         secondary_datastore_id = copyoffload_config_data["secondary_datastore_id"]
         storage_class = py_config["storage_class"]
-
-        # For multi-datastore test, ensure secondary datastore is configured
-        if not secondary_datastore_id:
-            pytest.fail(
-                "Multi-datastore test requires 'secondary_datastore_id' to be configured in copyoffload section."
-            )
 
         LOGGER.info("Multi-datastore migration using primary datastore: %s", datastore_id)
         LOGGER.info("Multi-datastore migration using secondary datastore: %s", secondary_datastore_id)

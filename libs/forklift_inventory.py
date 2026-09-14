@@ -11,6 +11,18 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 LOGGER = get_logger(__name__)
 
 
+def _extract_storage_ids(storages: list[dict[str, Any]]) -> set[str]:
+    """Extract datastore MoIDs from Forklift storage inventory entries.
+
+    Args:
+        storages: Storage dictionaries from Forklift inventory
+
+    Returns:
+        Set of datastore MoIDs present in the inventory
+    """
+    return {storage["id"] for storage in storages if storage.get("id")}
+
+
 class ForkliftInventory(abc.ABC):
     def __init__(self, client: DynamicClient, provider_name: str, mtv_namespace: str, provider_type: str) -> None:
         self.client = client
@@ -353,8 +365,114 @@ class VsphereForkliftInventory(ForkliftInventory):
         )
 
     @property
+    def hosts(self) -> list[dict[str, Any]]:
+        """Return all ESXi hosts from the Forklift vSphere inventory.
+
+        Returns:
+            list[dict[str, Any]]: Host objects from the provider's /hosts endpoint.
+        """
+        return self._request(url_path=f"{self.provider_url_path}/hosts")
+
+    @property
     def storages(self) -> list[dict[str, Any]]:
         return self._request(url_path=f"{self.provider_url_path}/datastores")
+
+    def wait_for_hosts(self, timeout: int = 300, sleep: int = 10) -> list[dict[str, Any]]:
+        """Wait for hosts to appear in the Forklift inventory.
+
+        Fresh vSphere providers report Ready while GET /hosts returns empty.
+        This causes VM validation to fail with 'host id not found' errors.
+
+        Args:
+            timeout: Maximum time to wait in seconds (default: 300)
+            sleep: Time to sleep between checks in seconds (default: 10)
+
+        Returns:
+            List of host dictionaries from inventory
+
+        Raises:
+            TimeoutExpiredError: If hosts don't appear within timeout
+        """
+        LOGGER.info(f"Waiting for hosts to appear in Forklift inventory for provider '{self.provider_name}'...")
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=sleep,
+                func=lambda: self.hosts,
+            ):
+                if sample:
+                    LOGGER.info(f"Found {len(sample)} hosts in inventory for provider '{self.provider_name}'")
+                    return sample
+        except TimeoutExpiredError:
+            pass
+
+        raise TimeoutExpiredError(
+            f"No hosts appeared in Forklift inventory for provider '{self.provider_name}' after {timeout}s"
+        )
+
+    def wait_for_datastores(
+        self, datastore_ids: list[str], timeout: int = 300, sleep: int = 10
+    ) -> list[dict[str, Any]]:
+        """Wait for datastores to appear in the Forklift inventory.
+
+        Fresh vSphere providers may report Ready while GET /datastores does not yet
+        include all datastores referenced by cross-datastore disk configurations.
+
+        Args:
+            datastore_ids: MoIDs of datastores to wait for
+            timeout: Maximum time to wait in seconds (default: 300)
+            sleep: Time to sleep between checks in seconds (default: 10)
+
+        Returns:
+            List of storage dictionaries for the requested datastores
+
+        Raises:
+            TimeoutExpiredError: If any requested datastores don't appear within timeout
+        """
+        if not datastore_ids:
+            return []
+
+        requested_ids = set(datastore_ids)
+        LOGGER.info(
+            f"Waiting for datastores {sorted(requested_ids)} to appear in Forklift inventory "
+            f"for provider '{self.provider_name}'..."
+        )
+
+        def _check_datastores() -> list[dict[str, Any]] | None:
+            """Poll for all requested datastore IDs to appear in inventory.
+
+            Returns:
+                list[dict[str, Any]]: Matching storage entries when all requested IDs are present.
+                None: If any requested IDs are still missing.
+            """
+            storages = self.storages
+            found_ids = _extract_storage_ids(storages)
+            if requested_ids - found_ids:
+                return None
+            return [storage for storage in storages if storage.get("id") in requested_ids]
+
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=timeout,
+                sleep=sleep,
+                func=_check_datastores,
+            ):
+                if sample:
+                    for storage in sample:
+                        LOGGER.info(
+                            f"Found datastore '{storage.get('id')}' in inventory for provider '{self.provider_name}'"
+                        )
+                    return sample
+        except TimeoutExpiredError:
+            pass
+
+        found_ids = _extract_storage_ids(self.storages)
+        missing_ids = sorted(requested_ids - found_ids)
+        raise TimeoutExpiredError(
+            f"Datastores {missing_ids} did not appear in Forklift inventory for provider "
+            f"'{self.provider_name}' after {timeout}s"
+        )
 
     def vms_storages_mappings(self, vms: list[str]) -> list[dict[str, str]]:
         _mappings: list[dict[str, str]] = []
