@@ -1066,6 +1066,12 @@ def prepared_plan(
 
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
+
+    if "pvc_name_template" in plan:
+        plan["pvc_name_template"] = resolve_pvc_name_template(
+            pvc_name_template=plan["pvc_name_template"],
+            source_provider=source_provider,
+        )
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     warm_migration = plan.get("warm_migration", False)
 
