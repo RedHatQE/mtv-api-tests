@@ -162,6 +162,7 @@ def resolve_pvc_name_template(
                 f"Unknown 'pvc_name_template' key(s): {sorted(unknown_keys)}; allowed keys: {sorted(allowed_keys)}"
             )
 
+    # Unsupported providers reject pvcNameTemplate, so omit it instead of validating an inapplicable mapping.
     if not source_provider.supports_pvc_name_template():
         return None
 
