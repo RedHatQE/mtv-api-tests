@@ -386,6 +386,12 @@ def copyoffload_storage_secret(
         "STORAGE_PASSWORD": storage_password,
     }
 
+    # Optional SSL verification skip
+    skip_ssl = get_copyoffload_credential("storage_skip_ssl_verification", copyoffload_cfg)
+    normalized_skip_ssl = str(skip_ssl).strip().lower() if skip_ssl is not None else ""
+    if normalized_skip_ssl in ("true", "1", "yes"):
+        secret_data["STORAGE_SKIP_SSL_VERIFICATION"] = "true"
+
     # Vendor-specific configuration mapping
     # Maps vendor name to list of (config_key, secret_key, required) tuples
     # Based on forklift vsphere-xcopy-volume-populator code and README
