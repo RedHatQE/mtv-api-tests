@@ -70,6 +70,59 @@ def create_and_store_resource(
     return _resource
 
 
+def unregister_teardown_resource(
+    fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
+    kind: str,
+    name: str,
+    namespace: str | None = None,
+) -> None:
+    """Remove a resource entry from fixture_store teardown tracking.
+
+    Use after intentionally deleting a resource mid-test so session teardown
+    does not operate on a missing object. Safe to call even if the entry
+    does not exist — logs a warning instead of raising.
+
+    When ``namespace`` is provided, only the entry matching both name and
+    namespace is removed. When omitted, only the first name match is removed.
+
+    Args:
+        fixture_store (dict[str, Any]): Fixture store for resource tracking.
+        kind (str): Resource kind key in fixture_store["teardown"].
+        name (str): Resource name to unregister.
+        namespace (str | None): Namespace stored on the teardown entry. When
+            omitted, only the first name match is removed.
+
+    Returns:
+        None
+    """
+    teardown = fixture_store.get("teardown")
+    if teardown is None:
+        LOGGER.warning("fixture_store has no 'teardown' key — nothing to unregister")
+        return
+
+    resources = list(teardown.get(kind, []))
+    match_indexes = [
+        index
+        for index, resource in enumerate(resources)
+        if resource["name"] == name and (namespace is None or resource.get("namespace") == namespace)
+    ]
+    if not match_indexes:
+        namespace_msg = f" in namespace '{namespace}'" if namespace is not None else ""
+        LOGGER.warning(
+            f"Resource '{name}' of kind '{kind}'{namespace_msg} not found in fixture_store teardown — already removed?"
+        )
+        return
+
+    if namespace is None and len(match_indexes) > 1:
+        LOGGER.warning(
+            f"Multiple teardown entries for kind '{kind}' name '{name}'; unregistering only the first. "
+            "Pass namespace= to select a specific entry."
+        )
+
+    del resources[match_indexes[0]]
+    teardown[kind] = resources
+
+
 def get_or_create_namespace(
     fixture_store: dict[str, Any],
     ocp_admin_client: "DynamicClient",
