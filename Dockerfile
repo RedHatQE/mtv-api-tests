@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: builder - install build deps, compile extensions, sync dependencies
 # ------------------------------------------------------------------------------
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.1@sha256:c858c2eb5bd336d8c400f6ee976a9d731beccf3351fa7a6f485dced24ae4af17 AS builder
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2@sha256:5b07a4099a1893e379a8eaf55768026337ab4ccb6affb44ea4506b7437199294 AS builder
 
 ARG APP_DIR=/app
 ARG OPENSHIFT_PYTHON_WRAPPER_COMMIT=''
@@ -48,7 +48,7 @@ RUN uv sync --locked \
 # ------------------------------------------------------------------------------
 # Stage 2: runtime - clean image with only runtime dependencies
 # ------------------------------------------------------------------------------
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.1@sha256:c858c2eb5bd336d8c400f6ee976a9d731beccf3351fa7a6f485dced24ae4af17
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2@sha256:5b07a4099a1893e379a8eaf55768026337ab4ccb6affb44ea4506b7437199294
 
 ARG APP_DIR=/app
 
