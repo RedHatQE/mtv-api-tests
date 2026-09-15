@@ -1076,7 +1076,7 @@ def prepared_plan(
     if "pvc_name_template" in plan:
         plan["pvc_name_template"] = resolve_pvc_name_template(
             pvc_name_template=plan["pvc_name_template"],
-            source_provider_type=source_provider.type,
+            source_provider=source_provider,
         )
 
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]

@@ -1059,6 +1059,11 @@ def check_pvc_names(
         LOGGER.info("No pvc_name_template specified, skipping PVC name verification")
         return
 
+    # Unsupported providers do not honor pvcNameTemplate, so their generated PVC names cannot be validated against it.
+    if source_provider is not None and not source_provider.supports_pvc_name_template():
+        LOGGER.info(f"pvcNameTemplate is not supported for {source_provider.type}, skipping PVC name verification")
+        return
+
     uses_file_name = re.search(r"\{\{-?\s*\.FileName\b", pvc_name_template) is not None
 
     # Validate VMware-only wildcard (requires VMDK filenames from vSphere inventory)

@@ -59,6 +59,14 @@ class OvirtProvider(BaseProvider):
         LOGGER.info(f"Disconnecting OvirtProvider source provider {self.host}")
         self.api.close()
 
+    def supports_pvc_name_template(self) -> bool:
+        """Whether RHV/oVirt supports the Plan pvcNameTemplate field.
+
+        Returns:
+            bool: False because RHV/oVirt does not support pvcNameTemplate.
+        """
+        return False
+
     def connect(self) -> Self:
         self.api = ovirtsdk4.Connection(
             url=self.host,
