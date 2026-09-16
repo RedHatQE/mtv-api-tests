@@ -1585,11 +1585,12 @@ class VMWareProvider(BaseProvider):
                             # MAC that already matches the expected case/format.
                             if device.macAddress != device.macAddress.lower():
                                 uppercase_mac_nics.add(nic_label)
-                        device.addressType = "generated"
-
+                        nic = copy.copy(device)
+                        nic.addressType = "generated"
+                        nic.macAddress = ""
                         device_spec = vim.vm.device.VirtualDeviceSpec()
                         device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
-                        device_spec.device = device
+                        device_spec.device = nic
                         device_changes.append(device_spec)
                         LOGGER.info(f"Configured MAC regeneration for network device: {nic_label}")
 
