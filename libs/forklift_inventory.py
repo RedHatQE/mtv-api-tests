@@ -333,6 +333,8 @@ class OvirtForkliftInventory(ForkliftInventory):
                 _disk_id_info = self._request(f"{self.provider_url_path}/disks/{_disk_id}")
                 _storage_id = _disk_id_info["storageDomain"]
                 if _storage_name_match := [_stg["name"] for _stg in _storages if _storage_id == _stg["id"]]:
+                    if [_map for _map in _mappings if _map.get("name") == _storage_name_match[0]]:
+                        continue
                     _mappings.append({"name": _storage_name_match[0]})
 
         if not _mappings:

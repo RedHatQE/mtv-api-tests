@@ -632,11 +632,11 @@ tests_params: dict = {
         "enable_nested_virtualization": False,
         "vm_target_namespace": f"mtv-vms-warm-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": "default",  # Cross-namespace NAD access
-        # Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default";
-        # vsphere uses the vSphere-only .FileName variable, other providers use the neutral default.
+        # Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default".
+        # vsphere uses .FileName; default truncates VmName to stay within 63 chars.
         "pvc_name_template": {
             "vsphere": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
-            "default": "{{.VmName}}-disk-{{.DiskIndex}}",
+            "default": '{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}',
         },
         "pvc_name_template_use_generate_name": True,
         "target_labels": {
@@ -670,7 +670,7 @@ tests_params: dict = {
         "target_power_state": "on",
         "preserve_static_ips": True,
         "enable_nested_virtualization": False,
-        "pvc_name_template": "{{.VmName}}-disk-{{.DiskIndex}}",
+        "pvc_name_template": '{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,
         "target_node_selector": {
             "mtv-comprehensive-node": None,  # None = auto-generate with session_uuid
