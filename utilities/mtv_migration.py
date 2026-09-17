@@ -130,32 +130,37 @@ def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[
 
 def resolve_pvc_name_template(
     pvc_name_template: str | dict[str, str],
-    source_provider_type: str,
-) -> str:
+    source_provider: BaseProvider,
+) -> str | None:
     """Resolve a provider-appropriate PVC name template.
 
     Accepts either a ready-to-use template string (returned unchanged) or a
     provider-keyed mapping. For a mapping, the template for
-    ``source_provider_type`` is used, falling back to the ``"default"`` key
+    ``source_provider.type`` is used, falling back to the ``"default"`` key
     when no provider-specific entry exists.
 
     Args:
         pvc_name_template (str | dict[str, str]): A template string, or a
             mapping of provider type to template string. A mapping must
-            contain either a key matching ``source_provider_type`` or a
+            contain either a key matching ``source_provider.type`` or a
             ``"default"`` key.
-        source_provider_type (str): The source provider type
-            (e.g. ``Provider.ProviderType.VSPHERE``).
+        source_provider (BaseProvider): Source provider used to resolve
+            provider-specific configuration.
 
     Returns:
-        str: The resolved PVC name template string.
+        str | None: The resolved PVC name template string, or ``None`` when
+            the provider does not support pvcNameTemplate.
 
     Raises:
         ValueError: If the mapping contains a key that is not a valid
             ``Provider.ProviderType`` value or ``"default"``, or if the
-            mapping has no entry matching ``source_provider_type`` and no
+            mapping has no entry matching ``source_provider.type`` and no
             ``"default"`` key.
     """
+    # Unsupported providers reject pvcNameTemplate, so omit it instead of validating an inapplicable mapping.
+    if not source_provider.supports_pvc_name_template():
+        return None
+
     if isinstance(pvc_name_template, dict):
         valid_provider_types = {
             value
@@ -170,14 +175,14 @@ def resolve_pvc_name_template(
                 f"Unknown 'pvc_name_template' key(s): {sorted(unknown_keys)}; allowed keys: {sorted(allowed_keys)}"
             )
 
-        if source_provider_type in pvc_name_template:
-            return pvc_name_template[source_provider_type]
+        if source_provider.type in pvc_name_template:
+            return pvc_name_template[source_provider.type]
 
         if "default" in pvc_name_template:
             return pvc_name_template["default"]
 
         raise ValueError(
-            f"No 'pvc_name_template' entry found for provider type '{source_provider_type}' and no "
+            f"No 'pvc_name_template' entry found for provider type '{source_provider.type}' and no "
             f"'default' key present; available keys: {sorted(pvc_name_template.keys())}"
         )
 
