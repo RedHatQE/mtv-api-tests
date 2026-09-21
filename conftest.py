@@ -7,7 +7,7 @@ import pickle
 import shutil
 import tempfile
 import uuid
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from copy import deepcopy
 from pathlib import Path
 from shutil import rmtree
@@ -297,7 +297,7 @@ def pytest_collection_modifyitems(session, config, items):
     #   1. Register the marker in pytest.ini under [pytest] > markers.
     #   2. Add a condition block below following the existing pattern:
     #        - Check source_provider_type against Provider.ProviderType.*
-    #        - Create a skip/jira marker with a descriptive reason
+    #        - Create a skip marker with a descriptive reason
     #        - Iterate over items and add the marker where the keyword matches
     #   3. Apply the marker to the relevant test class, e.g.:
     #        @pytest.mark.my_new_marker
@@ -322,12 +322,6 @@ def pytest_collection_modifyitems(session, config, items):
                 for item in items:
                     if "warm" in item.keywords:
                         item.add_marker(warm_skip)
-
-            # Mark RHV warm migration tests with a Jira issue (disables execution until resolved).
-            if source_provider_type == Provider.ProviderType.RHV:
-                for item in items:
-                    if "warm" in item.keywords:
-                        item.add_marker(pytest.mark.jira("MTV-2846", run=False))
 
             # Skip vSphere-only tests for non-vSphere providers.
             if source_provider_type != Provider.ProviderType.VSPHERE:
@@ -1037,7 +1031,6 @@ def prepared_plan(
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
     vcenter_clone_provider: VMWareProvider | None,
-    jira_issue_scope_session: Callable[[str], bool | None],
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -1046,11 +1039,8 @@ def prepared_plan(
     once per test class rather than once per test function.
 
     Cloning uses a two-phase pattern: all VMs are cloned first, then Forklift
-    inventory sync is waited on for every cloned VM. vSphere inventory sync
-    workarounds (MTV-6066) are gated by MTV-6072 via jira_issue_scope_session: active
-    while the issue is open or Jira is unavailable, skipped when resolved.
-    This avoids inventory sync failures when cloning VM2+ while VM1 inventory
-    sync is still pending.
+    inventory sync is waited on for every cloned VM. This avoids inventory sync
+    failures when cloning VM2+ while VM1 inventory sync is still pending.
 
     Args:
         request (pytest.FixtureRequest): Pytest fixture request
@@ -1064,7 +1054,6 @@ def prepared_plan(
         source_provider_inventory (ForkliftInventory): Source provider inventory
         target_namespace (str): Default target namespace for VMs
         vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
-        jira_issue_scope_session (Callable[[str], bool | None]): pytest-jira session-scoped callable
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1350,16 +1339,13 @@ def prepared_plan(
                 source_provider=source_provider,
                 source_provider_inventory=source_provider_inventory,
                 cloned_vm_names=cloned_vm_names,
-                virtual_machines=virtual_machines,
-                copyoffload_config=fixture_store["source_provider_data"].get("copyoffload", {}),
                 inventory_timeout=inventory_timeout,
-                jira_issue_open=jira_issue_scope_session,
             )
 
-            # After add_nic, the cloned VM already existed in inventory so the quick check above
-            # passed without forcing a refresh — the inventory is stale and missing the new NIC.
-            # Force a refresh and block until each VM's NIC count reflects the added NIC, so
-            # NetworkMap creation (later in the test) maps every NIC and Forklift keeps it.
+            # After add_nic, the cloned VM already existed in inventory so wait_for_cloned_vms
+            # returns without seeing the new NIC. Force a refresh and block until each VM's
+            # NIC count reflects the added NIC, so NetworkMap creation (later in the test)
+            # maps every NIC and Forklift keeps it.
             if added_nic_expected_counts:
                 wait_for_added_nics_in_forklift_inventory(
                     source_provider=source_provider,

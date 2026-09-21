@@ -965,9 +965,6 @@ Two class-scoped fixtures work together (used with `indirect=True` parametrizati
   - Two-phase clone pattern: clone all VMs first, then batch inventory sync via
     `wait_for_cloned_vms_in_forklift_inventory`.
   - Applies to all non-OVA class tests with cloned VMs.
-  - vSphere MTV-6066 workarounds (host/datastore wait, refresh on timeout) are gated on MTV-6072 via
-    `jira_issue_open` in `utilities/provider_inventory.py`; disabled when MTV-6072 is resolved in Jira.
-  - Use `utilities/jira_helpers.py` for Jira runtime checks in fixtures.
 
 Test methods receive `prepared_plan` which is ready to use:
 
