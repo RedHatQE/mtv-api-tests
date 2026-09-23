@@ -148,7 +148,7 @@ class TestPlanArchivePvcCleanup:
            least one DataVolume, one regular PVC, and one prime- prefixed PVC.
            Allow up to 120 seconds for these objects to become visible.
         5. Archive the failed Plan. Check its Archived condition is True, then
-           delete the Plan and confirm deletion succeeds.
+           delete the Plan and confirm both the Plan and its Migration are gone.
         6. Delete any retained destination VM in the target namespace and
            wait for its deletion to finish.
         7. Poll that namespace for up to 120 seconds for any remaining
@@ -159,7 +159,8 @@ class TestPlanArchivePvcCleanup:
     Expected result:
         1. The migration fails at PostHook after a DataVolume, a regular PVC,
            and a prime PVC have been observed in the effective target namespace.
-        2. The failed Plan reaches Archived=True and can be deleted.
+        2. The failed Plan reaches Archived=True; deleting it also removes its
+           Migration. If the Migration remains, report its name and namespace.
         3. After deletion of any retained destination VM, no DataVolumes or
            PVCs remain in the isolated effective target namespace within 120
            seconds. If a check fails, inspect the Plan conditions and the VM's
@@ -370,7 +371,7 @@ class TestPlanArchivePvcCleanup:
             None
 
         Raises:
-            AssertionError: If plan is not archived or deletion fails.
+            AssertionError: If plan is not archived or Plan/Migration deletion fails.
         """
         plan = self.__class__.plan_resource
         migration = get_migration_for_plan(plan)
@@ -384,9 +385,12 @@ class TestPlanArchivePvcCleanup:
 
         assert plan.clean_up(wait=True), f"Failed to delete plan '{plan.name}' after archiving"
 
-        # Plan was deleted intentionally; unregister so session_teardown does not
-        # call archive_plan() on a missing Plan and abort the rest of cleanup.
+        # Plan is gone, but keep the Migration tracked until cascade deletion completes.
         unregister_teardown_resource(fixture_store=fixture_store, resource=plan)
+        assert migration.wait_deleted(timeout=120), (
+            f"Migration '{migration.name}' in namespace '{migration.namespace}' was not deleted "
+            f"within 120s after Plan '{plan.name}' deletion; retained for session cleanup"
+        )
         unregister_teardown_resource(fixture_store=fixture_store, resource=migration)
 
     def test_verify_pvc_cleanup(
