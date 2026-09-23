@@ -42,7 +42,11 @@ class OVAProvider(BaseProvider):
         vm_name: str | None = kwargs.get("name")
         if source_provider_inventory and vm_name:
             vm_data = source_provider_inventory.get_vm(name=vm_name)
-            raw_os_type: str = vm_data.get("osType") or ""
+            raw_os_type = vm_data.get("osType")
+            if raw_os_type is not None and not isinstance(raw_os_type, str):
+                raise ValueError(
+                    f"Invalid osType for OVA VM '{vm_name}': expected string or None, got {type(raw_os_type).__name__}"
+                )
             result_vm_info["win_os"] = (
                 "win" in raw_os_type.lower()
                 if raw_os_type
