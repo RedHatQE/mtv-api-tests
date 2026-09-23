@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from typing import TYPE_CHECKING, Any, Self
 
 from ocp_resources.provider import Provider
@@ -41,8 +42,12 @@ class OVAProvider(BaseProvider):
         vm_name: str | None = kwargs.get("name")
         if source_provider_inventory and vm_name:
             vm_data = source_provider_inventory.get_vm(name=vm_name)
-            raw_os_type: str = vm_data.get("osType", "")
-            result_vm_info["win_os"] = "win" in raw_os_type.lower()
+            raw_os_type: str = vm_data.get("osType") or ""
+            result_vm_info["win_os"] = (
+                "win" in raw_os_type.lower()
+                if raw_os_type
+                else bool(re.search(r"(?<![a-z0-9])win(?:dows)?\d*(?![a-z0-9])", vm_name, re.IGNORECASE))
+            )
             LOGGER.info(f"OVA VM '{vm_name}' OS type: '{raw_os_type}', win_os={result_vm_info['win_os']}")
 
         return result_vm_info

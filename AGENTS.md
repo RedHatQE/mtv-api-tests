@@ -924,7 +924,10 @@ tests_params: dict = {
 
 ### Test File Location (MUST)
 
-Test files must be placed in feature subdirectories under `tests/`, not directly in the `tests/` root. Each subdirectory groups related tests (e.g., `tests/cold/`, `tests/warm/`, `tests/copyoffload/`).
+This repo tests MTV against live infrastructure. All test methods must exercise MTV product behavior through the supported
+integration/end-to-end architecture; never unit-test internal helpers or providers or use mocks. Put all test files
+under `tests/<feature>/`, not directly under `tests/`. Do not add `unit_tests/` or standalone test scripts.
+For execution restrictions, see **Test Execution Prohibition**.
 
 ### conftest.py Structure and File Placement (MUST)
 
