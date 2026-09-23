@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import ipaddress
 import json
+import re
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -42,6 +43,10 @@ KUBERNETES_MAX_NAME_LENGTH: int = 63
 KUBERNETES_MAX_GENERATE_NAME_PREFIX_LENGTH: int = 58
 
 _LUKS_FSTYPE = "crypto_LUKS"  # lsblk filesystem-type identifier for LUKS partitions
+
+_GO_TEMPLATE_TOKEN = re.compile(
+    r'\{\{-?|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`[^`]*`|/\*.*?\*/|-?\}\}|\.FileName\b|.', re.DOTALL
+)
 
 _VBS_STATUS_RUNNING = "2"
 _NESTED_VIRT_DISABLED_FEATURES: list[dict[str, str]] = [
@@ -969,6 +974,30 @@ def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], sto
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
 
 
+def _uses_file_name_field(template: str) -> bool:
+    """Find FileName field tokens in Go template actions, ignoring literals and comments.
+
+    Args:
+        template: Go template to inspect.
+
+    Returns:
+        Whether an action references the FileName field.
+    """
+    position = 0
+    while (start := template.find("{{", position)) != -1:
+        position = start + 2
+        for match in _GO_TEMPLATE_TOKEN.finditer(template, position):
+            token = match.group()
+            position = match.end()
+            if token in ("}}", "-}}"):
+                break
+            if token == ".FileName":
+                return True
+        else:
+            return False
+    return False
+
+
 def check_pvc_names(
     source_vm: dict[str, Any],
     destination_vm: dict[str, Any],
@@ -1019,17 +1048,16 @@ def check_pvc_names(
         LOGGER.info(f"pvcNameTemplate is not supported for {source_provider.type}, skipping PVC name verification")
         return
 
-    uses_file_name = re.search(r"\{\{-?\s*\.FileName\b", pvc_name_template) is not None
+    uses_file_name = _uses_file_name_field(pvc_name_template)
 
-    # Validate VMware-only wildcards
-    for wildcard in ["{{.FileName}}", "{{.DiskIndex}}"]:
-        if wildcard in pvc_name_template and (not source_provider or source_provider.type != Provider.ProviderType.VSPHERE):
-            LOGGER.warning(
-                f"{wildcard} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
-                f"Current provider: {source_provider.type if source_provider else 'unknown'}. "
-                "Skipping PVC name verification."
-            )
-            return
+    # FileName is available only for VMware/vSphere disks.
+    if uses_file_name and (not source_provider or source_provider.type != Provider.ProviderType.VSPHERE):
+        LOGGER.warning(
+            "{{.FileName}} wildcard in pvcNameTemplate is only supported for VMware/vSphere provider. "
+            f"Current provider: {source_provider.type if source_provider else 'unknown'}. "
+            "Skipping PVC name verification."
+        )
+        return
 
     # Get disk filenames from inventory (required for {{.FileName}} template)
     inventory_disk_files: dict[int, str] = {}
@@ -1106,7 +1134,7 @@ def check_pvc_names(
             filename = inventory_disk_files.get(device_key, "")
 
         # Warn if FileName template is used but filename not found from inventory
-        if "{{.FileName}}" in pvc_name_template and not filename:
+        if uses_file_name and not filename:
             LOGGER.warning(
                 f"{{{{.FileName}}}} wildcard used but filename not found for disk with device_key={device_key}. "
                 f"Available inventory disk keys: {list(inventory_disk_files.keys())}"

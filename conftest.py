@@ -52,7 +52,7 @@ from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
-from utilities.mtv_migration import get_vm_suffix
+from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
 from utilities.must_gather import run_must_gather
 from utilities.provider_inventory import validate_source_vms_exist, wait_for_cloned_vms_in_forklift_inventory
 from utilities.naming import (
