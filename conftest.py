@@ -279,7 +279,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     if session.config.getoption("analyze_with_ai"):
         if session.exitstatus == pytest.ExitCode.OK:
-            LOGGER.info("No test failures (exit code %d), skipping AI analysis", session.exitstatus)
+            LOGGER.info(f"No test failures (exit code {session.exitstatus}), skipping AI analysis")
 
         else:
             try:
@@ -388,6 +388,9 @@ def pytest_collection_finish(session: pytest.Session) -> None:
 
     Args:
         session (pytest.Session): Session containing the selected test items.
+
+    Returns:
+        None: This hook does not return a value.
     """
     if not is_dry_run(session.config):
         maybe_register_awx_controller_lease(config=session.config, items=session.items)
