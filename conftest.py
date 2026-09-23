@@ -270,14 +270,16 @@ def pytest_sessionfinish(session, exitstatus):
         maybe_teardown_awx_at_session_end(session.config)
     except (TimeoutError, ValueError) as exp:
         LOGGER.exception(f"AWX session teardown failed: {exp}")
+        if session.exitstatus == pytest.ExitCode.OK:
+            session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     reporter.summary_stats()
 
     if session.config.getoption("analyze_with_ai"):
-        if exitstatus == 0:
-            LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
+        if session.exitstatus == pytest.ExitCode.OK:
+            LOGGER.info("No test failures (exit code %d), skipping AI analysis", session.exitstatus)
 
         else:
             try:
@@ -311,7 +313,6 @@ def pytest_collection_modifyitems(session, config, items):
     #        class TestMyFeature: ...
     # -------------------------------------------------------------------
     if not is_dry_run(config):
-        maybe_register_awx_controller_lease(config=config, items=items)
         providers_json_path = config.getoption("providers_json", default=None)
         providers = load_source_providers(providers_json_path=providers_json_path)
         # .get() with default is intentional: source_provider may not be configured (e.g., partial config),
@@ -380,6 +381,16 @@ def pytest_collection_modifyitems(session, config, items):
 
     if not is_dry_run(session.config):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Register the local controller after pytest has deselected items.
+
+    Args:
+        session (pytest.Session): Session containing the selected test items.
+    """
+    if not is_dry_run(session.config):
+        maybe_register_awx_controller_lease(config=session.config, items=session.items)
 
 
 def pytest_xdist_node_collection_finished(node: WorkerController, ids: list[str]) -> None:

@@ -402,13 +402,13 @@ def maybe_register_awx_controller_lease(
     """Register the pytest controller as an AWX lifecycle participant.
 
     Nested ``tests/hooks`` collection hooks do not run in the xdist controller.
-    Call this from the root ``pytest_collection_modifyitems`` and
+    Call this from the root ``pytest_collection_finish`` and
     ``pytest_xdist_node_collection_finished`` hooks so the controller PID lease
     outlives every worker fixture.
 
     Args:
         config (pytest.Config): Pytest config for this process.
-        items (list[pytest.Item] | None): Collected pytest items.
+        items (list[pytest.Item] | None): Selected pytest items after deselection.
         nodeids (list[str] | None): Collected node ids from an xdist worker.
 
     Returns:
@@ -422,13 +422,13 @@ def maybe_register_awx_controller_lease(
         return
     if getattr(config, "workerinput", None) is not None:
         return
-    if items is not None:
-        has_hooks_tests = any("hooks" in Path(str(getattr(item, "path", item.fspath))).parts for item in items)
-    elif nodeids is not None:
-        has_hooks_tests = any("/hooks/" in nodeid.replace("\\", "/") for nodeid in nodeids)
-    else:
-        has_hooks_tests = False
-    if not has_hooks_tests:
+    # The xdist controller has node IDs but no fixture names or markers.
+    selected_nodeids = (item.nodeid for item in items) if items is not None else (nodeids or ())
+    if not any(
+        ("/" + nodeid.replace("\\", "/").split("::", 1)[0]).endswith("/tests/hooks/test_aap_hook_migration.py")
+        and "::TestAapHookMigration::" in nodeid
+        for nodeid in selected_nodeids
+    ):
         return
     client = get_cluster_client()
     with awx_lifecycle_lock(client=client):
