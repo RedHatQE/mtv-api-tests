@@ -75,6 +75,8 @@ def awx_deployment(
 
     Raises:
         TimeoutError: If the cross-worker AWX lifecycle lock cannot be acquired.
+        ValueError: If the client has no API server host or the current process's
+            /proc start-time data cannot be read for its AWX lease.
     """
     with awx_lifecycle_lock(client=ocp_admin_client):
         register_awx_worker(client=ocp_admin_client)

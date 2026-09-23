@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from ocp_resources.datavolume import DataVolume
-from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
@@ -115,21 +114,58 @@ def _get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[st
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestPlanArchivePvcCleanup:
-    """MTV-5663: Verify PVC cleanup after archiving and deleting a failed migration plan.
+    """Verify failed-Plan archive and deletion clean up destination DVs and PVCs.
 
-    Regression test for MTV-5564: archiving and deleting a failed plan left
-    orphan PVCs (both regular and prime PVCs) in the target namespace.
+    Purpose/Regression:
+        MTV-5663 covers the PVC leak reported in MTV-5564: archiving and
+        deleting a failed Plan left regular and prime PVCs behind. The original
+        failure occurred mid-transfer. This test fails at PostHook, after disk
+        resources exist, then exercises the same Plan archive/delete cleanup.
 
-    Test steps:
-        1. Create StorageMap resource.
-        2. Create NetworkMap resource.
-        3. Create Plan with a post-hook configured to fail.
-        4. Execute migration — migration runs far enough to create PVCs,
-           then fails due to post-hook failure (MigrationPlanExecError).
-        5. Archive the failed plan, then delete it.
-        6. Delete retained destination VMs, then verify all DVs and PVCs
-           from this test session in the effective VM target namespace are
-           cleaned up — no matching orphan resources remain.
+    Prerequisites:
+        Register and connect an MTV source provider and OpenShift destination.
+        Prepare accessible destination storage and network for the source VM.
+        Use a disposable, powered-on Linux source VM
+        with a disk and network interface supported by both providers and
+        guest-agent access for migration checks. For an OpenShift source,
+        create the VM from an available OS DataSource such as ``rhel9``.
+        Have permission to create a dedicated target namespace, maps, a
+        Hook, and a Plan. Use a cold migration, target power state off,
+        and a post-migration Hook that intentionally fails.
+
+    Test plan:
+        1. Prepare the disposable source VM and start it. For an OpenShift
+           source, create and attach a dedicated source network. Wait until
+           the VM appears in Forklift inventory. Create a dedicated target
+           namespace and a post-migration Hook whose playbook fails.
+        2. Create a StorageMap for the prepared VM's disks and a NetworkMap
+           for its network. Create a cold Plan using those maps, the failing
+           PostHook, and target VM power state off. Wait for its Ready
+           condition to become True.
+        3. Run the migration. Check that the migration fails and that the
+           VM's failed step in the Plan is PostHook.
+        4. Before archiving, check the effective VM target namespace for at
+           least one DataVolume, one regular PVC, and one prime- prefixed PVC.
+           Allow up to 120 seconds for these objects to become visible.
+        5. Archive the failed Plan. Check its Archived condition is True, then
+           delete the Plan and confirm deletion succeeds.
+        6. Delete any retained destination VM in the target namespace and
+           wait for its deletion to finish.
+        7. Poll that namespace for up to 120 seconds for any remaining
+           DataVolumes or PVCs, not just names matching the VM. After the
+           check, remove the disposable source VM, maps, Hook, dedicated
+           namespace, and any source network created in step 1.
+
+    Expected result:
+        1. The migration fails at PostHook after a DataVolume, a regular PVC,
+           and a prime PVC have been observed in the effective target namespace.
+        2. The failed Plan reaches Archived=True and can be deleted.
+        3. After deletion of any retained destination VM, no DataVolumes or
+           PVCs remain in the isolated effective target namespace within 120
+           seconds. If a check fails, inspect the Plan conditions and the VM's
+           failed step for PostHook, review the failing Hook's events or logs,
+           then list remaining PVC and DataVolume names in the effective VM
+           target namespace.
     """
 
     storage_map: StorageMap
@@ -350,15 +386,8 @@ class TestPlanArchivePvcCleanup:
 
         # Plan was deleted intentionally; unregister so session_teardown does not
         # call archive_plan() on a missing Plan and abort the rest of cleanup.
-        unregister_teardown_resource(
-            fixture_store=fixture_store, kind=Plan.kind, name=plan.name, namespace=plan.namespace
-        )
-        unregister_teardown_resource(
-            fixture_store=fixture_store,
-            kind=Migration.kind,
-            name=migration.name,
-            namespace=migration.namespace,
-        )
+        unregister_teardown_resource(fixture_store=fixture_store, resource=plan)
+        unregister_teardown_resource(fixture_store=fixture_store, resource=migration)
 
     def test_verify_pvc_cleanup(
         self,

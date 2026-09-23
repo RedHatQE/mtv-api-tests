@@ -729,15 +729,17 @@ plan = self.__class__.plan_resource
 migration = get_migration_for_plan(plan)
 archive_plan(plan=plan)
 plan.clean_up(wait=True)
-unregister_teardown_resource(fixture_store=fixture_store, kind=Plan.kind, name=plan.name, namespace=plan.namespace)
-unregister_teardown_resource(
-    fixture_store=fixture_store, kind=Migration.kind, name=migration.name, namespace=migration.namespace
-)
+unregister_teardown_resource(fixture_store=fixture_store, resource=plan)
+unregister_teardown_resource(fixture_store=fixture_store, resource=migration)
 ```
 
 ## Test Structure Pattern
 
-All tests follow a class-based structure with 5 base test methods:
+Every new test class MUST have a complete, customer-readable manual product test plan in its class docstring.
+Follow every requirement and the review checklist in [`test_plan_schema.md`](test_plan_schema.md) before review.
+The example below illustrates method structure only; use the schema for the class docstring.
+
+The standard class-based test pattern has 5 base test methods; feature-specific exceptions, including the 6-step plan-archive pattern, are listed below:
 
 ```python
 from pytest_testconfig import config as py_config
@@ -764,7 +766,7 @@ from utilities.post_migration import check_vms
 @pytest.mark.incremental
 @pytest.mark.tier0  # optional: tier0, tier1, warm, remote, copyoffload
 class TestNameHere:
-    """Test description."""
+    """See test_plan_schema.md for the required manual product test plan."""
 
     storage_map: StorageMap
     network_map: NetworkMap
