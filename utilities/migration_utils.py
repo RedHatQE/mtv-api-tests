@@ -77,6 +77,21 @@ def archive_plan(plan: Plan) -> None:
         LOGGER.error(f"Failed to archive plan {plan.name}")
 
 
+def get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[str]:
+    """List PVCs and DataVolumes remaining in the target namespace.
+
+    Args:
+        client (DynamicClient): OpenShift admin client.
+        namespace (str): Isolated VM target namespace to check.
+
+    Returns:
+        list[str]: Remaining resources prefixed with PVC/ or DV/.
+    """
+    return [f"PVC/{pvc.name}" for pvc in PersistentVolumeClaim.get(client=client, namespace=namespace)] + [
+        f"DV/{dv.name}" for dv in DataVolume.get(client=client, namespace=namespace)
+    ]
+
+
 def check_dv_pvc_pv_deleted(
     ocp_client: DynamicClient,
     target_namespace: str,
