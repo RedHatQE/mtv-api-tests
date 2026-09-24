@@ -8,12 +8,15 @@ This document provides project-specific instructions for the MTV API Tests codeb
 2. **Create Branch** - Create a feature branch (e.g., `feat/description` or `fix/description`)
 3. **Agent Selection** - Route to appropriate specialist agent
 4. **Code Changes** - Specialist implements the changes
-5. **Pre-commit** - Run `pre-commit run --all-files` and fix any failures (formatting, linting)
-6. **Completion** - Tests pass, ready to commit
+5. **Code Review** - Delegate to `code-reviewer` agent after ANY code change
+6. **Review Cycle** - Repeat steps 4-5 until no more changes needed
+7. **Pre-commit** - Run `pre-commit run --all-files` and fix any failures (formatting, linting - no re-review needed)
+8. **Completion** - All changes reviewed, tests pass, ready to commit
 
 ### Rules
 
 - Run agents in PARALLEL when possible
+- Never skip code-reviewer after code changes
 - (MUST) Update README.md when code changes affect usage/requirements/installation/configuration
 - (MUST) Update CLAUDE.md when methodology or coding patterns change. Show proposed changes to user and get approval before committing
   (These updates happen during the work, not as separate workflow steps)
@@ -600,17 +603,12 @@ with ResourceEditor(node) as editor:
 
 ## Critical Constraints
 
-### Test Execution Requirements (MUST)
+### Test Execution Prohibition
 
-Tests interact with live OpenShift clusters and source providers. Before running tests:
+AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live clusters, provider connections, and credentials.
 
-- **Cluster access:** A dedicated test cluster with `kubeadmin` or equivalent credentials is required
-- **Provider credentials:** A valid `.providers.json` with source provider connection details
-- **Isolation:** Tests create unique namespaces per session (`session_uuid`) to prevent OCP resource collisions between parallel runs
-- **Parallel safety:** Namespace isolation does not prevent source-provider VM conflicts when multiple
-  runs share the same source VM names — use separate provider configurations or VM cloning for true
-  parallel safety
-- **Cleanup:** Tests clean up resources via `fixture_store` teardown — use `--skip-teardown` to preserve resources for debugging
+AI can: Read/analyze/write/fix tests, suggest improvements, review structure
+AI cannot: Execute tests, validate by running
 
 ### No Module-Level Provider Loading (MUST)
 
@@ -1103,13 +1101,11 @@ When multiple issues exist, address them in this order:
 
 ## Parallel Execution (pytest-xdist)
 
-Tests are parallel-safe for OpenShift resources because:
+Tests are parallel-safe because:
 
 - Unique namespaces per session via `session_uuid`
 - Each worker has isolated `fixture_store`
 - `create_and_store_resource()` generates unique names
-
-**Note:** Namespace isolation does not prevent source-provider VM conflicts — see Test Execution Requirements above.
 
 Rules:
 
