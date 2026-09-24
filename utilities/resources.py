@@ -80,8 +80,7 @@ def unregister_teardown_resource(
     does not operate on a missing object. Safe to call even if the entry
     does not exist — logs a warning instead of raising.
 
-    For namespaced resources, match both name and namespace. For cluster-scoped
-    resources, only the first name match is removed.
+    Remove all entries matching the resource kind, name, and namespace.
 
     Args:
         fixture_store (dict[str, Any]): Fixture store for resource tracking.
@@ -100,7 +99,7 @@ def unregister_teardown_resource(
     match_indexes = [
         index
         for index, resource in enumerate(resources)
-        if resource["name"] == name and (namespace is None or resource.get("namespace") == namespace)
+        if resource["name"] == name and resource.get("namespace") == namespace
     ]
     if not match_indexes:
         namespace_msg = f" in namespace '{namespace}'" if namespace is not None else ""
@@ -109,13 +108,8 @@ def unregister_teardown_resource(
         )
         return
 
-    if namespace is None and len(match_indexes) > 1:
-        LOGGER.warning(
-            f"Multiple teardown entries for kind '{kind}' name '{name}'; unregistering only the first. "
-            "Pass a namespaced resource to select a specific entry."
-        )
-
-    del resources[match_indexes[0]]
+    for index in reversed(match_indexes):
+        del resources[index]
     teardown[kind] = resources
 
 
