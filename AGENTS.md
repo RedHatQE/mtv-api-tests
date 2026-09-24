@@ -713,9 +713,28 @@ namespace = Namespace(client=ocp_admin_client, name="my-namespace")
 namespace.deploy()
 ```
 
+When intentionally deleting a resource mid-test (e.g., testing plan archive+delete), unregister it
+from teardown to prevent session cleanup from operating on a missing resource:
+
+```python
+# Assumes Plan, Migration, archive_plan, get_migration_for_plan are already imported
+from utilities.resources import unregister_teardown_resource
+
+plan = self.__class__.plan_resource
+migration = get_migration_for_plan(plan)
+archive_plan(plan=plan)
+plan.clean_up(wait=True)
+unregister_teardown_resource(fixture_store=fixture_store, resource=plan)
+unregister_teardown_resource(fixture_store=fixture_store, resource=migration)
+```
+
 ## Test Structure Pattern
 
-All tests follow a class-based structure with 5 base test methods:
+Every new test class MUST have a complete, customer-readable manual product test plan in its class docstring.
+Follow every requirement and the review checklist in [`test_plan_schema.md`](test_plan_schema.md) before review.
+The example below illustrates method structure only; use the schema for the class docstring.
+
+The standard class-based test pattern has 5 base test methods; feature-specific exceptions, including the 6-step plan-archive pattern, are listed below:
 
 ```python
 from pytest_testconfig import config as py_config
@@ -742,7 +761,7 @@ from utilities.post_migration import check_vms
 @pytest.mark.incremental
 @pytest.mark.tier0  # optional: tier0, tier1, warm, remote, copyoffload
 class TestNameHere:
-    """Test description."""
+    """See test_plan_schema.md for the required manual product test plan."""
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -795,6 +814,10 @@ class TestNameHere:
   Used when the feature under test is exercised during provider/plan creation (e.g., CA cert field
   validation). No migration is executed — plan readiness proves the feature works.
 - **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
+- **6-step plan-archive PVC cleanup pattern**: storagemap -> networkmap -> plan -> migrate (expected fail) -> archive_and_delete -> verify_pvc_cleanup
+  Plan-archive tests induce a failed migration (typically via post-hook), archive and delete the Plan,
+  then assert leftover DataVolumes and PVCs (including `prime-*`) are gone. There is no `test_check_vms`
+  step. Lives in `tests/plan_lifecycle/`.
 - **6-step shared-disk pattern (Linux)**: storagemap -> networkmap -> plan -> migrate -> verify_shared_disk_data -> check_vms
   Shared disk tests insert `test_verify_shared_disk_data` before `test_check_vms`. This step mounts,
   writes, and reads a shared disk from both VMs to verify bidirectional access after migration.
@@ -857,7 +880,9 @@ then the base five through `test_migrate_vms`, then `test_verify_shared_disk_dat
 throttling tests: same through `test_migrate_vms`, then `test_verify_vm_inflight_throttling`,
 `test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. LUKS tests: same through `test_migrate_vms`, then
 `test_verify_luks_encryption`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
-`test_verify_xfs_version`, `test_check_vms`.
+`test_verify_xfs_version`, `test_check_vms`. Plan-archive PVC cleanup tests: same through
+`test_migrate_vms` (expects `MigrationPlanExecError`), then `test_archive_and_delete_plan`,
+`test_verify_pvc_cleanup`.
 
 **Fixture parameters:** Each test method requests only the fixtures it needs. The example shows typical patterns.
 

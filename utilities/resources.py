@@ -70,6 +70,49 @@ def create_and_store_resource(
     return _resource
 
 
+def unregister_teardown_resource(
+    fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
+    resource: Resource,
+) -> None:
+    """Remove a resource entry from fixture_store teardown tracking.
+
+    Use after intentionally deleting a resource mid-test so session teardown
+    does not operate on a missing object. Safe to call even if the entry
+    does not exist — logs a warning instead of raising.
+
+    Remove all entries matching the resource kind, name, and namespace.
+
+    Args:
+        fixture_store (dict[str, Any]): Fixture store for resource tracking.
+        resource (Resource): OpenShift resource to unregister.
+
+    Returns:
+        None
+    """
+    kind, name, namespace = resource.kind, resource.name, resource.namespace
+    teardown = fixture_store.get("teardown")
+    if teardown is None:
+        LOGGER.warning("fixture_store has no 'teardown' key — nothing to unregister")
+        return
+
+    resources = list(teardown.get(kind, []))
+    match_indexes = [
+        index
+        for index, resource in enumerate(resources)
+        if resource["name"] == name and resource.get("namespace") == namespace
+    ]
+    if not match_indexes:
+        namespace_msg = f" in namespace '{namespace}'" if namespace is not None else ""
+        LOGGER.warning(
+            f"Resource '{name}' of kind '{kind}'{namespace_msg} not found in fixture_store teardown — already removed?"
+        )
+        return
+
+    for index in reversed(match_indexes):
+        del resources[index]
+    teardown[kind] = resources
+
+
 def get_or_create_namespace(
     fixture_store: dict[str, Any],
     ocp_admin_client: "DynamicClient",
