@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
+from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
@@ -117,6 +118,72 @@ def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[
         failed_steps[vm_name] = _get_failed_migration_step(plan_resource, vm_name)
 
     return failed_steps
+
+
+def resolve_pvc_name_template(
+    pvc_name_template: str | dict[str, str],
+    source_provider: BaseProvider,
+) -> str | None:
+    """Resolve a provider-appropriate PVC name template.
+
+    Accepts either a ready-to-use template string (returned unchanged) or a
+    provider-keyed mapping. For a mapping, the template for
+    ``source_provider.type`` is used, falling back to the ``"default"`` key
+    when no provider-specific entry exists.
+
+    Args:
+        pvc_name_template (str | dict[str, str]): A template string, or a
+            mapping of provider type to template string. A mapping must
+            contain either a key matching ``source_provider.type`` or a
+            ``"default"`` key.
+        source_provider (BaseProvider): Source provider used to resolve
+            provider-specific configuration.
+
+    Returns:
+        str | None: The resolved PVC name template string, or ``None`` when
+            the provider does not support pvcNameTemplate.
+
+    Raises:
+        ValueError: If the input is not a nonempty template string or a mapping
+            of valid provider keys to nonempty template strings, or if a
+            supported provider has no matching entry or ``"default"`` key.
+    """
+    if isinstance(pvc_name_template, dict):
+        valid_provider_types = {
+            value
+            for name, value in vars(Provider.ProviderType).items()
+            if not name.startswith("_") and isinstance(value, str)
+        }
+        allowed_keys = valid_provider_types | {"default"}
+        if any(not isinstance(key, str) for key in pvc_name_template):
+            raise ValueError("'pvc_name_template' mapping keys must be strings")
+        unknown_keys = set(pvc_name_template) - allowed_keys
+        if unknown_keys:
+            raise ValueError(
+                f"Unknown 'pvc_name_template' key(s): {sorted(unknown_keys)}; allowed keys: {sorted(allowed_keys)}"
+            )
+        if not pvc_name_template or any(
+            not isinstance(value, str) or not value.strip() for value in pvc_name_template.values()
+        ):
+            raise ValueError("'pvc_name_template' mapping must contain nonempty template strings")
+    elif not isinstance(pvc_name_template, str) or not pvc_name_template.strip():
+        raise ValueError("'pvc_name_template' must be a nonempty template string or provider mapping")
+
+    # Unsupported providers reject pvcNameTemplate, but still validate the plan configuration.
+    if not source_provider.supports_pvc_name_template():
+        return None
+
+    if isinstance(pvc_name_template, dict):
+        if source_provider.type in pvc_name_template:
+            return pvc_name_template[source_provider.type]
+        if "default" in pvc_name_template:
+            return pvc_name_template["default"]
+        raise ValueError(
+            f"No 'pvc_name_template' entry found for provider type '{source_provider.type}' and no "
+            f"'default' key present; available keys: {sorted(pvc_name_template)}"
+        )
+
+    return pvc_name_template
 
 
 def create_plan_resource(

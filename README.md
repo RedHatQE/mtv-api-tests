@@ -592,6 +592,31 @@ For technical implementation details, see the
 
 ---
 
+## PVC name templates in test plans
+
+Set `pvc_name_template` in a plan entry in `tests/tests_config/config.py`, not in `.providers.json`.
+It can be a Go template string or a mapping keyed by `Provider.ProviderType` values
+(for example, `"vsphere"`) with an optional `"default"` key:
+
+```python
+"pvc_name_template": {
+    "vsphere": '{{ .FileName | trimSuffix ".vmdk" }}-{{.DiskIndex}}',
+    "default": "{{.VmName}}-disk-{{.DiskIndex}}",
+},
+```
+
+The `prepared_plan` fixture selects the source provider's entry first, then `default`.
+Templates must be nonempty strings (not just whitespace). Mapping keys must be valid
+`Provider.ProviderType` strings or `"default"`, and every value must be a nonempty template
+string. Invalid inputs raise `ValueError`, as does a supported provider without a matching
+entry or `"default"`. A valid plain string is used unchanged. RHV/oVirt does not support
+`pvcNameTemplate`: after validating the input, the fixture sets the plan value to `None`
+and PVC name verification skips it, even when a mapping has a `default` entry.
+`{{.FileName}}` inside a Go template action (including piped or `printf` forms) is
+VMware-only; `{{.DiskIndex}}` can be verified for other supported providers.
+
+---
+
 ## LUKS Disk Encryption Migration (tier1)
 
 This test suite verifies MTV's ability to migrate LUKS-encrypted VMs. It validates both

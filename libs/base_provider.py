@@ -130,3 +130,11 @@ class BaseProvider(abc.ABC):
             bool: True if VMs can be used directly without cloning, False otherwise.
         """
         return True
+
+    def supports_pvc_name_template(self) -> bool:
+        """Whether the provider supports the Plan pvcNameTemplate field.
+
+        Returns:
+            bool: True when the provider supports pvcNameTemplate.
+        """
+        return True
