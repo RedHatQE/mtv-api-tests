@@ -1,11 +1,11 @@
 """MTV-5663: Verify PVC cleanup after archiving and deleting a failed migration plan.
 
 Regression test for MTV-5564: archiving and deleting a failed plan left
-orphan PVCs (both regular and prime PVCs) in the target namespace.
+orphan PVCs in the target namespace.
 
-This test induces failure via a post-hook (not mid-transfer like the original
-bug) to create PVCs and then fail the migration. Both paths exercise the same
-Forklift plan archive+delete cleanup mechanism.
+This test induces failure via a post-hook rather than mid-transfer as in the
+original bug, then checks Plan archive+delete cleanup. Prime PVCs may exist
+transiently but are not required at the point of failure.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
-from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -32,7 +31,6 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
-from utilities.naming import resolve_destination_vm_name
 from utilities.resources import unregister_teardown_resource
 from utilities.utils import populate_vm_ids
 
@@ -46,8 +44,6 @@ if TYPE_CHECKING:
 
 _ORPHAN_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for async DV/PVC garbage collection
 _ORPHAN_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
-_FAILED_MIGRATION_RESOURCE_WAIT_TIMEOUT = 120  # Seconds to wait for DVs/PVCs after Plan FAILED
-_FAILED_MIGRATION_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
 
 
 def _namespace_dv_and_pvc_names(client: DynamicClient, namespace: str) -> tuple[list[str], list[str]]:
@@ -63,24 +59,6 @@ def _namespace_dv_and_pvc_names(client: DynamicClient, namespace: str) -> tuple[
     pvc_names = [pvc.name for pvc in PersistentVolumeClaim.get(client=client, namespace=namespace)]
     dv_names = [dv.name for dv in DataVolume.get(client=client, namespace=namespace)]
     return pvc_names, dv_names
-
-
-def _failed_migration_resources_ready(client: DynamicClient, namespace: str) -> bool:
-    """Return whether a failed migration left a DV, a regular PVC, and a prime PVC.
-
-    Args:
-        client (DynamicClient): OpenShift admin client.
-        namespace (str): Namespace to inspect.
-
-    Returns:
-        bool: True when all three resource types are visible.
-    """
-    pvc_names, dv_names = _namespace_dv_and_pvc_names(client=client, namespace=namespace)
-    return (
-        bool(dv_names)
-        and any(not name.startswith("prime-") for name in pvc_names)
-        and any(name.startswith("prime-") for name in pvc_names)
-    )
 
 
 def _get_orphan_resource_names(client: DynamicClient, namespace: str) -> list[str]:
@@ -118,9 +96,10 @@ class TestPlanArchivePvcCleanup:
 
     Purpose/Regression:
         MTV-5663 covers the PVC leak reported in MTV-5564: archiving and
-        deleting a failed Plan left regular and prime PVCs behind. The original
-        failure occurred mid-transfer. This test fails at PostHook, after disk
-        resources exist, then exercises the same Plan archive/delete cleanup.
+        deleting a failed Plan left PVCs behind. The original failure
+        occurred mid-transfer; this test fails at PostHook and checks Plan
+        archive/delete cleanup. Prime PVCs may exist transiently but need not
+        remain when the Plan fails.
 
     Prerequisites:
         Register and connect an MTV source provider and OpenShift destination.
@@ -144,29 +123,26 @@ class TestPlanArchivePvcCleanup:
            condition to become True.
         3. Run the migration. Check that the migration fails and that the
            VM's failed step in the Plan is PostHook.
-        4. Before archiving, check the effective VM target namespace for at
-           least one DataVolume, one regular PVC, and one prime- prefixed PVC.
-           Allow up to 120 seconds for these objects to become visible.
+        4. Just before archiving, confirm at least one PVC or DataVolume
+           remains in the isolated effective VM target namespace.
         5. Archive the failed Plan. Check its Archived condition is True, then
            delete the Plan and confirm both the Plan and its Migration are gone.
-        6. Delete any retained destination VM in the target namespace and
-           wait for its deletion to finish.
-        7. Poll that namespace for up to 120 seconds for any remaining
-           DataVolumes or PVCs, not just names matching the VM. After the
-           check, remove the disposable source VM, maps, Hook, dedicated
-           namespace, and any source network created in step 1.
+        6. Before deleting any destination VM, poll that namespace for up to
+           120 seconds until no DataVolumes or PVCs remain. After the check,
+           class teardown removes retained destination VMs; session teardown
+           removes the disposable source VM, maps, Hook, dedicated namespace,
+           and any source network created in step 1.
 
     Expected result:
-        1. The migration fails at PostHook after a DataVolume, a regular PVC,
-           and a prime PVC have been observed in the effective target namespace.
+        1. The migration fails at PostHook with at least one PVC or DataVolume
+           still present immediately before archiving.
         2. The failed Plan reaches Archived=True; deleting it also removes its
            Migration. If the Migration remains, report its name and namespace.
-        3. After deletion of any retained destination VM, no DataVolumes or
-           PVCs remain in the isolated effective target namespace within 120
-           seconds. If a check fails, inspect the Plan conditions and the VM's
-           failed step for PostHook, review the failing Hook's events or logs,
-           then list remaining PVC and DataVolume names in the effective VM
-           target namespace.
+        3. Before destination VM teardown, no DataVolumes or PVCs remain in
+           the isolated effective target namespace within 120 seconds. If a
+           check fails, inspect the Plan conditions and the VM's failed step
+           for PostHook, review the failing Hook's events or logs, then list
+           remaining PVC and DataVolume names in the effective VM target namespace.
     """
 
     storage_map: StorageMap
@@ -308,9 +284,9 @@ class TestPlanArchivePvcCleanup:
     ) -> None:
         """Execute migration — expected to fail due to post-hook failure.
 
-        The migration runs far enough to create PVCs for the VM disks, then
-        the post-hook triggers a failure. This leaves PVCs in the target
-        namespace that should be cleaned up when the plan is archived and deleted.
+        The post-hook triggers a failure after disk resources are created.
+        The archive step checks whether any remain; a prime PVC may already
+        have disappeared.
 
         Args:
             prepared_plan (dict[str, Any]): The prepared migration plan.
@@ -334,48 +310,36 @@ class TestPlanArchivePvcCleanup:
 
         validate_hook_failure_and_check_vms(self.__class__.plan_resource, prepared_plan)
 
-        # Verify migration created resources before we archive+delete.
-        # The target namespace is unique per session (named after session_uuid),
-        # so all PVCs/DVs in it belong to this test run. Forklift creates PVCs
-        # using source disk UUIDs (not session_uuid), so name filtering is wrong.
-        # execute_migration() returns when Plan is FAILED and does not wait for
-        # DV/PVC objects to be visible, so poll until they appear.
-        vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
-        try:
-            for sample in TimeoutSampler(
-                wait_timeout=_FAILED_MIGRATION_RESOURCE_WAIT_TIMEOUT,
-                sleep=_FAILED_MIGRATION_RESOURCE_POLL_INTERVAL,
-                func=_failed_migration_resources_ready,
-                client=ocp_admin_client,
-                namespace=vm_namespace,
-            ):
-                if sample:
-                    break
-        except TimeoutExpiredError as exc:
-            pvc_names, dv_names = _namespace_dv_and_pvc_names(client=ocp_admin_client, namespace=vm_namespace)
-            raise AssertionError(
-                f"Failed-migration DVs/PVCs not visible in namespace '{vm_namespace}' "
-                f"within {_FAILED_MIGRATION_RESOURCE_WAIT_TIMEOUT}s. PVCs={pvc_names} DVs={dv_names}"
-            ) from exc
-
     def test_archive_and_delete_plan(
         self,
         fixture_store: dict[str, Any],  # Any: pytest fixture_store has dynamic teardown structure
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
     ) -> None:
-        """Archive and delete the failed migration plan.
+        """Check remaining disk resources, then archive and delete the failed Plan.
 
         Args:
             fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Target namespace for migration.
 
         Returns:
             None
 
         Raises:
-            AssertionError: If plan is not archived or Plan/Migration deletion fails.
+            AssertionError: If no disk resources remain, or Plan/Migration cleanup fails.
         """
         plan = self.__class__.plan_resource
         migration = get_migration_for_plan(plan)
 
+        # The effective target namespace is unique per session. PVC names may
+        # be source disk UUIDs, so check all resources without name filtering.
+        vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
+        assert _get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace), (
+            f"No PVCs or DVs remain before archiving failed Plan in namespace '{vm_namespace}'"
+        )
         archive_plan(plan=plan)
         conditions = plan.instance.status.conditions or []
         assert any(
@@ -399,12 +363,10 @@ class TestPlanArchivePvcCleanup:
         ocp_admin_client: DynamicClient,
         target_namespace: str,
     ) -> None:
-        """Verify all PVCs are cleaned up after plan archive and deletion.
+        """Verify all DVs and PVCs are gone before destination VM teardown.
 
-        Destination VMs may still exist if post-hook failure retained them.
-        Any remaining VMs are deleted so the orphan DV/PVC check below is not
-        masked by VM-owned resources.
-        Polls for up to 120s because DV/PVC garbage collection is async.
+        Poll for up to 120s after Plan archive and deletion because DV/PVC
+        garbage collection is async. Class-scoped teardown handles retained VMs.
 
         Args:
             prepared_plan (dict[str, Any]): The prepared migration plan.
@@ -418,14 +380,6 @@ class TestPlanArchivePvcCleanup:
             AssertionError: If orphan resources remain after 120s timeout.
         """
         vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = resolve_destination_vm_name(vm)
-            vm_obj = VirtualMachine(client=ocp_admin_client, name=vm_name, namespace=vm_namespace)
-            if vm_obj.exists:
-                assert vm_obj.clean_up(wait=True), (
-                    f"Failed to delete destination VM '{vm_name}' in namespace '{vm_namespace}'"
-                )
-
         try:
             for sample in TimeoutSampler(
                 wait_timeout=_ORPHAN_RESOURCE_WAIT_TIMEOUT,

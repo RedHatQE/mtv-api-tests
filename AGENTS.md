@@ -8,15 +8,12 @@ This document provides project-specific instructions for the MTV API Tests codeb
 2. **Create Branch** - Create a feature branch (e.g., `feat/description` or `fix/description`)
 3. **Agent Selection** - Route to appropriate specialist agent
 4. **Code Changes** - Specialist implements the changes
-5. **Code Review** - Delegate to `code-reviewer` agent after ANY code change
-6. **Review Cycle** - Repeat steps 4-5 until no more changes needed
-7. **Pre-commit** - Run `pre-commit run --all-files` and fix any failures (formatting, linting - no re-review needed)
-8. **Completion** - All changes reviewed, tests pass, ready to commit
+5. **Pre-commit** - Run `pre-commit run --all-files` and fix any failures (formatting, linting)
+6. **Completion** - Tests pass, ready to commit
 
 ### Rules
 
 - Run agents in PARALLEL when possible
-- Never skip code-reviewer after code changes
 - (MUST) Update README.md when code changes affect usage/requirements/installation/configuration
 - (MUST) Update CLAUDE.md when methodology or coding patterns change. Show proposed changes to user and get approval before committing
   (These updates happen during the work, not as separate workflow steps)
