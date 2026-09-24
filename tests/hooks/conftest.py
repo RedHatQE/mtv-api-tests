@@ -23,7 +23,6 @@ from utilities.aap import (
     AWX_PREHOOK_PLAYBOOK,
     AWX_PREHOOK_TEMPLATE_NAME,
     AWX_PROJECT_NAME,
-    awx_lifecycle_lock,
     create_aap_token_secret,
     create_awx_auth_token,
     create_awx_instance,
@@ -32,10 +31,9 @@ from utilities.aap import (
     create_awx_project,
     deploy_awx_via_helm,
     get_awx_admin_password,
+    is_awx_installed,
     get_awx_route_url,
-    mark_awx_install_owner,
-    register_awx_worker,
-    unregister_awx_worker,
+    teardown_awx,
     wait_for_awx_api_ready,
     wait_for_awx_project_sync,
     wait_for_awx_ready,
@@ -62,36 +60,24 @@ def awx_deployment(
     and waits for all pods to be ready. AWX is a third-party CRD installed
     at runtime — cleanup is handled by namespace deletion in teardown_awx().
 
-    Helm install is serialized across pytest-xdist workers with a file lock
-    and PID leases. The pytest controller registers during collection in the
-    root conftest and tears AWX down in root ``pytest_sessionfinish`` after
-    every worker finishes.
-
     Args:
         ocp_admin_client: OpenShift admin client.
 
     Yields:
         str: AWX web route URL (https://...).
-
-    Raises:
-        TimeoutError: If the cross-worker AWX lifecycle lock cannot be acquired.
-        ValueError: If the client has no API server host or the current process's
-            /proc start-time data cannot be read for its AWX lease.
     """
-    with awx_lifecycle_lock(client=ocp_admin_client):
-        register_awx_worker(client=ocp_admin_client)
-        mark_awx_install_owner(client=ocp_admin_client)
+    created_by_us = not is_awx_installed()
+    try:
         deploy_awx_via_helm()
         create_awx_instance(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
-    wait_for_awx_ready(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
-    awx_url = get_awx_route_url(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
-    password = get_awx_admin_password(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
-    wait_for_awx_api_ready(awx_url=awx_url, username=AWX_ADMIN_USERNAME, password=password)
-    try:
+        wait_for_awx_ready(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
+        awx_url = get_awx_route_url(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
+        password = get_awx_admin_password(ocp_admin_client=ocp_admin_client, namespace=AWX_NAMESPACE)
+        wait_for_awx_api_ready(awx_url=awx_url, username=AWX_ADMIN_USERNAME, password=password)
         yield awx_url
     finally:
-        with awx_lifecycle_lock(client=ocp_admin_client):
-            unregister_awx_worker(client=ocp_admin_client)
+        if created_by_us:
+            teardown_awx()
 
 
 @pytest.fixture(scope="session")
