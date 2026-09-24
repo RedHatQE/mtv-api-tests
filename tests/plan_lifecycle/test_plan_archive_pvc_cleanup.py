@@ -336,6 +336,8 @@ class TestPlanArchivePvcCleanup:
 
         # The effective target namespace is unique per session. PVC names may
         # be source disk UUIDs, so check all resources without name filtering.
+        # Prime PVC garbage collection may finish before the failed migration is observed;
+        # either a remaining PVC or DV proves disk resources existed before archive.
         vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
         assert _get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace), (
             f"No PVCs or DVs remain before archiving failed Plan in namespace '{vm_namespace}'"
