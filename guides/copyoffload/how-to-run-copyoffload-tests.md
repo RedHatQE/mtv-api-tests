@@ -134,7 +134,8 @@ Add the `copyoffload` section to your `.providers.json` file:
       "esxi_host": "esxi01.example.com",
       "esxi_user": "root",
       "esxi_password": "your-esxi-password",  # pragma: allowlist secret
-      "rdm_lun_uuid": "naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      "rdm_lun_uuid": "naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "dedicated_migration_hosts": ["host-123"]
     }
   }
 }
@@ -275,6 +276,19 @@ Configuration for testing RDM virtual disk migrations:
 > **Important**: The `datastore_id` must be a **VMFS datastore** for RDM disk support. RDM disks are not
 > supported on vSAN or NFS datastores.
 
+### Dedicated Migration Hosts Support (Advanced)
+
+Configuration for testing routing of XCOPY data extraction to specific ESXi hosts instead of each
+VM's registered host:
+
+- `dedicated_migration_hosts` - List of vSphere managed object IDs (e.g. `["host-3078"]`) of ESXi
+  hosts to use for XCOPY data extraction (optional). Forklift selects one host at random per disk
+  when more than one is configured.
+
+> **Note**: If `dedicated_migration_hosts` is not provided, tests that require it
+> (e.g., `test_copyoffload_dedicated_migration_host_migration`) will fail. Other copy-offload tests
+> will continue to work normally.
+
 ---
 
 ## Running Copy-Offload Tests
@@ -402,6 +416,8 @@ The Job automatically reads cluster credentials from the Secret created in Step 
 - `test_copyoffload_multi_disk_migration` - Multi-disk VM migration
 - `test_copyoffload_multi_disk_different_path_migration` - Multi-disk with different paths
 - `test_copyoffload_rdm_virtual_disk_migration` - RDM virtual disk migration
+- `test_copyoffload_dedicated_migration_host_migration` - Dedicated migration host routing and per-host throttling
+- `test_copyoffload_dedicated_migration_host_invalid_id_migration` - Invalid dedicated host ID fails fast
 
 > **Note**: Additional copy-offload tests are being developed and automated. Use `pytest --collect-only -m copyoffload`
 > to see the full list of available tests.

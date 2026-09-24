@@ -109,6 +109,12 @@
       # HPE Primera/3PAR, Dell PowerStore, Infinidat InfiniBox, IBM FlashSystem:
       # No additional vendor-specific fields required - use only the common fields above
 
+      # Optional: dedicated ESXi host(s) for XCOPY data extraction (StorageMap
+      # offloadPlugin.vsphereXcopyConfig.dedicatedMigrationHosts). When set, Forklift
+      # extracts data via one of these hosts instead of each VM's registered host
+      # (random per-disk selection when more than one is listed).
+      # "dedicated_migration_hosts": ["host-3078"],
+
       # ESXi SSH configuration (optional, for SSH-based cloning):
       # Can be overridden via environment variables: COPYOFFLOAD_ESXI_HOST, COPYOFFLOAD_ESXI_USER, COPYOFFLOAD_ESXI_PASSWORD
       "esxi_clone_method": "ssh",  # "vib" (default) or "ssh"

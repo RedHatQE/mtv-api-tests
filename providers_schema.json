@@ -95,6 +95,14 @@
           },
           "description": "Additional key-value pairs to include in the storage Secret resource for vendor-specific configuration."
         },
+        "dedicated_migration_hosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "vSphere managed object IDs of ESXi hosts to use for XCOPY data extraction instead of each VM's registered host (e.g. ['host-3078']). Forklift selects one at random per disk when more than one is configured."
+        },
         "esxi_clone_method": {
           "type": "string",
           "enum": ["vib", "ssh"],

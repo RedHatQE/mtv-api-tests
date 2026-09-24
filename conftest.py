@@ -44,7 +44,7 @@ from exceptions.exceptions import (
     RemoteClusterAndLocalCluterNamesError,
 )
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
-from utilities.copyoffload_migration import apply_copyoffload_vm_name_override
+from utilities.copyoffload_migration import apply_copyoffload_vm_name_override, resolve_non_dedicated_esxi_host
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
@@ -1031,6 +1031,7 @@ def prepared_plan(
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
     vcenter_clone_provider: VMWareProvider | None,
+    source_provider_data: dict[str, Any],
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -1054,6 +1055,7 @@ def prepared_plan(
         source_provider_inventory (ForkliftInventory): Source provider inventory
         target_namespace (str): Default target namespace for VMs
         vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
+        source_provider_data (dict[str, Any]): Source provider configuration data
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1176,6 +1178,7 @@ def prepared_plan(
         cloned_vm_objects: list[Any] = []
         cloned_vm_names: list[str] = []
         first_vm_esxi_host: str | None = None
+        non_dedicated_host_name: str | None = None
         # VM name -> expected total NIC count after add_nic; used to wait for a fresh inventory
         # that includes the added NIC before NetworkMap creation.
         added_nic_expected_counts: dict[str, int] = {}
@@ -1226,6 +1229,16 @@ def prepared_plan(
                 # Uses setdefault to respect any explicit per-VM target_esxi_host override.
                 if plan.get("clone_to_same_host", False) and first_vm_esxi_host:
                     clone_options.setdefault("target_esxi_host", first_vm_esxi_host)
+
+                # Pin every VM to an ESXi host outside the configured dedicated hosts, so
+                # dedicated-host verification can never coincide with a VM's own host (MTV-6136).
+                if plan.get("pin_to_non_dedicated_host", False):
+                    if non_dedicated_host_name is None:
+                        non_dedicated_host_name = resolve_non_dedicated_esxi_host(
+                            source_provider_inventory=source_provider_inventory,
+                            source_provider_data=source_provider_data,
+                        )
+                    clone_options.setdefault("target_esxi_host", non_dedicated_host_name)
 
                 provider_vm_api = clone_provider.get_vm_by_name(
                     query=vm["name"],

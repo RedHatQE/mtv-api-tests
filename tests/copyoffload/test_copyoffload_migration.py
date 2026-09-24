@@ -38,6 +38,9 @@ from utilities.copyoffload_migration import (
     execute_copyoffload_migration,
     execute_migration_monitoring_populator_inflight,
     execute_migration_monitoring_vm_and_populator_inflight,
+    resolve_invalid_dedicated_host_id,
+    verify_dedicated_migration_host,
+    verify_populate_pod_failure_reason,
     verify_populator_throttling,
     verify_vm_inflight_throttling,
     verify_xcopy_used,
@@ -3775,6 +3778,401 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         )
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_dedicated_migration_host_migration"])],
+    indirect=True,
+    ids=["MTV-4494:copyoffload-dedicated-migration-host"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "populator_inflight_forkliftcontroller",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadDedicatedMigrationHost:
+    """Copy-offload migration (MTV-4494): dedicated migration host routing and per-host throttling.
+
+    Configures StorageMap offloadPlugin.vsphereXcopyConfig.dedicatedMigrationHosts from
+    providers.json copyoffload.dedicated_migration_hosts and verifies XCOPY executes on
+    those hosts instead of each VM's registered ESXi host.
+
+    Every VM in this test is pinned to an ESXi host outside the configured dedicated hosts via
+    the plan's pin_to_non_dedicated_host flag, handled in prepared_plan (root conftest.py) the
+    same way clone_to_same_host is: it resolves one non-dedicated host once and injects it as
+    target_esxi_host on every VM's clone_options before cloning. This guarantees a VM's actual
+    host can never coincide with a dedicated host, deterministically (guards against a
+    false-pass regression, MTV-6136), rather than reacting after the fact to wherever DRS
+    happens to place unpinned VMs. VM-to-VM host diversity is not required for correctness:
+    Forklift's dedicated-host selection logic does not branch on a VM's own host.
+
+    Forklift selects a dedicated host at random per disk (not round-robin, not per-VM).
+    With a single configured host the test is fully deterministic: every disk shares one
+    throttle budget, so peak populator concurrency must reach min(limit, disk_count) and
+    produce PopulatorThrottled events. With more than one configured host, disks split
+    their throttle budget unpredictably, so only the per-host concurrency ceiling is
+    enforced and a warning (not a failure) is logged if fewer distinct hosts were observed
+    across the migrated disks than were configured.
+    """
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+    max_concurrent_by_host: dict[str, int]
+
+    def test_create_storagemap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+        configured_dedicated_hosts: list[str],
+    ) -> None:
+        """Create StorageMap with copy-offload dedicatedMigrationHosts configuration."""
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+                "dedicatedMigrationHosts": configured_dedicated_hosts,
+            }
+        }
+
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource."""
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource."""
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan["copyoffload"],
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    def test_migrate_vms(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+    ) -> None:
+        """Execute migration while monitoring populator concurrency per ESXi host."""
+        self.__class__.max_concurrent_by_host = execute_migration_monitoring_populator_inflight(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+        )
+
+    def test_verify_dedicated_migration_host(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+        configured_dedicated_hosts: list[str],
+    ) -> None:
+        """Verify XCOPY executed on configured dedicated hosts, not VMs' registered hosts.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods and PVCs exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+            configured_dedicated_hosts (list[str]): Configured dedicatedMigrationHosts.
+        """
+        verify_dedicated_migration_host(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            dedicated_hosts=configured_dedicated_hosts,
+            max_concurrent_by_host=self.max_concurrent_by_host,
+            fixture_store=fixture_store,
+            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+        )
+
+    def test_check_xcopy_used(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+    ) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+            fixture_store=fixture_store,
+        )
+
+    def test_check_vms(
+        self,
+        prepared_plan: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs and verify disk count."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_dedicated_migration_host_invalid_id_migration"])],
+    indirect=True,
+    ids=["MTV-4494:copyoffload-dedicated-migration-host-invalid-id"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadDedicatedMigrationHostInvalidId:
+    """Copy-offload migration (MTV-4494): invalid dedicatedMigrationHosts entry fails fast.
+
+    Configures an ESXi host ID that does not exist in vCenter inventory. Forklift's
+    vsphere-copy-offload-populator resolves the host at runtime inside the populate pod
+    (no admission-time validation exists for this field), so the Plan and Migration CRs
+    are created successfully and only the populate pod fails.
+    """
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+    invalid_host_id: str
+
+    def test_create_storagemap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with an invalid dedicatedMigrationHosts entry."""
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+        self.__class__.invalid_host_id = resolve_invalid_dedicated_host_id(
+            source_provider_inventory=source_provider_inventory
+        )
+
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+                "dedicatedMigrationHosts": [self.invalid_host_id],
+            }
+        }
+
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource."""
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource."""
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan["copyoffload"],
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    def test_migrate_vms(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+    ) -> None:
+        """Execute migration — expects failure due to an invalid dedicated host ID.
+
+        Args:
+            fixture_store (dict[str, Any]): Resource tracking dictionary.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Target namespace for migration resources.
+        """
+        with pytest.raises(MigrationPlanExecError):
+            execute_copyoffload_migration(
+                ocp_admin_client=ocp_admin_client,
+                fixture_store=fixture_store,
+                plan=self.plan_resource,
+                target_namespace=target_namespace,
+            )
+        verify_populate_pod_failure_reason(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            fixture_store=fixture_store,
+            expected_error_substring=f"didn't find any host with id {self.invalid_host_id}",
         )
 
 

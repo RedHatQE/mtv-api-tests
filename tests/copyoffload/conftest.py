@@ -21,6 +21,7 @@ from utilities.copyoffload_constants import (
     VM_POPULATOR_INFLIGHT_LIMIT,
 )
 from utilities.copyoffload_migration import (
+    get_configured_dedicated_hosts,
     get_copyoffload_credential,
     merge_storage_secret_extra,
     wait_for_vmware_cloud_init_all_vms,
@@ -319,6 +320,24 @@ def rdm_config(source_provider_data: dict[str, Any]) -> None:
         raise ValueError("RDM copy-offload tests require 'rdm_lun_uuid' to be configured in the copyoffload section.")
 
     LOGGER.info("✓ RDM configuration validated: rdm_lun_uuid = %s", rdm_lun_uuid)
+
+
+@pytest.fixture(scope="class")
+def configured_dedicated_hosts(source_provider_data: dict[str, Any]) -> list[str]:
+    """Validate and return the configured dedicatedMigrationHosts list for the test class.
+
+    Args:
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        list[str]: Configured ESXi host MoRef IDs for dedicated migration hosts.
+
+    Raises:
+        ValueError: If dedicated_migration_hosts is missing or empty in the copyoffload config.
+    """
+    dedicated_hosts = get_configured_dedicated_hosts(source_provider_data)
+    LOGGER.info(f"✓ Dedicated migration hosts configured: {dedicated_hosts}")
+    return dedicated_hosts
 
 
 @pytest.fixture(scope="session")

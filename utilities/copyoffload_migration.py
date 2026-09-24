@@ -39,6 +39,7 @@ from utilities.post_migration import get_ssh_credentials_from_provider_config
 from utilities.resources import create_and_store_resource
 
 from libs.base_provider import BaseProvider
+from libs.forklift_inventory import VsphereForkliftInventory
 from libs.providers.vmware import VMWareProvider
 
 if TYPE_CHECKING:
@@ -1594,11 +1595,33 @@ def execute_migration_monitoring_populator_inflight(
     return tracker.results
 
 
-def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) -> str:
-    """Verify sourceHost labels from cached populate pod data and return the shared host value.
+def _extract_source_hosts(pod_logs: list[PopulatePodLogData]) -> dict[str, str]:
+    """Extract and validate the cached sourceHost label for each populate pod.
 
     Uses cached PopulatePodLogData captured during migration, because live populate pods
     are no longer available after migration completes.
+
+    Args:
+        pod_logs (list[PopulatePodLogData]): Cached populate pod log data including source_host.
+
+    Returns:
+        dict[str, str]: Mapping of pod_name to its sourceHost label value.
+
+    Raises:
+        ValueError: If source_host is missing from any entry.
+    """
+    source_hosts: dict[str, str] = {}
+    for log_data in pod_logs:
+        source_host = log_data["source_host"]
+        if not source_host:
+            raise ValueError(f"Populate pod '{log_data['pod_name']}' is missing cached '{SOURCE_HOST_LABEL}' label")
+        source_hosts[log_data["pod_name"]] = source_host
+        LOGGER.info(f"Populate pod '{log_data['pod_name']}' has {SOURCE_HOST_LABEL}={source_host!r} (from cache)")
+    return source_hosts
+
+
+def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) -> str:
+    """Verify sourceHost labels from cached populate pod data and return the shared host value.
 
     Args:
         pod_logs (list[PopulatePodLogData]): Cached populate pod log data including source_host.
@@ -1609,16 +1632,313 @@ def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) ->
     Raises:
         ValueError: If source_host is missing from any entry or hosts are inconsistent across pods.
     """
-    source_hosts: set[str] = set()
-    for log_data in pod_logs:
-        source_host = log_data["source_host"]
-        if not source_host:
-            raise ValueError(f"Populate pod '{log_data['pod_name']}' is missing cached '{SOURCE_HOST_LABEL}' label")
-        source_hosts.add(source_host)
-        LOGGER.info(f"Populate pod '{log_data['pod_name']}' has {SOURCE_HOST_LABEL}={source_host!r} (from cache)")
+    source_hosts = set(_extract_source_hosts(pod_logs).values())
     if len(source_hosts) != 1:
         raise ValueError(f"Expected a single ESXi sourceHost across populate pods, found: {sorted(source_hosts)}")
     return source_hosts.pop()
+
+
+def _verify_source_host_labels_against_allowed_set(
+    pod_logs: list[PopulatePodLogData],
+    allowed_hosts: list[str],
+) -> set[str]:
+    """Verify every populate pod's sourceHost label is one of the configured dedicated hosts.
+
+    Unlike _verify_source_host_labels_from_cache, this does not require a single uniform
+    host across all pods: Forklift selects a dedicated host at random per disk
+    (pkg/controller/plan/adapter/vsphere/builder.go), so different disks of the same
+    migration may legitimately report different sourceHost values when multiple
+    dedicated hosts are configured.
+
+    Args:
+        pod_logs (list[PopulatePodLogData]): Cached populate pod log data including source_host.
+        allowed_hosts (list[str]): Configured dedicatedMigrationHosts for the StorageMap.
+
+    Returns:
+        set[str]: Distinct sourceHost values observed across all populate pods.
+
+    Raises:
+        ValueError: If a pod's sourceHost is not in allowed_hosts (i.e. XCOPY ran on a VM's
+            registered host instead of a dedicated host).
+    """
+    allowed_hosts_set = set(allowed_hosts)
+    source_hosts = _extract_source_hosts(pod_logs)
+    for pod_name, source_host in source_hosts.items():
+        if source_host not in allowed_hosts_set:
+            raise ValueError(
+                f"Populate pod '{pod_name}' has {SOURCE_HOST_LABEL}={source_host!r}, "
+                f"which is not one of the configured dedicated hosts {sorted(allowed_hosts_set)}"
+            )
+    return set(source_hosts.values())
+
+
+def get_configured_dedicated_hosts(source_provider_data: dict[str, Any]) -> list[str]:
+    """Read and validate the configured dedicatedMigrationHosts list from provider data.
+
+    dedicated_migration_hosts is optional in the copyoffloadConfig schema, so this validates
+    it is present and non-empty rather than letting a missing key raise a bare, unhelpful
+    KeyError or a silently-empty list propagate to callers.
+
+    Args:
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        list[str]: Configured ESXi host MoRef IDs for dedicated migration hosts.
+
+    Raises:
+        ValueError: If dedicated_migration_hosts is missing, empty, or not a list of non-empty
+            strings in the copyoffload config.
+    """
+    dedicated_hosts = source_provider_data["copyoffload"].get("dedicated_migration_hosts")
+    if not dedicated_hosts:
+        raise ValueError(
+            "dedicated_migration_hosts is required in the copyoffload section of provider config "
+            "for dedicated migration host tests (e.g. ['host-3078'])."
+        )
+    if not isinstance(dedicated_hosts, list) or not all(isinstance(host, str) and host for host in dedicated_hosts):
+        raise ValueError(
+            "dedicated_migration_hosts must be a non-empty list of ESXi host MoRef ID strings "
+            f"(e.g. ['host-3078']), got: {dedicated_hosts!r}"
+        )
+    return dedicated_hosts
+
+
+def resolve_non_dedicated_esxi_host(
+    source_provider_inventory: ForkliftInventory,
+    source_provider_data: dict[str, Any],
+) -> str:
+    """Resolve one ESXi host name outside the configured dedicated hosts, for VM clone pinning.
+
+    Guards against a false-pass regression (MTV-6136): dedicated-host verification only checks
+    that populate pods' sourceHost label is a member of the configured dedicatedMigrationHosts
+    set. If a VM's actual host happened to coincide with a configured dedicated host, a
+    completely broken/reverted dedicated-host feature that silently falls back to each VM's own
+    host would still satisfy that membership check undetected. Rather than letting DRS decide VM
+    placement and reacting after the fact, this resolves a single non-dedicated host upfront so
+    every VM can be pinned to it (see prepared_plan's pin_to_non_dedicated_host handling in the
+    root conftest.py), guaranteeing the two can never coincide.
+
+    Args:
+        source_provider_inventory (ForkliftInventory): Inventory API client for ESXi host lookup.
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        str: Display name of an ESXi host not in the configured dedicatedMigrationHosts list.
+
+    Raises:
+        TypeError: If source_provider_inventory is not a vSphere inventory (dedicatedMigrationHosts
+            is a vSphere-only feature).
+        ValueError: If no non-dedicated ESXi host exists in the provider inventory.
+    """
+    if not isinstance(source_provider_inventory, VsphereForkliftInventory):
+        raise TypeError(
+            "dedicatedMigrationHosts is a vSphere-only feature; got inventory type "
+            f"'{type(source_provider_inventory).__name__}'"
+        )
+
+    dedicated_hosts = set(get_configured_dedicated_hosts(source_provider_data))
+    hosts = source_provider_inventory.hosts
+    total_hosts = len(hosts)
+    # Only count configured dedicated hosts that actually exist in inventory — a stale/typo'd
+    # host ID must not be able to mask an otherwise-available non-dedicated host.
+    present_dedicated_hosts = dedicated_hosts & {host.get("id") for host in hosts}
+
+    if total_hosts <= len(present_dedicated_hosts):
+        raise ValueError(
+            f"Provider inventory has only {total_hosts} ESXi host(s), but {len(present_dedicated_hosts)} are "
+            f"configured as dedicated and present in inventory ({sorted(present_dedicated_hosts)}) — no "
+            "non-dedicated host can exist. This test needs at least one non-dedicated host to pin VMs to. "
+            "Use a lab with more ESXi hosts or reduce dedicated_migration_hosts."
+        )
+
+    for host in hosts:
+        host_id = host.get("id")
+        if not host_id:
+            raise ValueError(f"ESXi host entry missing 'id' field: {host!r}")
+        if host_id not in dedicated_hosts:
+            host_name = host.get("name")
+            if not host_name:
+                raise ValueError(f"ESXi host '{host_id}' has no 'name' field: {host!r}")
+            LOGGER.info(f"Pinning VMs to non-dedicated ESXi host '{host_name}' (id={host_id})")
+            return host_name
+
+    raise ValueError(
+        f"All {total_hosts} ESXi host(s) in provider inventory are configured as dedicated "
+        f"({sorted(dedicated_hosts)}); found no non-dedicated host to pin VMs to despite the "
+        "count check passing — dedicated_migration_hosts may contain IDs not present in inventory."
+    )
+
+
+def verify_dedicated_migration_host(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    dedicated_hosts: list[str],
+    max_concurrent_by_host: dict[str, int],
+    fixture_store: dict[str, Any],
+    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+) -> set[str]:
+    """Verify populate pods executed XCOPY on configured dedicated migration hosts.
+
+    Forklift's vsphereXcopyConfig.dedicatedMigrationHosts routes XCOPY data extraction to
+    one of the configured ESXi hosts instead of each VM's registered host. Host selection
+    is random per disk (not round-robin, not per-VM), so with more than one configured
+    host, different disks may land on different hosts within the same migration; this is
+    checked as set membership per pod, not a uniform value across pods.
+
+    Populator throttling (MAX_POPULATOR_INFLIGHT) is keyed on the same sourceHost pod
+    label used here, so with a single configured host every disk shares one throttle
+    budget and the peak concurrency is verified to reach min(limit, disk_count) and to
+    have produced PopulatorThrottled events. With multiple configured hosts, disks split
+    their throttle budget unpredictably across hosts, so only the per-host ceiling is
+    enforced there and neither a minimum peak nor PopulatorThrottled events are required.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods and PVCs exist.
+        dedicated_hosts (list[str]): Configured dedicatedMigrationHosts from the StorageMap.
+        max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per sourceHost
+            observed during migration.
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+
+    Returns:
+        set[str]: Distinct dedicated hosts observed executing XCOPY across all populate pods.
+
+    Raises:
+        ValueError: If dedicated_hosts is empty, any populate pod ran on a host outside
+            dedicated_hosts, or observed concurrency for any host exceeded max_populator_inflight.
+    """
+    if not dedicated_hosts:
+        raise ValueError(
+            "dedicated_hosts must not be empty; this function verifies routing to configured "
+            "dedicated hosts, not the baseline (no dedicated host configured) behavior"
+        )
+
+    migration_uid = get_migration_uid(plan=plan)
+    pod_logs = _get_populate_pod_logs(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        fixture_store=fixture_store,
+    )
+    observed_hosts = _verify_source_host_labels_against_allowed_set(pod_logs=pod_logs, allowed_hosts=dedicated_hosts)
+    distinct_dedicated_hosts = set(dedicated_hosts)
+
+    if len(distinct_dedicated_hosts) == 1:
+        # With one dedicated host, every disk shares its throttle budget — same sequence
+        # (labels, throttled events, peak concurrency) as the non-dedicated-host throttling
+        # test, so delegate to it instead of re-implementing it here. _get_populate_pod_logs
+        # is cache-backed, so this second call is cheap.
+        verify_populator_throttling(
+            ocp_admin_client=ocp_admin_client,
+            plan=plan,
+            target_namespace=target_namespace,
+            max_concurrent_by_host=max_concurrent_by_host,
+            fixture_store=fixture_store,
+            max_populator_inflight=max_populator_inflight,
+        )
+    else:
+        # Random per-disk host selection: don't require a minimum peak or throttled
+        # events per host, only that no host's concurrency exceeded the limit.
+        verify_populator_inflight_observed(
+            max_concurrent_by_host=max_concurrent_by_host,
+            max_populator_inflight=max_populator_inflight,
+        )
+        if len(observed_hosts) < len(distinct_dedicated_hosts):
+            LOGGER.warning(
+                f"Configured {len(distinct_dedicated_hosts)} dedicated hosts {sorted(distinct_dedicated_hosts)} but "
+                f"only {len(observed_hosts)} distinct host(s) were observed executing XCOPY: {sorted(observed_hosts)}. "
+                "Host selection is random per disk; re-run with more disks for stronger distribution coverage."
+            )
+
+    LOGGER.info(f"Dedicated migration host verification passed: observed hosts {sorted(observed_hosts)}")
+    return observed_hosts
+
+
+def resolve_invalid_dedicated_host_id(source_provider_inventory: ForkliftInventory) -> str:
+    """Derive an ESXi host MoRef ID guaranteed not to exist in the source provider inventory.
+
+    Used for negative tests of the dedicatedMigrationHosts field. Rather than hardcoding a
+    fixed placeholder ID that could coincidentally collide with a real host in some
+    environments, this scrapes actual host IDs from the inventory and picks a numeric
+    suffix guaranteed to be higher than any of them.
+
+    Args:
+        source_provider_inventory (ForkliftInventory): Inventory API client for the source provider.
+
+    Returns:
+        str: An ESXi host MoRef ID (e.g. "host-1000123") confirmed absent from the inventory.
+
+    Raises:
+        TypeError: If source_provider_inventory is not a vSphere inventory (dedicatedMigrationHosts
+            is a vSphere-only feature).
+        ValueError: If the inventory returns no ESXi hosts, or a host ID does not match the
+            expected "host-<number>" MoRef format.
+    """
+    if not isinstance(source_provider_inventory, VsphereForkliftInventory):
+        raise TypeError(
+            "dedicatedMigrationHosts is a vSphere-only feature; got inventory type "
+            f"'{type(source_provider_inventory).__name__}'"
+        )
+
+    hosts = source_provider_inventory.hosts
+    if not hosts:
+        raise ValueError("Source provider inventory returned no ESXi hosts; cannot derive an invalid host ID")
+
+    max_host_number = 0
+    for host in hosts:
+        host_id = host.get("id")
+        match = re.fullmatch(r"host-(\d+)", host_id or "")
+        if not match:
+            raise ValueError(f"ESXi host ID '{host_id}' does not match expected 'host-<number>' MoRef format")
+        max_host_number = max(max_host_number, int(match.group(1)))
+
+    return f"host-{max_host_number + 1_000_000}"
+
+
+def verify_populate_pod_failure_reason(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    fixture_store: dict[str, Any],
+    expected_error_substring: str,
+) -> None:
+    """Verify a failed copy-offload migration's populate pod logs contain a specific error.
+
+    Use after a migration is expected to fail (e.g. an invalid dedicatedMigrationHosts
+    entry) to confirm the failure reason matches the expected cause, rather than only
+    asserting that MigrationPlanExecError was raised for any reason.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods exist.
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        expected_error_substring (str): Text expected to appear in at least one populate
+            pod's log content (e.g. "didn't find any host with id").
+
+    Raises:
+        ValueError: If no populate pod logs are available, or none contain the expected
+            error text.
+    """
+    migration_uid = get_migration_uid(plan=plan)
+    pod_logs = _get_populate_pod_logs(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        fixture_store=fixture_store,
+    )
+    for pod_log in pod_logs:
+        if expected_error_substring in pod_log["log_content"]:
+            LOGGER.info(f"Pod '{pod_log['pod_name']}' log contains expected error: {expected_error_substring!r}")
+            return
+
+    raise ValueError(
+        f"Expected error {expected_error_substring!r} not found in any of {len(pod_logs)} populate pod log(s) "
+        f"for migration '{migration_uid}': {[pod_log['pod_name'] for pod_log in pod_logs]}"
+    )
 
 
 def _get_pvc_events(
