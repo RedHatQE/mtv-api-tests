@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 @pytest.fixture(scope="class")
 def plan_archive_vm_namespace(
-    prepared_plan: dict[str, Any],
-    fixture_store: dict[str, Any],
+    prepared_plan: dict[str, Any],  # Any: prepared plan contains dynamic VM and provider data
+    fixture_store: dict[str, Any],  # Any: pytest fixture store has dynamic teardown entries
     ocp_admin_client: DynamicClient,
     session_uuid: str,
 ) -> str:
