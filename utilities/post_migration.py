@@ -1992,7 +1992,7 @@ def check_vms(
                 res[vm_name].append(f"check_memory - {str(exp)}")
 
             # TODO: Remove when OCP to OCP migration is done with 2 clusters
-            if source_provider.type != Provider.ProviderType.OPENSHIFT and not plan.get("per_nic_network_map"):
+            if source_provider.type != Provider.ProviderType.OPENSHIFT:
                 try:
                     check_network(
                         source_vm=source_vm,

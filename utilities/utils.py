@@ -499,9 +499,12 @@ def create_source_provider(
             secret_string_data["smbPassword"] = smb_password
 
         if not insecure:
-            _fetch_and_store_cacert(
+            cert_file = _fetch_and_store_cacert(
                 source_provider_data_copy, secret_string_data, tmp_dir, session_uuid, ca_cert_key, port=5986
             )
+            provider_args["cert_validation"] = str(cert_file)
+        else:
+            provider_args["cert_validation"] = False
 
     elif ova_provider(provider_data=source_provider_data_copy):
         source_provider = OVAProvider

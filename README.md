@@ -117,7 +117,7 @@ virtualization platform.
 
 **Why do you need it?** The tests need to:
 
-- Connect to your source provider (vSphere, RHV, OpenStack, or OVA)
+- Connect to your source provider (vSphere, RHV, OpenStack, OVA, or Hyper-V)
 - Find the base VM to clone for testing
 - Create test VMs and perform migrations
 
@@ -182,7 +182,7 @@ Create a providers JSON file with your provider's details:
 - All fields shown above are required
 - Replace placeholder values with your actual credentials and endpoints
 
-**For other providers** (RHV, OpenStack, OVA, or copy-offload configuration):
+**For other providers** (RHV, OpenStack, OVA, Hyper-V, or copy-offload configuration):
 
 ```bash
 # Use the example file as a template
@@ -274,6 +274,7 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | `shared_disk` | Shared disk migration tests | Testing shared disk between VMs |
 | `ca_crt` | CA certificate field (ca.crt) in provider secrets | Testing ca.crt secret field support |
 | `vsphere` | VMware vSphere provider-specific tests | Tests specific to vSphere provider |
+| `hyperv` | Hyper-V provider-specific tests | Tests specific to Hyper-V provider |
 | `upgrade` | Migration across MTV operator upgrades | Validating upgrade compatibility |
 
 ### Copy-Offload Sanity Tests

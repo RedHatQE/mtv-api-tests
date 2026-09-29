@@ -3,7 +3,8 @@ from __future__ import annotations
 import copy
 import ipaddress
 import json
-from pathlib import Path
+from pathlib import PureWindowsPath
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 
 import requests
@@ -22,6 +23,207 @@ if TYPE_CHECKING:
     from pypsrp.complex_objects import GenericComplexObject
 
 LOGGER = get_logger(__name__)
+
+# Guest OSName/Notes must contain this token to be treated as Windows. The previous
+# ``"win" in vm_name`` check misclassified names such as "twin-server".
+_WINDOWS_GUEST_TOKEN = "windows"
+
+_NIC_DETAILS_SCRIPT = r"""
+param([string]$VMName)
+$nics = Get-VMNetworkAdapter -VMName $VMName
+$kvp = @{}
+$filter = "ElementName='$($VMName.Replace("'","''"))'"
+$vmCim = Get-CimInstance -Namespace root\virtualization\v2 `
+    -ClassName Msvm_ComputerSystem -Filter $filter
+if ($vmCim) {
+    $vs = Get-CimAssociatedInstance -InputObject $vmCim `
+        -ResultClassName Msvm_VirtualSystemSettingData |
+        Where-Object {$_.VirtualSystemType -eq 'Microsoft:Hyper-V:System:Realized'}
+    if ($vs) {
+        Get-CimAssociatedInstance -InputObject $vs `
+            -ResultClassName Msvm_SyntheticEthernetPortSettingData | ForEach-Object {
+            $port = $_
+            Get-CimAssociatedInstance -InputObject $port `
+                -ResultClassName Msvm_GuestNetworkAdapterConfiguration | ForEach-Object {
+                $kvp[$port.Address] = $_
+            }
+        }
+    }
+}
+$result = foreach ($nic in $nics) {
+    $gc = $kvp[$nic.MacAddress]
+    [PSCustomObject]@{
+        Name = $nic.Name
+        MacAddress = $nic.MacAddress
+        SwitchName = if ($nic.SwitchName) { $nic.SwitchName } else { '' }
+        IPAddresses = @($nic.IPAddresses)
+        KVPIPAddresses = if ($gc) { @($gc.IPAddresses) } else { @() }
+        DHCPEnabled = if ($gc) { $gc.DHCPEnabled } else { $null }
+        Subnets = if ($gc) { @($gc.Subnets) } else { @() }
+        DefaultGateways = if ($gc) { @($gc.DefaultGateways) } else { @() }
+        DNSServers = if ($gc) { @($gc.DNSServers) } else { @() }
+    }
+}
+if (-not $result) { $result = @() }
+ConvertTo-Json -Compress -Depth 4 -InputObject @($result)
+"""
+
+_GUEST_OS_NAME_SCRIPT = r"""
+param([string]$VMName)
+$filter = "ElementName='$($VMName.Replace("'","''"))'"
+$vmCim = Get-CimInstance -Namespace root\virtualization\v2 `
+    -ClassName Msvm_ComputerSystem -Filter $filter
+if (-not $vmCim) { return }
+$kvp = Get-CimAssociatedInstance -InputObject $vmCim `
+    -ResultClassName Msvm_KvpExchangeComponent | Select-Object -First 1
+if (-not $kvp -or -not $kvp.GuestIntrinsicExchangeItems) { return }
+foreach ($itemXml in $kvp.GuestIntrinsicExchangeItems) {
+    try {
+        $xml = [xml]$itemXml
+    } catch {
+        continue
+    }
+    $name = ($xml.INSTANCE.PROPERTY | Where-Object { $_.Name -eq 'Name' }).Value
+    if ($name -eq 'OSName') {
+        ($xml.INSTANCE.PROPERTY | Where-Object { $_.Name -eq 'Data' }).Value
+        return
+    }
+}
+"""
+
+_CLONE_VM_SCRIPT = r"""
+param(
+    [string]$SourceVMName,
+    [string]$CloneVMName,
+    [string]$ExportPath
+)
+$ErrorActionPreference = "Stop"
+$cloneError = $null
+$restoreError = $null
+$wasRunning = $false
+$imported = $false
+$clonedName = $null
+
+try {
+    New-Item -ItemType Directory -Path $ExportPath -Force | Out-Null
+
+    $sourceVM = Get-VM -Name $SourceVMName
+    if (-not $sourceVM) {
+        throw "Source VM '$SourceVMName' not found"
+    }
+
+    $wasRunning = $sourceVM.State -eq 'Running'
+    if ($wasRunning) {
+        Stop-VM -Name $SourceVMName -Force
+        Start-Sleep -Seconds 5
+    }
+
+    Export-VM -Name $SourceVMName -Path $ExportPath
+
+    $vmcxPath = Get-ChildItem -Path $ExportPath -Recurse -Filter "*.vmcx" | Select-Object -First 1
+    if (-not $vmcxPath) {
+        throw "No .vmcx file found in export path"
+    }
+
+    $clonePath = Join-Path (Split-Path $sourceVM.Path -Parent) $CloneVMName
+    $cloneVhdPath = Join-Path $clonePath 'Virtual Hard Disks'
+    New-Item -ItemType Directory -Path $cloneVhdPath -Force | Out-Null
+    $clonedVM = Import-VM -Path $vmcxPath.FullName -Copy -GenerateNewId -VhdDestinationPath $cloneVhdPath -VirtualMachinePath $clonePath
+    $imported = $true
+    $clonedName = $clonedVM.Name
+
+    Rename-VM -VM $clonedVM -NewName $CloneVMName
+    $clonedName = $CloneVMName
+
+    Remove-Item -Path $ExportPath -Recurse -Force -ErrorAction SilentlyContinue
+
+    Start-VM -Name $CloneVMName
+    Stop-VM -Name $CloneVMName -Force -TurnOff
+
+    Get-VM -Name $CloneVMName
+} catch {
+    $cloneError = $_
+    # Inline cleanup (not delete_vm/_DELETE_VM_SCRIPT) because $clonedName may still be the
+    # auto-generated pre-rename name if Rename-VM failed, which Python never learns.
+    if ($imported -and $clonedName) {
+        $leftover = Get-VM -Name $clonedName -ErrorAction SilentlyContinue
+        if ($leftover) {
+            if ($leftover.State -ne 'Off') {
+                Stop-VM -Name $clonedName -Force -TurnOff -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 3
+            }
+            $vmPath = $leftover.Path
+            $vhdPaths = @(Get-VMHardDiskDrive -VMName $clonedName -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
+            Remove-VM -Name $clonedName -Force -ErrorAction SilentlyContinue
+            foreach ($vhdPath in $vhdPaths) {
+                if ($vhdPath -and (Test-Path $vhdPath)) {
+                    Remove-Item -Path $vhdPath -Force -ErrorAction SilentlyContinue
+                }
+            }
+            if ($vmPath -and (Test-Path $vmPath)) {
+                Remove-Item -Path $vmPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+} finally {
+    if (Test-Path $ExportPath) {
+        Remove-Item -Path $ExportPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($wasRunning) {
+        try {
+            $src = Get-VM -Name $SourceVMName -ErrorAction Stop
+            if ($src.State -ne 'Running') {
+                Start-VM -Name $SourceVMName
+            }
+        } catch {
+            $restoreError = $_
+        }
+    }
+}
+
+if ($cloneError) {
+    if ($restoreError) {
+        throw "VM clone failed: $cloneError; also failed to restore source VM '$SourceVMName': $restoreError"
+    }
+    throw $cloneError
+}
+if ($restoreError) {
+    throw "Cloned VM '$CloneVMName' but failed to restore source VM '$SourceVMName': $restoreError"
+}
+"""
+
+_DELETE_VM_SCRIPT = r"""
+param([string]$VMName)
+$ErrorActionPreference = "Stop"
+
+$vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+if (-not $vm) {
+    return
+}
+
+if ($vm.State -eq 'Running') {
+    Stop-VM -Name $VMName -Force -TurnOff
+    Start-Sleep -Seconds 3
+}
+
+$vmPath = $vm.Path
+$vhdPaths = @()
+Get-VMHardDiskDrive -VMName $VMName | ForEach-Object {
+    $vhdPaths += $_.Path
+}
+
+Remove-VM -Name $VMName -Force
+
+foreach ($vhdPath in $vhdPaths) {
+    if (Test-Path $vhdPath) {
+        Remove-Item -Path $vhdPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if ($vmPath -and (Test-Path $vmPath)) {
+    Remove-Item -Path $vmPath -Recurse -Force -ErrorAction SilentlyContinue
+}
+"""
 
 
 def _ps_prop(obj: GenericComplexObject, name: str) -> Any:
@@ -124,6 +326,7 @@ class HyperVProvider(BaseProvider):
         host: str,
         username: str,
         password: str,
+        cert_validation: bool | str = False,
         ocp_resource: Provider | None = None,
         **kwargs: Any,
     ) -> None:
@@ -135,6 +338,9 @@ class HyperVProvider(BaseProvider):
             **kwargs,
         )
         self.type = Provider.ProviderType.HYPERV
+        # Default False keeps teardown and lab hosts with self-signed certs working.
+        # create_source_provider() passes a CA path when insecure=False.
+        self.cert_validation = cert_validation
         self._wsman: WSMan | None = None
         self._pool: RunspacePool | None = None
 
@@ -143,6 +349,11 @@ class HyperVProvider(BaseProvider):
 
         Returns:
             Self: Connected provider instance.
+
+        Raises:
+            WinRMError: If the WinRM handshake or runspace open fails.
+            OSError: If the TLS or socket layer fails while connecting.
+            requests.exceptions.RequestException: If the HTTP transport fails.
         """
         self._wsman = WSMan(
             server=self.host,
@@ -151,10 +362,14 @@ class HyperVProvider(BaseProvider):
             auth="ntlm",
             ssl=True,
             port=5986,
-            cert_validation=False,
+            cert_validation=self.cert_validation,
         )
-        self._pool = RunspacePool(self._wsman)
-        self._pool.open()
+        try:
+            self._pool = RunspacePool(self._wsman)
+            self._pool.open()
+        except (WinRMError, OSError, requests.exceptions.RequestException):
+            self.disconnect()
+            raise
         return self
 
     def disconnect(self) -> None:
@@ -165,6 +380,15 @@ class HyperVProvider(BaseProvider):
         if self._wsman:
             self._wsman.close()
             self._wsman = None
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Close the PSRP session when leaving a ``with`` block."""
+        self.disconnect()
 
     @property
     def test(self) -> bool:
@@ -209,11 +433,13 @@ class HyperVProvider(BaseProvider):
 
         return output
 
-    def _run_script(self, script: str) -> list[Any]:
+    def _run_script(self, script: str, params: dict[str, Any] | None = None) -> list[Any]:
         """Execute a PowerShell script (for multi-step operations).
 
         Args:
-            script: PowerShell script text
+            script: PowerShell script text. Use a ``param(...)`` block and pass
+                values via ``params`` instead of interpolating into the script.
+            params: Optional parameter dict matching the script ``param()`` names.
 
         Returns:
             List of output objects from PowerShell
@@ -227,6 +453,8 @@ class HyperVProvider(BaseProvider):
 
         ps = PowerShell(self._pool)
         ps.add_script(script)
+        if params:
+            ps.add_parameters(params)
         output = ps.invoke()
 
         if ps.had_errors:
@@ -333,7 +561,7 @@ class HyperVProvider(BaseProvider):
         """
         return self._run_cmdlet("Get-VMSnapshot", VMName=vm_name, ErrorAction="SilentlyContinue")
 
-    def wait_for_guest_network_config(self, vm_name: str, timeout: int = 120) -> None:
+    def wait_for_guest_network_config(self, vm: GenericComplexObject, timeout: int = 120) -> None:
         """Wait for Hyper-V Integration Services to report guest network configuration.
 
         Polls the KVP exchange data until guest network config is available.
@@ -341,12 +569,13 @@ class HyperVProvider(BaseProvider):
         reported IP configuration before collecting static IP data.
 
         Args:
-            vm_name (str): Name of the VM to wait for.
+            vm (GenericComplexObject): VM object from Hyper-V (pypsrp deserialized CIM instance).
             timeout (int): Maximum wait time in seconds.
 
         Raises:
             TimeoutError: If KVP data is not available within the timeout.
         """
+        vm_name = _ps_prop(vm, "Name")
         LOGGER.info(
             f"Waiting for Hyper-V Integration Services guest network config for VM '{vm_name}' (timeout: {timeout}s)"
         )
@@ -406,46 +635,8 @@ class HyperVProvider(BaseProvider):
             "subnets"/"default_gateways"/"dns_servers"/"kvp_ip_addresses" are
             empty lists.
         """
-        script = f"""
-        $nics = Get-VMNetworkAdapter -VMName '{vm_name}'
-        $kvp = @{{}}
-        $vmCim = Get-CimInstance -Namespace root\\virtualization\\v2 `
-            -ClassName Msvm_ComputerSystem -Filter "ElementName='{vm_name}'"
-        if ($vmCim) {{
-            $vs = Get-CimAssociatedInstance -InputObject $vmCim `
-                -ResultClassName Msvm_VirtualSystemSettingData |
-                Where-Object {{$_.VirtualSystemType -eq 'Microsoft:Hyper-V:System:Realized'}}
-            if ($vs) {{
-                Get-CimAssociatedInstance -InputObject $vs `
-                    -ResultClassName Msvm_SyntheticEthernetPortSettingData | ForEach-Object {{
-                    $port = $_
-                    Get-CimAssociatedInstance -InputObject $port `
-                        -ResultClassName Msvm_GuestNetworkAdapterConfiguration | ForEach-Object {{
-                        $kvp[$port.Address] = $_
-                    }}
-                }}
-            }}
-        }}
-        $result = foreach ($nic in $nics) {{
-            $gc = $kvp[$nic.MacAddress]
-            [PSCustomObject]@{{
-                Name = $nic.Name
-                MacAddress = $nic.MacAddress
-                SwitchName = if ($nic.SwitchName) {{ $nic.SwitchName }} else {{ '' }}
-                IPAddresses = @($nic.IPAddresses)
-                KVPIPAddresses = if ($gc) {{ @($gc.IPAddresses) }} else {{ @() }}
-                DHCPEnabled = if ($gc) {{ $gc.DHCPEnabled }} else {{ $null }}
-                Subnets = if ($gc) {{ @($gc.Subnets) }} else {{ @() }}
-                DefaultGateways = if ($gc) {{ @($gc.DefaultGateways) }} else {{ @() }}
-                DNSServers = if ($gc) {{ @($gc.DNSServers) }} else {{ @() }}
-            }}
-        }}
-        if (-not $result) {{ $result = @() }}
-        ConvertTo-Json -Compress -Depth 4 -InputObject @($result)
-        """
-
         try:
-            output = self._run_script(script)
+            output = self._run_script(_NIC_DETAILS_SCRIPT, params={"VMName": vm_name})
         except PowerShellCommandError as e:
             LOGGER.warning(f"Failed to query NIC details for VM '{vm_name}': {e}")
             return []
@@ -492,6 +683,41 @@ class HyperVProvider(BaseProvider):
             LOGGER.warning(f"No NIC details found for VM '{vm_name}'")
 
         return nic_details
+
+    def _guest_os_name(self, vm_name: str) -> str | None:
+        """Return the guest OSName from Hyper-V KVP exchange data, if present.
+
+        Args:
+            vm_name: Name of the VM to query.
+
+        Returns:
+            str | None: Guest OSName string, or None when KVP data is unavailable.
+        """
+        try:
+            output = self._run_script(_GUEST_OS_NAME_SCRIPT, params={"VMName": vm_name})
+        except PowerShellCommandError as e:
+            LOGGER.warning(f"Failed to query guest OS name for VM '{vm_name}': {e}")
+            return None
+        if not output or output[-1] is None:
+            return None
+        return str(output[-1]).strip() or None
+
+    @staticmethod
+    def _is_windows_guest(*, os_name: str | None, notes: str, explicit_win_os: bool | None) -> bool:
+        """Determine whether a Hyper-V guest should be treated as Windows.
+
+        Args:
+            os_name: KVP OSName value, if available.
+            notes: Hyper-V VM Notes field.
+            explicit_win_os: Optional per-VM override from plan config.
+
+        Returns:
+            bool: True when the guest is Windows.
+        """
+        if explicit_win_os is not None:
+            return explicit_win_os
+        haystacks = (os_name or "", notes)
+        return any(_WINDOWS_GUEST_TOKEN in haystack.lower() for haystack in haystacks)
 
     def _build_nic_ip_entries(self, guest_config: dict[str, Any]) -> list[dict[str, Any]]:
         """Build enriched IPv4 address entries from KVP guest network configuration.
@@ -541,7 +767,8 @@ class HyperVProvider(BaseProvider):
 
         Args:
             **kwargs: Must contain 'name' key for VM name.
-                     Optional: 'clone', 'session_uuid', 'provider_vm_api' (to reuse VM object)
+                     Optional: 'clone', 'session_uuid', 'provider_vm_api' (to reuse VM object),
+                     'win_os' (bool Hyper-V guest OS override), 'clone_options' (may include win_os).
 
         Returns:
             Dictionary with normalized VM data
@@ -639,10 +866,11 @@ class HyperVProvider(BaseProvider):
                 size_kb = 0
 
             disk_path = str(_ps_prop(disk, "Path"))
+            windows_disk_path = PureWindowsPath(disk_path)
             result_vm_info["disks"].append({
-                "name": Path(disk_path).name,
+                "name": windows_disk_path.name,
                 "size_in_kb": size_kb,
-                "storage": {"name": str(Path(disk_path).parent)},
+                "storage": {"name": str(windows_disk_path.parent)},
                 "device_key": str(disk.adapted_properties.get("DiskNumber", idx)),
             })
 
@@ -666,10 +894,20 @@ class HyperVProvider(BaseProvider):
         except PowerShellCommandError:
             result_vm_info["guest_agent_running"] = False
 
-        # OS type heuristic - check VM notes or VM name
-        # Hyper-V doesn't expose OS type directly, so we use a simple heuristic
+        # OS type: optional per-VM win_os override, else KVP OSName / Notes.
+        # Hyper-V does not expose a vSphere-style guestId.
+        clone_options = kwargs.get("clone_options") or {}
+        explicit_win_os = kwargs.get("win_os")
+        if explicit_win_os is None:
+            explicit_win_os = clone_options.get("win_os")
+        if explicit_win_os is not None and not isinstance(explicit_win_os, bool):
+            raise TypeError(f"win_os must be bool, got {type(explicit_win_os).__name__}")
         vm_notes = str(vm_obj.adapted_properties.get("Notes", ""))
-        result_vm_info["win_os"] = "windows" in vm_notes.lower() or "win" in vm_name.lower()
+        result_vm_info["win_os"] = self._is_windows_guest(
+            os_name=self._guest_os_name(vm_name=vm_name),
+            notes=vm_notes,
+            explicit_win_os=explicit_win_os,
+        )
 
         return result_vm_info
 
@@ -697,76 +935,22 @@ class HyperVProvider(BaseProvider):
         clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
         LOGGER.info(f"Cloning VM '{source_vm_name}' to '{clone_vm_name}'")
 
-        # Create temp directory name on Hyper-V host
         temp_export_path = f"C:\\Temp\\HyperV-Clone-{session_uuid}"
 
-        script = f"""
-        $ErrorActionPreference = "Stop"
-
-        # Ensure export directory exists
-        New-Item -ItemType Directory -Path '{temp_export_path}' -Force | Out-Null
-
-        # Get source VM
-        $sourceVM = Get-VM -Name '{source_vm_name}'
-        if (-not $sourceVM) {{
-            throw "Source VM '{source_vm_name}' not found"
-        }}
-
-        # Check if VM is running
-        $wasRunning = $sourceVM.State -eq 'Running'
-
-        # Stop VM if running
-        if ($wasRunning) {{
-            Stop-VM -Name '{source_vm_name}' -Force
-            Start-Sleep -Seconds 5
-        }}
-
-        # Export VM
-        $exportPath = '{temp_export_path}'
-        Export-VM -Name '{source_vm_name}' -Path $exportPath
-
-        # Find .vmcx config file
-        $vmcxPath = Get-ChildItem -Path $exportPath -Recurse -Filter "*.vmcx" | Select-Object -First 1
-        if (-not $vmcxPath) {{
-            throw "No .vmcx file found in export path"
-        }}
-
-        # Import VM as copy with new ID, redirecting VHDs to a path alongside the
-        # source VM (same parent directory, different folder) to avoid colliding
-        # with the source VM's disk files
-        $clonePath = Join-Path (Split-Path $sourceVM.Path -Parent) '{clone_vm_name}'
-        $cloneVhdPath = Join-Path $clonePath 'Virtual Hard Disks'
-        New-Item -ItemType Directory -Path $cloneVhdPath -Force | Out-Null
-        $clonedVM = Import-VM -Path $vmcxPath.FullName -Copy -GenerateNewId -VhdDestinationPath $cloneVhdPath -VirtualMachinePath $clonePath
-
-        # Rename VM
-        Rename-VM -VM $clonedVM -NewName '{clone_vm_name}'
-
-        # Restart source VM if it was running
-        if ($wasRunning) {{
-            Start-VM -Name '{source_vm_name}'
-        }}
-
-        # Clean up export folder
-        Remove-Item -Path $exportPath -Recurse -Force -ErrorAction SilentlyContinue
-
-        # Trigger dynamic MAC assignment: Hyper-V assigns MACs from its pool at
-        # VM start; without this, cloned NICs retain 00:00:00:00:00:00.
-        Start-VM -Name '{clone_vm_name}'
-        Stop-VM -Name '{clone_vm_name}' -Force -TurnOff
-
-        # Return cloned VM
-        Get-VM -Name '{clone_vm_name}'
-        """
-
         try:
-            result = self._run_script(script)
+            result = self._run_script(
+                _CLONE_VM_SCRIPT,
+                params={
+                    "SourceVMName": source_vm_name,
+                    "CloneVMName": clone_vm_name,
+                    "ExportPath": temp_export_path,
+                },
+            )
             if not result:
                 raise PowerShellCommandError("Clone script did not return a VM object")
 
             cloned_vm = result[-1]  # Last output is the Get-VM result
 
-            # Track cloned VM for cleanup
             if self.fixture_store:
                 self.fixture_store["teardown"].setdefault(self.type, []).append({"name": clone_vm_name})
 
@@ -775,11 +959,6 @@ class HyperVProvider(BaseProvider):
 
         except PowerShellCommandError as e:
             LOGGER.error(f"Failed to clone VM '{source_vm_name}': {e}")
-            try:
-                cleanup_script = f"Remove-Item -Path '{temp_export_path}' -Recurse -Force -ErrorAction SilentlyContinue"
-                self._run_script(cleanup_script)
-            except PowerShellCommandError:
-                pass
             raise VmCloneError(f"VM clone failed for '{clone_vm_name}': {e}") from e
 
     def delete_vm(self, vm_name: str) -> None:
@@ -789,46 +968,7 @@ class HyperVProvider(BaseProvider):
             vm_name: Name of VM to delete
         """
         LOGGER.info(f"Deleting VM '{vm_name}'")
-
-        script = f"""
-        $ErrorActionPreference = "Stop"
-
-        # Get VM (silently continue if not found)
-        $vm = Get-VM -Name '{vm_name}' -ErrorAction SilentlyContinue
-        if (-not $vm) {{
-            exit 0
-        }}
-
-        # Stop VM if running
-        if ($vm.State -eq 'Running') {{
-            Stop-VM -Name '{vm_name}' -Force -TurnOff
-            Start-Sleep -Seconds 3
-        }}
-
-        # Get VM paths before deletion
-        $vmPath = $vm.Path
-        $vhdPaths = @()
-        Get-VMHardDiskDrive -VMName '{vm_name}' | ForEach-Object {{
-            $vhdPaths += $_.Path
-        }}
-
-        # Remove VM
-        Remove-VM -Name '{vm_name}' -Force
-
-        # Clean up VHD files
-        foreach ($vhdPath in $vhdPaths) {{
-            if (Test-Path $vhdPath) {{
-                Remove-Item -Path $vhdPath -Force -ErrorAction SilentlyContinue
-            }}
-        }}
-
-        # Clean up VM folder
-        if ($vmPath -and (Test-Path $vmPath)) {{
-            Remove-Item -Path $vmPath -Recurse -Force -ErrorAction SilentlyContinue
-        }}
-        """
-
-        self._run_script(script)
+        self._run_script(_DELETE_VM_SCRIPT, params={"VMName": vm_name})
 
     def get_vm_or_template_networks(
         self,

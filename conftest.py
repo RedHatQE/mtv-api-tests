@@ -1221,7 +1221,7 @@ def prepared_plan(
                             )
                         elif source_provider.type == Provider.ProviderType.HYPERV:
                             source_provider.wait_for_guest_network_config(
-                                vm_name=vm["name"],
+                                vm=provider_vm_api,
                                 timeout=class_plan_config.get("guest_agent_timeout", 120),
                             )
                     elif source_vm_power == "off":
@@ -1232,6 +1232,7 @@ def prepared_plan(
                         provider_vm_api=provider_vm_api,
                         name=vm["name"],
                         namespace=source_vms_namespace,
+                        clone_options=vm,
                     )
                     plan["source_vms_data"][vm["name"]] = source_vm_details
 
@@ -1290,7 +1291,7 @@ def prepared_plan(
                         )
                     elif source_provider.type == Provider.ProviderType.HYPERV:
                         source_provider.wait_for_guest_network_config(
-                            vm_name=vm["name"],
+                            vm=provider_vm_api,
                             timeout=class_plan_config.get("guest_agent_timeout", 120),
                         )
                 elif source_vm_power == "off":
