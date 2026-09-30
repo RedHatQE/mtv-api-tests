@@ -102,7 +102,8 @@ $cloneError = $null
 $restoreError = $null
 $wasRunning = $false
 $imported = $false
-$clonedName = $null
+$clonedId = $null
+$cloneResult = $null
 
 try {
     New-Item -ItemType Directory -Path $ExportPath -Force | Out-Null
@@ -114,7 +115,7 @@ try {
 
     $wasRunning = $sourceVM.State -eq 'Running'
     if ($wasRunning) {
-        Stop-VM -Name $SourceVMName -Force
+        Stop-VM -Name $SourceVMName -Force | Out-Null
         Start-Sleep -Seconds 5
     }
 
@@ -130,31 +131,29 @@ try {
     New-Item -ItemType Directory -Path $cloneVhdPath -Force | Out-Null
     $clonedVM = Import-VM -Path $vmcxPath.FullName -Copy -GenerateNewId -VhdDestinationPath $cloneVhdPath -VirtualMachinePath $clonePath
     $imported = $true
-    $clonedName = $clonedVM.Name
+    $clonedId = $clonedVM.Id
 
     Rename-VM -VM $clonedVM -NewName $CloneVMName
-    $clonedName = $CloneVMName
 
     Remove-Item -Path $ExportPath -Recurse -Force -ErrorAction SilentlyContinue
 
-    Start-VM -Name $CloneVMName
-    Stop-VM -Name $CloneVMName -Force -TurnOff
+    Start-VM -Name $CloneVMName | Out-Null
+    Stop-VM -Name $CloneVMName -Force -TurnOff | Out-Null
 
-    Get-VM -Name $CloneVMName
+    $cloneResult = Get-VM -Name $CloneVMName
 } catch {
     $cloneError = $_
-    # Inline cleanup (not delete_vm/_DELETE_VM_SCRIPT) because $clonedName may still be the
-    # auto-generated pre-rename name if Rename-VM failed, which Python never learns.
-    if ($imported -and $clonedName) {
-        $leftover = Get-VM -Name $clonedName -ErrorAction SilentlyContinue
+    # Rollback by VM Id so a failed rename cannot match the source template by name.
+    if ($imported -and $clonedId) {
+        $leftover = Get-VM -Id $clonedId -ErrorAction SilentlyContinue
         if ($leftover) {
             if ($leftover.State -ne 'Off') {
-                Stop-VM -Name $clonedName -Force -TurnOff -ErrorAction SilentlyContinue
+                Stop-VM -VM $leftover -Force -TurnOff -ErrorAction SilentlyContinue
                 Start-Sleep -Seconds 3
             }
             $vmPath = $leftover.Path
-            $vhdPaths = @(Get-VMHardDiskDrive -VMName $clonedName -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
-            Remove-VM -Name $clonedName -Force -ErrorAction SilentlyContinue
+            $vhdPaths = @(Get-VMHardDiskDrive -VM $leftover -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
+            Remove-VM -VM $leftover -Force -ErrorAction SilentlyContinue
             foreach ($vhdPath in $vhdPaths) {
                 if ($vhdPath -and (Test-Path $vhdPath)) {
                     Remove-Item -Path $vhdPath -Force -ErrorAction SilentlyContinue
@@ -173,7 +172,7 @@ try {
         try {
             $src = Get-VM -Name $SourceVMName -ErrorAction Stop
             if ($src.State -ne 'Running') {
-                Start-VM -Name $SourceVMName
+                Start-VM -Name $SourceVMName | Out-Null
             }
         } catch {
             $restoreError = $_
@@ -190,6 +189,7 @@ if ($cloneError) {
 if ($restoreError) {
     throw "Cloned VM '$CloneVMName' but failed to restore source VM '$SourceVMName': $restoreError"
 }
+$cloneResult
 """
 
 _DELETE_VM_SCRIPT = r"""
