@@ -892,6 +892,7 @@ tests_params: dict = {
         "warm_migration": False,
         "target_power_state": "off",
         "post_hook": {"expected_result": "fail"},
+        "vm_target_namespace": f"mtv-vms-archive-{uuid.uuid4().hex[:4]}",
     },
     "test_standalone_di_vsphere": {
         "virtual_machines": [

@@ -13,6 +13,7 @@ import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
+from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -26,6 +27,7 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
+from utilities.naming import resolve_destination_vm_name
 from utilities.resources import unregister_teardown_resource
 from utilities.utils import populate_vm_ids
 
@@ -53,7 +55,7 @@ _ORPHAN_RESOURCE_POLL_INTERVAL = 5  # Seconds between polls
     indirect=True,
     ids=["MTV-5663-plan-archive-pvc-cleanup"],
 )
-@pytest.mark.usefixtures("cleanup_migrated_vms", "plan_archive_vm_namespace")
+@pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestPlanArchivePvcCleanup:
     """Verify failed-Plan archive and deletion clean up destination DVs and PVCs.
 
@@ -77,8 +79,9 @@ class TestPlanArchivePvcCleanup:
     Test plan:
         1. Prepare the disposable source VM and start it. For an OpenShift
            source, create and attach a dedicated source network. Wait until
-           the VM appears in Forklift inventory. Create a dedicated target
-           namespace and a post-migration Hook whose playbook fails.
+           the VM appears in Forklift inventory. The dedicated target VM
+           namespace comes from the plan config, and a post-migration Hook
+           whose playbook fails is created for the Plan.
         2. Create a StorageMap for the prepared VM's disks and a NetworkMap
            for its network. Create a cold Plan using those maps, the failing
            PostHook, and target VM power state off. Wait for its Ready
@@ -86,26 +89,27 @@ class TestPlanArchivePvcCleanup:
         3. Run the migration. Check that the migration fails and that the
            VM's failed step in the Plan is PostHook.
         4. Just before archiving, confirm at least one PVC or DataVolume
-           remains in the isolated effective VM target namespace.
+           remains in the dedicated VM target namespace.
         5. Archive the failed Plan. Check its Archived condition is True, then
            delete the Plan and confirm both the Plan and its Migration are gone.
-        6. Before deleting any destination VM, poll that namespace for up to
-           120 seconds until no DataVolumes or PVCs remain. After the check,
-           class teardown removes retained destination VMs from the dedicated
-           VM namespace; session teardown removes the disposable source VM,
-           maps, Hook, dedicated namespace, and any source network created
-           in step 1. The Plan and maps live in the session namespace.
+        6. Delete the destination VM retained by the PostHook failure, then
+           poll the dedicated namespace for up to 120 seconds until no
+           DataVolumes or PVCs remain. After the check, class teardown
+           confirms VM removal; session teardown removes the disposable
+           source VM, maps, Hook, dedicated namespace, and any source
+           network created in step 1. The Plan and maps live in the session
+           namespace.
 
     Expected result:
         1. The migration fails at PostHook with at least one PVC or DataVolume
            still present immediately before archiving.
         2. The failed Plan reaches Archived=True; deleting it also removes its
            Migration. If the Migration remains, report its name and namespace.
-        3. Before destination VM teardown, no DataVolumes or PVCs remain in
-           the isolated effective target namespace within 120 seconds. If a
-           check fails, inspect the Plan conditions and the VM's failed step
+        3. After the destination VM is deleted, no DataVolumes or PVCs
+           remain in the dedicated VM target namespace within 120 seconds. If
+           a check fails, inspect the Plan conditions and the VM's failed step
            for PostHook, review the failing Hook's events or logs, then list
-           remaining PVC and DataVolume names in the effective VM target namespace.
+           remaining PVC and DataVolume names in the dedicated VM target namespace.
     """
 
     storage_map: StorageMap
@@ -296,10 +300,10 @@ class TestPlanArchivePvcCleanup:
         plan = self.__class__.plan_resource
         migration = get_migration_for_plan(plan)
 
-        # The dedicated VM namespace contains only this migration's resources.
-        # PVC names may be source disk UUIDs, so check without name filtering.
-        # Prime PVC garbage collection may finish before the failed migration is observed;
-        # either a remaining PVC or DV proves disk resources existed before archive.
+        # Vacuity guard, not a prime-PVC check: the VM's own PVC/DV satisfy this
+        # because the migration reached PostHook. It only proves the migration
+        # created storage that archive+delete had to clean up, so the final
+        # empty-namespace assertion cannot pass on an untouched namespace.
         vm_namespace = prepared_plan["_vm_target_namespace"]
         assert get_orphan_resource_names(client=ocp_admin_client, namespace=vm_namespace), (
             f"No PVCs or DVs remain before archiving failed Plan in namespace '{vm_namespace}'"
@@ -326,10 +330,12 @@ class TestPlanArchivePvcCleanup:
         prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
         ocp_admin_client: DynamicClient,
     ) -> None:
-        """Verify all DVs and PVCs are gone before destination VM teardown.
+        """Delete the retained destination VM, then verify no DV or PVC remains.
 
-        Poll for up to 120s after Plan archive and deletion because DV/PVC
-        garbage collection is async. Class-scoped teardown handles retained VMs.
+        The PostHook failure leaves the migrated VM in place, and its own
+        DataVolume and PVC would mask any orphan the Plan left behind. Delete
+        it first so the poll only sees resources no VM owns. Poll for up to
+        120s because DV/PVC garbage collection is async.
 
         Args:
             prepared_plan (dict[str, Any]): The prepared migration plan.
@@ -339,9 +345,18 @@ class TestPlanArchivePvcCleanup:
             None
 
         Raises:
-            AssertionError: If orphan resources remain after 120s timeout.
+            AssertionError: If the destination VM is not deleted, or orphan
+                resources remain after 120s timeout.
         """
         vm_namespace = prepared_plan["_vm_target_namespace"]
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = resolve_destination_vm_name(vm)
+            vm_obj = VirtualMachine(client=ocp_admin_client, name=vm_name, namespace=vm_namespace)
+            if vm_obj.exists:
+                assert vm_obj.clean_up(wait=True), (
+                    f"Failed to delete destination VM '{vm_name}' in namespace '{vm_namespace}'"
+                )
+
         try:
             for sample in TimeoutSampler(
                 wait_timeout=_ORPHAN_RESOURCE_WAIT_TIMEOUT,

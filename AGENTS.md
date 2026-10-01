@@ -816,8 +816,12 @@ class TestNameHere:
 - **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
 - **6-step plan-archive PVC cleanup pattern**: storagemap -> networkmap -> plan -> migrate (expected fail) -> archive_and_delete -> verify_pvc_cleanup
   Plan-archive tests induce a failed migration (typically via post-hook), archive and delete the Plan,
-  then assert leftover DataVolumes and PVCs (including `prime-*`) are gone. There is no `test_check_vms`
-  step. Lives in `tests/plan_lifecycle/`.
+  then assert leftover DataVolumes and PVCs (including `prime-*`) are gone. `test_verify_pvc_cleanup`
+  must delete the destination VM retained by the failure before polling: the VM owns a DataVolume and
+  PVC, so an unfiltered namespace poll would never empty and the step would always time out. Isolate the
+  run with `vm_target_namespace` in the plan config (see `prepared_plan`), not with a fixture that
+  overwrites `prepared_plan["_vm_target_namespace"]`. There is no `test_check_vms` step. Lives in
+  `tests/plan_lifecycle/`.
 - **6-step shared-disk pattern (Linux)**: storagemap -> networkmap -> plan -> migrate -> verify_shared_disk_data -> check_vms
   Shared disk tests insert `test_verify_shared_disk_data` before `test_check_vms`. This step mounts,
   writes, and reads a shared disk from both VMs to verify bidirectional access after migration.
