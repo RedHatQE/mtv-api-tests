@@ -1836,12 +1836,16 @@ def check_vms(
         destination_vm_name = resolve_destination_vm_name(vm)
         res[vm_name] = []
 
-        source_vm = source_provider.vm_dict(
-            name=vm_name,
-            namespace=source_vms_namespace,
-            source=True,
-            source_provider_inventory=source_provider_inventory,
-        )
+        source_vm_data: dict[str, Any] = plan.get("source_vms_data", {}).get(vm["name"], {})
+        source_vm_kwargs: dict[str, Any] = {
+            "name": vm_name,
+            "namespace": source_vms_namespace,
+            "source": True,
+            "source_provider_inventory": source_provider_inventory,
+        }
+        if source_provider.type == Provider.ProviderType.HYPERV and source_vm_data:
+            source_vm_kwargs["win_os"] = source_vm_data["win_os"]
+        source_vm = source_provider.vm_dict(**source_vm_kwargs)
         vm_guest_agent = vm.get("guest_agent")
         vm_kwargs = {
             "wait_for_guest_agent": vm_guest_agent,
@@ -1883,7 +1887,6 @@ def check_vms(
 
             # Static IP preservation check - for VMs with preserve_static_ips enabled, migrated from a
             # provider in _STATIC_IP_PROVIDERS
-            source_vm_data = plan.get("source_vms_data", {}).get(vm["name"], {})
 
             # Fail fast: if preserve_static_ips is requested, source_vms_data must exist
             if plan.get("preserve_static_ips") and source_provider.type in _STATIC_IP_PROVIDERS:

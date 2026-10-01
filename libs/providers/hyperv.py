@@ -104,6 +104,7 @@ $wasRunning = $false
 $imported = $false
 $clonedId = $null
 $cloneResult = $null
+$cloneVhdPath = $null
 
 try {
     New-Item -ItemType Directory -Path $ExportPath -Force | Out-Null
@@ -126,8 +127,14 @@ try {
         throw "No .vmcx file found in export path"
     }
 
+    $sourceDisk = Get-VMHardDiskDrive -VM $sourceVM | Select-Object -First 1
+    if (-not $sourceDisk -or -not $sourceDisk.Path) {
+        throw "Source VM '$SourceVMName' has no hard disk"
+    }
+    # Get-VM.Path is the local config store (often C:\ProgramData\Microsoft\Windows\Hyper-V).
+    # MTV can only copy disks from the configured SMB share, so clone VHDs beside the source VHD.
     $clonePath = Join-Path (Split-Path $sourceVM.Path -Parent) $CloneVMName
-    $cloneVhdPath = Join-Path $clonePath 'Virtual Hard Disks'
+    $cloneVhdPath = Join-Path (Split-Path $sourceDisk.Path -Parent) $CloneVMName
     New-Item -ItemType Directory -Path $cloneVhdPath -Force | Out-Null
     $clonedVM = Import-VM -Path $vmcxPath.FullName -Copy -GenerateNewId -VhdDestinationPath $cloneVhdPath -VirtualMachinePath $clonePath
     $imported = $true
@@ -163,6 +170,9 @@ try {
                 Remove-Item -Path $vmPath -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
+    }
+    if ($cloneVhdPath -and (Test-Path $cloneVhdPath)) {
+        Remove-Item -Path $cloneVhdPath -Recurse -Force -ErrorAction SilentlyContinue
     }
 } finally {
     if (Test-Path $ExportPath) {
@@ -217,6 +227,13 @@ Remove-VM -Name $VMName -Force
 foreach ($vhdPath in $vhdPaths) {
     if (Test-Path $vhdPath) {
         Remove-Item -Path $vhdPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$vhdDirs = $vhdPaths | ForEach-Object { Split-Path $_ -Parent } | Select-Object -Unique
+foreach ($vhdDir in $vhdDirs) {
+    if ($vhdDir -and ((Split-Path $vhdDir -Leaf) -eq $VMName) -and (Test-Path $vhdDir)) {
+        Remove-Item -Path $vhdDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
