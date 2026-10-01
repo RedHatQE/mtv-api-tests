@@ -885,6 +885,15 @@ tests_params: dict = {
             "expected_output": "crc=0",
         },
     },
+    "test_plan_archive_pvc_cleanup": {
+        "virtual_machines": [
+            {"name": "mtv-tests-rhel8", "source_vm_power": "on", "guest_agent": True},
+        ],
+        "warm_migration": False,
+        "target_power_state": "off",
+        "post_hook": {"expected_result": "fail"},
+        "vm_target_namespace": f"mtv-vms-archive-{uuid.uuid4().hex[:4]}",
+    },
     "test_standalone_di_vsphere": {
         "virtual_machines": [
             {
