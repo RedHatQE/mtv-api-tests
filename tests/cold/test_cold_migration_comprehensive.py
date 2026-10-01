@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 @pytest.mark.rhv
 @pytest.mark.openstack
 @pytest.mark.openshift
+@pytest.mark.hyperv
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_cold_migration_comprehensive"])],

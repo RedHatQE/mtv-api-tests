@@ -117,7 +117,7 @@ virtualization platform.
 
 **Why do you need it?** The tests need to:
 
-- Connect to your source provider (vSphere, RHV, OpenStack, or OVA)
+- Connect to your source provider (vSphere, RHV, OpenStack, OVA, or Hyper-V)
 - Find the base VM to clone for testing
 - Create test VMs and perform migrations
 
@@ -182,7 +182,7 @@ Create a providers JSON file with your provider's details:
 - All fields shown above are required
 - Replace placeholder values with your actual credentials and endpoints
 
-**For other providers** (RHV, OpenStack, OVA, or copy-offload configuration):
+**For other providers** (RHV, OpenStack, OVA, Hyper-V, or copy-offload configuration):
 
 ```bash
 # Use the example file as a template
@@ -274,6 +274,7 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | `shared_disk` | Shared disk migration tests | Testing shared disk between VMs |
 | `ca_crt` | CA certificate field (ca.crt) in provider secrets | Testing ca.crt secret field support |
 | `vsphere` | VMware vSphere provider-specific tests | Tests specific to vSphere provider |
+| `hyperv` | Hyper-V provider-specific tests | Tests specific to Hyper-V provider |
 | `upgrade` | Migration across MTV operator upgrades | Validating upgrade compatibility |
 
 ### Copy-Offload Sanity Tests
@@ -934,6 +935,26 @@ uv run pytest -m tier0 -v --analyze-with-ai \
 - If `ROOTCOZ_SERVER_URL` is not set, the feature is disabled with a warning
 - If `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` are unset, rootcoz uses `.rootcoz/settings.json`
 - Original JUnit XML is preserved if enrichment fails
+
+---
+
+## Known Limitations
+
+### Hyper-V KVP DHCP Detection (RHEL 9)
+
+The `preserve_static_ips` feature relies on Hyper-V KVP `DHCPEnabled` to distinguish static from DHCP-assigned IPs.
+This field is unreliable on RHEL 9 guests using NetworkManager keyfiles (the default configuration).
+The Linux `hv_kvp_daemon` determines DHCP status by checking `/etc/sysconfig/network-scripts/ifcfg-*` files —
+on RHEL 9+ (which uses keyfiles in `/etc/NetworkManager/system-connections/`), no ifcfg file is found,
+causing all NICs to report `DHCPEnabled = False` regardless of actual DHCP state.
+
+**Impact:** DHCP-assigned IPs are incorrectly treated as static, causing `preserve_static_ips` post-migration verification to fail.
+
+**Workarounds:**
+
+- Use RHEL 10 guests (patched `hv_kvp_daemon` queries NetworkManager directly)
+- Use RHEL 9 guests with ifcfg-style network configuration
+- Ensure Hyper-V test VMs use only static IPs on NICs being verified
 
 ---
 

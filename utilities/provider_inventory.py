@@ -9,6 +9,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from exceptions.exceptions import VmNotFoundError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
+from libs.providers.hyperv import HyperVProvider
 from libs.providers.openstack import OpenStackProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
@@ -209,10 +210,10 @@ def validate_source_vms_exist(source_provider: BaseProvider, vm_names: list[str]
     """Validate that all source VMs/templates exist on the provider before cloning.
 
     For RHV, validates template names (RHV clones from templates, not VMs).
-    For VMware and OpenStack, validates VM names.
+    For VMware, OpenStack, and Hyper-V, validates VM names.
 
     Args:
-        source_provider: Source provider instance (VMware, RHV, or OpenStack).
+        source_provider: Source provider instance (VMware, RHV, OpenStack, or Hyper-V).
         vm_names: VM or template names to check on the source provider.
 
     Raises:
@@ -227,7 +228,7 @@ def validate_source_vms_exist(source_provider: BaseProvider, vm_names: list[str]
             except OvirtNotFoundError:
                 missing.append(name)
         entity_type = "templates"
-    elif isinstance(source_provider, (VMWareProvider, OpenStackProvider)):
+    elif isinstance(source_provider, (VMWareProvider, OpenStackProvider, HyperVProvider)):
         for name in vm_names:
             try:
                 source_provider.get_vm_by_name(query=name)

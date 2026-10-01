@@ -135,6 +135,10 @@ class SSHConnectionSetupError(Exception):
     """Raised when SSH connection setup fails (e.g., missing virtctl, port-forward failure)."""
 
 
+class PowerShellCommandError(Exception):
+    """Raised when a PowerShell cmdlet or script executed via PSRP fails."""
+
+
 class ConversionError(Exception):
     """Raised when a Conversion CR reaches Failed or Canceled phase."""
 

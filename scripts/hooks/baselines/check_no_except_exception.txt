@@ -60,6 +60,8 @@ utilities/pytest_utils.py:8c5bfc19ff10d8de  # L317: except Exception as exc:
 utilities/pytest_utils.py:8f06d1542dff80bf  # L437: except Exception as exc:
 utilities/pytest_utils.py:964744513fbdc973  # L273: except Exception as exc:
 utilities/pytest_utils.py:a1f5de32e65cc13a  # L413: except Exception as exc:
+utilities/pytest_utils.py:3698052bc93413fb  # L426: except Exception as exc:
+utilities/pytest_utils.py:4ef273eb69427fce  # L431: except Exception as exc:
 utilities/pytest_utils.py:a854758cac788d54  # L250: except Exception as exc:
 utilities/pytest_utils.py:ab3c44a273a8a186  # L263: except Exception as exc:
 utilities/pytest_utils.py:b6f29d5a14ce96bc  # L208: except Exception as exc:

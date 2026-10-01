@@ -938,6 +938,7 @@ tests_params: dict = {
 | `migrate_shared_disks`    | No       | True for owner VM in shared disk tests   |
 | `add_nic`                 | No       | True to add a NIC (vSphere only)         |
 | `add_nic_start_connected` | Yes*     | Required when `add_nic=True`; bool       |
+| `win_os`                  | No       | Hyper-V guest OS override (bool)         |
 
 **Plan Configuration Options:**
 
