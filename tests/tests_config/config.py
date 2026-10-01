@@ -632,7 +632,7 @@ tests_params: dict = {
         "vm_target_namespace": f"mtv-vms-warm-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": "default",  # Cross-namespace NAD access
         # Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default";
-        # rhv/oVirt does not support pvcNameTemplate.
+        # rhv/oVirt and OpenStack do not support pvcNameTemplate.
         "pvc_name_template": {
             "vsphere": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
             "default": '{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}',
@@ -669,6 +669,7 @@ tests_params: dict = {
         "target_power_state": "on",
         "preserve_static_ips": True,
         "enable_nested_virtualization": False,
+        # RHV/oVirt and OpenStack do not honor pvcNameTemplate; prepared_plan clears it for those providers.
         "pvc_name_template": "{{.VmName}}-disk-{{.DiskIndex}}",
         "pvc_name_template_use_generate_name": False,
         "target_node_selector": {

@@ -609,9 +609,10 @@ The `prepared_plan` fixture selects the source provider's entry first, then `def
 Templates must be nonempty strings (not just whitespace). Mapping keys must be valid
 `Provider.ProviderType` strings or `"default"`, and every value must be a nonempty template
 string. Invalid inputs raise `ValueError`, as does a supported provider without a matching
-entry or `"default"`. A valid plain string is used unchanged. RHV/oVirt does not support
-`pvcNameTemplate`: after validating the input, the fixture sets the plan value to `None`
-and PVC name verification skips it, even when a mapping has a `default` entry.
+entry or `"default"`. A valid plain string is used unchanged. RHV/oVirt and OpenStack do
+not support `pvcNameTemplate`: after validating the input, the fixture sets the plan
+value to `None` and PVC name verification skips it, even when a mapping has a `default`
+entry.
 `{{.FileName}}` inside a Go template action (including piped or `printf` forms) is
 VMware-only; `{{.DiskIndex}}` can be verified for other supported providers.
 

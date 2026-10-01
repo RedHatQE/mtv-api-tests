@@ -60,6 +60,14 @@ class OpenStackProvider(BaseProvider):
         LOGGER.info(f"Disconnecting OpenStackProvider source provider {self.host}")
         self.api.close()
 
+    def supports_pvc_name_template(self) -> bool:
+        """Whether OpenStack supports the Plan pvcNameTemplate field.
+
+        Returns:
+            bool: False because OpenStack does not honor pvcNameTemplate.
+        """
+        return False
+
     def connect(self) -> Self:
         self.api = Connection(
             auth_url=self.auth_url,
