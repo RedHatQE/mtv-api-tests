@@ -804,9 +804,6 @@ def get_cluster_client() -> DynamicClient:
 
     Returns:
         DynamicClient: The cluster client.
-
-    Raises:
-        ValueError: If the client cannot be created.
     """
     host = get_value_from_py_config("cluster_host")
     if host is None:
@@ -827,8 +824,6 @@ def get_cluster_client() -> DynamicClient:
         if insecure_verify_skip is None:
             insecure_verify_skip = True
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
-    if not isinstance(client, DynamicClient):
-        raise ValueError("Failed to get client for cluster")
     return client
 
 

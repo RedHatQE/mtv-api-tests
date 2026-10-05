@@ -528,8 +528,6 @@ falling back to the matching <code>CLUSTER_*</code> environment variable:</p>
     <span class="k">if</span> <span class="n">insecure_verify_skip</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">DynamicClient</span><span class="p">):</span>
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Failed to get client for cluster"</span><span class="p">)</span>
 <span class="k">return</span> <span class="n">client</span>
 </code></pre></div>
 

@@ -77,6 +77,9 @@ Rules:
   Validation = checking required inputs/config exist before test execution (belongs in fixtures).
   Assertions = verifying test outcomes (belongs in test methods).
   Use `@pytest.mark.skipif` at class/test level for conditional skipping.
+  (exception, updated after review feedback: provider-capability gating inside `prepared_plan` may call `pytest.skip()` when a configured VM option
+  cannot apply to the configured source provider — today `add_nic` on a non-vSphere provider. It must stay a capability gate on configuration, never a
+  check on test results. Tracked for conversion to collection-time gating in issue #708, which removes the exception.)
 - **Every OpenShift resource:** Must use `create_and_store_resource()` function
 - **Logging Format:** Use f-strings for logging by default.
   Use parameterized format (`%s`) only for expensive operations (e.g., `large_object.to_json()`) where lazy evaluation matters.

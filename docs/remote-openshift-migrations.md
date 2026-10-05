@@ -230,8 +230,6 @@ else:
     if insecure_verify_skip is None:
         insecure_verify_skip = True
 client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
-if not isinstance(client, DynamicClient):
-    raise ValueError("Failed to get client for cluster")
 return client
 ```
 
