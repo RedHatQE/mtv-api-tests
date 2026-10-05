@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced Plan Features - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -169,7 +170,7 @@
 
                     <li>
                         <a href="advanced-plan-features.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Advanced Plan Features
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,8 +302,200 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="advanced-plan-features">Advanced Plan Features</h1>
-<p>Advanced plan options let you control how MTV creates the destination VM after the basic provider, storage, and network mappings are in place. In this project, you define those options under <code>tests_params</code> in <code>tests/tests_config/config.py</code>, then pass them into <code>create_plan_resource()</code> from your test class.</p>
-<table>
+<p>Advanced plan options control how MTV builds the destination VM once the provider, storage, and network mappings are in
+place. In this project you declare them under <code>tests_params</code> in <code>tests/tests_config/config.py</code> and pass them into
+<code>create_plan_resource()</code> from your test class.</p>
+<p>This page covers three layers:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Where it lives</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VM-level options</td>
+<td>one entry per item in <code>virtual_machines</code></td>
+<td><code>luks</code>, <code>disk_type</code>, <code>add_nic</code>, <code>migrate_shared_disks</code></td>
+</tr>
+<tr>
+<td>Plan-level options</td>
+<td>top level of a <code>tests_params</code> entry</td>
+<td><code>preserve_static_ips</code>, <code>xfs_compatibility</code>, <code>per_nic_network_map</code></td>
+</tr>
+<tr>
+<td>Test-verification options</td>
+<td>top level, consumed by the post-migration step</td>
+<td><code>xfs_check</code></td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Note:</strong> Every plan-level key is read with <code>plan.get(...)</code> in the preparation fixtures and with an explicit keyword
+argument in <code>create_plan_resource()</code>, so an option only reaches the MTV Plan CR when the test class actually passes it.</p>
+</blockquote>
+<h2 id="plan-level-options">Plan-level options</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it controls</th>
+<th>Where it is applied</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>target_power_state</code></td>
+<td>Final destination VM power state</td>
+<td>Plan CR field</td>
+<td><code>"on"</code></td>
+</tr>
+<tr>
+<td><code>preserve_static_ips</code></td>
+<td>Preserve guest static IP configuration</td>
+<td>Plan CR field + post-migration SSH check</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>enable_nested_virtualization</code></td>
+<td><code>False</code> disables the <code>vmx</code>/<code>svm</code> CPU features</td>
+<td>Plan CR field + CPU-feature check</td>
+<td><code>False</code></td>
+</tr>
+<tr>
+<td><code>pvc_name_template</code></td>
+<td>Destination PVC naming template (string or provider-keyed map)</td>
+<td>Plan CR field</td>
+<td>see <a href="#pvc-naming-templates">PVC naming templates</a></td>
+</tr>
+<tr>
+<td><code>pvc_name_template_use_generate_name</code></td>
+<td>Let Kubernetes append a random PVC suffix</td>
+<td>Plan CR field</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>vm_target_namespace</code></td>
+<td>Namespace where migrated VMs are created</td>
+<td>Plan CR <code>targetNamespace</code></td>
+<td><code>f"mtv-vms-cold-comprehensive-{uuid4hex}"</code></td>
+</tr>
+<tr>
+<td><code>multus_namespace</code></td>
+<td>Namespace where extra NADs are created</td>
+<td><code>multus_network_name</code> fixture</td>
+<td><code>"default"</code></td>
+</tr>
+<tr>
+<td><code>target_node_selector</code></td>
+<td>Single node label the VM must be scheduled onto</td>
+<td>Plan CR field</td>
+<td><code>{"mtv-comprehensive-node": None}</code></td>
+</tr>
+<tr>
+<td><code>target_labels</code></td>
+<td>Labels added to the migrated VM template</td>
+<td>Plan CR field</td>
+<td><code>{"static-label": "static-value"}</code></td>
+</tr>
+<tr>
+<td><code>target_affinity</code></td>
+<td>Affinity rules applied to the migrated VM</td>
+<td>Plan CR field</td>
+<td><code>{"podAffinity": {...}}</code></td>
+</tr>
+<tr>
+<td><code>migrate_shared_disks</code></td>
+<td>Enable shared-disk migration for every VM by default</td>
+<td>Plan CR field</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>xfs_compatibility</code></td>
+<td>Use the XFS-compatible virt-v2v image</td>
+<td>Plan CR field</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>rdm_as_lun</code></td>
+<td>Map RDM disks as SCSI LUN devices instead of virtio</td>
+<td>Plan CR field</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>copyoffload</code></td>
+<td>Enable copy-offload (XCOPY) handling; forces <code>pvc_name_template</code> to <code>"pvc"</code></td>
+<td>Plan CR field</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>run_preflight_inspection</code></td>
+<td>Enable Forklift preflight Deep Inspection on warm migrations</td>
+<td>Plan CR field</td>
+<td><code>False</code></td>
+</tr>
+<tr>
+<td><code>guest_agent_timeout</code></td>
+<td>Seconds to wait for the destination guest agent</td>
+<td>Post-migration VM lookup</td>
+<td><code>600</code></td>
+</tr>
+<tr>
+<td><code>inventory_timeout</code></td>
+<td>Seconds to wait for cloned VMs and added NICs in the Forklift inventory</td>
+<td><code>prepared_plan</code> fixture (default <code>300</code>)</td>
+<td><code>600</code></td>
+</tr>
+<tr>
+<td><code>clone_to_same_host</code></td>
+<td>Pin VM 2+ to the ESXi host used by VM 1</td>
+<td><code>prepared_plan</code> fixture</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>pin_to_non_dedicated_host</code></td>
+<td>Pin every VM to an ESXi host outside <code>copyoffload.dedicated_migration_hosts</code></td>
+<td><code>prepared_plan</code> fixture</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>disable_drs_for_vms</code></td>
+<td>Disable vSphere DRS per VM after cloning</td>
+<td><code>prepared_plan</code> fixture</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>per_nic_network_map</code></td>
+<td>One NetworkMap entry per NIC instead of per distinct network</td>
+<td><code>get_network_migration_map()</code></td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>skip_clone</code></td>
+<td>Skip the cloning phase and migrate the existing VMs</td>
+<td><code>prepared_plan</code> fixture</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>warm_migration</code></td>
+<td>Run a warm migration</td>
+<td>Plan CR field</td>
+<td><code>True</code></td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Warning:</strong> <code>disable_drs_for_vms</code> raises <code>ValueError</code> for OVA providers and for any clone provider that is not
+<code>VMWareProvider</code>. <code>skip_clone</code> raises <code>ValueError</code> on providers whose <code>supports_skip_clone()</code> is <code>False</code> (RHV, whose
+plan names are templates) and when combined with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>, <code>preserve_static_ips</code>
+(non-Hyper-V), <code>migrate_shared_disks</code>, or <code>add_nic</code>.</p>
+</blockquote>
+<h2 id="vm-level-options">VM-level options</h2>
+<p>Each entry of <code>virtual_machines</code> describes one source VM or template.</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -311,90 +505,229 @@
 </thead>
 <tbody>
 <tr>
-<td><code>target_power_state</code></td>
-<td>Final destination VM power state</td>
+<td><code>name</code></td>
+<td>Source VM or template name</td>
+<td><code>"mtv-tests-rhel9-luks"</code></td>
+</tr>
+<tr>
+<td><code>source_vm_power</code></td>
+<td>Power state applied to the source VM before migration (<code>"on"</code> or <code>"off"</code>)</td>
 <td><code>"on"</code></td>
 </tr>
 <tr>
-<td><code>preserve_static_ips</code></td>
-<td>Preserve guest static IP configuration</td>
+<td><code>guest_agent</code></td>
+<td>Wait for the destination guest agent and assert it is running</td>
 <td><code>True</code></td>
 </tr>
 <tr>
-<td><code>pvc_name_template</code></td>
-<td>Destination PVC naming pattern</td>
-<td><code>"{{.VmName}}-disk-{{.DiskIndex}}"</code></td>
-</tr>
-<tr>
-<td><code>pvc_name_template_use_generate_name</code></td>
-<td>Let Kubernetes append a random suffix</td>
+<td><code>clone</code></td>
+<td>Clone the source VM before migrating it</td>
 <td><code>True</code></td>
 </tr>
 <tr>
-<td><code>vm_target_namespace</code></td>
-<td>Namespace where migrated VMs are created</td>
-<td><code>"custom-vm-namespace"</code></td>
+<td><code>clone_name</code></td>
+<td>Override the generated clone base name</td>
+<td><code>"XCopy_Test_VM_CAPS"</code></td>
 </tr>
 <tr>
-<td><code>target_node_selector</code></td>
-<td>Node labels the VM should be scheduled onto</td>
-<td><code>{"mtv-comprehensive-node": None}</code></td>
+<td><code>preserve_name_format</code></td>
+<td>Keep uppercase and underscores in <code>clone_name</code> instead of sanitizing</td>
+<td><code>True</code></td>
 </tr>
 <tr>
-<td><code>target_labels</code></td>
-<td>Labels added to the migrated VM template</td>
-<td><code>{"static-label": "static-value"}</code></td>
+<td><code>disk_type</code></td>
+<td>VMware provisioning for the cloned disks</td>
+<td><code>"thick-eager"</code></td>
 </tr>
 <tr>
-<td><code>target_affinity</code></td>
-<td>Affinity rules applied to the migrated VM</td>
-<td><code>{"podAffinity": {...}}</code></td>
+<td><code>add_disks</code></td>
+<td>Extra disks to attach to the cloned source VM</td>
+<td><code>[{"size_gb": 30, "provision_type": "thin"}]</code></td>
 </tr>
 <tr>
-<td><code>multus_namespace</code></td>
-<td>Namespace where extra NADs are created</td>
-<td><code>"default"</code></td>
+<td><code>snapshots</code></td>
+<td>Snapshots to create on the source VM before migration</td>
+<td><code>2</code></td>
+</tr>
+<tr>
+<td><code>target_datastore_id</code></td>
+<td>Target datastore for the clone</td>
+<td><code>"non_xcopy_datastore_id"</code></td>
+</tr>
+<tr>
+<td><code>luks</code></td>
+<td>Marks the VM as having a LUKS-encrypted disk</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>luks_passphrase</code></td>
+<td>Per-VM LUKS passphrase override</td>
+<td><code>"WRONGPASSWORD"</code></td>
+</tr>
+<tr>
+<td><code>migrate_shared_disks</code></td>
+<td><code>True</code> for the shared-disk owner VM, <code>False</code> for the consumer</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>add_nic</code></td>
+<td>Attach an extra NIC to the clone (vSphere only)</td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>add_nic_start_connected</code></td>
+<td>Required when <code>add_nic</code> is <code>True</code>; <code>False</code> yields a disconnected NIC</td>
+<td><code>False</code></td>
+</tr>
+<tr>
+<td><code>win_os</code></td>
+<td>Hyper-V guest OS override; must be a bool</td>
+<td><code>False</code></td>
 </tr>
 </tbody>
-</table>
+</table></div>
+<blockquote>
+<p><strong>Note:</strong> <code>add_nic</code> skips the whole class on non-vSphere providers and raises <code>ValueError</code> when <code>add_nic_start_connected</code>
+is missing or is not a bool. The MAC of the added NIC is written back into the VM dict as <code>connected_nic_mac</code> or
+<code>disconnected_nic_mac</code> and is checked after migration.</p>
+</blockquote>
+<h3 id="disk-provisioning-with-disk_type">Disk provisioning with <code>disk_type</code></h3>
+<p><code>disk_type</code> maps to a vSphere relocate transform. <code>thick-eager</code> additionally sets per-disk <code>DiskLocator</code> entries with
+eager scrubbing:</p>
+<div class="highlight"><pre><span></span><code><span class="n">DISK_TYPE_MAP</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"thin"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"sparse"</span><span class="p">,</span> <span class="s2">"Setting disk provisioning to 'thin' (sparse)."</span><span class="p">),</span>
+    <span class="s2">"thick-lazy"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"flat"</span><span class="p">,</span> <span class="s2">"Setting disk provisioning to 'thick-lazy' (flat)."</span><span class="p">),</span>
+    <span class="s2">"thick-eager"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"flat"</span><span class="p">,</span> <span class="s2">"Setting disk provisioning to 'thick-eager' (flat + eagerlyScrub)."</span><span class="p">),</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>An unrecognized value logs a warning and falls back to the vSphere default.</p>
+<h2 id="test-verification-options">Test-verification options</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>What it controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>xfs_check</code></td>
+<td>Required by XFS tests</td>
+<td>Block of verification settings for the XFS step</td>
+</tr>
+<tr>
+<td><code>xfs_check.command</code></td>
+<td>With <code>xfs_check</code></td>
+<td>Absolute path of the command to run in the guest</td>
+</tr>
+<tr>
+<td><code>xfs_check.mount_point</code></td>
+<td>With <code>xfs_check</code></td>
+<td>Mount point passed as the command argument</td>
+</tr>
+<tr>
+<td><code>xfs_check.expected_output</code></td>
+<td>With <code>xfs_check</code></td>
+<td>Substring that must appear in the command output</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="step-patterns">Step patterns</h2>
+<p>Base pattern: <code>test_create_storagemap</code> → <code>test_create_networkmap</code> → <code>test_create_plan</code> → <code>test_migrate_vms</code> →
+<code>test_check_vms</code>. Feature suites insert or replace steps:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Ordered steps</th>
+<th>Class</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Base 5-step</td>
+<td>storagemap → networkmap → plan → migrate → check_vms</td>
+<td>most suites</td>
+</tr>
+<tr>
+<td>LUKS (6-step)</td>
+<td>storagemap → networkmap → plan → migrate → <code>test_verify_luks_encryption</code> → check_vms</td>
+<td><code>TestLuksColdMigration</code></td>
+</tr>
+<tr>
+<td>XFS (6-step)</td>
+<td>storagemap → networkmap → plan → migrate → <code>test_verify_xfs_version</code> → check_vms</td>
+<td><code>TestColdMigrationXfs</code>, <code>TestWarmMigrationXfs</code></td>
+</tr>
+<tr>
+<td>Shared disk, Linux (6-step)</td>
+<td>storagemap → networkmap → plan → migrate → <code>test_verify_shared_disk_data</code> → check_vms</td>
+<td><code>TestSharedDiskRhelMigration</code></td>
+</tr>
+<tr>
+<td>Shared disk, Windows (7-step)</td>
+<td><code>test_label_shared_disk</code> → base 5 steps → <code>test_verify_shared_disk_data</code> → check_vms</td>
+<td><code>TestSharedDiskWindowsMigration</code></td>
+</tr>
+<tr>
+<td>Plan archive (6-step)</td>
+<td>storagemap → networkmap → plan → migrate (expected failure) → <code>test_archive_and_delete_plan</code> → <code>test_verify_pvc_cleanup</code></td>
+<td><code>TestPlanArchivePvcCleanup</code></td>
+</tr>
+<tr>
+<td>Plan readiness (3-step)</td>
+<td>storagemap → networkmap → plan, no migration</td>
+<td><code>TestColdDualNicSameNetworkPlanValidation</code></td>
+</tr>
+</tbody>
+</table></div>
 <h2 id="typical-usage">Typical usage</h2>
 <p>A full example already exists in <code>tests/tests_config/config.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_warm_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2022-ip-3disks"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-        <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+    <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-warm-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+    <span class="c1"># Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default".</span>
+    <span class="c1"># vsphere uses .FileName; default truncates VmName to stay within 63 chars.</span>
+    <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"vsphere"</span><span class="p">:</span> <span class="s1">'{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}'</span><span class="p">,</span>
+        <span class="s2">"default"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"mtv-comprehensive-test"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+        <span class="s2">"static-label"</span><span class="p">:</span> <span class="s2">"static-value"</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
-                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                    <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"comprehensive-test"</span><span class="p">}},</span>
+                        <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
                     <span class="p">},</span>
-                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
+                    <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="p">]</span>
         <span class="p">}</span>
     <span class="p">},</span>
+    <span class="s2">"guest_agent_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
-<p>That configuration is then passed into the Plan helper in <code>tests/test_warm_migration_comprehensive.py</code>:</p>
+<p>That configuration is then passed into the Plan helper in <code>tests/warm/test_warm_migration_comprehensive.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">plan_resource</span> <span class="o">=</span> <span class="n">create_plan_resource</span><span class="p">(</span>
     <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
     <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
@@ -402,56 +735,69 @@
     <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
     <span class="n">storage_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span>
     <span class="n">network_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">network_map</span><span class="p">,</span>
-    <span class="n">virtual_machines_list</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">],</span>
-    <span class="n">target_power_state</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;target_power_state&quot;</span><span class="p">],</span>
+    <span class="n">virtual_machines_list</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">],</span>
+    <span class="n">target_power_state</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_power_state"</span><span class="p">],</span>
     <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
-    <span class="n">warm_migration</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;warm_migration&quot;</span><span class="p">],</span>
-    <span class="n">preserve_static_ips</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">],</span>
-    <span class="n">vm_target_namespace</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">],</span>
-    <span class="n">pvc_name_template</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">],</span>
-    <span class="n">pvc_name_template_use_generate_name</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">],</span>
-    <span class="n">target_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">&quot;vm_labels&quot;</span><span class="p">],</span>
-    <span class="n">target_affinity</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">],</span>
+    <span class="n">warm_migration</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"warm_migration"</span><span class="p">],</span>
+    <span class="n">preserve_static_ips</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"preserve_static_ips"</span><span class="p">],</span>
+    <span class="n">vm_target_namespace</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"vm_target_namespace"</span><span class="p">],</span>
+    <span class="n">pvc_name_template</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">],</span>
+    <span class="n">pvc_name_template_use_generate_name</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">],</span>
+    <span class="n">target_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">"vm_labels"</span><span class="p">],</span>
+    <span class="n">target_affinity</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_affinity"</span><span class="p">],</span>
+    <span class="n">enable_nested_virtualization</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"enable_nested_virtualization"</span><span class="p">],</span>
 <span class="p">)</span>
 </code></pre></div>
 
 <h2 id="target-power-state">Target power state</h2>
-<p>Use <code>target_power_state</code> when you want the migrated VM to end in a known power state, regardless of how the source VM started out. The repository examples use both <code>"on"</code> and <code>"off"</code>.</p>
-<p>If you omit <code>target_power_state</code>, the post-migration check falls back to the VM's pre-migration source power state.</p>
+<p>Use <code>target_power_state</code> when you want the migrated VM to end in a known power state, regardless of how the source VM
+started out. The repository examples use both <code>"on"</code> and <code>"off"</code>.</p>
+<p>If you omit <code>target_power_state</code>, <code>check_vms_power_state()</code> falls back to the VM's pre-migration source power state.</p>
 <blockquote>
-<p><strong>Note:</strong> <code>source_vm_power</code> and <code>target_power_state</code> are different. <code>source_vm_power</code> controls how the source VM is prepared before migration. <code>target_power_state</code> controls the expected state of the destination VM after migration.</p>
+<p><strong>Note:</strong> <code>source_vm_power</code> and <code>target_power_state</code> are different. <code>source_vm_power</code> controls how the source VM is
+prepared before migration. <code>target_power_state</code> controls the expected state of the destination VM after migration.</p>
 </blockquote>
-<p>Practical examples from <code>tests/tests_config/config.py</code> include:</p>
+<p>Practical examples from <code>tests/tests_config/config.py</code>:</p>
 <ul>
 <li><code>"target_power_state": "on"</code> in both comprehensive migration tests</li>
-<li><code>"target_power_state": "off"</code> in <code>test_post_hook_retain_failed_vm</code></li>
+<li><code>"target_power_state": "off"</code> in <code>test_post_hook_retain_failed_vm</code> and <code>test_plan_archive_pvc_cleanup</code></li>
 </ul>
 <h2 id="static-ip-preservation">Static IP preservation</h2>
-<p>Set <code>preserve_static_ips</code> to <code>True</code> when you want MTV to preserve guest static IP settings. Both comprehensive migration configs enable it.</p>
-<p>For vSphere sources, the project records guest IP origin and treats <code>origin == "manual"</code> as a static IP:</p>
-<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">ip_info</span><span class="p">,</span> <span class="s2">&quot;origin&quot;</span><span class="p">):</span>
-    <span class="n">ip_config</span><span class="p">[</span><span class="s2">&quot;ip_origin&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ip_info</span><span class="o">.</span><span class="n">origin</span>
-    <span class="n">ip_config</span><span class="p">[</span><span class="s2">&quot;is_static_ip&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ip_info</span><span class="o">.</span><span class="n">origin</span> <span class="o">==</span> <span class="s2">&quot;manual&quot;</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-        <span class="sa">f</span><span class="s2">&quot;VM </span><span class="si">{</span><span class="n">vm</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> NIC </span><span class="si">{</span><span class="n">device</span><span class="o">.</span><span class="n">deviceInfo</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: IPv4=</span><span class="si">{</span><span class="n">ip_info</span><span class="o">.</span><span class="n">ipAddress</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="sa">f</span><span class="s2">&quot; Origin=</span><span class="si">{</span><span class="n">ip_info</span><span class="o">.</span><span class="n">origin</span><span class="si">}</span><span class="s2"> Static=</span><span class="si">{</span><span class="n">ip_info</span><span class="o">.</span><span class="n">origin</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s1">&#39;manual&#39;</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-    <span class="p">)</span>
+<p>Set <code>preserve_static_ips</code> to <code>True</code> when you want MTV to preserve guest static IP settings. Both comprehensive migration
+configs enable it.</p>
+<p>For vSphere sources, the provider records guest IP origin and treats <code>origin == "manual"</code> as a static IP:</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">ip_info</span><span class="p">,</span> <span class="s2">"origin"</span><span class="p">):</span>
+    <span class="n">ip_config</span><span class="p">[</span><span class="s2">"ip_origin"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ip_info</span><span class="o">.</span><span class="n">origin</span>
+    <span class="n">ip_config</span><span class="p">[</span><span class="s2">"is_static_ip"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ip_info</span><span class="o">.</span><span class="n">origin</span> <span class="o">==</span> <span class="s2">"manual"</span>
 </code></pre></div>
 
-<p>After migration, the verifier connects to the destination VM over SSH and checks the guest configuration.</p>
+<p>VMware does not always report an origin for Linux guests, so the preparation flow falls back to <code>nmcli device show</code>
+through VMware Guest Operations and marks the recorded origins as <code>manual</code> or <code>auto</code> from the guest's own answer.</p>
+<p>After migration, <code>check_static_ip_preservation()</code> connects to the destination VM over SSH, reads the guest network
+configuration (<code>ipconfig /all</code> on Windows, <code>nmcli device show</code> on Linux), and asserts that every recorded static IP
+appears, then validates subnet masks and gateways.</p>
 <blockquote>
-<p><strong>Warning:</strong> In this repository, static IP verification is currently implemented only for Windows guests migrated from vSphere. The verification path uses <code>ipconfig /all</code> inside the guest and does not support non-Windows guests yet.</p>
-<p><strong>Note:</strong> If no static interfaces are found on the source VM, the check is skipped rather than failed.</p>
+<p><strong>Warning:</strong> Static IP verification runs only for source providers in <code>_STATIC_IP_PROVIDERS</code> — vSphere and Hyper-V.
+For Linux VMs migrated from vSphere, a failure to detect IP origins through Guest Operations raises <code>ValueError</code>
+instead of degrading to a warning when <code>preserve_static_ips</code> is enabled.</p>
+<p><strong>Note:</strong> If no static interfaces are found on the source VM, the check raises <code>ValueError</code> telling you to power the
+VM on so guest tools can report IP origins. <code>preserve_static_ips</code> also requires <code>source_vm_power: "on"</code> on every VM in
+the plan, enforced during preparation.</p>
 </blockquote>
 <h2 id="pvc-naming-templates">PVC naming templates</h2>
-<p>Use <code>pvc_name_template</code> when you want stable, readable PVC names. The repository covers both exact names and <code>generateName</code>-style prefixes.</p>
-<p>Examples from <code>tests/tests_config/config.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-<span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<p>Use <code>pvc_name_template</code> when you want stable, readable PVC names. <code>resolve_pvc_name_template()</code> accepts either a plain
+template string or a map keyed by provider type, resolved against the source provider type and falling back to
+<code>"default"</code>.</p>
+<p>Real examples from <code>tests/tests_config/config.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"vsphere"</span><span class="p">:</span> <span class="s1">'{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}'</span><span class="p">,</span>
+    <span class="s2">"default"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
+<span class="p">},</span>
+<span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 </code></pre></div>
 
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s2">&quot;{{.VmName}}-disk-{{.DiskIndex}}&quot;</span><span class="p">,</span>
-<span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
+<span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
 </code></pre></div>
 
 <p>The validator in <code>utilities/post_migration.py</code> explicitly supports:</p>
@@ -461,105 +807,112 @@
 <li><code>{{.FileName}}</code></li>
 <li>Sprig functions such as <code>trimSuffix</code>, <code>replace</code>, <code>lower</code>, and <code>upper</code></li>
 </ul>
-<p>When <code>pvc_name_template_use_generate_name</code> is <code>True</code>, the project expects Kubernetes to append a random suffix and validates the PVC by prefix match. When it is <code>False</code>, the validator expects an exact name match.</p>
+<p>When <code>pvc_name_template_use_generate_name</code> is <code>True</code>, the project expects Kubernetes to append a random suffix and
+validates the PVC by prefix match. When it is <code>False</code>, the validator expects an exact name match.</p>
 <blockquote>
-<p><strong>Note:</strong> The validator also accounts for Kubernetes name-length limits by truncating the rendered template before comparing it with the actual PVC name.</p>
-<p><strong>Warning:</strong> In this repository's post-migration validation, templates using <code>{{.FileName}}</code> and <code>{{.DiskIndex}}</code> are effectively vSphere-oriented. If the source provider is not vSphere, the PVC-name verifier logs a warning and skips that validation path.</p>
+<p><strong>Note:</strong> The validator also accounts for Kubernetes name-length limits by truncating the rendered template before
+comparing it with the actual PVC name.</p>
+<p><strong>Warning:</strong> Templates using <code>{{.FileName}}</code> need VMDK filenames from a vSphere inventory. On any other provider the
+PVC-name verifier logs a warning and skips that validation path.</p>
 </blockquote>
-<p>There is one important exception for copy-offload migrations. In <code>utilities/mtv_migration.py</code>, <code>copyoffload=True</code> overrides any custom template:</p>
+<p>There is one important exception for copy-offload migrations. In <code>utilities/mtv_migration.py</code>, <code>copyoffload=True</code>
+overrides any custom template:</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">copyoffload</span><span class="p">:</span>
-    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pvc&quot;</span>
+    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"pvc"</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> If you are running copy-offload tests, do not expect your custom <code>pvc_name_template</code> to be used. The helper forces it to <code>"pvc"</code> so the volume populator framework gets predictable PVC prefixes.</p>
+<p><strong>Warning:</strong> If you are running copy-offload tests, do not expect your custom <code>pvc_name_template</code> to be used. The helper
+forces it to <code>"pvc"</code> so the volume populator framework gets predictable PVC prefixes.</p>
 </blockquote>
 <h2 id="custom-vm-namespaces">Custom VM namespaces</h2>
-<p>Use <code>vm_target_namespace</code> when you want the migrated VM to land in a namespace that is different from the namespace where the Plan and mapping resources are created.</p>
-<p>The comprehensive tests show two examples:</p>
-<ul>
-<li><code>"vm_target_namespace": "custom-vm-namespace"</code></li>
-<li><code>"vm_target_namespace": "mtv-comprehensive-vms"</code></li>
-</ul>
+<p>Use <code>vm_target_namespace</code> when you want the migrated VM to land in a namespace that is different from the namespace where
+the Plan and mapping resources are created.</p>
 <p>In this project:</p>
 <ul>
 <li>The Plan, <code>StorageMap</code>, and <code>NetworkMap</code> are still created in the regular <code>target_namespace</code></li>
 <li>The migrated VM itself is created in <code>vm_target_namespace</code></li>
-<li>The <code>prepared_plan</code> fixture creates that namespace automatically if it does not already exist</li>
-<li>The post-migration checks also look up the migrated VM in that custom namespace</li>
+<li>
+<p>The <code>prepared_plan</code> fixture creates that namespace automatically if it does not already exist, and stores it in
+  <code>plan["_vm_target_namespace"]</code> for the post-migration lookups</p>
+</li>
+<li>
+<p>The comprehensive configs build the value from <code>uuid.uuid4().hex[:4]</code> so parallel sessions never collide</p>
+</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> This is useful when you want one namespace for migration resources and another namespace for the resulting VMs.</p>
+<p><strong>Note:</strong> <code>vm_target_namespace</code> and <code>multus_namespace</code> solve different problems. Use <code>vm_target_namespace</code> to choose
+where migrated VMs land, and <code>multus_namespace</code> to choose where the test-created NetworkAttachmentDefinitions live.</p>
 </blockquote>
 <h2 id="node-selectors-labels-and-affinity">Node selectors, labels, and affinity</h2>
 <p>These options control where the migrated VM runs and what metadata MTV applies to it.</p>
-<p>A cold-migration example from <code>tests/test_cold_migration_comprehensive.py</code> shows the scheduling-related arguments passed into the Plan helper:</p>
-<div class="highlight"><pre><span></span><code><span class="n">target_node_selector</span><span class="o">=</span><span class="p">{</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">&quot;label_key&quot;</span><span class="p">]:</span> <span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">&quot;label_value&quot;</span><span class="p">]},</span>
-<span class="n">target_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">&quot;vm_labels&quot;</span><span class="p">],</span>
-<span class="n">target_affinity</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">],</span>
-<span class="n">vm_target_namespace</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">],</span>
+<p>A cold-migration example from <code>tests/cold/test_cold_migration_comprehensive.py</code> shows the scheduling-related arguments
+passed into the Plan helper:</p>
+<div class="highlight"><pre><span></span><code><span class="n">target_node_selector</span><span class="o">=</span><span class="p">{</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_key"</span><span class="p">]:</span> <span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_value"</span><span class="p">]},</span>
+<span class="n">target_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">"vm_labels"</span><span class="p">],</span>
+<span class="n">target_affinity</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_affinity"</span><span class="p">],</span>
 </code></pre></div>
 
 <h3 id="node-selectors">Node selectors</h3>
-<p>Use <code>target_node_selector</code> to place the destination VM on nodes with a matching label.</p>
+<p>Use <code>target_node_selector</code> to place the destination VM on nodes with a matching label. It must contain exactly one label.</p>
 <p>Example from <code>tests/tests_config/config.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;target_node_selector&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;mtv-comprehensive-node&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"target_node_selector"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"mtv-comprehensive-node"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
-<p>In the comprehensive cold test, the <code>labeled_worker_node</code> fixture picks a worker node, applies the label, and passes the resolved selector into <code>create_plan_resource()</code>. After migration, the project verifies that the VM actually landed on that node.</p>
+<p>In the comprehensive cold test, the <code>labeled_worker_node</code> fixture picks the worker node with the most available memory,
+applies the label through a <code>ResourceEditor</code> context manager so cleanup is automatic, and passes the resolved selector
+into <code>create_plan_resource()</code>. After migration, <code>check_vm_node_placement()</code> verifies the VM actually landed on that node.</p>
 <blockquote>
-<p><strong>Tip:</strong> In this project, setting the selector value to <code>None</code> tells the fixture to replace it with the current <code>session_uuid</code>. That makes the label unique for each run and helps avoid collisions in parallel execution.</p>
+<p><strong>Tip:</strong> When the selector value is <code>None</code>, the fixture appends a <code>session_uuid</code> suffix to the label <strong>key</strong> and uses
+<code>session_uuid</code> as the <strong>value</strong>, so two parallel sessions never overwrite each other's label.</p>
 </blockquote>
 <h3 id="labels">Labels</h3>
-<p>Use <code>target_labels</code> to stamp metadata onto the migrated VM template.</p>
-<p>Examples from <code>tests/tests_config/config.py</code>:</p>
+<p>Use <code>target_labels</code> to stamp metadata onto the migrated VM template. Examples from <code>tests/tests_config/config.py</code>:</p>
 <ul>
 <li><code>"static-label": "static-value"</code></li>
 <li><code>"mtv-comprehensive-test": None</code></li>
 <li><code>"test-type": "comprehensive"</code></li>
 </ul>
-<p>The OpenShift provider reads labels back from the VM template metadata and the post-migration verifier checks that every expected label is present with the expected value.</p>
-<blockquote>
-<p><strong>Tip:</strong> As with node selectors, a label value of <code>None</code> is replaced by the current <code>session_uuid</code>, which is useful when you need unique per-run labels.</p>
-</blockquote>
+<p>The <code>target_vm_labels</code> fixture replaces every <code>None</code> value with the current <code>session_uuid</code>, the post-migration
+<code>check_vm_labels()</code> verifies each expected label is present with the expected value, and a missing <code>target_labels</code> key in
+the test config raises <code>ValueError</code> naming the key you forgot.</p>
 <h3 id="affinity">Affinity</h3>
-<p>Use <code>target_affinity</code> when you need Kubernetes scheduling preferences or constraints on the migrated VM.</p>
-<p>The repository examples use <code>podAffinity</code> with <code>preferredDuringSchedulingIgnoredDuringExecution</code>, for example matching VMs near pods with a specific label and topology key.</p>
-<p>Because the verifier deep-compares the resulting affinity block, it is best to keep the structure in your test config exactly as MTV should apply it.</p>
+<p>Use <code>target_affinity</code> when you need Kubernetes scheduling preferences or constraints on the migrated VM. The repository
+examples use <code>podAffinity</code> with <code>preferredDuringSchedulingIgnoredDuringExecution</code>, matching VMs near pods with a
+specific label and topology key. Because <code>check_vm_affinity()</code> deep-compares the resulting block, keep the structure in
+your test config exactly as MTV should apply it.</p>
 <blockquote>
-<p><strong>Note:</strong> In this repository, labels are validated from the VM template metadata and affinity is validated from the VM template spec. Node placement is validated from the running VMI's assigned node.</p>
+<p><strong>Note:</strong> Labels are validated from the VM template metadata, affinity from the VM template spec, and node placement
+from the running VMI's assigned node.</p>
 </blockquote>
 <h2 id="multus-setup">Multus setup</h2>
 <p>Multus support is handled as part of network-map preparation, not as a direct Plan field.</p>
 <p>The default Multus CNI configuration comes from <code>conftest.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">"session"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">multus_cni_config</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="n">bridge_type_and_name</span> <span class="o">=</span> <span class="s2">&quot;cnv-bridge&quot;</span>
-    <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;cniVersion&quot;</span><span class="p">:</span> <span class="s2">&quot;0.3.1&quot;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;bridge&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+    <span class="n">bridge_type_and_name</span> <span class="o">=</span> <span class="s2">"cnv-bridge"</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"cniVersion"</span><span class="p">:</span> <span class="s2">"0.3.1"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"bridge"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">"</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
 </code></pre></div>
 
-<p>When the source VM has multiple NICs, <code>utilities/utils.py</code> maps the first source network to the pod network and every additional network to a Multus NAD:</p>
-<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_networks_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)):</span>
+<p>When the source VM has multiple NICs, <code>utilities/utils.py</code> maps the first source network to the pod network and every
+additional network to a Multus NAD:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">networks</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">pod_only</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="c1"># First network or pod_only mode → pod network</span>
         <span class="n">_destination</span> <span class="o">=</span> <span class="n">_destination_pod</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Extract base name and namespace from multus_network_name (only when needed)</span>
-        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span>
+        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span>
 
-        <span class="c1"># Generate unique NAD name for each additional network</span>
-        <span class="c1"># Use consistent naming: {base_name}-1, {base_name}-2, etc.</span>
-        <span class="c1"># Where base_name includes unique test identifier (e.g., cnv-bridge-abc12345)</span>
-        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">"</span>
 
         <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
-            <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
-            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;multus&quot;</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
+            <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
+            <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"multus"</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">multus_counter</span> <span class="o">+=</span> <span class="mi">1</span>  <span class="c1"># Increment for next NAD</span>
 </code></pre></div>
@@ -569,17 +922,442 @@
 <li>The first NIC stays on the pod network</li>
 <li>Each additional NIC gets its own <code>NetworkAttachmentDefinition</code></li>
 <li>NADs are named from a short base name plus <code>-1</code>, <code>-2</code>, and so on</li>
-<li><code>multus_namespace</code> decides where those NADs are created</li>
+<li><code>multus_namespace</code> decides where those NADs are created, and the fixture creates that namespace if needed</li>
 </ul>
 <p>Both comprehensive configs use:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>
 </code></pre></div>
 
-<p>That enables cross-namespace NAD access by creating or reusing the NADs in <code>default</code>.</p>
 <blockquote>
-<p><strong>Note:</strong> A single-NIC VM does not need Multus. The fixture calculates the number of NADs as <code>max(0, len(networks) - 1)</code>, so only additional NICs get Multus attachments.</p>
-<p><strong>Tip:</strong> If you want to keep migration resources in one namespace but share NADs from another namespace, set <code>multus_namespace</code> explicitly, as the comprehensive tests do.</p>
+<p><strong>Note:</strong> A single-NIC VM does not need Multus. The fixture calculates the number of NADs as <code>max(0, len(networks) - 1)</code>,
+plus one per VM that sets <code>add_nic</code>, so only additional NICs get Multus attachments.</p>
 </blockquote>
+<h2 id="per-nic-network-mapping">Per-NIC network mapping</h2>
+<p>By default the NetworkMap holds one entry per <strong>distinct source network</strong>, which collapses two NICs attached to the same
+vSphere network into a single mapping. Set <code>per_nic_network_map: True</code> to emit one mapping per NIC instead, using
+<code>get_per_nic_networks()</code> with <code>deduplicate=False</code>.</p>
+<p>This is what lets two NICs on the same source network land on different destination NADs without Forklift rejecting the
+plan:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_cold_dual_nic_same_network_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel9-dual-nic"</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"per_nic_network_map"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"skip_clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p><code>TestColdDualNicSameNetworkPlanValidation</code> is a 3-step plan-readiness test: <code>test_create_storagemap</code>,
+<code>test_create_networkmap</code>, <code>test_create_plan</code>. No migration runs, so the proof is that <code>create_plan_resource()</code> waits for
+Plan Ready without a <code>VMDuplicateNADMappings</code> validation error.</p>
+<blockquote>
+<p><strong>Note:</strong> The flag is read in two places. The <code>multus_network_name</code> fixture uses it to decide how many NADs to create,
+and <code>get_network_migration_map(per_nic_network_map=...)</code> uses it to decide whether to deduplicate networks.</p>
+</blockquote>
+<h2 id="adding-a-nic-to-the-source-vm">Adding a NIC to the source VM</h2>
+<p><code>add_nic: True</code> clones the source VM and attaches one extra NIC by duplicating an existing secondary NIC, which
+guarantees the new NIC lands on a valid, migratable secondary network. <code>add_nic_start_connected</code> is required and decides
+whether the new NIC is connected.</p>
+<p>Because the NIC is added after the clone was already synced to the Forklift inventory, the preparation flow records the
+expected NIC count per VM and then forces a refresh with <code>wait_for_added_nics_in_forklift_inventory()</code>. Without that
+wait, NetworkMap creation would use stale inventory and Forklift would drop the added NIC.</p>
+<blockquote>
+<p><strong>Tip:</strong> <code>add_nic</code> requires an existing secondary NIC on the source VM — the VMware implementation copies the backing
+of the first NIC that is not on the pod network and returns <code>None</code> when there is none.</p>
+</blockquote>
+<h2 id="luks-encrypted-disk-migration">LUKS encrypted disk migration</h2>
+<p><strong>Problem.</strong> Forklift cannot read a LUKS-encrypted disk. MTV needs the passphrase as a Kubernetes Secret referenced from the
+Plan, and the migrated VM must come up with encryption still active.</p>
+<p><strong>Config keys.</strong></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VM</td>
+<td><code>luks</code></td>
+<td><code>True</code> marks the VM as having a LUKS-encrypted disk</td>
+</tr>
+<tr>
+<td>VM</td>
+<td><code>luks_passphrase</code></td>
+<td>Per-VM passphrase override</td>
+</tr>
+<tr>
+<td>Provider</td>
+<td><code>luks_passphrase</code></td>
+<td>Optional vSphere source-provider fallback in <code>.providers.json</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Real config from <code>tests/tests_config/config.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_luks_cold_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel9-luks"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"luks"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p>The negative case overrides the passphrase per VM instead of the provider entry:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_luks_cold_migration_wrong_key"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel9-luks"</span><span class="p">,</span>
+            <span class="s2">"luks"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"luks_passphrase"</span><span class="p">:</span> <span class="s2">"WRONGPASSWORD"</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p><strong>Secret setup.</strong> The <code>luks_vm_specs</code> fixture in <code>tests/luks/conftest.py</code> does all of it:</p>
+<ol>
+<li><code>populate_vm_ids()</code> so each VM dict carries its Forklift inventory ID</li>
+<li>Pop <code>luks</code> and <code>luks_passphrase</code> off the VM config</li>
+<li>
+<p>Resolve the passphrase: per-VM override first, then <code>source_provider_data["luks_passphrase"]</code>; raise <code>ValueError</code>
+   when neither yields a value</p>
+</li>
+<li>
+<p>Create a <code>Secret</code> in <code>target_namespace</code> with a single <code>key</code> string-data entry holding the passphrase, via <code>create_and_store_resource()</code></p>
+</li>
+<li>Set <code>vm["luks"] = {"name": secret.name}</code> so the Plan references it</li>
+</ol>
+<p><strong>Step pattern (6 steps).</strong> <code>tests/luks/test_luks_cold_migration.py</code> splits shared setup into <code>LuksColdMigrationBase</code>
+(<code>test_create_storagemap</code>, <code>test_create_networkmap</code>, <code>test_create_plan</code>), where <code>test_create_plan</code> passes
+<code>virtual_machines_list=luks_vm_specs</code>. The subclasses then add:</p>
+<ul>
+<li><code>TestLuksColdMigration</code>: <code>test_migrate_vms</code> → <code>test_verify_luks_encryption</code> → <code>test_check_vms</code></li>
+<li><code>TestLuksColdMigrationWrongKey</code>: <code>test_migrate_vms</code> only, wrapped in
+  <code>pytest.raises(MigrationPlanExecError, match="ImageConversion")</code></li>
+</ul>
+<p>Both classes carry <code>@pytest.mark.vsphere</code> and <code>@pytest.mark.tier1</code>.</p>
+<p><strong>What is verified.</strong> <code>verify_luks_encryption()</code> opens an SSH connection to the migrated VM, runs <code>lsblk -J -f</code>,
+recursively walks the blockdevice tree for <code>fstype == "crypto_LUKS"</code>, and asserts at least one encrypted device was found.
+SSH or parse failures are treated as transient and retried every 15 seconds for up to 300 seconds; an empty device list
+is definitive and fails immediately.</p>
+<blockquote>
+<p><strong>Warning:</strong> The source VM must have its LUKS key file configured (for example <code>/etc/luks-key</code> in <code>/etc/crypttab</code>) so
+the guest boots unattended. Without it the VM prompts interactively for the passphrase and SSH never comes up, so the
+verification step times out rather than failing on the migration itself.</p>
+<p><strong>Note:</strong> The wrong-key class matches on <code>ImageConversion</code>, the pipeline step name read from
+<code>plan.instance.status</code>. If upstream renames that step the match string needs updating.</p>
+</blockquote>
+<h2 id="xfs-v4-filesystem-compatibility">XFS v4 filesystem compatibility</h2>
+<p><strong>Problem.</strong> The default virt-v2v image cannot handle XFS v4 metadata. MTV's <code>xfs_compatibility</code> option selects the
+XFS-compatible virt-v2v image instead.</p>
+<p><strong>Config keys.</strong></p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_warm_migration_xfs"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-feature-rhel7-xfs"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+    <span class="s2">"xfs_compatibility"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"xfs_check"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"command"</span><span class="p">:</span> <span class="s2">"/usr/sbin/xfs_info"</span><span class="p">,</span>
+        <span class="s2">"mount_point"</span><span class="p">:</span> <span class="s2">"/"</span><span class="p">,</span>
+        <span class="s2">"expected_output"</span><span class="p">:</span> <span class="s2">"crc=0"</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p><code>test_cold_migration_xfs</code> uses the same shape with <code>mount_point: "/sdb1"</code> for a non-root XFS volume. Both test classes are
+<code>TestWarmMigrationXfs</code> and <code>TestColdMigrationXfs</code>.</p>
+<p><strong>Plan wiring.</strong> <code>create_plan_resource(xfs_compatibility=...)</code> sets the Plan CR field only when the flag is truthy, so a
+<code>False</code> value leaves the Forklift default untouched.</p>
+<p><strong>Step pattern (6 steps).</strong> storagemap → networkmap → plan → migrate → <code>test_verify_xfs_version</code> → <code>test_check_vms</code>.</p>
+<p><strong>What is verified.</strong> <code>test_verify_xfs_version</code> reads <code>prepared_plan["xfs_check"]</code> with direct key access, looks up each
+source VM's info, and calls <code>check_vm_command_output()</code> with <code>command=[xfs_check["command"], xfs_check["mount_point"]]</code>.
+That helper resolves the destination VM name, resolves guest credentials from <code>.providers.json</code>, runs the command over
+SSH, and asserts <code>expected_output</code> appears in stdout.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>check_vm_command_output()</code> raises <code>ValueError</code> for Windows guests, so <code>xfs_check</code> is a Linux-only option.</p>
+</blockquote>
+<h2 id="shared-disk-migration">Shared disk migration</h2>
+<p><strong>Problem.</strong> Two vSphere VMs can share one VMDK. Cloning breaks that relationship because each clone gets an independent
+disk copy, and Forklift would otherwise migrate a separate disk for every VM.</p>
+<p><strong>Config keys.</strong> <code>migrate_shared_disks</code> exists at both scopes:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Plan</td>
+<td><code>True</code></td>
+<td>Enable shared-disk migration for all VMs by default</td>
+</tr>
+<tr>
+<td>VM</td>
+<td><code>True</code></td>
+<td>This VM is the <strong>owner</strong> and its shared-disk PVC is migrated</td>
+</tr>
+<tr>
+<td>VM</td>
+<td><code>False</code></td>
+<td>This VM is the <strong>consumer</strong> and skips the shared-disk PVC</td>
+</tr>
+</tbody>
+</table></div>
+<p>Real config from <code>tests/tests_config/config.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_shared_disk_rhel_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-feature-shared-rhel1"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"off"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"migrate_shared_disks"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-feature-shared-rhel2"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"off"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"migrate_shared_disks"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"migrate_shared_disks"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p><strong>Preparation.</strong> The <code>prepared_plan</code> fixture detects shared-disk configuration from either scope, fails fast when the
+source provider does not implement <code>relink_shared_disks()</code>, and after all clones complete calls
+<code>relink_shared_disks(source_vm_names=..., cloned_vms=...)</code>. Orphaned VMDKs left on the consumer clones are recorded for
+reattachment during teardown so normal VM deletion removes them.</p>
+<p><code>create_plan_resource()</code> renames the per-VM snake_case <code>migrate_shared_disks</code> to the camelCase <code>migrateSharedDisks</code> API
+field before serializing the VM list.</p>
+<p><strong>Linux step pattern (6 steps).</strong> <code>TestSharedDiskRhelMigration</code> (markers <code>vsphere</code>, <code>shared_disk</code>, <code>tier0</code>) inserts
+<code>test_verify_shared_disk_data</code> before <code>test_check_vms</code>. That step calls <code>verify_shared_disk_data()</code>, which:</p>
+<ol>
+<li>Locates the single shared PVC between the two destination VMs and maps each VM to its block device</li>
+<li>VM1 mounts the shared partition, writes a marker file, syncs, unmounts</li>
+<li>VM2 mounts it, reads VM1's marker, writes its own marker, syncs, unmounts</li>
+<li>VM1 runs <code>blockdev --flushbufs</code>, remounts, and reads VM2's marker — the flush is required because XFS keeps metadata in
+   the kernel buffer cache</li>
+</ol>
+<p><strong>Windows step pattern (7 steps).</strong> <code>TestSharedDiskWindowsMigration</code> (markers <code>vsphere</code>, <code>shared_disk</code>, <code>tier1</code>) prepends
+<code>test_label_shared_disk</code>, which calls <code>label_shared_disk_on_source_windows()</code> before migration. It finds the shared VMDK's
+backing UUID on the owner VM, maps it to the Windows disk serial, powers the owner VM on, and runs a PowerShell command
+through VMware Guest Operations to write a session-unique NTFS volume label into <code>prepared_plan["_shared_disk_label"]</code>. It
+also disables Fast Startup and shuts the owner VM down gracefully. Post-migration verification uses
+<code>verify_shared_disk_data_windows()</code>, which reads the same label and performs the bidirectional read/write check with
+drive-letter discovery and a targeted <code>Update-HostStorageCache</code> refresh.</p>
+<blockquote>
+<p><strong>Warning:</strong> The shared disk must already carry a filesystem and be unmounted on the source VMs. virt-v2v cannot update
+<code>fstab</code> for shared disks, so <code>verify_shared_disk_data()</code> mounts the partition manually.</p>
+<p><strong>Note:</strong> Shared-disk migration is vSphere-only. The fixture raises <code>ValueError</code> for any other provider type before
+cloning starts, and only one shared VMDK per plan is supported.</p>
+</blockquote>
+<h2 id="esxi-host-pinning-and-drs">ESXi host pinning and DRS</h2>
+<p>Three plan flags control where the <strong>source clone</strong> lives, which matters because copy-offload and throttling verification
+compares per-host behaviour:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Effect</th>
+<th>Overridable</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clone_to_same_host</code></td>
+<td>VM 2+ are pinned to the ESXi host used by VM 1</td>
+<td>Yes, by a per-VM <code>target_esxi_host</code></td>
+</tr>
+<tr>
+<td><code>pin_to_non_dedicated_host</code></td>
+<td>Every VM is pinned to an ESXi host outside <code>copyoffload.dedicated_migration_hosts</code></td>
+<td>Yes, by a per-VM <code>target_esxi_host</code></td>
+</tr>
+<tr>
+<td><code>disable_drs_for_vms</code></td>
+<td>After cloning, a per-VM DRS override pins the VM to its current ESXi host</td>
+<td>No</td>
+</tr>
+</tbody>
+</table></div>
+<p>Both pinning flags use <code>setdefault</code>, so an explicit <code>target_esxi_host</code> on the VM entry wins. <code>clone_to_same_host</code> raises
+<code>ValueError</code> when the first clone has no runtime host, because later clones cannot be pinned.</p>
+<p><code>pin_to_non_dedicated_host</code> resolves one host through <code>resolve_non_dedicated_esxi_host()</code> and reuses it for every VM, which
+is what prevents a VM's own ESXi host from coinciding with a dedicated migration host and producing a false pass.</p>
+<p><code>disable_drs_for_vms</code> is required alongside <code>clone_to_same_host</code> so DRS cannot move a VM between hosts after cloning but
+before migration. It raises <code>ValueError</code> for OVA providers and for any non-<code>VMWareProvider</code> clone provider.</p>
+<p>Real configs, from the throttling and dedicated-host suites:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"clone_to_same_host"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="s2">"disable_drs_for_vms"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="s2">"inventory_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="s2">"disable_drs_for_vms"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="s2">"pin_to_non_dedicated_host"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="s2">"inventory_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
+</code></pre></div>
+
+<h2 id="skipping-the-clone-phase">Skipping the clone phase</h2>
+<p><code>skip_clone: True</code> makes <code>prepared_plan</code> use the existing source VMs instead of cloning them, which is how plan-readiness
+and CA-certificate field tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
+state during teardown, because these are real, shared VMs rather than disposable clones.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>skip_clone</code> is incompatible with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>, <code>preserve_static_ips</code> on
+non-Hyper-V providers, <code>migrate_shared_disks</code>, and <code>add_nic</code> — all of those need the cloning phase. It also raises
+<code>ValueError</code> on providers whose <code>supports_skip_clone()</code> is <code>False</code>, which today means RHV.</p>
+</blockquote>
+<h2 id="rdm-as-lun">RDM as LUN</h2>
+<p><strong>Problem.</strong> Raw Device Mapping disks default to virtio on the destination VM. Some guests need them presented as
+SCSI LUN devices instead.</p>
+<p><strong>Config keys.</strong> <code>add_disks</code> entries carry <code>rdm_type: "virtual"</code> or <code>"physical"</code> on the source clone, and the plan-level
+<code>rdm_as_lun: True</code> selects the LUN presentation:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_copyoffload_rdm_virtual_disk_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span><span class="s2">"rdm_type"</span><span class="p">:</span> <span class="s2">"virtual"</span><span class="p">},</span>  <span class="c1"># LUN UUID from copyoffload.rdm_lun_uuid</span>
+            <span class="p">],</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"rdm_as_lun"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p>The physical-mode variant is identical apart from <code>rdm_type: "physical"</code>, which uses <code>physicalMode</code> with
+<code>independent_persistent</code>. The LUN UUID comes from <code>copyoffload.rdm_lun_uuid</code> in <code>.providers.json</code>, which the schema
+constrains to the NAA format (<code>^naa\.</code>).</p>
+<p><code>test_copyoffload_warm_rdm_virtual_disk_migration</code> adds no <code>rdm_as_lun</code>, so it covers the default virtio presentation.
+The three classes are <code>TestCopyoffloadRdmVirtualDiskMigration</code>, <code>TestCopyoffloadRdmPhysicalDiskMigration</code>, and
+<code>TestCopyoffloadWarmRdmVirtualDiskMigration</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>rdm_as_lun</code> applies only to vSphere source providers.</p>
+</blockquote>
+<h2 id="plan-archive-and-delete-pvc-and-datavolume-cleanup">Plan archive and delete: PVC and DataVolume cleanup</h2>
+<p><strong>Problem.</strong> When a migration fails, the Plan and Migration CRs stay behind along with any DataVolumes and PVCs that were
+already created. Archiving and deleting the Plan must clean them up, or the target namespace leaks storage.</p>
+<p><strong>Config keys.</strong> A normal plan plus a failing post-hook and an isolated VM namespace:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_plan_archive_pvc_cleanup"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span> <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span> <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"off"</span><span class="p">,</span>
+    <span class="s2">"post_hook"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"expected_result"</span><span class="p">:</span> <span class="s2">"fail"</span><span class="p">},</span>
+    <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-archive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p><strong>Step pattern (6 steps).</strong> storagemap → networkmap → plan → migrate (expected failure) → <code>test_archive_and_delete_plan</code> →
+<code>test_verify_pvc_cleanup</code>. There is no <code>test_check_vms</code>.</p>
+<ul>
+<li>
+<p><code>test_migrate_vms</code> — wraps <code>execute_migration()</code> in <code>pytest.raises(MigrationPlanExecError)</code>, then calls
+  <code>validate_hook_failure_and_check_vms()</code>, which asserts every VM failed at the same step and that it matches the
+  configured hook.</p>
+</li>
+<li>
+<p><code>test_archive_and_delete_plan</code> — asserts at least one PVC or DataVolume exists in the VM namespace (vacuity guard),
+  calls <code>archive_plan()</code>, waits for the <code>Archived</code> condition, deletes the Plan, unregisters Plan and Migration from
+  teardown, then waits up to 120s for the Migration to be cascade-deleted.</p>
+</li>
+<li>
+<p><code>test_verify_pvc_cleanup</code> — deletes the retained destination VM first, then polls <code>get_orphan_resource_names()</code> every
+  5s for up to 120s until no <code>PVC/</code> or <code>DV/</code> remains.</p>
+</li>
+</ul>
+<p><code>TestPlanArchivePvcCleanup</code> carries <code>@pytest.mark.vsphere</code>, <code>rhv</code>, <code>openstack</code>, <code>openshift</code>, <code>tier1</code>, and <code>incremental</code>.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>test_verify_pvc_cleanup</code> must delete the destination VM before polling. That VM owns a DataVolume and a
+PVC, so an unfiltered namespace poll would never empty and the step would always time out.</p>
+<p><strong>Note:</strong> <code>archive_plan()</code> also deletes plan-owned populator pods in the target namespace and logs an error for any pod
+that does not disappear. This test complements the interrupted-transfer prime-PVC scenario but does not reproduce it,
+because a prime PVC may already be gone by the time a PostHook failure is raised.</p>
+</blockquote>
+<h2 id="configuration-validation-errors">Configuration validation errors</h2>
+<p>The preparation and plan helpers fail fast rather than silently degrading. The checks you are most likely to hit:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Trigger</th>
+<th>Error</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>add_nic: True</code> without <code>add_nic_start_connected</code>, or with a non-bool value</td>
+<td><code>ValueError</code> naming the VM</td>
+</tr>
+<tr>
+<td><code>add_nic: True</code> on a non-vSphere provider</td>
+<td><code>pytest.skip</code></td>
+</tr>
+<tr>
+<td>Shared-disk config on a provider without <code>relink_shared_disks()</code></td>
+<td><code>ValueError</code> naming the provider</td>
+</tr>
+<tr>
+<td><code>disable_drs_for_vms</code> on OVA or a non-VMware clone provider</td>
+<td><code>ValueError</code></td>
+</tr>
+<tr>
+<td><code>skip_clone</code> combined with an incompatible flag, or on RHV</td>
+<td><code>ValueError</code> listing the conflicts</td>
+</tr>
+<tr>
+<td><code>preserve_static_ips</code> without <code>source_vm_power: "on"</code> on some VM</td>
+<td><code>ValueError</code> naming the VM</td>
+</tr>
+<tr>
+<td><code>clone_to_same_host</code> when the first clone has no runtime host</td>
+<td><code>ValueError</code> naming the VM</td>
+</tr>
+<tr>
+<td>LUKS config with no resolvable passphrase</td>
+<td><code>ValueError</code> naming the VM and the resolution source</td>
+</tr>
+<tr>
+<td><code>pvc_name_template</code> map with a key that is not a provider type or <code>default</code></td>
+<td><code>ValueError</code> listing the allowed keys</td>
+</tr>
+<tr>
+<td><code>target_labels</code> missing from the test config</td>
+<td><code>ValueError</code> naming <code>target_labels</code></td>
+</tr>
+<tr>
+<td><code>target_node_selector</code> with anything other than exactly one label</td>
+<td><code>ValueError</code> reporting the count</td>
+</tr>
+</tbody>
+</table></div>
                 </div>
             </article>
             <nav class="page-nav">
@@ -602,6 +1380,13 @@
                     <h3>On this page</h3>
                     <div class="toc">
 <ul>
+<li><a href="#plan-level-options">Plan-level options</a></li>
+<li><a href="#vm-level-options">VM-level options</a><ul>
+<li><a href="#disk-provisioning-with-disk_type">Disk provisioning with disk_type</a></li>
+</ul>
+</li>
+<li><a href="#test-verification-options">Test-verification options</a></li>
+<li><a href="#step-patterns">Step patterns</a></li>
 <li><a href="#typical-usage">Typical usage</a></li>
 <li><a href="#target-power-state">Target power state</a></li>
 <li><a href="#static-ip-preservation">Static IP preservation</a></li>
@@ -614,30 +1399,43 @@
 </ul>
 </li>
 <li><a href="#multus-setup">Multus setup</a></li>
+<li><a href="#per-nic-network-mapping">Per-NIC network mapping</a></li>
+<li><a href="#adding-a-nic-to-the-source-vm">Adding a NIC to the source VM</a></li>
+<li><a href="#luks-encrypted-disk-migration">LUKS encrypted disk migration</a></li>
+<li><a href="#xfs-v4-filesystem-compatibility">XFS v4 filesystem compatibility</a></li>
+<li><a href="#shared-disk-migration">Shared disk migration</a></li>
+<li><a href="#esxi-host-pinning-and-drs">ESXi host pinning and DRS</a></li>
+<li><a href="#skipping-the-clone-phase">Skipping the clone phase</a></li>
+<li><a href="#rdm-as-lun">RDM as LUN</a></li>
+<li><a href="#plan-archive-and-delete-pvc-and-datavolume-cleanup">Plan archive and delete: PVC and DataVolume cleanup</a></li>
+<li><a href="#configuration-validation-errors">Configuration validation errors</a></li>
 </ul>
 </div>
 
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -683,5 +1481,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

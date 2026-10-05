@@ -4,6 +4,14 @@ default: true
 # MD013/line-length - Line length
 MD013:
   line_length: 180
+  # Tables and fenced code blocks must stay on one line to render correctly.
+  tables: false
+  code_blocks: false
+
+# MD028/no-blanks-blockquote - Disabled: stacked callouts ("> **Note:**" blocks
+# separated by a blank line) are a deliberate documentation style in docs/ and
+# AGENTS.md, and merging them would change how they render.
+MD028: false
 
 # MD033/no-inline-html - Allow inline HTML for collapsible sections
 MD033:

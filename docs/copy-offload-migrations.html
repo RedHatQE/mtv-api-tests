@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Copy-Offload Migrations - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -148,7 +149,7 @@
 
                     <li>
                         <a href="copy-offload-migrations.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Copy-Offload Migrations
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,23 +302,32 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="copy-offload-migrations">Copy-Offload Migrations</h1>
-<p>Copy-offload migrations in <code>mtv-api-tests</code> cover the VMware-to-OpenShift path where MTV can let the storage array move VM disk data instead of using the standard VDDK copy path. In practice, that means a vSphere source provider, shared storage between vSphere and OpenShift, a <code>StorageMap</code> with <code>offloadPlugin.vsphereXcopyConfig</code>, and the right storage credentials.</p>
-<p>This project does more than validate a single happy path. The existing copy-offload coverage includes thin and thick disks, snapshots, RDM, multi-datastore layouts, warm migration, non-XCOPY fallback, VM naming edge cases, scale, and concurrent XCOPY/VDDK execution.</p>
+<p>Copy-offload migrations in <code>mtv-api-tests</code> cover the VMware-to-OpenShift path where MTV can let the storage array move VM disk data instead of using the standard VDDK copy path. In
+practice, that means a vSphere source provider, shared storage between vSphere and OpenShift, a <code>StorageMap</code> with <code>offloadPlugin.vsphereXcopyConfig</code>, and the right storage
+credentials.</p>
+<p>This project does more than validate a single happy path. The existing copy-offload coverage includes thin and thick disks, snapshots, RDM, multi-datastore layouts, warm migration,
+non-XCOPY fallback, VM naming edge cases, scale, per-host populator throttling, dedicated migration hosts, and concurrent XCOPY/VDDK execution.</p>
 <h2 id="what-you-need">What You Need</h2>
 <ul>
 <li>A vSphere source provider. The copy-offload validation in this project fails fast for non-VMware sources.</li>
 <li>Shared storage between vSphere and OpenShift.</li>
-<li>A block-backed OpenShift storage class. The copy-offload tests map the destination as <code>ReadWriteOnce</code> with <code>Block</code> volume mode.</li>
-<li>MTV installed and healthy.</li>
-<li>A cloneable test VM or template with working guest access. Several scenarios power VMs on, wait for guest info, create snapshots, or validate guest connectivity after migration.</li>
-<li>A clone method: <code>vib</code> or <code>ssh</code>.</li>
+<li>
+<p>A block-backed OpenShift storage class. Every copy-offload test builds its <code>StorageMap</code> destination
+  with <code>volume_mode="Block"</code>, which emits <code>volumeMode: Block</code> alongside the storage class.</p>
+</li>
+<li>
+<p>MTV installed and healthy.</p>
+</li>
+<li>A cloneable test VM or template with working guest access. Several scenarios power VMs on, wait for guest info, create snapshots, or validate guest connectivity after migration.
+  A clone method: <code>vib</code> or <code>ssh</code>.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> The repository's copy-offload guidance assumes SAN or block-backed storage. The existing project docs explicitly call out NFS as unsupported for copy-offload scenarios.</p>
+<p><strong>Warning:</strong> The repository's copy-offload guidance assumes SAN or block-backed storage. The existing project docs explicitly call out NFS as unsupported for copy-offload
+scenarios.</p>
 </blockquote>
 <p>For older MTV environments, the project docs include this feature-gate example:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">feature_copy_offload</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;true&#39;</span>
+<span class="w">  </span><span class="nt">feature_copy_offload</span><span class="p">:</span><span class="w"> </span><span class="s">'true'</span>
 </code></pre></div>
 
 <blockquote>
@@ -324,105 +335,127 @@
 </blockquote>
 <h2 id="copy-offload-provider-config">Copy-Offload Provider Config</h2>
 <p>The copy-offload settings live under the VMware provider entry in <code>.providers.json</code>. This is the actual <code>copyoffload</code> block from <code>.providers.json.example</code>:</p>
-<div class="highlight"><pre><span></span><code>&quot;copyoffload&quot;: {
+<div class="highlight"><pre><span></span><code>"copyoffload": {
   # Supported storage_vendor_product values:
-  # - &quot;ontap&quot;           (NetApp ONTAP)
-  # - &quot;vantara&quot;         (Hitachi Vantara)
-  # - &quot;primera3par&quot;     (HPE Primera/3PAR)
-  # - &quot;pureFlashArray&quot;  (Pure Storage FlashArray)
-  # - &quot;powerflex&quot;       (Dell PowerFlex)
-  # - &quot;powermax&quot;        (Dell PowerMax)
-  # - &quot;powerstore&quot;      (Dell PowerStore)
-  # - &quot;infinibox&quot;       (Infinidat InfiniBox)
-  # - &quot;flashsystem&quot;     (IBM FlashSystem)
-  &quot;storage_vendor_product&quot;: &quot;ontap&quot;,
+  # - "ontap"           (NetApp ONTAP)
+  # - "vantara"         (Hitachi Vantara)
+  # - "primera3par"     (HPE Primera/3PAR)
+  # - "pureFlashArray"  (Pure Storage FlashArray)
+  # - "powerflex"       (Dell PowerFlex)
+  # - "powermax"        (Dell PowerMax)
+  # - "powerstore"      (Dell PowerStore)
+  # - "infinibox"       (Infinidat InfiniBox)
+  # - "flashsystem"     (IBM FlashSystem)
+  "storage_vendor_product": "ontap",
 
   # Primary datastore for copy-offload operations (required)
-  # This is the vSphere datastore ID (e.g., &quot;datastore-12345&quot;) where VMs reside
+  # This is the vSphere datastore ID (e.g., "datastore-12345") where VMs reside
   # Get via vSphere: Datacenter → Storage → Datastore → Summary → More Objects ID
-  &quot;datastore_id&quot;: &quot;datastore-12345&quot;,
+  "datastore_id": "datastore-12345",
 
   # Optional: Secondary datastore for multi-datastore copy-offload tests
   # Only needed when testing VMs with disks spanning multiple datastores
   # When specified, tests can validate copy-offload with disks on different datastores
-  &quot;secondary_datastore_id&quot;: &quot;datastore-67890&quot;,
+  "secondary_datastore_id": "datastore-67890",
 
   # Optional: Non-XCOPY datastore for mixed datastore tests
   # This should be a datastore that does NOT support XCOPY/VAAI primitives
   # Used for testing VMs with disks on both XCOPY and non-XCOPY datastores
-  &quot;non_xcopy_datastore_id&quot;: &quot;datastore-99999&quot;,
+  "non_xcopy_datastore_id": "datastore-99999",
 
-  &quot;default_vm_name&quot;: &quot;rhel9-template&quot;,
-  &quot;storage_hostname&quot;: &quot;storage.example.com&quot;,
-  &quot;storage_username&quot;: &quot;admin&quot;,
-  &quot;storage_password&quot;: &quot;your-password-here&quot;,  # pragma: allowlist secret
+  "default_vm_name": "rhel9-template",
+
+  # Optional: vSphere resource pool for VM placement during cloning
+  # Priority: this value -&gt; target ESXi host's pool -&gt; source VM's pool -&gt; cluster search
+  # "resource_pool": "&lt;VSPHERE RESOURCE POOL NAME&gt;",
+
+  "storage_hostname": "storage.example.com",
+  "storage_username": "admin",
+  "storage_password": "your-password-here",  # pragma: allowlist secret
 
   # Vendor-specific fields (configure based on your storage_vendor_product):
   # IMPORTANT: Only configure the fields for your selected storage_vendor_product.
-  # For example, if storage_vendor_product == &quot;ontap&quot;, only configure ontap_svm.
+  # For example, if storage_vendor_product == "ontap", only configure ontap_svm.
   # You may leave other vendor-specific fields blank or remove them from your config.
   # Note: Both datastore_id and secondary_datastore_id (if used) must be on the
   # same storage array and support XCOPY/VAAI primitives for copy-offload to work.
   # See forklift vsphere-xcopy-volume-populator code/README for details
 
-  # NetApp ONTAP (required for &quot;ontap&quot;):
-  &quot;ontap_svm&quot;: &quot;vserver-name&quot;,
+  # NetApp ONTAP (required for "ontap"):
+  "ontap_svm": "vserver-name",
 
-  # Hitachi Vantara (required for &quot;vantara&quot;):
-  &quot;vantara_storage_id&quot;: &quot;123456789&quot;,  # Storage array serial number
-  &quot;vantara_storage_port&quot;: &quot;443&quot;,  # Storage API port
-  &quot;vantara_hostgroup_id_list&quot;: &quot;CL1-A,1:CL2-B,2:CL4-A,1:CL6-A,1&quot;,  # IO ports and host group IDs
+  # Hitachi Vantara (required for "vantara"):
+  "vantara_storage_id": "123456789",  # Storage array serial number
+  "vantara_storage_port": "443",  # Storage API port
+  "vantara_hostgroup_id_list": "CL1-A,1:CL2-B,2:CL4-A,1:CL6-A,1",  # IO ports and host group IDs
 
-  # Pure Storage FlashArray (required for &quot;pureFlashArray&quot;):
-  # Get with: printf &quot;px_%.8s&quot; $(oc get storagecluster -A -o=jsonpath=&#39;{.items[?(@.spec.cloudStorage.provider==&quot;pure&quot;)].status.clusterUid}&#39;)
-  &quot;pure_cluster_prefix&quot;: &quot;px_a1b2c3d4&quot;,
+  # Pure Storage FlashArray (required for "pureFlashArray"):
+  # Get with: printf "px_%.8s" $(oc get storagecluster -A -o=jsonpath='{.items[?(@.spec.cloudStorage.provider=="pure")].status.clusterUid}')
+  "pure_cluster_prefix": "px_a1b2c3d4",
 
-  # Dell PowerFlex (required for &quot;powerflex&quot;):
+  # Dell PowerFlex (required for "powerflex"):
   # Get from vxflexos-config ConfigMap in vxflexos or openshift-operators namespace
-  &quot;powerflex_system_id&quot;: &quot;system-id&quot;,
+  "powerflex_system_id": "system-id",
 
-  # Dell PowerMax (required for &quot;powermax&quot;):
+  # Dell PowerMax (required for "powermax"):
   # Get from ConfigMap in powermax namespace used by CSI driver
-  &quot;powermax_symmetrix_id&quot;: &quot;000123456789&quot;,
+  "powermax_symmetrix_id": "000123456789",
 
   # HPE Primera/3PAR, Dell PowerStore, Infinidat InfiniBox, IBM FlashSystem:
   # No additional vendor-specific fields required - use only the common fields above
 
+  # Optional: extra Secret stringData keys not covered by vendor fields above.
+  # Keys must match Forklift Secret names (uppercase). Example is for PowerMax only.
+  # Overridden by the COPYOFFLOAD_STORAGE_SECRET_EXTRA env var (JSON object).
+  # "storage_secret_extra": {
+  #   "POWERMAX_PORT_GROUP_NAME": "mtv_group_pg",
+  #   "STORAGE_SKIP_SSL_VERIFICATION": "true"
+  # },
+
+  # Optional: dedicated ESXi host(s) for XCOPY data extraction. Maps to StorageMap
+  # offloadPlugin.vsphereXcopyConfig.dedicatedMigrationHosts. Random per-disk selection
+  # when more than one host is listed.
+  # "dedicated_migration_hosts": ["host-3078"],
+
   # ESXi SSH configuration (optional, for SSH-based cloning):
   # Can be overridden via environment variables: COPYOFFLOAD_ESXI_HOST, COPYOFFLOAD_ESXI_USER, COPYOFFLOAD_ESXI_PASSWORD
-  &quot;esxi_clone_method&quot;: &quot;ssh&quot;,  # &quot;vib&quot; (default) or &quot;ssh&quot;
-  &quot;esxi_host&quot;: &quot;your-esxi-host.example.com&quot;,  # required for ssh method
-  &quot;esxi_user&quot;: &quot;root&quot;,  # required for ssh method
-  &quot;esxi_password&quot;: &quot;your-esxi-password&quot;,  # pragma: allowlist secret # required for ssh method
+  "esxi_clone_method": "ssh",  # "vib" (default) or "ssh"
+  "esxi_host": "your-esxi-host.example.com",  # required for ssh method
+  "esxi_user": "root",  # required for ssh method
+  "esxi_password": "your-esxi-password",  # pragma: allowlist secret # required for ssh method
 
   # RDM testing (optional, for RDM disk tests):
   # Note: datastore_id must be a VMFS datastore for RDM disk support
-  &quot;rdm_lun_uuid&quot;: &quot;naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;
+  "rdm_lun_uuid": "naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 }
 </code></pre></div>
 
-<p>The minimum fields that this project validates before running are:</p>
+<p>The <code>copyoffload_config</code> session fixture validates five fields before any copy-offload test body runs.
+A missing value fails the session with a message naming the field or the environment variable to set:</p>
 <ul>
-<li><code>storage_vendor_product</code></li>
-<li><code>datastore_id</code></li>
-<li><code>storage_hostname</code></li>
-<li><code>storage_username</code></li>
-<li><code>storage_password</code></li>
+<li><code>storage_vendor_product</code> and <code>datastore_id</code> must be present in <code>.providers.json</code></li>
+<li><code>storage_hostname</code>, <code>storage_username</code>, and <code>storage_password</code> must resolve from <code>.providers.json</code> or from their <code>COPYOFFLOAD_*</code> environment variables</li>
 </ul>
 <p>Add these when you want advanced scenarios:</p>
 <ul>
 <li><code>secondary_datastore_id</code> for multi-datastore tests</li>
 <li><code>non_xcopy_datastore_id</code> for mixed and fallback tests</li>
 <li><code>rdm_lun_uuid</code> for RDM tests</li>
+<li><code>dedicated_migration_hosts</code> for the dedicated-host tests</li>
 <li><code>default_vm_name</code> if your copy-offload-ready template differs from the default test data</li>
 </ul>
+<p>Each advanced key has its own class-scoped guard fixture that fails fast with a specific message
+rather than letting the test fail later: <code>multi_datastore_config</code>, <code>mixed_datastore_config</code>,
+<code>rdm_config</code>, and <code>configured_dedicated_hosts</code>.</p>
 <blockquote>
-<p><strong>Note:</strong> The <code># pragma: allowlist secret</code> comments in <code>.providers.json.example</code> are there for repository tooling. They are not valid JSON and must be removed from your real <code>.providers.json</code>.</p>
+<p><strong>Note:</strong> The <code># pragma: allowlist secret</code> comments in <code>.providers.json.example</code> are there for repository tooling. They are not valid JSON and must be removed from your real
+<code>.providers.json</code>.</p>
 </blockquote>
-<p><code>default_vm_name</code> is especially useful when your environment has a single known-good copy-offload template. The suite applies that override to cloned VM scenarios so you do not have to change every test entry by hand.</p>
+<p><code>default_vm_name</code> is especially useful when your environment has a single known-good copy-offload template. The suite applies that override to cloned VM scenarios so you do not
+have to change every test entry by hand.</p>
 <h2 id="environment-variable-overrides">Environment Variable Overrides</h2>
 <p>The repository lets you override any copy-offload credential from the environment, and environment values always win over <code>.providers.json</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+<div class="highlight"><pre><span></span><code><span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span>
 <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">env_var_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">copyoffload_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">credential_name</span><span class="p">)</span>
 </code></pre></div>
 
@@ -440,12 +473,22 @@
 <li><code>COPYOFFLOAD_ESXI_USER</code></li>
 <li><code>COPYOFFLOAD_ESXI_PASSWORD</code></li>
 </ul>
+<p>There is one more override for raw secret keys. <code>COPYOFFLOAD_STORAGE_SECRET_EXTRA</code> takes a JSON object
+of <code>Secret</code> <code>stringData</code> keys and merges it into the copy-offload storage secret. Values from
+<code>storage_secret_extra</code> in <code>.providers.json</code> are applied first, then the environment variable
+overrides matching keys:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">COPYOFFLOAD_STORAGE_SECRET_EXTRA</span><span class="o">=</span><span class="s1">'{"POWERMAX_PORT_GROUP_NAME": "mtv_group_pg", "STORAGE_SKIP_SSL_VERIFICATION": "true"}'</span>
+</code></pre></div>
+
+<p>Extra entries win over the vendor-mapped fields, so you can correct a vendor key without editing
+<code>.providers.json</code>. JSON booleans are normalized to lowercase <code>true</code>/<code>false</code> before they reach
+the <code>Secret</code>.</p>
 <blockquote>
 <p><strong>Tip:</strong> A good pattern is to keep the structural values in <code>.providers.json</code> and inject the sensitive values through environment variables at runtime.</p>
 </blockquote>
 <h2 id="supported-storage-vendors">Supported Storage Vendors</h2>
 <p>Use these exact <code>storage_vendor_product</code> values. They come directly from the repository's copy-offload constants and secret-mapping logic.</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th><code>storage_vendor_product</code></th>
@@ -500,7 +543,7 @@
 <td>None beyond base storage credentials</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="storage-secrets">Storage Secrets</h2>
 <p>In <code>mtv-api-tests</code>, you usually do not create the copy-offload storage secret by hand. The suite creates it automatically from the VMware provider's <code>copyoffload</code> block.</p>
 <p>That matters because:</p>
@@ -515,51 +558,78 @@
 <li><code>STORAGE_USERNAME</code></li>
 <li><code>STORAGE_PASSWORD</code></li>
 </ul>
-<p>It then adds vendor-specific keys such as <code>ONTAP_SVM</code>, <code>STORAGE_ID</code>, <code>HOSTGROUP_ID_LIST</code>, <code>PURE_CLUSTER_PREFIX</code>, <code>POWERFLEX_SYSTEM_ID</code>, or <code>POWERMAX_SYMMETRIX_ID</code>, depending on <code>storage_vendor_product</code>.</p>
-<p>After the plan is created, the suite also waits for Forklift to create the plan-specific secret used during copy-offload. If that secret never appears, the run continues long enough to fail with a clearer migration error.</p>
+<p>It then adds vendor-specific keys such as <code>ONTAP_SVM</code>, <code>STORAGE_ID</code>, <code>STORAGE_PORT</code>,
+<code>HOSTGROUP_ID_LIST</code>, <code>PURE_CLUSTER_PREFIX</code>, <code>POWERFLEX_SYSTEM_ID</code>, or <code>POWERMAX_SYMMETRIX_ID</code>,
+depending on <code>storage_vendor_product</code>. Those keys are optional only when the vendor entry has an empty
+field list, which is the case for <code>primera3par</code>, <code>powerstore</code>, <code>infinibox</code>, and <code>flashsystem</code>.</p>
+<p>Any key from <code>storage_secret_extra</code> or <code>COPYOFFLOAD_STORAGE_SECRET_EXTRA</code> is merged in last and
+overrides the vendor-mapped value for the same key.</p>
+<p>After the <code>Migration</code> CR is created, the suite waits up to 60 seconds for Forklift to create the
+plan-specific populator secret, which it matches by the <code>plan-name</code> and <code>isPopulator</code> labels or by a
+<code>&lt;plan-name&gt;-*</code> name prefix. If the secret never appears, the run stops with a <code>TimeoutError</code> that
+lists the secrets actually present in the namespace.</p>
 <blockquote>
-<p><strong>Note:</strong> This automatic secret handling is specific to how <code>mtv-api-tests</code> drives copy-offload. It removes a lot of manual setup from the test workflow.</p>
+<p><strong>Note:</strong> Forklift creates that secret when the migration starts, not when the <code>Plan</code> reaches Ready.
+The suite therefore waits for it during <code>execute_copyoffload_migration()</code>, never inside
+<code>create_plan_resource()</code>.
+</p>
+<p><strong>Note:</strong> This automatic secret handling is specific to how <code>mtv-api-tests</code> drives copy-offload. It
+removes a lot of manual setup from the test workflow.</p>
 </blockquote>
 <h2 id="storagemap-and-plan-behavior">StorageMap and Plan Behavior</h2>
 <p>The core of copy-offload in this project is the <code>offloadPlugin</code> block. The tests build it like this:</p>
 <div class="highlight"><pre><span></span><code><span class="n">offload_plugin_config</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;vsphereXcopyConfig&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;secretRef&quot;</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;storageVendorProduct&quot;</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
+    <span class="s2">"vsphereXcopyConfig"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"secretRef"</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"storageVendorProduct"</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
     <span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
 
-<p>The storage map entries then attach that plugin to the source datastore mapping and set the destination for block-backed PVCs:</p>
+<p>The storage map entries then attach that plugin to the source datastore mapping and set the destination
+for block-backed PVCs. <code>access_mode</code> is optional and no copy-offload test passes it, so only
+<code>storageClass</code> and <code>volumeMode</code> are emitted:</p>
 <div class="highlight"><pre><span></span><code><span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-    <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">,</span>
-        <span class="s2">&quot;accessMode&quot;</span><span class="p">:</span> <span class="s2">&quot;ReadWriteOnce&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;volumeMode&quot;</span><span class="p">:</span> <span class="s2">&quot;Block&quot;</span><span class="p">,</span>
-    <span class="p">},</span>
-    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">ds_id</span><span class="p">},</span>
-    <span class="s2">&quot;offloadPlugin&quot;</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
+    <span class="s2">"destination"</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
+    <span class="s2">"source"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">ds_id</span><span class="p">},</span>
+    <span class="s2">"offloadPlugin"</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
 <span class="p">})</span>
 </code></pre></div>
 
-<p>The project also changes plan behavior for copy-offload runs:</p>
+<p>The project also changes plan behavior for copy-offload runs. The volume populator framework needs a predictable PVC name, so the plan helper overrides any template you configured:</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">copyoffload</span><span class="p">:</span>
-    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pvc&quot;</span>
+    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"pvc"</span>
 
 <span class="n">plan</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span><span class="o">**</span><span class="n">plan_kwargs</span><span class="p">)</span>
-
-<span class="k">if</span> <span class="n">copyoffload</span><span class="p">:</span>
-    <span class="n">wait_for_plan_secret</span><span class="p">(</span><span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">,</span> <span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 </code></pre></div>
 
-<p>And when the suite creates the VMware <code>Provider</code> for copy-offload, it adds this annotation:</p>
-<div class="highlight"><pre><span></span><code><span class="n">provider_annotations</span><span class="p">[</span><span class="s2">&quot;forklift.konveyor.io/empty-vddk-init-image&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;yes&quot;</span>
+<p>The plan secret is not waited for here. It is waited for right after the <code>Migration</code> CR is created, inside <code>execute_copyoffload_migration()</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">create_and_store_resource</span><span class="p">(</span>
+    <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="n">resource</span><span class="o">=</span><span class="n">Migration</span><span class="p">,</span>
+    <span class="n">namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+    <span class="n">plan_name</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="n">plan_namespace</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="n">cut_over</span><span class="o">=</span><span class="n">cut_over</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">wait_for_copyoffload_plan_secret</span><span class="p">(</span>
+    <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="n">plan</span><span class="o">=</span><span class="n">plan</span><span class="p">,</span>
+    <span class="n">namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>And when the suite creates the VMware <code>Provider</code> for a provider that has a <code>copyoffload</code> section, it adds this annotation:</p>
+<div class="highlight"><pre><span></span><code><span class="n">provider_annotations</span><span class="p">[</span><span class="s2">"forklift.konveyor.io/empty-vddk-init-image"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"yes"</span>
 </code></pre></div>
 
 <p>That is the repository's way of steering the provider toward the copy-offload path instead of a VDDK-only setup.</p>
 <p>The difference is explicit in the concurrent XCOPY/VDDK scenario: the XCOPY <code>StorageMap</code> must contain <code>offloadPlugin</code>, and the VDDK <code>StorageMap</code> must not.</p>
 <blockquote>
-<p><strong>Tip:</strong> If you want a fast sanity check that your environment is wired correctly, start with <code>test_copyoffload_thin_migration</code>. It uses the same <code>offloadPlugin</code> structure as the advanced scenarios, but with fewer moving parts.</p>
+<p><strong>Tip:</strong> If you want a fast sanity check that your environment is wired correctly, start with <code>test_copyoffload_thin_migration</code>. It uses the same <code>offloadPlugin</code> structure as the
+advanced scenarios, but with fewer moving parts.</p>
 </blockquote>
 <h2 id="clone-methods">Clone Methods</h2>
 <p>The suite supports both copy-offload clone methods exposed by the populator: <code>vib</code> and <code>ssh</code>.</p>
@@ -575,14 +645,15 @@
 </blockquote>
 <h3 id="ssh">SSH</h3>
 <p>If you set <code>esxi_clone_method</code> to <code>ssh</code>, the suite patches the VMware <code>Provider</code> so MTV uses SSH-based cloning:</p>
-<div class="highlight"><pre><span></span><code><span class="n">patch</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;spec&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;settings&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;esxiCloneMethod&quot;</span><span class="p">:</span> <span class="n">clone_method</span><span class="p">}}}</span>
+<div class="highlight"><pre><span></span><code><span class="n">patch</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"spec"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"settings"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"esxiCloneMethod"</span><span class="p">:</span> <span class="n">clone_method</span><span class="p">}}}</span>
 <span class="n">ResourceEditor</span><span class="p">(</span><span class="n">patches</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ocp_resource</span><span class="p">:</span> <span class="n">patch</span><span class="p">})</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
 </code></pre></div>
 
-<p>It then retrieves the provider-generated public key from the <code>offload-ssh-keys-&lt;provider&gt;-public</code> secret and installs a restricted key on the ESXi host. The restricted command is taken directly from the ESXi helper:</p>
+<p>It then retrieves the provider-generated public key from the <code>offload-ssh-keys-&lt;provider&gt;-public</code> secret and installs a restricted key on the ESXi host. The restricted command is
+taken directly from the ESXi helper:</p>
 <div class="highlight"><pre><span></span><code><span class="n">command_template</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="s1">&#39;command=&quot;python /vmfs/volumes/</span><span class="si">{datastore_name}</span><span class="s1">/secure-vmkfstools-wrapper.py&quot;,&#39;</span>
-    <span class="s2">&quot;no-port-forwarding,no-agent-forwarding,no-X11-forwarding </span><span class="si">{public_key}</span><span class="s2">&quot;</span>
+    <span class="s1">'command="python /vmfs/volumes/</span><span class="si">{datastore_name}</span><span class="s1">/secure-vmkfstools-wrapper.py",'</span>
+    <span class="s2">"no-port-forwarding,no-agent-forwarding,no-X11-forwarding </span><span class="si">{public_key}</span><span class="s2">"</span>
 <span class="p">)</span>
 </code></pre></div>
 
@@ -593,8 +664,11 @@
 <li><code>esxi_password</code></li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> SSH mode temporarily updates <code>/etc/ssh/keys-root/authorized_keys</code> on the ESXi host. The suite removes the key during teardown, but it is still a real host-side change.</p>
-<p><strong>Tip:</strong> SSH mode is a good choice when you want a fully test-managed setup path. The suite handles the provider patch, key installation, and cleanup for you.</p>
+<p><strong>Warning:</strong> SSH mode temporarily updates <code>/etc/ssh/keys-root/authorized_keys</code> on the ESXi host.
+The suite removes the key during teardown, but it is still a real host-side change.
+</p>
+<p><strong>Tip:</strong> SSH mode is a good choice when you want a fully test-managed setup path. The suite handles
+the provider patch, key installation, and cleanup for you.</p>
 </blockquote>
 <h2 id="fallback-modes">Fallback Modes</h2>
 <p>Copy-offload is not all-or-nothing in this repository. The existing tests explicitly cover cases where some or all disks live on a datastore that does not support XCOPY/VAAI.</p>
@@ -605,169 +679,401 @@
 </ul>
 <p>The storage-map helper keeps the <code>offloadPlugin</code> on the non-XCOPY mapping so Forklift can exercise fallback behavior:</p>
 <div class="highlight"><pre><span></span><code><span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-    <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
-    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">non_xcopy_datastore_id</span><span class="p">},</span>
-    <span class="s2">&quot;offloadPlugin&quot;</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
+    <span class="s2">"destination"</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
+    <span class="s2">"source"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">non_xcopy_datastore_id</span><span class="p">},</span>
+    <span class="s2">"offloadPlugin"</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
 <span class="p">})</span>
 </code></pre></div>
 
 <p>The full fallback case is modeled directly in the repository like this:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_fallback_large_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_copyoffload_fallback_large_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;target_datastore_id&quot;</span><span class="p">:</span> <span class="s2">&quot;non_xcopy_datastore_id&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;add_disks&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"target_datastore_id"</span><span class="p">:</span> <span class="s2">"non_xcopy_datastore_id"</span><span class="p">,</span>
+            <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+            <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;size_gb&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
-                    <span class="s2">&quot;provision_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;datastore_id&quot;</span><span class="p">:</span> <span class="s2">&quot;non_xcopy_datastore_id&quot;</span><span class="p">,</span>
+                    <span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+                    <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+                    <span class="s2">"datastore_id"</span><span class="p">:</span> <span class="s2">"non_xcopy_datastore_id"</span><span class="p">,</span>
                 <span class="p">},</span>
             <span class="p">],</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">}</span>
 </code></pre></div>
 
+<p>The two fallback classes assert the transfer mechanism in opposite ways, which is the part worth knowing before you read a failure:</p>
+<ul>
+<li><code>TestCopyoffloadFallbackLargeMigration</code> calls <code>verify_xcopy_used()</code> with <code>expected_xcopy_used=False</code>, so every disk is expected to report <code>xcopyUsed=0</code>.
+  <code>TestCopyoffloadMixedDatastoreMigration</code> calls <code>verify_xcopy_used_per_datastore()</code> and asserts per
+  datastore: <code>xcopyUsed=1</code> on <code>datastore_id</code>, <code>xcopyUsed=0</code> on <code>non_xcopy_datastore_id</code>. It
+  cross-checks populate pod logs against the <code>xcopyUsed</code> annotation on each <code>DiskTransfer</code> task of
+  the <code>Plan</code> CR.</li>
+</ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>non_xcopy_datastore_id</code> must point to a real datastore that does not support XCOPY/VAAI. If it is missing, the mixed and fallback scenarios fail fast before migration starts.</p>
+<p><strong>Warning:</strong> <code>non_xcopy_datastore_id</code> must point to a real datastore that does not support XCOPY/VAAI. If it is missing, the <code>mixed_datastore_config</code> fixture fails the class
+before migration starts.</p>
 </blockquote>
+<h2 id="dedicated-migration-hosts">Dedicated Migration Hosts</h2>
+<p><code>dedicated_migration_hosts</code> in your provider <code>copyoffload</code> block is a list of vSphere managed object IDs, for example <code>["host-3078"]</code>. It is passed straight through to the
+<code>StorageMap</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">offload_plugin_config</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"vsphereXcopyConfig"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"secretRef"</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"storageVendorProduct"</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
+        <span class="s2">"dedicatedMigrationHosts"</span><span class="p">:</span> <span class="n">configured_dedicated_hosts</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>TestCopyoffloadDedicatedMigrationHost</code> then verifies that XCOPY data extraction ran on one of those
+hosts instead of each VM's registered ESXi host. It reads the <code>sourceHost</code> label from the cached
+populate pod logs and compares it against the configured set.</p>
+<p>Forklift picks a host at random per disk, so the test adapts its assertions:</p>
+<ul>
+<li>
+<p>With exactly one configured host, every disk shares one throttle budget. The test asserts peak concurrency reaches <code>min(limit, disk_count)</code> and that <code>PopulatorThrottled</code> events
+  appear.</p>
+</li>
+<li>
+<p>With more than one configured host, only the per-host ceiling is enforced, and observing fewer distinct hosts than configured logs a warning instead of failing.</p>
+</li>
+</ul>
+<p>To make that check meaningful, the plan sets <code>pin_to_non_dedicated_host</code>, which resolves a single ESXi
+host outside the dedicated list and pins every VM clone to it before migration. Without the pin, a VM
+placed by DRS on a dedicated host would satisfy the membership check even if the dedicated-host
+feature did nothing.</p>
+<blockquote>
+<p><strong>Warning:</strong> The lab needs at least one ESXi host that is not in <code>dedicated_migration_hosts</code>.
+<code>resolve_non_dedicated_esxi_host()</code> raises a <code>ValueError</code> when every inventoried host is configured
+as dedicated.</p>
+</blockquote>
+<p>The negative case lives in <code>TestCopyoffloadDedicatedMigrationHostInvalidId</code>. It resolves an ESXi host ID
+that is absent from the vSphere inventory and puts that ID in <code>dedicatedMigrationHosts</code>. Forklift
+validates the host only inside the populate pod, so the <code>Plan</code> and <code>Migration</code> CRs are created
+successfully and only the populate pod fails. The test therefore expects <code>test_migrate_vms</code> to raise
+<code>MigrationPlanExecError</code> and then asserts the populate pod failure reason contains
+<code>didn't find any host with id &lt;id&gt;</code>.</p>
+<h2 id="populator-and-vm-throttling">Populator And VM Throttling</h2>
+<p>Two classes validate the <code>ForkliftController</code> in-flight limits by lowering them for the duration of the class and restoring the previous values afterwards.</p>
+<p><code>TestCopyoffloadPopulatorThrottlingMigration</code> uses the <code>populator_inflight_forkliftcontroller</code> fixture,
+which sets <code>spec.controller_max_populator_inflight</code> to <code>POPULATOR_INFLIGHT_LIMIT</code> (2) and waits for
+the populator controller deployment to pick up the matching <code>MAX_POPULATOR_INFLIGHT</code> env value. The VM
+has four added disks, and the test asserts:</p>
+<ul>
+<li>populate pods carry the <code>sourceHost</code> label, and all pods agree on one host</li>
+<li>at least <code>disk_count - limit</code> PVCs recorded a <code>PopulatorThrottled</code> event</li>
+<li>observed peak concurrency per host stays at or below the limit and reaches <code>min(limit, disk_count)</code></li>
+</ul>
+<p><code>TestCopyoffloadVmPopulatorThrottlingMigration</code> uses <code>vm_populator_inflight_forkliftcontroller</code> and
+lowers two limits at once: <code>controller_max_vm_inflight</code> to <code>VM_INFLIGHT_LIMIT</code> (1) and
+<code>controller_max_populator_inflight</code> to <code>VM_POPULATOR_INFLIGHT_LIMIT</code> (2). It migrates two three-disk
+VMs and splits verification into two steps: <code>test_verify_vm_inflight_throttling</code> for peak concurrent
+VMs per host, then <code>test_verify_populator_throttling</code> for labels, events, and peak populate pods.
+Because VMs migrate sequentially, the expected throttled count is computed per VM batch
+(<code>vm_count * max(0, disks_per_vm - limit)</code>) rather than the default <code>pod_count - limit</code>.</p>
+<blockquote>
+<p><strong>Warning:</strong> Both fixtures mutate cluster-wide MTV settings and take a file lock so parallel
+pytest-xdist workers cannot patch the same <code>ForkliftController</code>. Do not run the populator-throttling
+and VM-throttling classes against the same cluster at the same time. The file lock also serializes a
+run against itself: expect a <code>TimeoutError</code> if another worker holds it.</p>
+</blockquote>
+<p>Both throttling fixtures also delete DRS for the cloned VMs (<code>disable_drs_for_vms</code>) and, for the
+VM-throttling case, pin every clone to the first VM's host (<code>clone_to_same_host</code>). Without both, DRS
+could move a VM to a different ESXi host mid-run and the per-host counters would stop meaning
+anything.</p>
 <h2 id="advanced-copy-offload-scenarios">Advanced Copy-Offload Scenarios</h2>
-<p>The copy-offload test matrix in this repository is broader than the basic thin-disk path.</p>
-<table>
+<p>The copy-offload test matrix in this repository is broader than the basic thin-disk path.
+Every row below is a real test class in <code>tests/copyoffload/test_copyoffload_migration.py</code>,
+paired with the plan-config key it reads.</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
-<th>Scenario</th>
+<th>Test class</th>
+<th>Plan-config key</th>
 <th>What it validates</th>
-<th>Key test name(s)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Basic provisioning</td>
-<td>Thin and thick-lazy disk copy-offload</td>
-<td><code>test_copyoffload_thin_migration</code>, <code>test_copyoffload_thick_lazy_migration</code></td>
+<td><code>TestCopyoffloadThinMigration</code></td>
+<td><code>test_copyoffload_thin_migration</code></td>
+<td>Baseline thin-disk XCOPY acceleration</td>
 </tr>
 <tr>
-<td>Multi-disk layouts</td>
-<td>Additional disks on the same datastore</td>
+<td><code>TestCopyoffloadThickLazyMigration</code></td>
+<td><code>test_copyoffload_thick_lazy_migration</code></td>
+<td>Thick lazy zeroed disk</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadThickEagerMigration</code></td>
+<td><code>test_copyoffload_thick_eager_migration</code></td>
+<td>Thick eager zeroed disk</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadMultiDiskMigration</code></td>
 <td><code>test_copyoffload_multi_disk_migration</code></td>
+<td>One added disk on the primary datastore</td>
 </tr>
 <tr>
-<td>Custom datastore paths</td>
-<td>Extra disks placed under a custom folder like <code>shared_disks</code></td>
+<td><code>TestCopyoffloadDualDiskMixedThinThickMigration</code></td>
+<td><code>test_copyoffload_dual_disk_mixed_thin_thick_migration</code></td>
+<td>Thin boot disk plus a thick-lazy added disk</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadMultiDiskDifferentPathMigration</code></td>
 <td><code>test_copyoffload_multi_disk_different_path_migration</code></td>
+<td>Added disk under a custom folder such as <code>shared_disks</code></td>
 </tr>
 <tr>
-<td>Multi-datastore</td>
-<td>A VM with disks spanning primary and secondary XCOPY datastores</td>
+<td><code>TestCopyoffloadMultiDatastoreMigration</code></td>
 <td><code>test_copyoffload_multi_datastore_migration</code></td>
+<td>Disks split across primary and secondary XCOPY datastores</td>
 </tr>
 <tr>
-<td>Mixed XCOPY / non-XCOPY</td>
-<td>Some disks accelerate while others fall back</td>
+<td><code>TestCopyoffloadMultiDiskDifferentDatastorePathMigration</code></td>
+<td><code>test_copyoffload_multi_disk_different_datastore_path_migration</code></td>
+<td>Added disk on secondary datastore, custom folder</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadMixedDatastoreMigration</code></td>
 <td><code>test_copyoffload_mixed_datastore_migration</code></td>
+<td>Accelerate on one datastore, fall back on another</td>
 </tr>
 <tr>
-<td>Full fallback on non-XCOPY</td>
-<td>Large VM and added disk entirely on a non-XCOPY datastore</td>
+<td><code>TestCopyoffloadFallbackLargeMigration</code></td>
 <td><code>test_copyoffload_fallback_large_migration</code></td>
+<td>Large VM and added disk entirely on a non-XCOPY datastore</td>
 </tr>
 <tr>
-<td>RDM</td>
-<td>RDM virtual-disk migration using <code>rdm_lun_uuid</code></td>
+<td><code>TestCopyoffloadRdmVirtualDiskMigration</code></td>
 <td><code>test_copyoffload_rdm_virtual_disk_migration</code></td>
+<td><code>virtualMode</code> RDM LUN migrated as a SCSI LUN device</td>
 </tr>
 <tr>
-<td>Snapshots</td>
-<td>Source snapshots before migration, including a 2 TB case</td>
-<td><code>test_copyoffload_thin_snapshots_migration</code>, <code>test_copyoffload_2tb_vm_snapshots_migration</code></td>
+<td><code>TestCopyoffloadRdmPhysicalDiskMigration</code></td>
+<td><code>test_copyoffload_rdm_physical_disk_migration</code></td>
+<td><code>physicalMode</code> independent-persistent RDM LUN</td>
 </tr>
 <tr>
-<td>Disk modes</td>
-<td>Independent persistent and independent nonpersistent disks</td>
-<td><code>test_copyoffload_independent_persistent_disk_migration</code>, <code>test_copyoffload_independent_nonpersistent_disk_migration</code></td>
+<td><code>TestCopyoffloadWarmRdmVirtualDiskMigration</code></td>
+<td><code>test_copyoffload_warm_rdm_virtual_disk_migration</code></td>
+<td>Warm migration of a VM with an RDM virtual disk</td>
 </tr>
 <tr>
-<td>Large and dense VMs</td>
-<td>1 TB VM and 10 mixed thin/thick disks</td>
-<td><code>test_copyoffload_large_vm_migration</code>, <code>test_copyoffload_10_mixed_disks_migration</code></td>
+<td><code>TestCopyoffloadThinSnapshotsMigration</code></td>
+<td><code>test_copyoffload_thin_snapshots_migration</code></td>
+<td>Two source snapshots plus a data-integrity marker on a thin disk</td>
 </tr>
 <tr>
-<td>Warm copy-offload</td>
-<td>Warm migration with cutover</td>
-<td><code>test_copyoffload_warm_migration</code></td>
+<td><code>TestCopyoffloadThickLazySnapshotsMigration</code></td>
+<td><code>test_copyoffload_thick_lazy_snapshots_migration</code></td>
+<td>Same snapshot flow on a thick lazy disk</td>
 </tr>
 <tr>
-<td>Name edge cases</td>
-<td>Non-Kubernetes VM names with uppercase letters and underscores</td>
+<td><code>TestCopyoffloadThickEagerSnapshotsMigration</code></td>
+<td><code>test_copyoffload_thick_eager_snapshots_migration</code></td>
+<td>Same snapshot flow on a thick eager disk</td>
+</tr>
+<tr>
+<td><code>TestCopyoffload2TbVmSnapshotsMigration</code></td>
+<td><code>test_copyoffload_2tb_vm_snapshots_migration</code></td>
+<td>2 TB added disk with snapshots and a data-integrity marker</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadIndependentPersistentDiskMigration</code></td>
+<td><code>test_copyoffload_independent_persistent_disk_migration</code></td>
+<td>Independent persistent added disk</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadIndependentNonpersistentDiskMigration</code></td>
+<td><code>test_copyoffload_independent_nonpersistent_disk_migration</code></td>
+<td>Independent nonpersistent added disk</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadLargeVmMigration</code></td>
+<td><code>test_copyoffload_large_vm_migration</code></td>
+<td>1 TB added disk</td>
+</tr>
+<tr>
+<td><code>TestCopyoffload10MixedDisksMigration</code></td>
+<td><code>test_copyoffload_10_mixed_disks_migration</code></td>
+<td>Ten added disks alternating thin and thick-lazy</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadPopulatorThrottlingMigration</code></td>
+<td><code>test_copyoffload_populator_throttling_migration</code></td>
+<td>Per-host populator limit and <code>PopulatorThrottled</code> events</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadVmPopulatorThrottlingMigration</code></td>
+<td><code>test_copyoffload_vm_populator_throttling_migration</code></td>
+<td>Combined VM and populator limits across two VMs</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadDedicatedMigrationHost</code></td>
+<td><code>test_copyoffload_dedicated_migration_host_migration</code></td>
+<td>XCOPY extraction routed to <code>dedicatedMigrationHosts</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadDedicatedMigrationHostInvalidId</code></td>
+<td><code>test_copyoffload_dedicated_migration_host_invalid_id_migration</code></td>
+<td>Unknown host ID fails the populate pod, not the Plan</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadNonconformingNameMigration</code></td>
 <td><code>test_copyoffload_nonconforming_name_migration</code></td>
+<td>Uppercase and underscore source name sanitized for Kubernetes</td>
 </tr>
 <tr>
-<td>Scale</td>
-<td>Five copy-offload VMs in one run</td>
+<td><code>TestCopyoffloadWarmMigration</code></td>
+<td><code>test_copyoffload_warm_migration</code></td>
+<td>Live warm migration with a cutover value</td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadScaleMigration</code></td>
 <td><code>test_copyoffload_scale_migration</code></td>
+<td>Five thick-lazy VMs in one plan</td>
 </tr>
 <tr>
-<td>Concurrency</td>
-<td>Two copy-offload plans at once</td>
+<td><code>TestSimultaneousCopyoffloadMigrations</code></td>
 <td><code>test_simultaneous_copyoffload_migrations</code></td>
+<td>Two copy-offload plans executing simultaneously</td>
 </tr>
 <tr>
-<td>XCOPY vs VDDK</td>
-<td>One copy-offload plan and one standard VDDK plan running together</td>
+<td><code>TestConcurrentXcopyVddkMigration</code></td>
 <td><code>test_concurrent_xcopy_vddk_migration</code></td>
+<td>One copy-offload plan and one VDDK plan running together</td>
 </tr>
 </tbody>
-</table>
-<p>The repository's multi-datastore scenario uses a symbolic secondary datastore key instead of hardcoding the MoID into every disk entry:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_multi_datastore_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+</table></div>
+<h3 id="snapshot-scenarios">Snapshot Scenarios</h3>
+<p>The four snapshot classes share <code>CopyoffloadSnapshotBase</code>, which adds one step before the standard sequence and one after it:</p>
+<ol>
+<li>
+<p><code>test_create_snapshots_and_data_marker</code> powers the source VM on, waits for VMware guest info,
+   creates <code>snapshots</code> snapshots named with the session UUID, and writes a data-integrity marker file
+   over VMware Guest Operations.</p>
+</li>
+<li>
+<p>The standard <code>test_create_storagemap</code> through <code>test_check_vms</code> steps run.</p>
+</li>
+<li><code>test_check_data_integrity</code> starts the migrated VM over SSH, reads the marker file back, compares it to what was written pre-migration, and stops the VM again.</li>
+</ol>
+<p>Snapshot VMs expect fallback, not acceleration: the shared base class calls <code>verify_xcopy_used()</code> with
+<code>expected_xcopy_used=False</code>. These classes also carry the <code>copyoffload_snapshots</code> marker so you can run
+them on their own.</p>
+<h3 id="rdm-handling">RDM Handling</h3>
+<p>RDM tests add their LUN through <code>add_disks</code> with an <code>rdm_type</code> key rather than <code>size_gb</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_copyoffload_rdm_virtual_disk_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;add_disks&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span><span class="s2">"rdm_type"</span><span class="p">:</span> <span class="s2">"virtual"</span><span class="p">},</span>
+            <span class="p">],</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"rdm_as_lun"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ul>
+<li><code>rdm_type: "virtual"</code> maps to <code>virtualMode</code>, <code>rdm_type: "physical"</code> to <code>physicalMode</code> plus <code>independent_persistent</code> disk mode.</li>
+<li>The LUN itself comes from <code>copyoffload.rdm_lun_uuid</code>, resolved when the disk is attached to the clone.</li>
+<li>The plan-level <code>rdm_as_lun: True</code> key sets <code>spec.rdmAsLun</code> on the <code>Plan</code> CR, which makes KubeVirt map the RDM as a LUN device with a SCSI bus instead of a regular virtio disk.
+  <code>verify_rdm_disk_bus_types()</code> asserts at least one LUN-type disk exists on the migrated VM and that each one carries the SCSI bus.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> The <code>Plan</code> CR only gets <code>spec.rdmAsLun</code> when the key is present, so <code>rdm_as_lun</code> is set on
+the cold RDM configs but deliberately omitted from the warm RDM config.
+</p>
+<p><strong>Note:</strong> The project's copy-offload guide calls out RDM support only for Pure Storage, and it
+requires <code>datastore_id</code> to be a VMFS datastore for RDM scenarios. RDM disks are not supported on vSAN
+or NFS datastores.</p>
+</blockquote>
+<p>The repository's multi-datastore scenario uses a symbolic secondary datastore key instead of hardcoding the MoID into every disk entry:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_copyoffload_multi_datastore_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+            <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;size_gb&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
-                    <span class="s2">&quot;disk_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;persistent&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;provision_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;datastore_id&quot;</span><span class="p">:</span> <span class="s2">&quot;secondary_datastore_id&quot;</span><span class="p">,</span>
+                    <span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
+                    <span class="s2">"disk_mode"</span><span class="p">:</span> <span class="s2">"persistent"</span><span class="p">,</span>
+                    <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+                    <span class="s2">"datastore_id"</span><span class="p">:</span> <span class="s2">"secondary_datastore_id"</span><span class="p">,</span>
                 <span class="p">},</span>
             <span class="p">],</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">}</span>
 </code></pre></div>
 
-<p>The non-conforming-name scenario is also deliberate. Its source config preserves uppercase letters and underscores in the cloned VMware name, and the suite then verifies that MTV sanitizes the destination VM name to a Kubernetes-safe value.</p>
+<p>The non-conforming-name scenario is also deliberate. Its source config preserves uppercase letters and underscores in the cloned VMware name, and the suite then verifies that MTV
+sanitizes the destination VM name to a Kubernetes-safe value.</p>
 <blockquote>
-<p><strong>Note:</strong> The project docs currently call out RDM copy-offload support only for Pure Storage, and they require <code>datastore_id</code> to be a VMFS datastore for RDM scenarios.</p>
+<p><strong>Note:</strong> In copy-offload plan configs, <code>name: "xcopy-template-test"</code> is a placeholder. When
+<code>default_vm_name</code> is set in your provider <code>copyoffload</code> block, the plan preparation step replaces it
+with that template name for every VM marked <code>clone: True</code>.</p>
 </blockquote>
 <h2 id="what-the-suite-automates-for-you">What the Suite Automates for You</h2>
 <p>When you run copy-offload scenarios through <code>mtv-api-tests</code>, the project handles several setup steps automatically:</p>
 <ul>
 <li>It validates that the source provider is vSphere and that the <code>copyoffload</code> section exists.</li>
-<li>It creates the copy-offload storage secret from <code>.providers.json</code> or environment variables.</li>
-<li>It creates <code>StorageMap</code> entries with <code>offloadPlugin.vsphereXcopyConfig</code>.</li>
+<li>It creates the copy-offload storage secret from <code>.providers.json</code>, environment variables, and any <code>storage_secret_extra</code> entries.</li>
+<li>It creates <code>StorageMap</code> entries with <code>offloadPlugin.vsphereXcopyConfig</code>, including <code>dedicatedMigrationHosts</code> when the dedicated-host test asks for it.</li>
 <li>It annotates the VMware provider with <code>forklift.konveyor.io/empty-vddk-init-image: "yes"</code>.</li>
 <li>It patches <code>esxiCloneMethod</code> to <code>ssh</code> when you choose SSH cloning.</li>
-<li>It waits for Forklift to create the plan-specific copy-offload secret.</li>
+<li>It waits for Forklift to create the plan-specific copy-offload secret once the migration starts.</li>
 <li>It forces <code>pvc_name_template</code> to <code>pvc</code> for copy-offload plans.</li>
+<li>It captures populate pod logs during the migration so <code>test_check_xcopy_used</code> can verify <code>xcopyUsed</code> after MTV has already deleted the pods.</li>
 </ul>
 <p>That is why the user-facing setup is mostly about getting the provider config, datastore IDs, storage array credentials, and clone method right.</p>
-<h2 id="running-the-copy-offload-marker">Running the Copy-Offload Marker</h2>
-<p>The repository's copy-offload guide uses the <code>copyoffload</code> pytest marker. This command is taken directly from the existing Job example:</p>
+<h2 id="running-the-copy-offload-markers">Running The Copy-Offload Markers</h2>
+<p>Three markers select copy-offload tests, and they are registered in <code>pytest.ini</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Marker</th>
+<th>Selects</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>copyoffload</code></td>
+<td>Every copy-offload test class</td>
+</tr>
+<tr>
+<td><code>copyoffload_sanity</code></td>
+<td>A curated core subset for quick validation</td>
+</tr>
+<tr>
+<td><code>copyoffload_snapshots</code></td>
+<td>The four snapshot classes built on <code>CopyoffloadSnapshotBase</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>The <code>copyoffload_sanity</code> subset covers <code>TestCopyoffloadRdmVirtualDiskMigration</code>,
+<code>TestCopyoffloadMultiDatastoreMigration</code>, <code>TestCopyoffloadMixedDatastoreMigration</code>,
+<code>TestCopyoffloadScaleMigration</code>, <code>TestCopyoffload10MixedDisksMigration</code>,
+<code>TestCopyoffloadWarmMigration</code>, and <code>TestCopyoffloadThickEagerSnapshotsMigration</code>.</p>
+<p>The full-suite command below is taken directly from the existing Job example:</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="p">:+--tc=cluster_host:</span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
@@ -777,9 +1083,11 @@
 <span class="w">  </span>--tc<span class="o">=</span>storage_class:my-block-storageclass
 </code></pre></div>
 
-<p>Replace the provider key with the exact key from your <code>.providers.json</code>, and replace the storage class with the block-backed class that maps to the same storage array as your vSphere datastores.</p>
+<p>Replace the provider key with the exact key from your <code>.providers.json</code>, and replace the storage class with the block-backed class that maps to the same storage array as your
+vSphere datastores. Add <code>-k &lt;test_name&gt;</code> after <code>-m copyoffload</code> to select a single test, for example <code>-m copyoffload -k test_copyoffload_thin_migration</code>.</p>
 <blockquote>
-<p><strong>Tip:</strong> Start with <code>test_copyoffload_thin_migration</code>, then move to <code>test_copyoffload_multi_datastore_migration</code>, <code>test_copyoffload_mixed_datastore_migration</code>, or <code>test_concurrent_xcopy_vddk_migration</code> once the base path is working.</p>
+<p><strong>Tip:</strong> Start with <code>test_copyoffload_thin_migration</code>, then move to <code>test_copyoffload_multi_datastore_migration</code>, <code>test_copyoffload_mixed_datastore_migration</code>, or
+<code>test_concurrent_xcopy_vddk_migration</code> once the base path is working.</p>
 </blockquote>
                 </div>
             </article>
@@ -815,33 +1123,42 @@
 </ul>
 </li>
 <li><a href="#fallback-modes">Fallback Modes</a></li>
-<li><a href="#advanced-copy-offload-scenarios">Advanced Copy-Offload Scenarios</a></li>
+<li><a href="#dedicated-migration-hosts">Dedicated Migration Hosts</a></li>
+<li><a href="#populator-and-vm-throttling">Populator And VM Throttling</a></li>
+<li><a href="#advanced-copy-offload-scenarios">Advanced Copy-Offload Scenarios</a><ul>
+<li><a href="#snapshot-scenarios">Snapshot Scenarios</a></li>
+<li><a href="#rdm-handling">RDM Handling</a></li>
+</ul>
+</li>
 <li><a href="#what-the-suite-automates-for-you">What the Suite Automates for You</a></li>
-<li><a href="#running-the-copy-offload-marker">Running the Copy-Offload Marker</a></li>
+<li><a href="#running-the-copy-offload-markers">Running The Copy-Offload Markers</a></li>
 </ul>
 </div>
 
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -887,5 +1204,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Container And OpenShift Job Execution - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -85,7 +86,7 @@
 
                     <li>
                         <a href="container-and-openshift-job-execution.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Container And OpenShift Job Execution
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,18 +302,29 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="container-and-openshift-job-execution">Container And OpenShift Job Execution</h1>
-<p>Running <code>mtv-api-tests</code> from a container or an OpenShift <code>Job</code> gives you a repeatable environment for long migration runs, shared execution in CI-style workflows, and predictable artifact collection. The key is understanding what the image expects at runtime:</p>
+<p>Running <code>mtv-api-tests</code> from a container or an OpenShift <code>Job</code> gives you a repeatable environment for long migration runs, shared execution in CI-style workflows, and predictable
+artifact collection. The key is understanding what the image expects at runtime:</p>
 <ul>
 <li>a <code>.providers.json</code> file in the container working directory</li>
 <li>pytest testconfig values for the OpenShift cluster and test selection</li>
 <li>an overridden container command, because the image defaults to collection only</li>
 </ul>
+<h2 id="build-and-run-locally">Build And Run Locally</h2>
+<p>A pre-built image is published at <code>ghcr.io/redhatqe/mtv-api-tests:latest</code>, so you can use it directly. To build your own instead:</p>
+<div class="highlight"><pre><span></span><code>podman<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>quay.io/&lt;your-registry&gt;/mtv-tests:latest<span class="w"> </span>.
+podman<span class="w"> </span>push<span class="w"> </span>quay.io/&lt;your-registry&gt;/mtv-tests:latest
+</code></pre></div>
+
+<p>Docker works the same way. On RHEL and Fedora with SELinux enforcing, add <code>,z</code> to volume mounts.</p>
 <h2 id="how-the-image-starts">How The Image Starts</h2>
-<p>The checked-in image is built to run from <code>/app</code>, and its default command only collects tests:</p>
+<p>The <code>Dockerfile</code> is a two-stage build.
+A builder stage installs the toolchain and runs <code>uv sync --locked</code>, and a runtime stage on <code>ubi-minimal</code> copies the finished <code>/app</code>, sets <code>JUNITFILE</code>, and runs as UID <code>1001</code>.</p>
+<p>Because the container runs as a non-root user, read-only mounts (<code>:ro</code>) are unaffected, but any writable bind mount must already be accessible to UID <code>1001</code>.</p>
+<p>The image is built to run from <code>/app</code>, and its default command only collects tests:</p>
 <div class="highlight"><pre><span></span><code><span class="k">ARG</span><span class="w"> </span><span class="nv">APP_DIR</span><span class="o">=</span>/app
 <span class="k">WORKDIR</span><span class="w"> </span><span class="s">${APP_DIR}</span>
 
-<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">]</span>
+<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--collect-only"</span><span class="p">]</span>
 </code></pre></div>
 
 <p>Pytest is also preconfigured in the repo:</p>
@@ -323,28 +336,30 @@
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
 <span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
-<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
 <span class="w">  </span><span class="na">--show-progress</span>
 <span class="w">  </span><span class="na">--strict-markers</span>
-<span class="w">  </span><span class="na">--jira</span>
 <span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
 </code></pre></div>
 
 <blockquote>
 <p><strong>Note:</strong> A plain <code>podman run ... ghcr.io/redhatqe/mtv-api-tests:latest</code> will not execute migrations. Override the command with <code>uv run pytest ...</code>.</p>
 </blockquote>
-<p>The suite reads provider definitions from <code>.providers.json</code> and builds the OpenShift client from pytest config values:</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_source_providers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
-    <span class="n">providers_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;.providers.json&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">providers_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-        <span class="k">return</span> <span class="p">{}</span>
+<p>The suite reads provider definitions from <code>.providers.json</code> and builds the OpenShift client from pytest config values, falling back to <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and
+<code>CLUSTER_PASSWORD</code> environment variables:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">host</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">host</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_HOST"</span><span class="p">)</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_host&quot;</span><span class="p">)</span>
-    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_username&quot;</span><span class="p">)</span>
-    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_password&quot;</span><span class="p">)</span>
-    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;insecure_verify_skip&quot;</span><span class="p">)</span>
-    <span class="n">_client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_USERNAME"</span><span class="p">)</span>
+
+    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">password</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">password</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_PASSWORD"</span><span class="p">)</span>
+    <span class="o">...</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
 </code></pre></div>
 
 <p>In practice, every real run needs these values:</p>
@@ -356,52 +371,60 @@
 <li><code>cluster_username</code></li>
 <li><code>cluster_password</code></li>
 </ul>
+<p><code>cluster_username</code> and <code>cluster_password</code> can come from the environment instead of the command line.
+That is why the generated <code>Job</code> manifest wires <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, <code>CLUSTER_PASSWORD</code>, and <code>CLUSTER_VERIFY_SSL</code> in from a <code>Secret</code>.</p>
 <blockquote>
-<p><strong>Warning:</strong> The suite does not currently create its OpenShift client from the pod service account. Even inside an OpenShift <code>Job</code>, you still need to provide <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>.</p>
+<p><strong>Warning:</strong> The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
+<code>Job</code>, you still need to provide <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>.</p>
 </blockquote>
 <h2 id="provider-and-test-config">Provider And Test Config</h2>
 <h3 id="providersjson"><code>.providers.json</code></h3>
 <p>The provider file lives at <code>.providers.json</code> in the working directory, so inside the image the simplest path is <code>/app/.providers.json</code>.</p>
 <p>A real example from <code>.providers.json.example</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;vsphere&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vsphere&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER VERSION&gt;&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SERVER FQDN/IP&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;api_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;USERNAME&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_linux_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS USERNAME&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_linux_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_win_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS USERNAME&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_win_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;vddk_init_image&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;</span>
+<span class="w">  </span><span class="nt">"vsphere"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vsphere"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SERVER VERSION&gt;"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"fqdn"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SERVER FQDN/IP"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"api_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SERVER FQDN/IP&gt;/sdk"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"username"</span><span class="p">:</span><span class="w"> </span><span class="s2">"USERNAME"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PASSWORD"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_linux_user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LINUX VMS USERNAME"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_linux_password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LINUX VMS PASSWORD"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_win_user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"WINDOWS VMS USERNAME"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_win_password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"WINDOWS VMS PASSWORD"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"luks_passphrase"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LUKS DISK ENCRYPTION PASSPHRASE"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"vddk_init_image"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;PATH TO VDDK INIT IMAGE&gt;"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"endpoint_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vcenter"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
 
 <p>The top-level key is the provider name you pass through pytest. If your file uses <code>"vsphere"</code>, then your run must include <code>--tc=source_provider:vsphere</code>.</p>
 <blockquote>
+<p><strong>Note:</strong> Inside the container you can also pass <code>--providers-json /some/other/path.json</code>, or set
+<code>PROVIDERS_JSON_PATH</code>. The mount path below is a convention, not a hard requirement.</p>
 <p><strong>Tip:</strong> The top-level key can be descriptive, versioned, or site-specific. What matters is that <code>source_provider</code> matches it exactly.</p>
 </blockquote>
 <h3 id="teststests_configconfigpy"><code>tests/tests_config/config.py</code></h3>
 <p>The repo already ships a Python testconfig file with global defaults and <code>tests_params</code> used by the test modules:</p>
-<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>
-<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>
-<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
-<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"true"</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"false"</span>
+<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"openshift-mtv"</span>
 <span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
 
 <span class="n">tests_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;test_sanity_warm_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s2">"test_sanity_warm_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">},</span>
 </code></pre></div>
 
@@ -410,38 +433,49 @@
 <h2 id="running-from-the-container-image">Running From The Container Image</h2>
 <p>Examples below use <code>podman</code>, but the same pattern works with Docker.</p>
 <p>A practical local run mounts <code>.providers.json</code>, exports cluster credentials into the container, and overrides the image command:</p>
-<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_HOST</span><span class="o">=</span><span class="s2">&quot;https://api.example.com:6443&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_USERNAME</span><span class="o">=</span><span class="s2">&quot;kubeadmin&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_PASSWORD</span><span class="o">=</span><span class="s2">&quot;&lt;password&gt;&quot;</span>
+<div class="highlight"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>results
+
+<span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_HOST</span><span class="o">=</span><span class="s2">"https://api.example.com:6443"</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_USERNAME</span><span class="o">=</span><span class="s2">"kubeadmin"</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_PASSWORD</span><span class="o">=</span><span class="s2">"&lt;password&gt;"</span>
 
 podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-e<span class="w"> </span>CLUSTER_HOST<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-e<span class="w"> </span>CLUSTER_USERNAME<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-e<span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/.providers.json:/app/.providers.json:ro&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/results:/app/results&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/.providers.json:/app/.providers.json:ro"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/results:/app/results"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>ghcr.io/redhatqe/mtv-api-tests:latest<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>/bin/bash<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;uv run pytest -m tier0 \</span>
+<span class="w">  </span>/bin/bash<span class="w"> </span>-c<span class="w"> </span><span class="s1">'uv run pytest -m tier0 \</span>
 <span class="s1">    -v \</span>
-<span class="s1">    ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \</span>
-<span class="s1">    ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \</span>
-<span class="s1">    ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \</span>
 <span class="s1">    --tc=source_provider:vsphere \</span>
 <span class="s1">    --tc=storage_class:my-block-storageclass \</span>
 <span class="s1">    --junit-xml=/app/results/junit-report.xml \</span>
 <span class="s1">    --log-file=/app/results/pytest-tests.log \</span>
-<span class="s1">    --data-collector-path=/app/results/data&#39;</span>
+<span class="s1">    --data-collector-path=/app/results/data'</span>
 </code></pre></div>
 
+<p>No <code>--tc=cluster_*</code> flags are needed here.
+<code>get_cluster_client()</code> falls back to <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and <code>CLUSTER_PASSWORD</code> from the environment, which keeps the credentials out of the process arguments.</p>
+<blockquote>
+<p><strong>Warning:</strong> The container runs as UID <code>1001</code>. A <code>results</code> directory created by your own user is usually not
+writable by that UID, so either <code>chmod 777 results</code> or add <code>,z</code> on SELinux-enforcing hosts, or mount a directory
+that UID <code>1001</code> can already write to.</p>
+</blockquote>
 <p>Useful marker selections come directly from <code>pytest.ini</code> and the test modules:</p>
 <ul>
 <li><code>-m tier0</code> for smoke-style coverage</li>
+<li><code>-m tier1</code> for the extended LUKS, XFS, and CA-cert scenarios</li>
 <li><code>-m warm</code> for warm migration coverage</li>
-<li><code>-m copyoffload</code> for copy-offload coverage</li>
+<li><code>-m copyoffload</code> for the full copy-offload coverage</li>
+<li><code>-m copyoffload_sanity</code> for the core copy-offload scenarios when you want a quicker pass</li>
+<li><code>-m copyoffload_snapshots</code> for the vSphere copy-offload snapshot scenarios</li>
+<li><code>-m upgrade</code> for the MTV operator upgrade scenario, which needs its own config keys</li>
 <li><code>-m remote</code> for remote-cluster scenarios when <code>remote_ocp_cluster</code> is configured</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> <code>warm</code> is not universally supported for every provider type. If you select <code>-m warm</code> against a provider that the warm test module skips, pytest will report skips rather than failures.</p>
+<p><strong>Note:</strong> <code>warm</code> is not universally supported for every provider type. If you select <code>-m warm</code> against a provider
+that the warm test module skips, pytest will report skips rather than failures.</p>
 </blockquote>
 <p>If you prefer a mounted config file instead of many <code>--tc=</code> flags, mount your own Python config and point pytest at it:</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--tc-file<span class="o">=</span>/app/config.py<span class="w"> </span>--tc-format<span class="o">=</span>python<span class="w"> </span>...
@@ -449,64 +483,67 @@ podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </
 
 <p>That is only safe when <code>/app/config.py</code> is based on the repo’s existing <code>tests/tests_config/config.py</code>.</p>
 <h2 id="running-inside-an-openshift-job">Running Inside An OpenShift Job</h2>
-<p>The repo already contains a checked-in <code>Job</code> pattern under <code>docs/copyoffload/</code>. It is written for copy-offload, but the wiring is the same for any suite: mount <code>.providers.json</code>, provide cluster credentials from a <code>Secret</code>, and expand them into <code>--tc=</code> arguments in the container command.</p>
-<h3 id="1-create-a-secret">1. Create A Secret</h3>
-<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>mtv-tests
-
-<span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">&quot;Enter cluster password: &quot;</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
-oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>mtv-test-config<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-file<span class="o">=</span>providers.json<span class="o">=</span>.providers.json<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_host</span><span class="o">=</span>https://api.your-cluster.com:6443<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_username</span><span class="o">=</span>kubeadmin<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_password</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-n<span class="w"> </span>mtv-tests
-<span class="nb">unset</span><span class="w"> </span>CLUSTER_PASSWORD
+<p>The supported way to get a <code>Job</code> manifest is to let the CLI generate one. Do not hand-write it:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w"> </span>generate
+uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w"> </span>run<span class="w"> </span>--mode<span class="w"> </span>job
 </code></pre></div>
 
-<h3 id="2-create-the-job">2. Create The Job</h3>
-<p>This example is copied from the checked-in documentation:</p>
+<p><code>generate</code> writes <code>mtv-api-tests-manifests.yaml</code>, a single self-contained file with a <code>Namespace</code>, a <code>Secret</code>, and a <code>Job</code>.
+The namespace name carries a random suffix, so parallel runs do not collide. <code>run --mode job</code> applies it with <code>oc apply -f</code> and prints the namespace and job name to follow.</p>
+<p>The manifest looks roughly like this. The <code>Secret</code> supplies the credentials, and the <code>Job</code> command expands them into <code>--tc=</code> flags:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch/v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Job</span>
 <span class="nt">metadata</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-copyoffload-tests</span>
-<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests-a1b2c3</span>
 <span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">backoffLimit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
 <span class="w">  </span><span class="nt">template</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">restartPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Never</span>
+<span class="w">      </span><span class="nt">securityContext</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">runAsNonRoot</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="nt">seccompProfile</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RuntimeDefault</span>
 <span class="w">      </span><span class="nt">containers</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tests</span>
 <span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/redhatqe/mtv-api-tests:latest</span>
+<span class="w">        </span><span class="nt">securityContext</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">allowPrivilegeEscalation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="nt">capabilities</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">drop</span><span class="p">:</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ALL</span>
 <span class="w">        </span><span class="nt">env</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_HOST</span>
 <span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
 <span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests-a1b2c3-config</span>
 <span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cluster_host</span>
-<span class="w">              </span><span class="nt">optional</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_USERNAME</span>
 <span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
 <span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests-a1b2c3-config</span>
 <span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cluster_username</span>
-<span class="w">              </span><span class="nt">optional</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_PASSWORD</span>
 <span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
 <span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests-a1b2c3-config</span>
 <span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cluster_password</span>
-<span class="w">              </span><span class="nt">optional</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_VERIFY_SSL</span>
+<span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests-a1b2c3-config</span>
+<span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cluster_verify_ssl</span>
 <span class="w">        </span><span class="nt">command</span><span class="p">:</span>
-<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/bin/bash</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/bin/sh</span>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-c</span>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">|</span>
-<span class="w">            </span><span class="no">uv run pytest -m copyoffload \</span>
-<span class="w">              </span><span class="no">-v \</span>
-<span class="w">              </span><span class="no">${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \</span>
-<span class="w">              </span><span class="no">${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \</span>
-<span class="w">              </span><span class="no">${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \</span>
-<span class="w">              </span><span class="no">--tc=source_provider:vsphere-8.0.3.00400 \</span>
-<span class="w">              </span><span class="no">--tc=storage_class:my-block-storageclass</span>
+<span class="w">            </span><span class="no">uv run pytest \</span>
+<span class="w">                      </span><span class="no">-v \</span>
+<span class="w">                      </span><span class="no">--tc=source_provider:vsphere-8.0.3.00400 \</span>
+<span class="w">                      </span><span class="no">--tc=storage_class:my-block-storageclass \</span>
+<span class="w">                      </span><span class="no">--tc=cluster_host:"$CLUSTER_HOST" \</span>
+<span class="w">                      </span><span class="no">--tc=insecure_verify_skip:false</span>
 <span class="w">        </span><span class="nt">volumeMounts</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config</span>
 <span class="w">          </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/app/.providers.json</span>
@@ -514,19 +551,40 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
 <span class="w">      </span><span class="nt">volumes</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config</span>
 <span class="w">        </span><span class="nt">secret</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-test-config</span>
+<span class="w">          </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-tests-a1b2c3-config</span>
 </code></pre></div>
 
 <p>To reuse this pattern for other suites:</p>
 <ul>
-<li>change <code>-m copyoffload</code> to <code>-m tier0</code> for smoke tests</li>
-<li>change <code>-m copyoffload</code> to <code>-m warm</code> for warm migration runs</li>
-<li>replace <code>vsphere-8.0.3.00400</code> with your actual <code>.providers.json</code> key</li>
+<li>change the category passed to <code>generate</code> from <code>copyoffload</code> to <code>tier0</code> or <code>warm</code></li>
+<li>replace the provider key <code>vsphere-8.0.3.00400</code> with your actual <code>.providers.json</code> key</li>
 <li>replace <code>my-block-storageclass</code> with the storage class used by your target cluster</li>
-<li>replace the image if you built and pushed your own copy</li>
+<li>pass <code>--image</code> if you built and pushed your own copy</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and <code>CLUSTER_PASSWORD</code> are not read directly by the test code. In this pattern they exist only so the shell can expand them into <code>--tc=</code> options.</p>
+<p><strong>Warning:</strong> <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, <code>CLUSTER_PASSWORD</code>, and <code>CLUSTER_VERIFY_SSL</code> are not read by
+the pytest fixtures directly. They exist so the shell can expand them, and so <code>get_cluster_client()</code> can pick them
+up from the environment.</p>
+<p><strong>Warning:</strong> A completed <code>Job</code> will not re-run. <code>run --mode job</code> detects the "unchanged" response from <code>oc apply</code>
+and tells you to delete it first with <code>oc delete -f mtv-api-tests-manifests.yaml</code>.</p>
+</blockquote>
+<h3 id="building-the-secret-by-hand">Building The Secret By Hand</h3>
+<p>If you would rather assemble the <code>Secret</code> yourself, this is the same minimum set the generator produces:</p>
+<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>mtv-tests
+
+<span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">"Enter cluster password: "</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
+oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>mtv-test-config<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-file<span class="o">=</span>providers.json<span class="o">=</span>.providers.json<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_host</span><span class="o">=</span>https://api.your-cluster.com:6443<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_username</span><span class="o">=</span>kubeadmin<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_password</span><span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-n<span class="w"> </span>mtv-tests
+<span class="nb">unset</span><span class="w"> </span>CLUSTER_PASSWORD
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> <code>generate</code> also stores a <code>cluster_ca_bundle</code> key, but the test runner does not consume it yet. CA bundle
+injection into the container is still unimplemented.</p>
 </blockquote>
 <h2 id="copy-offload-credentials">Copy-Offload Credentials</h2>
 <p>Copy-offload is the one area where the suite can read credentials directly from environment variables as well as from <code>.providers.json</code>:</p>
@@ -534,7 +592,7 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
     <span class="n">credential_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">copyoffload_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span>
     <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">env_var_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">copyoffload_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">credential_name</span><span class="p">)</span>
 </code></pre></div>
 
@@ -544,11 +602,13 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
 <li><code>COPYOFFLOAD_STORAGE_HOSTNAME</code></li>
 <li><code>COPYOFFLOAD_STORAGE_USERNAME</code></li>
 <li><code>COPYOFFLOAD_STORAGE_PASSWORD</code></li>
-<li>vendor-specific names such as <code>COPYOFFLOAD_ONTAP_SVM</code></li>
+<li>vendor-specific names such as <code>COPYOFFLOAD_ONTAP_SVM</code> or <code>COPYOFFLOAD_VANTARA_HOSTGROUP_ID_LIST</code></li>
 <li>ESXi SSH values such as <code>COPYOFFLOAD_ESXI_HOST</code>, <code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code></li>
+<li><code>COPYOFFLOAD_STORAGE_SECRET_EXTRA</code>, a JSON object of extra Secret <code>stringData</code> keys that override <code>storage_secret_extra</code> from the file</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> This environment-variable fallback applies to copy-offload storage credentials. It does not replace the normal <code>cluster_host</code>, <code>cluster_username</code>, <code>cluster_password</code>, or <code>source_provider</code> inputs.</p>
+<p><strong>Note:</strong> This environment-variable fallback applies to copy-offload storage credentials. It does not replace the
+normal <code>cluster_host</code>, <code>cluster_username</code>, <code>cluster_password</code>, or <code>source_provider</code> inputs.</p>
 </blockquote>
 <h2 id="collecting-results">Collecting Results</h2>
 <p>By default, a run produces these useful artifacts inside <code>/app</code>:</p>
@@ -564,16 +624,16 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
 <li>disable it with <code>--skip-data-collector</code></li>
 </ul>
 <p>When data collection is enabled, the suite writes <code>resources.json</code> there and can also collect must-gather data on failures.</p>
-<p>For a finished OpenShift <code>Job</code>, the checked-in docs already show how to stream logs and copy the JUnit file out of the pod:</p>
-<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>mtv-tests<span class="w"> </span>job/mtv-copyoffload-tests<span class="w"> </span>-f
+<p>For a finished OpenShift <code>Job</code>, stream the logs and copy the JUnit file out of the pod:</p>
+<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>-n<span class="w"> </span>mtv-tests-a1b2c3<span class="w"> </span>job/mtv-tests
 
-<span class="nv">POD_NAME</span><span class="o">=</span><span class="k">$(</span>oc<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>mtv-tests<span class="w"> </span>-l<span class="w"> </span>job-name<span class="o">=</span>mtv-copyoffload-tests<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.items[0].metadata.name}&#39;</span><span class="k">)</span>
-oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$POD_NAME</span>:/app/junit-report.xml<span class="w"> </span>./junit-report.xml
+<span class="nv">POD_NAME</span><span class="o">=</span><span class="k">$(</span>oc<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>mtv-tests-a1b2c3<span class="w"> </span>-l<span class="w"> </span>job-name<span class="o">=</span>mtv-tests<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.items[0].metadata.name}'</span><span class="k">)</span>
+oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests-a1b2c3/<span class="nv">$POD_NAME</span>:/app/junit-report.xml<span class="w"> </span>./junit-report.xml
 </code></pre></div>
 
 <p>You can collect the other artifacts the same way:</p>
-<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$POD_NAME</span>:/app/pytest-tests.log<span class="w"> </span>./pytest-tests.log
-oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$POD_NAME</span>:/app/.data-collector<span class="w"> </span>./data-collector
+<div class="highlight"><pre><span></span><code>oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests-a1b2c3/<span class="nv">$POD_NAME</span>:/app/pytest-tests.log<span class="w"> </span>./pytest-tests.log
+oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests-a1b2c3/<span class="nv">$POD_NAME</span>:/app/.data-collector<span class="w"> </span>./data-collector
 </code></pre></div>
 
 <p>For container runs, the easiest pattern is to mount a results directory and redirect outputs into it with:</p>
@@ -591,11 +651,10 @@ oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$
 <div class="highlight"><pre><span></span><code>--skip-teardown
 </code></pre></div>
 
-<p>If you skip teardown, keep the data collector output. The repo includes a cleanup helper that can use the saved <code>resources.json</code> file:</p>
+<p>If you skip teardown, keep the data collector output. <code>tools/clean_cluster.py</code> reads that saved <code>resources.json</code> and calls <code>clean_up()</code> on each recorded resource:</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>tools/clean_cluster.py<span class="w"> </span>.data-collector/resources.json
 </code></pre></div>
 
-<p><code>resources.json</code> is only created when data collection is enabled.</p>
 <blockquote>
 <p><strong>Warning:</strong> If you pass <code>--skip-data-collector</code>, the suite will not write <code>.data-collector/resources.json</code>, and failed runs will not gather the extra collector output.</p>
 <p><strong>Note:</strong> The completed <code>Job</code> pod remains available until you delete the <code>Job</code>, so you can still fetch logs and artifacts after the test run finishes.</p>
@@ -622,6 +681,7 @@ oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$
                     <h3>On this page</h3>
                     <div class="toc">
 <ul>
+<li><a href="#build-and-run-locally">Build And Run Locally</a></li>
 <li><a href="#how-the-image-starts">How The Image Starts</a></li>
 <li><a href="#provider-and-test-config">Provider And Test Config</a><ul>
 <li><a href="#providersjson">.providers.json</a></li>
@@ -630,8 +690,7 @@ oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$
 </li>
 <li><a href="#running-from-the-container-image">Running From The Container Image</a></li>
 <li><a href="#running-inside-an-openshift-job">Running Inside An OpenShift Job</a><ul>
-<li><a href="#1-create-a-secret">1. Create A Secret</a></li>
-<li><a href="#2-create-the-job">2. Create The Job</a></li>
+<li><a href="#building-the-secret-by-hand">Building The Secret By Hand</a></li>
 </ul>
 </li>
 <li><a href="#copy-offload-credentials">Copy-Offload Credentials</a></li>
@@ -643,24 +702,27 @@ oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -706,5 +768,6 @@ oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests/<span class="nv">$
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

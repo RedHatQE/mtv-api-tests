@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Development Workflow - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -239,7 +240,7 @@
 
                     <li>
                         <a href="development-workflow.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Development Workflow
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,7 +302,8 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="development-workflow">Development Workflow</h1>
-<p>This repository does not revolve around a single <code>make</code> target. The practical local workflow is a short loop built around <code>uv</code>, <code>pre-commit</code>, <code>tox</code>, and the checked-in <code>Dockerfile</code>.</p>
+<p>This repository does not revolve around a single <code>make</code> target. The practical local workflow is a short loop built around <code>uv</code>, <code>pre-commit</code>, <code>tox</code>, and the checked-in
+<code>Dockerfile</code>.</p>
 <p>For most day-to-day work, the fastest feedback loop is:</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>sync
 pre-commit<span class="w"> </span>run<span class="w"> </span>--all-files
@@ -312,70 +315,91 @@ podman<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </
 <h2 id="prerequisites">Prerequisites</h2>
 <p>The project targets Python <code>&gt;=3.12, &lt;3.14</code>, and it keeps a small <code>dev</code> dependency group for interactive tooling.</p>
 <div class="highlight"><pre><span></span><code><span class="k">[project]</span>
-<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.12, &lt;3.14&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&gt;=3.12, &lt;3.14"</span>
 
 <span class="k">[dependency-groups]</span>
-<span class="n">dev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;ipdb&gt;=0.13.13&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ipython&gt;=8.12.3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;python-jenkins&gt;=1.8.2&quot;</span><span class="p">]</span>
+<span class="n">dev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"ipdb&gt;=0.13.13"</span><span class="p">,</span><span class="w"> </span><span class="s2">"ipython&gt;=8.12.3"</span><span class="p">,</span><span class="w"> </span><span class="s2">"python-jenkins&gt;=1.8.2"</span><span class="p">]</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Note:</strong> <code>pre-commit</code> and <code>tox</code> are configured in this repository, but they are not declared as project dependencies in <code>pyproject.toml</code>. If those commands are not already available on your machine, install them with the Python CLI tool manager you normally use.</p>
+<p><strong>Note:</strong> <code>pre-commit</code> and <code>tox</code> are configured in this repository, but they are not declared as project dependencies in <code>pyproject.toml</code>. If those commands are not already
+available on your machine, install them with the Python CLI tool manager you normally use.</p>
 </blockquote>
 <h2 id="sync-dependencies">Sync Dependencies</h2>
-<p>Run <code>uv sync</code> from the repository root to create or refresh the local environment from <code>uv.lock</code>. That is the right starting point after cloning the repo or switching to a branch with dependency changes.</p>
-<p>When you want the strictest possible sync, use <code>uv sync --locked</code>. That is the exact mode used by the container build:</p>
-<div class="highlight"><pre><span></span><code><span class="k">RUN</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--locked<span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/RedHatQE/openshift-python-wrapper.git@<span class="nv">$OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/RedHatQE/openshift-python-utilities.git@<span class="nv">$OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>find<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/<span class="w"> </span>-type<span class="w"> </span>d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;__pycache__&quot;</span><span class="w"> </span>-print0<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>-0<span class="w"> </span>rm<span class="w"> </span>-rfv<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/.cache
+<p>Run <code>uv sync</code> from the repository root to create or refresh the local environment from <code>uv.lock</code>. That is the right starting point after cloning the repo or switching to a branch
+with dependency changes.</p>
+<p>When you want the strictest possible sync, use <code>uv sync --locked</code>. That is the exact mode used by the container build, which also layers unreleased upstream commits on top:</p>
+<div class="highlight"><pre><span></span><code><span class="k">RUN</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--locked<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"git+https://github.com/RedHatQE/openshift-python-wrapper.git@</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"git+https://github.com/RedHatQE/openshift-python-utilities.git@</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span>
 </code></pre></div>
 
 <blockquote>
 <p><strong>Tip:</strong> If you want to reproduce the container's dependency resolution locally, run <code>uv sync --locked</code> before troubleshooting.</p>
 </blockquote>
 <h2 id="pre-commit-checks">Pre-commit Checks</h2>
-<p><code>pre-commit run --all-files</code> is the main local quality gate. It brings together repository hygiene checks, secret scanning, Python linting and formatting, typing, and Markdown linting.</p>
+<p><code>pre-commit run --all-files</code> is the main local quality gate. It brings together repository hygiene checks, secret scanning, Python linting and formatting, typing, and Markdown
+linting.</p>
 <p>Key hooks from <code>.pre-commit-config.yaml</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">default_language_version</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python3.13</span>
 
 <span class="nt">repos</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/pre-commit/pre-commit-hooks</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v6.0.0</span>
+<span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-added-large-files</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-docstring-first</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-merge-conflict</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-symlinks</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">detect-private-key</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mixed-line-ending</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trailing-whitespace</span>
+<span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--markdown-linebreak-ext=md</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">end-of-file-fixer</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-ast</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-toml</span>
+
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/PyCQA/flake8</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.3.0</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.4.1</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flake8</span>
 <span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--config=.flake8</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">flake8-mutable</span><span class="p p-Indicator">]</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/astral-sh/ruff-pre-commit</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.15.4</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.16.9</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff-format</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/pre-commit/mirrors-mypy</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.19.1</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.3.1</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mypy</span>
 <span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span>
 <span class="w">          </span><span class="p p-Indicator">[</span>
-<span class="w">            </span><span class="s">&quot;types-pyvmomi&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-requests&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-six&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-pytz&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-PyYAML&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-paramiko&quot;</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-pyvmomi"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-requests"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-six"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-pytz"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-PyYAML"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-paramiko"</span><span class="p p-Indicator">,</span>
 <span class="w">          </span><span class="p p-Indicator">]</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/DavidAnson/markdownlint-cli2</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.21.0</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.23.3</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">markdownlint-cli2</span>
-<span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;--fix&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"--fix"</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^docs/</span>
 </code></pre></div>
 
-<p>The full hook set also includes <code>check-added-large-files</code>, <code>detect-private-key</code>, <code>detect-secrets</code>, <code>gitleaks</code>, <code>mixed-line-ending</code>, <code>trailing-whitespace</code>, and other small safety checks from <code>pre-commit-hooks</code>.</p>
+<p>The full hook set also includes <code>check-executables-have-shebangs</code>, <code>debug-statements</code>, <code>check-builtin-literals</code>, <code>detect-secrets</code>, and <code>gitleaks</code>.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>markdownlint-cli2</code>, <code>detect-secrets</code>, and <code>gitleaks</code> all carry <code>exclude: ^docs/</code>. Changes under <code>docs/</code> are not covered by the pre-commit quality gate at all. If
+you edit a Markdown page, lint it yourself or run the site generator, which reports structural problems.</p>
+</blockquote>
 <p>Use the full suite when you want the closest thing to a local CI gate:</p>
 <div class="highlight"><pre><span></span><code>pre-commit<span class="w"> </span>run<span class="w"> </span>--all-files
 </code></pre></div>
@@ -385,12 +409,76 @@ podman<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </
 pre-commit<span class="w"> </span>run<span class="w"> </span>ruff-format<span class="w"> </span>--all-files
 pre-commit<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>--all-files
 pre-commit<span class="w"> </span>run<span class="w"> </span>flake8<span class="w"> </span>--all-files
-pre-commit<span class="w"> </span>run<span class="w"> </span>markdownlint-cli2<span class="w"> </span>--all-files
+pre-commit<span class="w"> </span>run<span class="w"> </span>check-no-except-exception<span class="w"> </span>--all-files
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> The hook environments default to <code>python3.13</code>. If that interpreter is missing on your workstation, <code>pre-commit</code> can fail while creating hook environments even though the project itself supports Python 3.12.</p>
-<p><strong>Note:</strong> Secret scanning is part of the default local workflow. If you add examples that look like credentials, expect <code>detect-secrets</code> and <code>gitleaks</code> to review them.</p>
+<p><strong>Warning:</strong> The hook environments default to <code>python3.13</code>. If that interpreter is missing on your workstation, <code>pre-commit</code> can fail while creating hook environments even
+though the project itself supports Python 3.12.</p>
+</blockquote>
+<h2 id="agents-rules-enforced-by-local-hooks">AGENTS Rules Enforced By Local Hooks</h2>
+<p>Eight hooks under <code>repo: local</code> in <code>.pre-commit-config.yaml</code> run AST-based checks from <code>scripts/hooks/</code>. They exist because several <code>AGENTS.md</code> rules are easy to state and easy to
+violate silently.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Hook id</th>
+<th>Bans or requires</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-no-kubernetes-runtime</code></td>
+<td>Runtime <code>kubernetes.*</code> imports outside <code>TYPE_CHECKING</code>, except <code>kubernetes.dynamic.exceptions</code> and <code>from kubernetes.dynamic import exceptions</code></td>
+</tr>
+<tr>
+<td><code>check-no-dynamicclient-construct</code></td>
+<td>Constructing <code>DynamicClient()</code> directly; use <code>get_client()</code> instead</td>
+</tr>
+<tr>
+<td><code>check-no-except-exception</code></td>
+<td><code>except Exception</code>, including tuple and list forms such as <code>except (Exception, OSError)</code>, outside pytest hooks in <code>conftest.py</code></td>
+</tr>
+<tr>
+<td><code>check-no-runtimeerror</code></td>
+<td><code>raise RuntimeError</code>, including bare-name raises, outside pytest hooks in <code>conftest.py</code></td>
+</tr>
+<tr>
+<td><code>check-no-module-load-source-providers</code></td>
+<td>Module-level <code>load_source_providers()</code> calls under <code>tests/</code>, which silently ignore <code>--providers-json</code></td>
+</tr>
+<tr>
+<td><code>check-exceptions-location</code></td>
+<td><code>Exception</code> subclasses defined anywhere other than <code>exceptions/exceptions.py</code></td>
+</tr>
+<tr>
+<td><code>check-test-file-location</code></td>
+<td><code>tests/test_*.py</code> directly under <code>tests/</code>; test modules must live in a feature subdirectory</td>
+</tr>
+<tr>
+<td><code>check-autouse-fixtures</code></td>
+<td><code>autouse=True</code> on any fixture other than <code>autouse_fixtures</code> in <code>conftest.py</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>scripts/hooks/README.md</code> documents how to run a single check directly:</p>
+<div class="highlight"><pre><span></span><code>pre-commit<span class="w"> </span>run<span class="w"> </span>check-no-except-exception<span class="w"> </span>--all-files
+.venv/bin/python<span class="w"> </span>scripts/hooks/check_no_except_exception.py
+</code></pre></div>
+
+<h3 id="baseline-ratchet">Baseline ratchet</h3>
+<p>Four hooks still fail on legacy code. Those findings are grandfathered in <code>scripts/hooks/baselines/&lt;hook_id&gt;.txt</code>, so CI stays green while new violations still fail:</p>
+<ul>
+<li><code>check_exceptions_location.txt</code></li>
+<li><code>check_no_except_exception.txt</code></li>
+<li><code>check_no_kubernetes_runtime.txt</code></li>
+<li><code>check_no_runtimeerror.txt</code></li>
+</ul>
+<p>The filename uses the snake_case script stem, not the kebab-case pre-commit id. Each line is <code>relative/posix/path:&lt;16-char-sha256-hex&gt;</code>, where the fingerprint is
+<code>sha256(span)[:16]</code> over the exact source span. Matching is on path plus content fingerprint with occurrence counts, not line numbers, so refactors that move a violation do not
+resurrect it, but editing any line inside a baselined span does.</p>
+<blockquote>
+<p><strong>Tip:</strong> When you fix a baselined violation, delete its baseline line. Do not add baseline lines casually; only do it as a deliberate grandfathering decision.</p>
 </blockquote>
 <h2 id="linting-typing-and-docs-rules">Linting, Typing, and Docs Rules</h2>
 <p>The Python tool settings live in <code>pyproject.toml</code>:</p>
@@ -398,16 +486,24 @@ pre-commit<span class="w"> </span>run<span class="w"> </span>markdownlint-cli2<s
 <span class="n">preview</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">line-length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">120</span>
 <span class="n">fix</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">output-format</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;grouped&quot;</span>
+<span class="n">output-format</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"grouped"</span>
+
+<span class="k">[tool.ruff.format]</span>
+<span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">".git"</span><span class="p">,</span><span class="w"> </span><span class="s2">".venv"</span><span class="p">,</span><span class="w"> </span><span class="s2">".mypy_cache"</span><span class="p">,</span><span class="w"> </span><span class="s2">".tox"</span><span class="p">,</span><span class="w"> </span><span class="s2">"__pycache__"</span><span class="p">]</span>
 
 <span class="k">[tool.ruff.lint]</span>
-<span class="n">select</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;PLC0415&quot;</span><span class="p">]</span>
+<span class="n">select</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"PLC0415"</span><span class="p">]</span>
 
 <span class="k">[tool.mypy]</span>
+<span class="n">disallow_any_generics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
 <span class="n">disallow_incomplete_defs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">no_implicit_optional</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">show_error_codes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">warn_unused_ignores</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+
+<span class="k">[[tool.mypy.overrides]]</span>
+<span class="n">module</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"paramiko"</span>
+<span class="n">ignore_missing_imports</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 </code></pre></div>
 
 <p>In practice, that means:</p>
@@ -429,7 +525,8 @@ pre-commit<span class="w"> </span>run<span class="w"> </span>markdownlint-cli2<s
 <span class="w">    </span><span class="na">.cache/*</span>
 </code></pre></div>
 
-<p>If you are editing documentation, <code>markdownlint-cli2</code> is already part of the same workflow. Its repo-level config allows fairly wide lines and a few inline HTML elements often used in docs:</p>
+<p>If you are editing documentation, <code>markdownlint-cli2</code> is part of the same workflow but is configured with <code>exclude: ^docs/</code>, so it does not touch pages in this site. Its
+repo-level config, in <code>.markdownlint.yaml</code>, allows fairly wide lines and a few inline HTML elements:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">MD013</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">line_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">180</span>
 
@@ -440,26 +537,58 @@ pre-commit<span class="w"> </span>run<span class="w"> </span>markdownlint-cli2<s
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strong</span>
 </code></pre></div>
 
+<h2 id="rebuilding-the-documentation-site">Rebuilding The Documentation Site</h2>
+<p><code>docs/</code> is a <a href="https://pypi.org/project/pi-docsite/">pi-docsite</a> project. Per <code>AGENTS.md</code>, edit only the Markdown sources and never the generated output:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs/*.md</code></td>
+<td>Sources, the only files humans edit</td>
+</tr>
+<tr>
+<td><code>docs/nav.json</code></td>
+<td>Sidebar layout, groups and page order</td>
+</tr>
+<tr>
+<td><code>docs/*.html</code>, <code>docs/assets/</code>, <code>docs/llms.txt</code>, <code>docs/llms-full.txt</code></td>
+<td>Generated, never hand-edited</td>
+</tr>
+</tbody>
+</table></div>
+<p>Rebuild after any change to a <code>docs/*.md</code> file or to <code>docs/nav.json</code>:</p>
+<div class="highlight"><pre><span></span><code>uvx<span class="w"> </span>pi-docsite<span class="w"> </span>--docs-dir<span class="w"> </span>docs<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tagline<span class="w"> </span><span class="s2">"Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."</span>
+</code></pre></div>
+
+<p>The generator enforces the invariants this site depends on: each page has exactly one H1, every page appears in <code>nav.json</code>, and a <code>nav.json</code> slug without a <code>.md</code> behind it is a
+build error. Output is byte-for-byte reproducible, so churn in untouched files means the generator changed rather than the build being stale.</p>
 <blockquote>
-<p><strong>Tip:</strong> For docs-only changes, <code>pre-commit run markdownlint-cli2 --all-files</code> is usually the fastest targeted check.</p>
+<p><strong>Tip:</strong> Because <code>markdownlint-cli2</code> excludes <code>docs/</code>, the generator is your structural check on documentation changes. Run it before committing.</p>
+<p><strong>Note:</strong> Search on the site only works when <code>docs/</code> is served over HTTP. Browsers block <code>fetch()</code> of <code>search-index.json</code> over <code>file://</code>.</p>
 </blockquote>
 <h2 id="tox-targets">Tox Targets</h2>
 <p>Unlike some Python projects, tox is not the main entry point for every local check here. This repository defines two focused tox environments in <code>tox.toml</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="n">skipsdist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">env_list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;pytest-check&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;unused-code&quot;</span><span class="p">]</span>
+<span class="n">env_list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"pytest-check"</span><span class="p">,</span><span class="w"> </span><span class="s2">"unused-code"</span><span class="p">]</span>
 
 <span class="k">[env.pytest-check]</span>
 <span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-<span class="w">  </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--setup-plan&quot;</span><span class="p">],</span>
-<span class="w">  </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--setup-plan"</span><span class="p">],</span>
+<span class="w">  </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--collect-only"</span><span class="p">],</span>
 <span class="p">]</span>
-<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Run pytest collect-only and setup-plan&quot;</span>
-<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">]</span>
+<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run pytest collect-only and setup-plan"</span>
+<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">]</span>
 
 <span class="k">[env.unused-code]</span>
-<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Find unused code&quot;</span>
-<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;python-utility-scripts&quot;</span><span class="p">]</span>
-<span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="s2">&quot;pyutils-unusedcode&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--exclude-function-prefixes&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest_&quot;</span><span class="p">]]</span>
+<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Find unused code"</span>
+<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"python-utility-scripts"</span><span class="p">]</span>
+<span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="s2">"pyutils-unusedcode"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--exclude-function-prefixes"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest_"</span><span class="p">]]</span>
 </code></pre></div>
 
 <p>Run them with:</p>
@@ -474,14 +603,19 @@ tox<span class="w"> </span>-e<span class="w"> </span>unused-code
 </ul>
 <p><code>pytest-check</code> is intentionally safe because the repository treats both <code>--setup-plan</code> and <code>--collect-only</code> as dry-run modes:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">is_dry_run</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="o">.</span><span class="n">setupplan</span> <span class="ow">or</span> <span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="o">.</span><span class="n">collectonly</span>
+<span class="w">    </span><span class="sd">"""Check if pytest was invoked in dry-run mode (collectonly or setupplan)."""</span>
 </code></pre></div>
 
+<p>When <code>is_dry_run()</code> is true, <code>conftest.py</code> skips the required-config check, skips session finish, and skips the per-test data collector.</p>
 <blockquote>
-<p><strong>Tip:</strong> Run <code>tox -e pytest-check</code> after changing fixtures, parametrization, markers, or imports. It is a fast way to catch collection breakage before you try a real environment-backed run.</p>
+<p><strong>Warning:</strong> <code>AGENTS.md</code> prohibits running <code>pytest</code> or <code>uv run pytest</code> directly. Every test here needs a live OpenShift cluster, provider connections, and real credentials.
+Stick to <code>--collect-only</code>, <code>--setup-plan</code>, and <code>tox -e pytest-check</code>.</p>
+<p><strong>Tip:</strong> Run <code>tox -e pytest-check</code> after changing fixtures, parametrization, markers, or imports. It is a fast way to catch collection breakage before you try a real
+environment-backed run.</p>
 </blockquote>
 <h2 id="real-pytest-runs">Real Pytest Runs</h2>
-<p>A plain <code>pytest</code> invocation already picks up repository defaults from <code>pytest.ini</code>. Test discovery is limited to <code>tests/</code>, and the default options load <code>tests/tests_config/config.py</code>, write JUnit XML, enforce strict markers, and enable <code>loadscope</code> distribution.</p>
+<p>A plain <code>pytest</code> invocation already picks up repository defaults from <code>pytest.ini</code>. Test discovery is limited to <code>tests/</code>, and the default options load
+<code>tests/tests_config/config.py</code>, write JUnit XML, enforce strict markers, and enable <code>loadscope</code> distribution for <code>pytest-xdist</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="k">[pytest]</span>
 <span class="na">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">tests</span>
 
@@ -492,18 +626,25 @@ tox<span class="w"> </span>-e<span class="w"> </span>unused-code
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
 <span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
-<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
 <span class="w">  </span><span class="na">--show-progress</span>
 <span class="w">  </span><span class="na">--strict-markers</span>
-<span class="w">  </span><span class="na">--jira</span>
 <span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
+
+<span class="na">markers</span><span class="w"> </span><span class="o">=</span>
+<span class="w">    </span><span class="na">tier0</span><span class="o">:</span><span class="w"> </span><span class="s">Core functionality tests (smoke tests)</span>
+<span class="w">    </span><span class="na">tier1</span><span class="o">:</span><span class="w"> </span><span class="s">Extended functionality tests</span>
+<span class="w">    </span><span class="na">warm</span><span class="o">:</span><span class="w"> </span><span class="s">Warm migration tests</span>
+<span class="w">    </span><span class="na">copyoffload</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload (XCOPY) tests</span>
+<span class="w">    </span><span class="na">shared_disk</span><span class="o">:</span><span class="w"> </span><span class="s">Shared disk migration tests (vSphere only)</span>
+<span class="w">    </span><span class="na">incremental</span><span class="o">:</span><span class="w"> </span><span class="s">marks tests as incremental (xfail on previous failure)</span>
+<span class="w">    </span><span class="na">...</span>
 </code></pre></div>
 
 <p>Real test execution is not a unit-test-only workflow. In <code>conftest.py</code>, the session requires both <code>storage_class</code> and <code>source_provider</code> unless pytest is running in dry-run mode:</p>
-<div class="highlight"><pre><span></span><code><span class="n">required_config</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;storage_class&quot;</span><span class="p">,</span> <span class="s2">&quot;source_provider&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">required_config</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"storage_class"</span><span class="p">,</span> <span class="s2">"source_provider"</span><span class="p">)</span>
 
 <span class="k">if</span> <span class="ow">not</span> <span class="n">is_dry_run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="p">):</span>
-    <span class="n">BASIC_LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">separator</span><span class="p">(</span><span class="n">symbol_</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">val</span><span class="o">=</span><span class="s1">&#39;SESSION START&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">BASIC_LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">separator</span><span class="p">(</span><span class="n">symbol_</span><span class="o">=</span><span class="s1">'-'</span><span class="p">,</span><span class="w"> </span><span class="n">val</span><span class="o">=</span><span class="s1">'SESSION START'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
     <span class="n">missing_configs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
@@ -512,7 +653,7 @@ tox<span class="w"> </span>-e<span class="w"> </span>unused-code
             <span class="n">missing_configs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_req</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">missing_configs</span><span class="p">:</span>
-        <span class="n">pytest</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Some required config is missing </span><span class="si">{</span><span class="n">required_config</span><span class="si">=}</span><span class="s2"> - </span><span class="si">{</span><span class="n">missing_configs</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">returncode</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Some required config is missing </span><span class="si">{</span><span class="n">required_config</span><span class="si">=}</span><span class="s2"> - </span><span class="si">{</span><span class="n">missing_configs</span><span class="si">=}</span><span class="s2">"</span><span class="p">,</span> <span class="n">returncode</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
 
 <p>An actual checked-in example of a real test command appears in the copy-offload documentation:</p>
@@ -526,23 +667,42 @@ tox<span class="w"> </span>-e<span class="w"> </span>unused-code
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> Use real <code>pytest</code> runs only when you have access to a live OpenShift/MTV environment and valid provider configuration. For routine local verification, <code>pre-commit</code> and <code>tox -e pytest-check</code> are the safer defaults.</p>
-<p><strong>Tip:</strong> The repo includes <code>.providers.json.example</code> and ignores <code>.providers.json</code> in <code>.gitignore</code>. Use the example as a reference, but make sure your real <code>.providers.json</code> is valid JSON, because the loader reads it with <code>json.loads()</code> and the example file contains inline comments for documentation purposes.</p>
+<p><strong>Warning:</strong> Use real <code>pytest</code> runs only when you have access to a live OpenShift/MTV environment and valid provider configuration. For routine local verification, <code>pre-commit</code>
+and <code>tox -e pytest-check</code> are the safer defaults.</p>
+<p><strong>Tip:</strong> The repo includes <code>.providers.json.example</code> and ignores <code>.providers.json</code> in <code>.gitignore</code>. Use the example as a reference, but your real <code>.providers.json</code> must be plain
+JSON: <code>load_source_providers()</code> in <code>utilities/utils.py</code> calls <code>json.loads()</code> directly, and the example file carries inline <code># pragma: allowlist secret</code> comments for
+documentation that a strict JSON parser rejects. Field names and required/optional status are defined in <code>providers_schema.json</code>.</p>
 </blockquote>
 <h2 id="container-builds">Container Builds</h2>
-<p>Use the checked-in <code>Dockerfile</code> when you want a clean, reproducible runtime that matches the repository's containerized execution path. The image is based on Fedora 41, installs dependencies with <code>uv sync --locked</code>, and defaults to a safe collection-only pytest command.</p>
-<div class="highlight"><pre><span></span><code><span class="k">FROM</span><span class="w"> </span><span class="s">quay.io/fedora/fedora:41</span>
+<p>Use the checked-in <code>Dockerfile</code> when you want a clean, reproducible runtime that matches the repository's containerized execution path. It is a two-stage build on Red Hat UBI 10
+minimal: a builder stage installs compilers, copies the source, and runs <code>uv sync --locked</code>; a runtime stage copies only the resulting environment and drops the build toolchain.</p>
+<p>The relevant parts:</p>
+<div class="highlight"><pre><span></span><code><span class="k">FROM</span><span class="w"> </span><span class="s">registry.access.redhat.com/ubi10/ubi-minimal:10.1@sha256:c858c2eb...</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">builder</span>
 
+<span class="k">ARG</span><span class="w"> </span><span class="nv">APP_DIR</span><span class="o">=</span>/app
 <span class="k">ENV</span><span class="w"> </span><span class="nv">UV_PYTHON</span><span class="o">=</span>python3.12
-<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_COMPILE_BYTECODE</span><span class="o">=</span><span class="m">1</span>
-<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_NO_SYNC</span><span class="o">=</span><span class="m">1</span>
 
-<span class="k">ARG</span><span class="w"> </span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="o">=</span><span class="s1">&#39;&#39;</span>
-<span class="k">ARG</span><span class="w"> </span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="o">=</span><span class="s1">&#39;&#39;</span>
+<span class="k">COPY</span><span class="w"> </span>cli<span class="w"> </span>cli
+<span class="k">COPY</span><span class="w"> </span>docs<span class="w"> </span>docs
+<span class="k">COPY</span><span class="w"> </span>utilities<span class="w"> </span>utilities
+<span class="k">COPY</span><span class="w"> </span>tests<span class="w"> </span>tests
+<span class="k">COPY</span><span class="w"> </span>libs<span class="w"> </span>libs
+<span class="k">COPY</span><span class="w"> </span>exceptions<span class="w"> </span>exceptions
+<span class="k">COPY</span><span class="w"> </span>README.md<span class="w"> </span>pyproject.toml<span class="w"> </span>uv.lock<span class="w"> </span>conftest.py<span class="w"> </span>pytest.ini<span class="w"> </span>./
 
-<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">]</span>
+<span class="k">RUN</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--locked<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"git+https://github.com/RedHatQE/openshift-python-wrapper.git@</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>find<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/<span class="w"> </span>-type<span class="w"> </span>d<span class="w"> </span>-name<span class="w"> </span><span class="s2">"__pycache__"</span><span class="w"> </span>-print0<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>-0<span class="w"> </span>-r<span class="w"> </span>rm<span class="w"> </span>-rfv<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/.cache
+
+<span class="k">FROM</span><span class="w"> </span><span class="s">registry.access.redhat.com/ubi10/ubi-minimal:10.1@sha256:c858c2eb...</span>
+
+<span class="k">USER</span><span class="w"> </span><span class="s">1001</span>
+
+<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--collect-only"</span><span class="p">]</span>
 </code></pre></div>
 
+<p>The runtime stage also sets <code>PYTHONDONTWRITEBYTECODE=1</code> and <code>PYTHONUNBUFFERED=1</code> so nothing is lost from the OpenShift job log, and points <code>JUNITFILE</code> at <code>${APP_DIR}/output/</code>.</p>
 <p>Build locally with either Podman or Docker:</p>
 <div class="highlight"><pre><span></span><code>podman<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </span>Dockerfile<span class="w"> </span>-t<span class="w"> </span>mtv-api-tests<span class="w"> </span>.
 docker<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </span>Dockerfile<span class="w"> </span>-t<span class="w"> </span>mtv-api-tests<span class="w"> </span>.
@@ -587,7 +747,12 @@ docker<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </
 <li><a href="#prerequisites">Prerequisites</a></li>
 <li><a href="#sync-dependencies">Sync Dependencies</a></li>
 <li><a href="#pre-commit-checks">Pre-commit Checks</a></li>
+<li><a href="#agents-rules-enforced-by-local-hooks">AGENTS Rules Enforced By Local Hooks</a><ul>
+<li><a href="#baseline-ratchet">Baseline ratchet</a></li>
+</ul>
+</li>
 <li><a href="#linting-typing-and-docs-rules">Linting, Typing, and Docs Rules</a></li>
+<li><a href="#rebuilding-the-documentation-site">Rebuilding The Documentation Site</a></li>
 <li><a href="#tox-targets">Tox Targets</a></li>
 <li><a href="#real-pytest-runs">Real Pytest Runs</a></li>
 <li><a href="#container-builds">Container Builds</a></li>
@@ -597,24 +762,27 @@ docker<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -660,5 +828,6 @@ docker<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

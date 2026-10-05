@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Test Plan Configuration - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -113,7 +114,7 @@
 
                     <li>
                         <a href="test-plan-configuration.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Test Plan Configuration
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,8 +302,10 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="test-plan-configuration">Test Plan Configuration</h1>
-<p><code>tests_params</code> is the catalog of named migration plans used by this repository. Each entry defines which source VMs to use, which MTV plan features to enable, and which extra test behaviors should run before or after migration.</p>
-<p>The important thing to know is that the value you write in <code>tests/tests_config/config.py</code> is the <strong>raw plan</strong>. The test fixtures then turn that raw plan into a runtime <code>prepared_plan</code> before creating the MTV <code>Plan</code> custom resource.</p>
+<p><code>tests_params</code> is the catalog of named migration plans used by this repository. Each entry defines which source VMs to use, which MTV plan features to enable, and which extra
+test behaviors should run before or after migration.</p>
+<p>The important thing to know is that the value you write in <code>tests/tests_config/config.py</code> is the <strong>raw plan</strong>. The test fixtures then turn that raw plan into a runtime
+<code>prepared_plan</code> before creating the MTV <code>Plan</code> custom resource.</p>
 <h2 id="where-plans-live">Where Plans Live</h2>
 <p>The suite loads <code>tests/tests_config/config.py</code> as a Python config file, not as YAML or JSON:</p>
 <div class="highlight"><pre><span></span><code><span class="na">addopts</span><span class="w"> </span><span class="o">=</span>
@@ -314,64 +318,73 @@
 
 <p>Each test class then picks one named entry from <code>py_config["tests_params"]</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
-    <span class="s2">&quot;class_plan_config&quot;</span><span class="p">,</span>
+    <span class="s2">"class_plan_config"</span><span class="p">,</span>
     <span class="p">[</span>
         <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
-            <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;tests_params&quot;</span><span class="p">][</span><span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">],</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">"tests_params"</span><span class="p">][</span><span class="s2">"test_sanity_cold_mtv_migration"</span><span class="p">],</span>
         <span class="p">)</span>
     <span class="p">],</span>
     <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;rhel8&quot;</span><span class="p">],</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">"rhel8"</span><span class="p">],</span>
 <span class="p">)</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Note:</strong> <code>tests/tests_config/config.py</code> contains both shared test-suite settings and the <code>tests_params</code> dictionary. Only entries inside <code>tests_params</code> are individual plan definitions.</p>
+<p><strong>Note:</strong> <code>tests/tests_config/config.py</code> contains both shared test-suite settings and the <code>tests_params</code> dictionary. Only entries inside <code>tests_params</code> are individual plan
+definitions.</p>
 </blockquote>
 <h2 id="basic-structure">Basic Structure</h2>
 <p>A minimal plan can be very small:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span> <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
-    <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-<span class="p">},</span>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_sanity_cold_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span> <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"add_nic"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"add_nic_start_connected"</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"per_nic_network_map"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">},</span>
 </code></pre></div>
 
 <p>A more advanced plan adds destination placement, PVC naming, labels, and affinity:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_warm_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2022-ip-3disks"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+        <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-warm-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+        <span class="c1"># Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default".</span>
+        <span class="c1"># vsphere uses .FileName; default truncates VmName to stay within 63 chars.</span>
+        <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"vsphere"</span><span class="p">:</span> <span class="s1">'{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}'</span><span class="p">,</span>
+            <span class="s2">"default"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
         <span class="p">},</span>
-    <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-        <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
+        <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"mtv-comprehensive-test"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+            <span class="s2">"static-label"</span><span class="p">:</span> <span class="s2">"static-value"</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"comprehensive-test"</span><span class="p">}},</span>
+                            <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
+                        <span class="p">},</span>
+                        <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">]</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+        <span class="s2">"guest_agent_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
-                <span class="p">{</span>
-                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
-                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
-                    <span class="p">},</span>
-                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
-                <span class="p">}</span>
-            <span class="p">]</span>
-        <span class="p">}</span>
-    <span class="p">},</span>
-<span class="p">},</span>
 </code></pre></div>
 
 <p>In every entry:</p>
@@ -384,144 +397,290 @@
 </blockquote>
 <h2 id="per-vm-settings">Per-VM Settings</h2>
 <p>Each item in <code>virtual_machines</code> describes one source VM or template.</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Key</th>
-<th>What it means</th>
+<th>Required</th>
+<th>Values or meaning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>name</code></td>
-<td>Source VM or template name. During preparation, this may be rewritten to the actual cloned runtime name.</td>
+<td>Yes</td>
+<td>Source VM or template name. During preparation this may be rewritten to the actual cloned runtime name.</td>
 </tr>
 <tr>
 <td><code>source_vm_power</code></td>
-<td>Optional source power state before migration. <code>"on"</code> starts the VM, <code>"off"</code> stops it, and omitting it leaves the current state unchanged.</td>
+<td>No</td>
+<td><code>"on"</code> starts the VM, <code>"off"</code> stops it. Omitting it leaves the current state unchanged.</td>
 </tr>
 <tr>
 <td><code>guest_agent</code></td>
-<td>Enables guest-agent-aware validation after migration.</td>
+<td>No</td>
+<td><code>True</code> when the guest agent is expected to run after migration.</td>
 </tr>
 <tr>
 <td><code>clone</code></td>
-<td>Common in copy-offload and mutation-heavy scenarios. In this repository it is mostly a scenario hint, not the only thing that causes runtime cloning.</td>
+<td>No</td>
+<td><code>True</code> when the VM is cloned during preparation. For copy-offload plans, VMs with <code>clone: true</code> also get their name replaced by <code>copyoffload.default_vm_name</code>.</td>
 </tr>
 <tr>
 <td><code>clone_name</code></td>
+<td>No</td>
 <td>Overrides the default clone base name.</td>
 </tr>
 <tr>
 <td><code>preserve_name_format</code></td>
-<td>Preserves uppercase letters and underscores in <code>clone_name</code> for name-format tests.</td>
+<td>No</td>
+<td><code>True</code> keeps uppercase letters and underscores in <code>clone_name</code> instead of sanitizing them.</td>
 </tr>
 <tr>
 <td><code>disk_type</code></td>
-<td>VMware disk provisioning mode for the cloned VM.</td>
+<td>No</td>
+<td><code>thin</code>, <code>thick-lazy</code>, or <code>thick-eager</code>.</td>
 </tr>
 <tr>
 <td><code>add_disks</code></td>
-<td>Adds extra disks to the cloned source VM before migration.</td>
+<td>No</td>
+<td>List of extra disks to attach to the cloned VM before migration.</td>
 </tr>
 <tr>
 <td><code>snapshots</code></td>
-<td>Number of source snapshots to create before migration in snapshot-focused tests.</td>
+<td>No</td>
+<td>Number of source snapshots to create before migration.</td>
 </tr>
 <tr>
 <td><code>target_datastore_id</code></td>
+<td>No</td>
 <td>VMware target datastore for the cloned VM.</td>
 </tr>
 <tr>
-<td><code>add_disks[*].datastore_id</code></td>
-<td>Optional datastore override for an individual added disk.</td>
+<td><code>target_esxi_host</code></td>
+<td>No</td>
+<td>Pin the clone to a specific ESXi host. Set automatically by <code>clone_to_same_host</code> and <code>pin_to_non_dedicated_host</code> unless you set it yourself.</td>
+</tr>
+<tr>
+<td><code>luks</code></td>
+<td>No</td>
+<td><code>True</code> when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference.</td>
+</tr>
+<tr>
+<td><code>luks_passphrase</code></td>
+<td>No</td>
+<td>Per-VM LUKS passphrase. Overrides the provider-level <code>luks_passphrase</code>.</td>
+</tr>
+<tr>
+<td><code>migrate_shared_disks</code></td>
+<td>No</td>
+<td><code>True</code> for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM.</td>
+</tr>
+<tr>
+<td><code>add_nic</code></td>
+<td>No</td>
+<td><code>True</code> to add an extra NIC. vSphere only.</td>
+</tr>
+<tr>
+<td><code>add_nic_start_connected</code></td>
+<td>Yes*</td>
+<td>Required when <code>add_nic</code> is <code>True</code>. Must be a <code>bool</code>.</td>
+</tr>
+<tr>
+<td><code>win_os</code></td>
+<td>No</td>
+<td>Hyper-V guest OS override. Must be a <code>bool</code> when present.</td>
 </tr>
 </tbody>
-</table>
-<p>The VMware provider currently supports these <code>disk_type</code> values:</p>
-<div class="highlight"><pre><span></span><code><span class="n">DISK_TYPE_MAP</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;thin&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;sparse&quot;</span><span class="p">,</span> <span class="s2">&quot;Setting disk provisioning to &#39;thin&#39; (sparse).&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;thick-lazy&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;flat&quot;</span><span class="p">,</span> <span class="s2">&quot;Setting disk provisioning to &#39;thick-lazy&#39; (flat).&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;thick-eager&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;eagerZeroedThick&quot;</span><span class="p">,</span> <span class="s2">&quot;Setting disk provisioning to &#39;thick-eager&#39; (eagerZeroedThick).&quot;</span><span class="p">),</span>
-<span class="p">}</span>
+</table></div>
+<p>Validation is strict for the rows marked with an asterisk:</p>
+<ul>
+<li><code>add_nic: True</code> without <code>add_nic_start_connected</code> raises a <code>ValueError</code>.</li>
+<li>A non-<code>bool</code> <code>add_nic_start_connected</code> raises a <code>ValueError</code>.</li>
+<li><code>add_nic</code> on a non-vSphere provider skips the test.</li>
+<li><code>win_os</code> with a non-<code>bool</code> value raises a <code>TypeError</code> in the Hyper-V provider.</li>
+</ul>
+<h3 id="disk-types">Disk types</h3>
+<div class="highlight"><pre><span></span><code>    <span class="n">DISK_TYPE_MAP</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"thin"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"sparse"</span><span class="p">,</span> <span class="s2">"Setting disk provisioning to 'thin' (sparse)."</span><span class="p">),</span>
+        <span class="s2">"thick-lazy"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"flat"</span><span class="p">,</span> <span class="s2">"Setting disk provisioning to 'thick-lazy' (flat)."</span><span class="p">),</span>
+        <span class="s2">"thick-eager"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"flat"</span><span class="p">,</span> <span class="s2">"Setting disk provisioning to 'thick-eager' (flat + eagerlyScrub)."</span><span class="p">),</span>
+    <span class="p">}</span>
 </code></pre></div>
 
-<p>A real multi-disk example looks like this:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_multi_disk_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;add_disks&quot;</span><span class="p">:</span> <span class="p">[</span>
-                <span class="p">{</span><span class="s2">&quot;size_gb&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span> <span class="s2">&quot;disk_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;persistent&quot;</span><span class="p">,</span> <span class="s2">&quot;provision_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thick-lazy&quot;</span><span class="p">},</span>
-            <span class="p">],</span>
-        <span class="p">},</span>
-    <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-<span class="p">},</span>
+<p><code>thick-eager</code> maps to a flat disk with <code>eagerlyScrub</code> set, not to <code>eagerZeroedThick</code>.</p>
+<h3 id="add_disks-entries"><code>add_disks</code> entries</h3>
+<p>Each item in <code>add_disks</code> supports these keys:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>size_gb</code></td>
+<td>Yes for a normal added disk</td>
+<td>Disk size in gigabytes.</td>
+</tr>
+<tr>
+<td><code>provision_type</code></td>
+<td>No</td>
+<td><code>thin</code>, <code>thick-lazy</code>, or <code>thick-eager</code>. Defaults to <code>thin</code>.</td>
+</tr>
+<tr>
+<td><code>disk_mode</code></td>
+<td>No</td>
+<td>vSphere disk mode. Defaults to <code>persistent</code>. <code>independent_persistent</code> is used in <code>tests_params</code>.</td>
+</tr>
+<tr>
+<td><code>datastore_id</code></td>
+<td>No</td>
+<td>Places this disk on a specific datastore instead of the VM's default.</td>
+</tr>
+<tr>
+<td><code>datastore_path</code></td>
+<td>No</td>
+<td>Directory path to create on the datastore, for datastore-path tests.</td>
+</tr>
+<tr>
+<td><code>rdm_type</code></td>
+<td>No</td>
+<td><code>virtual</code> or <code>physical</code>. Creates an RDM disk from <code>copyoffload.rdm_lun_uuid</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<p>A real multi-disk example:</p>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_copyoffload_multi_disk_migration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span><span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span> <span class="s2">"disk_mode"</span><span class="p">:</span> <span class="s2">"persistent"</span><span class="p">,</span> <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thick-lazy"</span><span class="p">},</span>
+                <span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">},</span>
 </code></pre></div>
 
 <p>For special naming tests, the config can override the clone name entirely:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_nonconforming_name_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;clone_name&quot;</span><span class="p">:</span> <span class="s2">&quot;XCopy_Test_VM_CAPS&quot;</span><span class="p">,</span>  <span class="c1"># Non-conforming name for cloned VM</span>
-            <span class="s2">&quot;preserve_name_format&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Don&#39;t sanitize the name (keep capitals and underscores)</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-        <span class="p">},</span>
-    <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-<span class="p">},</span>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_copyoffload_nonconforming_name_migration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+                <span class="s2">"clone_name"</span><span class="p">:</span> <span class="s2">"XCopy_Test_VM_CAPS"</span><span class="p">,</span>  <span class="c1"># Non-conforming name for cloned VM</span>
+                <span class="s2">"preserve_name_format"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Don't sanitize the name (keep capitals and underscores)</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">},</span>
 </code></pre></div>
 
 <h3 id="snapshot-driven-tests">Snapshot-Driven Tests</h3>
-<p><code>snapshots</code> is a good example of a value that affects <strong>test preparation</strong>, not just MTV plan creation. Snapshot tests create the snapshots first, then store the pre-migration snapshot list back into the prepared plan for later validation:</p>
-<div class="highlight"><pre><span></span><code><span class="n">vm_cfg</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-<span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;source_vms_data&quot;</span><span class="p">][</span><span class="n">vm_cfg</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]][</span><span class="s2">&quot;provider_vm_api&quot;</span><span class="p">]</span>
+<p><code>snapshots</code> affects <strong>test preparation</strong>, not just MTV plan creation. Snapshot tests create the snapshots first, then store the pre-migration snapshot list back into the prepared
+plan for later validation:</p>
+<div class="highlight"><pre><span></span><code>        <span class="n">vm_cfg</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"source_vms_data"</span><span class="p">][</span><span class="n">vm_cfg</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]][</span><span class="s2">"provider_vm_api"</span><span class="p">]</span>
 
-<span class="c1"># Ensure VM is powered on for snapshot creation</span>
-<span class="n">source_provider</span><span class="o">.</span><span class="n">start_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
-<span class="n">source_provider</span><span class="o">.</span><span class="n">wait_for_vmware_guest_info</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="n">source_provider</span><span class="o">.</span><span class="n">start_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
+        <span class="n">source_provider</span><span class="o">.</span><span class="n">wait_for_vmware_guest_info</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
 
-<span class="n">snapshots_to_create</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">vm_cfg</span><span class="p">[</span><span class="s2">&quot;snapshots&quot;</span><span class="p">])</span>
-<span class="n">snapshot_prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">vm_cfg</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">fixture_store</span><span class="p">[</span><span class="s1">&#39;session_uuid&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">-snapshot&quot;</span>
+        <span class="n">snapshots_to_create</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">vm_cfg</span><span class="p">[</span><span class="s2">"snapshots"</span><span class="p">])</span>
+        <span class="n">snapshot_prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">vm_cfg</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">fixture_store</span><span class="p">[</span><span class="s1">'session_uuid'</span><span class="p">]</span><span class="si">}</span><span class="s2">-snapshot"</span>
 
-<span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">snapshots_to_create</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
-    <span class="n">source_provider</span><span class="o">.</span><span class="n">create_snapshot</span><span class="p">(</span>
-        <span class="n">vm</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">,</span>
-        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">snapshot_prefix</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;mtv-api-tests copy-offload snapshots migration test&quot;</span><span class="p">,</span>
-        <span class="n">memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">quiesce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span> <span class="o">*</span> <span class="mi">10</span><span class="p">,</span>
-    <span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">snapshots_to_create</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">source_provider</span><span class="o">.</span><span class="n">create_snapshot</span><span class="p">(</span>
+                <span class="n">vm</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">snapshot_prefix</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                <span class="n">description</span><span class="o">=</span><span class="s2">"mtv-api-tests copy-offload snapshots migration test"</span><span class="p">,</span>
+                <span class="n">memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">quiesce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span> <span class="o">*</span> <span class="mi">10</span><span class="p">,</span>
+            <span class="p">)</span>
 
-<span class="c1"># Refresh and store snapshots list for post-migration snapshot checks</span>
-<span class="n">vm_cfg</span><span class="p">[</span><span class="s2">&quot;snapshots_before_migration&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">vm_dict</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">)[</span>
-    <span class="s2">&quot;snapshots_data&quot;</span>
-<span class="p">]</span>
+        <span class="n">vm_cfg</span><span class="p">[</span><span class="s2">"snapshots_before_migration"</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">vm_dict</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">)[</span>
+            <span class="s2">"snapshots_data"</span>
+        <span class="p">]</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Note:</strong> In the class-based flow used by this repository, external-provider VMs are resolved with <code>clone_vm=True</code> during preparation. That means runtime VM names usually become per-test clone names even when the raw plan entry does not set <code>clone: true</code>.</p>
+<p><strong>Note:</strong> In the class-based flow used by this repository, external-provider VMs are resolved with <code>clone_vm=True</code> during preparation. That means runtime VM names usually
+become per-test clone names even when the raw plan entry does not set <code>clone: true</code>.</p>
 </blockquote>
 <h2 id="plan-level-settings">Plan-Level Settings</h2>
-<h3 id="migration-behavior">Migration Behavior</h3>
-<ul>
-<li><code>warm_migration</code>: Switches between warm and cold migration behavior.</li>
-<li><code>copyoffload</code>: Enables copy-offload-specific plan handling and validation.</li>
-<li><code>target_power_state</code>: Expected power state of the migrated VM after completion.</li>
-<li><code>preserve_static_ips</code>: Passes the static-IP preservation setting into the MTV plan and enables related validation in supported scenarios.</li>
-<li><code>guest_agent_timeout</code>: Overrides how long validation waits for the destination guest agent.</li>
-</ul>
+<h3 id="migration-behavior">Migration behavior</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Values or meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>warm_migration</code></td>
+<td>No</td>
+<td><code>True</code> for warm migration. Also adds the CTK flag to the clone options.</td>
+</tr>
+<tr>
+<td><code>copyoffload</code></td>
+<td>No</td>
+<td><code>True</code> to enable copy-offload (XCOPY) migration.</td>
+</tr>
+<tr>
+<td><code>target_power_state</code></td>
+<td>No</td>
+<td><code>on</code> or <code>off</code>. Expected power state of the migrated VM after completion.</td>
+</tr>
+<tr>
+<td><code>preserve_static_ips</code></td>
+<td>No</td>
+<td><code>True</code> to preserve static IP addresses. Requires <code>source_vm_power: "on"</code> for every VM.</td>
+</tr>
+<tr>
+<td><code>guest_agent_timeout</code></td>
+<td>No</td>
+<td>Guest-info wait timeout in seconds. Defaults to <code>120</code> where used.</td>
+</tr>
+<tr>
+<td><code>migrate_shared_disks</code></td>
+<td>No</td>
+<td><code>True</code> to enable shared disk migration at plan level. Individual VMs can override.</td>
+</tr>
+<tr>
+<td><code>xfs_compatibility</code></td>
+<td>No</td>
+<td><code>True</code> to request XFS v4 filesystem compatibility on the Plan CR.</td>
+</tr>
+<tr>
+<td><code>rdm_as_lun</code></td>
+<td>No</td>
+<td><code>True</code> to map RDM disks as LUN devices with a SCSI bus instead of the default virtio.</td>
+</tr>
+<tr>
+<td><code>enable_nested_virtualization</code></td>
+<td>No</td>
+<td><code>False</code> disables the <code>vmx</code> and <code>svm</code> CPU features.</td>
+</tr>
+<tr>
+<td><code>run_preflight_inspection</code></td>
+<td>No</td>
+<td><code>False</code> disables the Plan CR preflight inspection step.</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>preserve_static_ips</code> is validated up front. Every VM must declare <code>source_vm_power: "on"</code>, because guest tools must be running to collect static IP and NIC name data.</p>
 <p>If you omit <code>target_power_state</code>, post-migration validation falls back to the source VM power state:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_vms_power_state</span><span class="p">(</span>
     <span class="n">source_vm</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
@@ -531,214 +690,403 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="c1"># If targetPowerState is specified, check that the destination VM matches it</span>
     <span class="k">if</span> <span class="n">target_power_state</span><span class="p">:</span>
-        <span class="n">actual_power_state</span> <span class="o">=</span> <span class="n">destination_vm</span><span class="p">[</span><span class="s2">&quot;power_state&quot;</span><span class="p">]</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Checking target power state: expected=</span><span class="si">{</span><span class="n">target_power_state</span><span class="si">}</span><span class="s2">, actual=</span><span class="si">{</span><span class="n">actual_power_state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">actual_power_state</span> <span class="o">=</span> <span class="n">destination_vm</span><span class="p">[</span><span class="s2">"power_state"</span><span class="p">]</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Checking target power state: expected=</span><span class="si">{</span><span class="n">target_power_state</span><span class="si">}</span><span class="s2">, actual=</span><span class="si">{</span><span class="n">actual_power_state</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">actual_power_state</span> <span class="o">==</span> <span class="n">target_power_state</span><span class="p">,</span> <span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;VM power state mismatch: expected </span><span class="si">{</span><span class="n">target_power_state</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">actual_power_state</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">"VM power state mismatch: expected </span><span class="si">{</span><span class="n">target_power_state</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">actual_power_state</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Target power state verification passed: </span><span class="si">{</span><span class="n">actual_power_state</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">source_power_before_migration</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">source_power_before_migration</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;on&quot;</span><span class="p">,</span> <span class="s2">&quot;off&quot;</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid source_vm_power &#39;</span><span class="si">{</span><span class="n">source_power_before_migration</span><span class="si">}</span><span class="s2">&#39;. Must be &#39;on&#39; or &#39;off&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">source_power_before_migration</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"on"</span><span class="p">,</span> <span class="s2">"off"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid source_vm_power '</span><span class="si">{</span><span class="n">source_power_before_migration</span><span class="si">}</span><span class="s2">'. Must be 'on' or 'off'"</span><span class="p">)</span>
         <span class="c1"># Default behavior: destination VM should match source power state before migration</span>
-        <span class="k">assert</span> <span class="n">destination_vm</span><span class="p">[</span><span class="s2">&quot;power_state&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">source_power_before_migration</span>
+        <span class="k">assert</span> <span class="n">destination_vm</span><span class="p">[</span><span class="s2">"power_state"</span><span class="p">]</span> <span class="o">==</span> <span class="n">source_power_before_migration</span>
 </code></pre></div>
 
-<h3 id="placement-naming-and-scheduling">Placement, Naming, and Scheduling</h3>
-<ul>
-<li><code>vm_target_namespace</code>: Custom namespace for migrated VMs. The preparation flow creates it if needed.</li>
-<li><code>multus_namespace</code>: Namespace where NADs are created for additional networks.</li>
-<li><code>pvc_name_template</code>: Forklift PVC naming template.</li>
-<li><code>pvc_name_template_use_generate_name</code>: When <code>True</code>, post-checks treat the rendered PVC name as a prefix because Kubernetes adds a generated suffix.</li>
-<li><code>target_node_selector</code>: Node label selector used for VM placement tests.</li>
-<li><code>target_labels</code>: Labels to apply to migrated VM metadata.</li>
-<li><code>target_affinity</code>: Affinity rules passed to the migrated VM template.</li>
-</ul>
+<h3 id="placement-naming-and-scheduling">Placement, naming, and scheduling</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vm_target_namespace</code></td>
+<td>No</td>
+<td>Custom namespace for migrated VMs. The preparation flow creates it if needed.</td>
+</tr>
+<tr>
+<td><code>multus_namespace</code></td>
+<td>No</td>
+<td>Namespace where NetworkAttachmentDefinitions are created for additional networks.</td>
+</tr>
+<tr>
+<td><code>pvc_name_template</code></td>
+<td>No</td>
+<td>Forklift PVC naming template. Either a string, or a mapping of provider type to template.</td>
+</tr>
+<tr>
+<td><code>pvc_name_template_use_generate_name</code></td>
+<td>No</td>
+<td>When <code>True</code>, post-checks treat the rendered PVC name as a prefix because Kubernetes adds a generated suffix.</td>
+</tr>
+<tr>
+<td><code>target_node_selector</code></td>
+<td>No</td>
+<td>Node label selector used for VM placement tests.</td>
+</tr>
+<tr>
+<td><code>target_labels</code></td>
+<td>No</td>
+<td>Labels to apply to migrated VM metadata.</td>
+</tr>
+<tr>
+<td><code>target_affinity</code></td>
+<td>No</td>
+<td>Affinity rules passed to the migrated VM template.</td>
+</tr>
+<tr>
+<td><code>inventory_timeout</code></td>
+<td>No</td>
+<td>Seconds to wait for cloned VMs in the Forklift inventory. Defaults to <code>300</code>.</td>
+</tr>
+</tbody>
+</table></div>
 <p><code>None</code> has a special meaning in <code>target_labels</code> and <code>target_node_selector</code>: the fixtures replace it with the current <code>session_uuid</code> so each test run gets a unique value.</p>
+<p><code>pvc_name_template</code> accepts two shapes. A plain string is used as is. A mapping must use <code>Provider.ProviderType</code> values, such as <code>vsphere</code> and <code>ovirt</code>, plus the optional key
+<code>default</code>. Unknown keys raise a <code>ValueError</code>, and a mapping with neither a matching provider key nor <code>default</code> also raises. The mapping is resolved during preparation, before the
+Plan CR is created.</p>
 <blockquote>
-<p><strong>Tip:</strong> <code>vm_target_namespace</code> and <code>multus_namespace</code> solve different problems. Use <code>vm_target_namespace</code> to choose where migrated VMs land, and <code>multus_namespace</code> to choose where the test-created NetworkAttachmentDefinitions live.</p>
+<p><strong>Tip:</strong> <code>vm_target_namespace</code> and <code>multus_namespace</code> solve different problems. Use <code>vm_target_namespace</code> to choose where migrated VMs land, and <code>multus_namespace</code> to choose
+where the test-created NetworkAttachmentDefinitions live.</p>
 </blockquote>
-<h3 id="hooks-and-failure-expectations">Hooks and Failure Expectations</h3>
-<p>The repository also supports hook-driven tests. A simple failure-path example looks like this:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_post_hook_retain_failed_vm&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<h3 id="clone-placement-and-throttling">Clone placement and throttling</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clone_to_same_host</code></td>
+<td>No</td>
+<td><code>True</code> pins VM2 and later to the ESXi host of the first VM. An explicit <code>target_esxi_host</code> wins.</td>
+</tr>
+<tr>
+<td><code>pin_to_non_dedicated_host</code></td>
+<td>No</td>
+<td><code>True</code> pins every VM to an ESXi host outside <code>copyoffload.dedicated_migration_hosts</code>. An explicit <code>target_esxi_host</code> wins.</td>
+</tr>
+<tr>
+<td><code>disable_drs_for_vms</code></td>
+<td>No</td>
+<td><code>True</code> disables vSphere DRS per VM after cloning. Not supported for OVA, and it requires a VMware clone provider.</td>
+</tr>
+<tr>
+<td><code>skip_clone</code></td>
+<td>No</td>
+<td><code>True</code> skips the clone phase and uses the existing VMs directly.</td>
+</tr>
+<tr>
+<td><code>per_nic_network_map</code></td>
+<td>No</td>
+<td><code>True</code> creates per-NIC network mappings, which allows duplicate source network entries in the NetworkMap.</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>pin_to_non_dedicated_host</code> needs <code>copyoffload.dedicated_migration_hosts</code> in the provider entry. Without it, the code raises a <code>ValueError</code>.</p>
+<p><code>skip_clone</code> has its own validation. It is rejected when the provider does not support skipping clones, and it is incompatible with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>,
+<code>migrate_shared_disks</code>, and <code>add_nic</code>, plus <code>preserve_static_ips</code> on every provider except Hyper-V. Because skipped VMs are real and shared, the fixture restores their original
+power states during teardown.</p>
+<h3 id="xfs-verification">XFS verification</h3>
+<p>XFS tests need both <code>xfs_compatibility: True</code> and an <code>xfs_check</code> block:</p>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_warm_migration_xfs"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-feature-rhel7-xfs"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+        <span class="s2">"xfs_compatibility"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"xfs_check"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"command"</span><span class="p">:</span> <span class="s2">"/usr/sbin/xfs_info"</span><span class="p">,</span>
+            <span class="s2">"mount_point"</span><span class="p">:</span> <span class="s2">"/"</span><span class="p">,</span>
+            <span class="s2">"expected_output"</span><span class="p">:</span> <span class="s2">"crc=0"</span><span class="p">,</span>
         <span class="p">},</span>
-    <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;pre_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;succeed&quot;</span><span class="p">},</span>
-    <span class="s2">&quot;post_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">},</span>
-    <span class="s2">&quot;expected_migration_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">,</span>
-<span class="p">},</span>
+    <span class="p">},</span>
+</code></pre></div>
+
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>xfs_check.command</code></td>
+<td>Yes</td>
+<td>Command to run on the migrated guest.</td>
+</tr>
+<tr>
+<td><code>xfs_check.mount_point</code></td>
+<td>Yes</td>
+<td>Argument passed to the command, typically the mount point.</td>
+</tr>
+<tr>
+<td><code>xfs_check.expected_output</code></td>
+<td>Yes</td>
+<td>String that must appear in the command output.</td>
+</tr>
+</tbody>
+</table></div>
+<p>The verification step runs <code>[command, mount_point]</code> over SSH and asserts that <code>expected_output</code> is in stdout. It is Linux-only and raises a <code>ValueError</code> for a Windows guest.</p>
+<h3 id="hooks-and-failure-expectations">Hooks and failure expectations</h3>
+<p>The repository also supports hook-driven tests. A simple failure-path example looks like this:</p>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_post_hook_retain_failed_vm"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"off"</span><span class="p">,</span>
+        <span class="s2">"pre_hook"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"expected_result"</span><span class="p">:</span> <span class="s2">"succeed"</span><span class="p">},</span>
+        <span class="s2">"post_hook"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"expected_result"</span><span class="p">:</span> <span class="s2">"fail"</span><span class="p">},</span>
+        <span class="s2">"expected_migration_result"</span><span class="p">:</span> <span class="s2">"fail"</span><span class="p">,</span>
+    <span class="p">},</span>
 </code></pre></div>
 
 <p>In hook config:</p>
-<ul>
-<li><code>pre_hook</code> and <code>post_hook</code> are dictionaries.</li>
-<li>The code accepts either <code>expected_result</code> (<code>"succeed"</code> or <code>"fail"</code>) or <code>playbook_base64</code> for a custom encoded Ansible playbook.</li>
-<li><code>expected_migration_result</code> tells the test whether a migration failure is expected.</li>
-</ul>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pre_hook</code> / <code>post_hook</code></td>
+<td>Dictionaries describing a pre-migration or post-migration Hook CR.</td>
+</tr>
+<tr>
+<td><code>expected_migration_result</code></td>
+<td>Tells the test whether a migration failure is expected.</td>
+</tr>
+</tbody>
+</table></div>
+<p>A hook dictionary must contain exactly one of these keys:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>expected_result</code></td>
+<td><code>succeed</code> or <code>fail</code>. Selects a predefined playbook.</td>
+</tr>
+<tr>
+<td><code>playbook_base64</code></td>
+<td>A base64-encoded Ansible playbook, validated for base64, UTF-8, and YAML syntax.</td>
+</tr>
+<tr>
+<td><code>aap_job_template_id</code></td>
+<td>A positive integer AWX job template ID for an AAP hook.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Specifying more than one, or none of them, raises a <code>ValueError</code>. <code>expected_result</code> and <code>playbook_base64</code> cannot be empty or whitespace-only.</p>
 <h2 id="copy-offload-specific-notes">Copy-Offload-Specific Notes</h2>
 <p><code>copyoffload: true</code> is only the <strong>plan-side</strong> switch. The source provider also needs a <code>copyoffload</code> section in <code>.providers.json</code>.</p>
-<p>A real provider-side example from <code>.providers.json.example</code> looks like this:</p>
-<div class="highlight"><pre><span></span><code>&quot;copyoffload&quot;: {
-  # Supported storage_vendor_product values:
-  # - &quot;ontap&quot;           (NetApp ONTAP)
-  # - &quot;vantara&quot;         (Hitachi Vantara)
-  # - &quot;primera3par&quot;     (HPE Primera/3PAR)
-  # - &quot;pureFlashArray&quot;  (Pure Storage FlashArray)
-  # - &quot;powerflex&quot;       (Dell PowerFlex)
-  # - &quot;powermax&quot;        (Dell PowerMax)
-  # - &quot;powerstore&quot;      (Dell PowerStore)
-  # - &quot;infinibox&quot;       (Infinidat InfiniBox)
-  # - &quot;flashsystem&quot;     (IBM FlashSystem)
-  &quot;storage_vendor_product&quot;: &quot;ontap&quot;,
-
-  # Primary datastore for copy-offload operations (required)
-  # This is the vSphere datastore ID (e.g., &quot;datastore-12345&quot;) where VMs reside
-  # Get via vSphere: Datacenter → Storage → Datastore → Summary → More Objects ID
-  &quot;datastore_id&quot;: &quot;datastore-12345&quot;,
-
-  # Optional: Secondary datastore for multi-datastore copy-offload tests
-  # Only needed when testing VMs with disks spanning multiple datastores
-  # When specified, tests can validate copy-offload with disks on different datastores
-  &quot;secondary_datastore_id&quot;: &quot;datastore-67890&quot;,
-
-  # Optional: Non-XCOPY datastore for mixed datastore tests
-  # This should be a datastore that does NOT support XCOPY/VAAI primitives
-  # Used for testing VMs with disks on both XCOPY and non-XCOPY datastores
-  &quot;non_xcopy_datastore_id&quot;: &quot;datastore-99999&quot;,
-
-  &quot;default_vm_name&quot;: &quot;rhel9-template&quot;,
-  &quot;storage_hostname&quot;: &quot;storage.example.com&quot;,
-  &quot;storage_username&quot;: &quot;admin&quot;,
-  &quot;storage_password&quot;: &quot;your-password-here&quot;,  # pragma: allowlist secret
+<blockquote>
+<p><strong>Warning:</strong> A raw plan with <code>copyoffload: true</code> is not enough by itself. The test session validates that the source provider is vSphere, that the <code>copyoffload</code> section
+exists, that <code>storage_hostname</code>, <code>storage_username</code>, and <code>storage_password</code> resolve, and that <code>storage_vendor_product</code> and <code>datastore_id</code> are set.</p>
+</blockquote>
+<p>A plan that drives dedicated-host verification looks like this:</p>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_copyoffload_dedicated_migration_host_migration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+                <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span><span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">"disk_mode"</span><span class="p">:</span> <span class="s2">"persistent"</span><span class="p">,</span> <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">},</span>
+                    <span class="p">{</span><span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">"disk_mode"</span><span class="p">:</span> <span class="s2">"persistent"</span><span class="p">,</span> <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">},</span>
+                <span class="p">],</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+                <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span><span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">"disk_mode"</span><span class="p">:</span> <span class="s2">"persistent"</span><span class="p">,</span> <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">},</span>
+                    <span class="p">{</span><span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">"disk_mode"</span><span class="p">:</span> <span class="s2">"persistent"</span><span class="p">,</span> <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">},</span>
+                <span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"disable_drs_for_vms"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"pin_to_non_dedicated_host"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"inventory_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
+    <span class="p">},</span>
 </code></pre></div>
 
-<blockquote>
-<p><strong>Warning:</strong> A raw plan with <code>copyoffload: true</code> is not enough by itself. The test session validates that the source provider is vSphere and that provider-side copy-offload settings are present, including at least <code>storage_vendor_product</code> and <code>datastore_id</code>.</p>
-</blockquote>
 <p>There is one more important implementation detail: when the helper creates an MTV plan with <code>copyoffload=True</code>, it forces <code>pvc_name_template</code> to <code>"pvc"</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Add copy-offload specific parameters if enabled</span>
-<span class="k">if</span> <span class="n">copyoffload</span><span class="p">:</span>
-    <span class="c1"># Set PVC naming template for copy-offload migrations</span>
-    <span class="c1"># The volume populator framework requires this to generate consistent PVC names</span>
-    <span class="c1"># Note: generateName is enabled by default, so Kubernetes adds random suffix automatically</span>
-    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pvc&quot;</span>
+<div class="highlight"><pre><span></span><code>    <span class="c1"># Add copy-offload specific parameters if enabled</span>
+    <span class="k">if</span> <span class="n">copyoffload</span><span class="p">:</span>
+        <span class="c1"># Set PVC naming template for copy-offload migrations</span>
+        <span class="c1"># The volume populator framework requires this to generate consistent PVC names</span>
+        <span class="c1"># Note: generateName is enabled by default, so Kubernetes adds random suffix automatically</span>
+        <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"pvc"</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> Do not expect a custom <code>pvc_name_template</code> in <code>tests_params</code> to survive copy-offload plan creation. The helper currently overwrites it with <code>"pvc"</code>.</p>
+<p><strong>Warning:</strong> Do not expect a custom <code>pvc_name_template</code> in <code>tests_params</code> to survive copy-offload plan creation. The helper overwrites it with <code>"pvc"</code>.</p>
 </blockquote>
+<p>Provider-side copy-offload settings are documented in <a href="provider-config-file.md#vsphere-copy-offload">Provider Config File</a>.</p>
 <h2 id="how-raw-config-becomes-prepared_plan">How Raw Config Becomes <code>prepared_plan</code></h2>
 <p>The raw entry from <code>tests_params</code> is not used directly. The repository converts it into a runtime <code>prepared_plan</code> in several steps.</p>
 <h3 id="1-the-raw-plan-is-deep-copied">1. The Raw Plan Is Deep-Copied</h3>
-<p>The fixture starts by copying the selected config and setting up runtime-only storage:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Deep copy the plan config to avoid mutation</span>
-<span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">class_plan_config</span><span class="p">)</span>
-<span class="n">virtual_machines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">]</span>
-<span class="n">warm_migration</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;warm_migration&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+<p>The fixture copies the selected config, resolves a mapping-form <code>pvc_name_template</code>, and sets up runtime-only storage:</p>
+<div class="highlight"><pre><span></span><code>    <span class="c1"># Deep copy the plan config to avoid mutation</span>
+    <span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">class_plan_config</span><span class="p">)</span>
 
-<span class="c1"># Initialize separate storage for source VM data (keeps virtual_machines clean for Plan CR serialization)</span>
-<span class="n">plan</span><span class="p">[</span><span class="s2">&quot;source_vms_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="s2">"pvc_name_template"</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
+        <span class="n">plan</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">]</span> <span class="o">=</span> <span class="n">resolve_pvc_name_template</span><span class="p">(</span>
+            <span class="n">pvc_name_template</span><span class="o">=</span><span class="n">plan</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">],</span>
+            <span class="n">source_provider_type</span><span class="o">=</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+        <span class="p">)</span>
 
-<span class="c1"># Handle custom VM target namespace</span>
-<span class="n">vm_target_namespace</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">vm_target_namespace</span><span class="p">:</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using custom VM target namespace: </span><span class="si">{</span><span class="n">vm_target_namespace</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="n">get_or_create_namespace</span><span class="p">(</span>
-        <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
-        <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
-        <span class="n">namespace_name</span><span class="o">=</span><span class="n">vm_target_namespace</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;_vm_target_namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vm_target_namespace</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;_vm_target_namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_namespace</span>
+    <span class="n">virtual_machines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]</span>
+    <span class="n">warm_migration</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"warm_migration"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># Initialize separate storage for source VM data (keeps virtual_machines clean for Plan CR serialization)</span>
+    <span class="n">plan</span><span class="p">[</span><span class="s2">"source_vms_data"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Handle custom VM target namespace</span>
+    <span class="n">vm_target_namespace</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"vm_target_namespace"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">vm_target_namespace</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Using custom VM target namespace: </span><span class="si">{</span><span class="n">vm_target_namespace</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">get_or_create_namespace</span><span class="p">(</span>
+            <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+            <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+            <span class="n">namespace_name</span><span class="o">=</span><span class="n">vm_target_namespace</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">plan</span><span class="p">[</span><span class="s2">"_vm_target_namespace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">vm_target_namespace</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">plan</span><span class="p">[</span><span class="s2">"_vm_target_namespace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_namespace</span>
 </code></pre></div>
 
-<h3 id="2-each-vm-is-resolved-prepared-and-renamed">2. Each VM Is Resolved, Prepared, and Renamed</h3>
-<p>The fixture then resolves a per-test VM, applies source power-state rules, rewrites the VM name to the actual runtime name, and stores provider details separately:</p>
-<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">:</span>
-    <span class="c1"># Get VM object first (without full vm_dict analysis)</span>
-    <span class="c1"># Add enable_ctk flag for warm migrations</span>
-    <span class="n">clone_options</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">vm</span><span class="p">,</span> <span class="s2">&quot;enable_ctk&quot;</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">}</span>
-    <span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">get_vm_by_name</span><span class="p">(</span>
-        <span class="n">query</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-        <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
-        <span class="n">clone_vm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;session_uuid&quot;</span><span class="p">],</span>
-        <span class="n">clone_options</span><span class="o">=</span><span class="n">clone_options</span><span class="p">,</span>
-    <span class="p">)</span>
+<h3 id="2-the-clone-phase-runs">2. The Clone Phase Runs</h3>
+<p>Unless <code>skip_clone</code> is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:</p>
+<div class="highlight"><pre><span></span><code>        <span class="n">skip_clone</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"skip_clone"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 
-    <span class="c1"># Power state control: &quot;on&quot; = start VM, &quot;off&quot; = stop VM, not set = leave unchanged</span>
-    <span class="n">source_vm_power</span> <span class="o">=</span> <span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source_vm_power&quot;</span><span class="p">)</span>  <span class="c1"># Optional - if not set, VM power state unchanged</span>
-    <span class="k">if</span> <span class="n">source_vm_power</span> <span class="o">==</span> <span class="s2">&quot;on&quot;</span><span class="p">:</span>
-        <span class="n">source_provider</span><span class="o">.</span><span class="n">start_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
-        <span class="c1"># Wait for guest info to become available (VMware only)</span>
-        <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span>
-            <span class="n">source_provider</span><span class="o">.</span><span class="n">wait_for_vmware_guest_info</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">source_vm_power</span> <span class="o">==</span> <span class="s2">&quot;off&quot;</span><span class="p">:</span>
-        <span class="n">source_provider</span><span class="o">.</span><span class="n">stop_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
-
-    <span class="c1"># NOW call vm_dict() with VM in correct power state for guest info</span>
-    <span class="n">source_vm_details</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">vm_dict</span><span class="p">(</span>
-        <span class="n">provider_vm_api</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">,</span>
-        <span class="n">name</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-        <span class="n">namespace</span><span class="o">=</span><span class="n">source_vms_namespace</span><span class="p">,</span>
-        <span class="n">clone</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Already cloned above</span>
-        <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
-        <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;session_uuid&quot;</span><span class="p">],</span>
-        <span class="n">clone_options</span><span class="o">=</span><span class="n">vm</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-
-    <span class="c1"># Wait for cloned VM to appear in Forklift inventory before proceeding</span>
-    <span class="c1"># This is needed for external providers that Forklift needs to sync from</span>
-    <span class="c1"># OVA is excluded because it doesn&#39;t clone VMs (uses pre-existing files)</span>
-    <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">:</span>
-        <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">wait_for_vm</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
-
-    <span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">&quot;provider_vm_api&quot;</span><span class="p">]</span>
-
-    <span class="n">vm</span><span class="p">[</span><span class="s2">&quot;snapshots_before_migration&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">&quot;snapshots_data&quot;</span><span class="p">]</span>
-    <span class="c1"># Store complete source VM data separately (keeps virtual_machines clean for Plan CR serialization)</span>
-    <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;source_vms_data&quot;</span><span class="p">][</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">source_vm_details</span>
-
-<span class="c1"># Create Hooks if configured</span>
-<span class="n">create_hook_if_configured</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="s2">&quot;pre_hook&quot;</span><span class="p">,</span> <span class="s2">&quot;pre&quot;</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
-<span class="n">create_hook_if_configured</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="s2">&quot;post_hook&quot;</span><span class="p">,</span> <span class="s2">&quot;post&quot;</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">skip_clone</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">supports_skip_clone</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"skip_clone=True is not supported for provider type '</span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">'; "</span>
+                    <span class="s2">"VMs must be cloned from templates."</span>
+                <span class="p">)</span>
+            <span class="n">skip_clone_incompatible</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"disable_drs_for_vms"</span><span class="p">,</span> <span class="s2">"clone_to_same_host"</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">:</span>
+                <span class="n">skip_clone_incompatible</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"preserve_static_ips"</span><span class="p">)</span>
+            <span class="n">conflicting</span> <span class="o">=</span> <span class="p">[</span><span class="n">flag</span> <span class="k">for</span> <span class="n">flag</span> <span class="ow">in</span> <span class="n">skip_clone_incompatible</span> <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">flag</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="n">has_shared_disk_config</span><span class="p">:</span>
+                <span class="n">conflicting</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"migrate_shared_disks"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">has_add_nic_config</span><span class="p">:</span>
+                <span class="n">conflicting</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">conflicting</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"skip_clone=True is incompatible with </span><span class="si">{</span><span class="n">conflicting</span><span class="si">}</span><span class="s2">; these options require the cloning phase."</span>
+                <span class="p">)</span>
 </code></pre></div>
 
-<h3 id="3-the-test-adds-vm-ids-and-creates-the-mtv-plan">3. The Test Adds VM IDs and Creates the MTV Plan</h3>
-<p>Right before creating the MTV <code>Plan</code>, the tests add VM IDs from Forklift inventory and then pass the prepared values into <code>create_plan_resource()</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">populate_vm_ids</span><span class="p">(</span><span class="n">plan</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">,</span> <span class="n">inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">)</span>
+<h3 id="3-each-vm-is-cloned-and-renamed">3. Each VM Is Cloned and Renamed</h3>
+<p>In the clone phase, the fixture resolves each VM through the clone provider, applies the placement flags, sets the source power state, and rewrites the VM name to the actual
+runtime name:</p>
+<div class="highlight"><pre><span></span><code>        <span class="k">if</span> <span class="ow">not</span> <span class="n">skip_clone</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">:</span>
+                <span class="n">clone_options</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">vm</span><span class="p">,</span> <span class="s2">"enable_ctk"</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">}</span>
 
-<span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">plan_resource</span> <span class="o">=</span> <span class="n">create_plan_resource</span><span class="p">(</span>
-    <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
-    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
-    <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
-    <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
-    <span class="n">storage_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span>
-    <span class="n">network_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">network_map</span><span class="p">,</span>
-    <span class="n">virtual_machines_list</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">],</span>
-    <span class="n">target_power_state</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;target_power_state&quot;</span><span class="p">],</span>
-    <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
-    <span class="n">warm_migration</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;warm_migration&quot;</span><span class="p">],</span>
-    <span class="n">preserve_static_ips</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">],</span>
-    <span class="n">vm_target_namespace</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">],</span>
-    <span class="n">pvc_name_template</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;pvc_name_template&quot;</span><span class="p">],</span>
-    <span class="n">pvc_name_template_use_generate_name</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">],</span>
-    <span class="n">target_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">&quot;vm_labels&quot;</span><span class="p">],</span>
-    <span class="n">target_affinity</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">],</span>
-<span class="p">)</span>
+                <span class="c1"># Pin VM2+ to same ESXi host as VM1 (required for per-host inflight throttling).</span>
+                <span class="c1"># Uses setdefault to respect any explicit per-VM target_esxi_host override.</span>
+                <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"clone_to_same_host"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="n">first_vm_esxi_host</span><span class="p">:</span>
+                    <span class="n">clone_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"target_esxi_host"</span><span class="p">,</span> <span class="n">first_vm_esxi_host</span><span class="p">)</span>
+
+                <span class="c1"># Pin every VM to an ESXi host outside the configured dedicated hosts, so</span>
+                <span class="c1"># dedicated-host verification can never coincide with a VM's own host (MTV-6136).</span>
+                <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"pin_to_non_dedicated_host"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">non_dedicated_host_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">non_dedicated_host_name</span> <span class="o">=</span> <span class="n">resolve_non_dedicated_esxi_host</span><span class="p">(</span>
+                            <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span>
+                            <span class="n">source_provider_data</span><span class="o">=</span><span class="n">source_provider_data</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="n">clone_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"target_esxi_host"</span><span class="p">,</span> <span class="n">non_dedicated_host_name</span><span class="p">)</span>
+
+                <span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">clone_provider</span><span class="o">.</span><span class="n">get_vm_by_name</span><span class="p">(</span>
+                    <span class="n">query</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">"name"</span><span class="p">],</span>
+                    <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
+                    <span class="n">clone_vm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">"session_uuid"</span><span class="p">],</span>
+                    <span class="n">clone_options</span><span class="o">=</span><span class="n">clone_options</span><span class="p">,</span>
+                <span class="p">)</span>
 </code></pre></div>
 
+<h3 id="4-hooks-are-created">4. Hooks Are Created</h3>
+<p>After the VM loop, configured hooks become real <code>Hook</code> custom resources:</p>
+<div class="highlight"><pre><span></span><code>    <span class="n">create_hook_if_configured</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="s2">"pre_hook"</span><span class="p">,</span> <span class="s2">"pre"</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
+    <span class="n">create_hook_if_configured</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="s2">"post_hook"</span><span class="p">,</span> <span class="s2">"post"</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
+</code></pre></div>
+
+<h3 id="5-the-test-adds-vm-ids-and-creates-the-mtv-plan">5. The Test Adds VM IDs and Creates the MTV Plan</h3>
+<p>Right before creating the MTV <code>Plan</code>, the tests add VM IDs from the Forklift inventory and pass the prepared values into <code>create_plan_resource()</code>:</p>
+<div class="highlight"><pre><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">plan_resource</span> <span class="o">=</span> <span class="n">create_plan_resource</span><span class="p">(</span>
+            <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+            <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+            <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
+            <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
+            <span class="n">storage_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span>
+            <span class="n">network_map</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">network_map</span><span class="p">,</span>
+            <span class="n">virtual_machines_list</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">],</span>
+            <span class="n">target_power_state</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_power_state"</span><span class="p">],</span>
+            <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+            <span class="n">warm_migration</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"warm_migration"</span><span class="p">],</span>
+            <span class="n">preserve_static_ips</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"preserve_static_ips"</span><span class="p">],</span>
+            <span class="n">vm_target_namespace</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"vm_target_namespace"</span><span class="p">],</span>
+            <span class="n">pvc_name_template</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">],</span>
+            <span class="n">pvc_name_template_use_generate_name</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">],</span>
+            <span class="n">target_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">"vm_labels"</span><span class="p">],</span>
+            <span class="n">target_affinity</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_affinity"</span><span class="p">],</span>
+            <span class="n">enable_nested_virtualization</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"enable_nested_virtualization"</span><span class="p">],</span>
+        <span class="p">)</span>
+</code></pre></div>
+
+<p><code>create_plan_resource()</code> accepts only the flags that map onto the Plan CR: <code>warm_migration</code>, <code>copyoffload</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>,
+<code>pvc_name_template_use_generate_name</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>, <code>vm_target_namespace</code>, <code>migrate_shared_disks</code>, <code>target_power_state</code>,
+<code>enable_nested_virtualization</code>, <code>xfs_compatibility</code>, <code>run_preflight_inspection</code>, and <code>rdm_as_lun</code>. Everything else is consumed by fixtures or by post-migration checks.</p>
 <h2 id="runtime-fields-added-during-preparation">Runtime Fields Added During Preparation</h2>
 <p>These fields are derived at runtime. You do <strong>not</strong> write them yourself in <code>tests_params</code>.</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Field</th>
@@ -773,9 +1121,24 @@
 <td>Rewritten to the actual runtime VM name after provider lookup or cloning.</td>
 </tr>
 <tr>
+<td><code>virtual_machines[*].targetName</code></td>
+<td><code>prepared_plan</code></td>
+<td>Set for OVA only, as a per-session name so parallel runs do not collide.</td>
+</tr>
+<tr>
 <td><code>virtual_machines[*].snapshots_before_migration</code></td>
 <td><code>prepared_plan</code> or snapshot test setup</td>
 <td>Snapshot baseline used for post-migration checks.</td>
+</tr>
+<tr>
+<td><code>virtual_machines[*].connected_nic_mac</code> / <code>disconnected_nic_mac</code></td>
+<td><code>add_nic</code> handling</td>
+<td>MAC of the NIC added for the test.</td>
+</tr>
+<tr>
+<td><code>virtual_machines[*].luks</code></td>
+<td>LUKS fixture</td>
+<td>Replaced by a <code>{"name": ...}</code> Secret reference.</td>
 </tr>
 <tr>
 <td><code>virtual_machines[*].id</code></td>
@@ -783,15 +1146,16 @@
 <td>Forklift VM ID required by plan creation.</td>
 </tr>
 </tbody>
-</table>
-<p>A few raw config fields are also resolved by companion fixtures instead of <code>prepared_plan</code> itself:</p>
+</table></div>
+<p>A few raw config fields are resolved by companion fixtures instead of <code>prepared_plan</code> itself:</p>
 <ul>
 <li><code>multus_namespace</code> is consumed by the network setup fixture that creates NADs.</li>
 <li><code>target_labels</code> is resolved by <code>target_vm_labels</code>.</li>
 <li><code>target_node_selector</code> is resolved by <code>labeled_worker_node</code>.</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> Keep <code>tests_params</code> declarative. Do not hand-write runtime fields such as <code>id</code>, <code>source_vms_data</code>, <code>_vm_target_namespace</code>, or <code>snapshots_before_migration</code>. Let the fixtures derive them.</p>
+<p><strong>Tip:</strong> Keep <code>tests_params</code> declarative. Do not hand-write runtime fields such as <code>id</code>, <code>source_vms_data</code>, <code>_vm_target_namespace</code>, or <code>snapshots_before_migration</code>. Let the
+fixtures derive them.</p>
 </blockquote>
 <h2 id="practical-authoring-guidelines">Practical Authoring Guidelines</h2>
 <ul>
@@ -800,6 +1164,7 @@
 <li>Use <code>None</code> intentionally in <code>target_labels</code> or <code>target_node_selector</code> when you want a unique value per run.</li>
 <li>Expect VM names in <code>prepared_plan["virtual_machines"]</code> to differ from the raw <code>name</code> once preparation is complete.</li>
 <li>For copy-offload scenarios, think in two layers: test plan config in <code>tests_params</code>, and provider/storage config in <code>.providers.json</code>.</li>
+<li>Copy the key names exactly. The fixtures read them with direct key access, so a typo is a <code>KeyError</code>, not a silent default.</li>
 </ul>
                 </div>
             </article>
@@ -826,20 +1191,26 @@
 <li><a href="#where-plans-live">Where Plans Live</a></li>
 <li><a href="#basic-structure">Basic Structure</a></li>
 <li><a href="#per-vm-settings">Per-VM Settings</a><ul>
+<li><a href="#disk-types">Disk types</a></li>
+<li><a href="#add_disks-entries">add_disks entries</a></li>
 <li><a href="#snapshot-driven-tests">Snapshot-Driven Tests</a></li>
 </ul>
 </li>
 <li><a href="#plan-level-settings">Plan-Level Settings</a><ul>
-<li><a href="#migration-behavior">Migration Behavior</a></li>
-<li><a href="#placement-naming-and-scheduling">Placement, Naming, and Scheduling</a></li>
-<li><a href="#hooks-and-failure-expectations">Hooks and Failure Expectations</a></li>
+<li><a href="#migration-behavior">Migration behavior</a></li>
+<li><a href="#placement-naming-and-scheduling">Placement, naming, and scheduling</a></li>
+<li><a href="#clone-placement-and-throttling">Clone placement and throttling</a></li>
+<li><a href="#xfs-verification">XFS verification</a></li>
+<li><a href="#hooks-and-failure-expectations">Hooks and failure expectations</a></li>
 </ul>
 </li>
 <li><a href="#copy-offload-specific-notes">Copy-Offload-Specific Notes</a></li>
 <li><a href="#how-raw-config-becomes-prepared_plan">How Raw Config Becomes prepared_plan</a><ul>
 <li><a href="#1-the-raw-plan-is-deep-copied">1. The Raw Plan Is Deep-Copied</a></li>
-<li><a href="#2-each-vm-is-resolved-prepared-and-renamed">2. Each VM Is Resolved, Prepared, and Renamed</a></li>
-<li><a href="#3-the-test-adds-vm-ids-and-creates-the-mtv-plan">3. The Test Adds VM IDs and Creates the MTV Plan</a></li>
+<li><a href="#2-the-clone-phase-runs">2. The Clone Phase Runs</a></li>
+<li><a href="#3-each-vm-is-cloned-and-renamed">3. Each VM Is Cloned and Renamed</a></li>
+<li><a href="#4-hooks-are-created">4. Hooks Are Created</a></li>
+<li><a href="#5-the-test-adds-vm-ids-and-creates-the-mtv-plan">5. The Test Adds VM IDs and Creates the MTV Plan</a></li>
 </ul>
 </li>
 <li><a href="#runtime-fields-added-during-preparation">Runtime Fields Added During Preparation</a></li>
@@ -850,24 +1221,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -913,5 +1287,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

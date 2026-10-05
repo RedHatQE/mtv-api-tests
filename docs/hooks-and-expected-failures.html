@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hooks And Expected Failures - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -162,7 +163,7 @@
 
                     <li>
                         <a href="hooks-and-expected-failures.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Hooks And Expected Failures
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,33 +302,67 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="hooks-and-expected-failures">Hooks And Expected Failures</h1>
-<p>Hooks let you run Ansible logic before or after an MTV migration. In this repository, you do not hand-craft <code>Hook</code> resources yourself. You describe the hook in the plan configuration, and the test suite creates the <code>Hook</code> resource, attaches it to the <code>Plan</code>, and validates the outcome.</p>
-<p>The project supports two hook modes:</p>
+<p>Hooks let you run Ansible logic before or after an MTV migration. In this repository, you do not hand-craft <code>Hook</code> resources yourself. You describe the hook in the plan
+configuration, and the test suite creates the <code>Hook</code> resource, attaches it to the <code>Plan</code>, and validates the outcome.</p>
+<p>The project supports three hook modes, and each <code>pre_hook</code> or <code>post_hook</code> block uses exactly one of them:</p>
 <ul>
 <li>predefined playbooks selected with <code>expected_result</code></li>
 <li>custom playbooks supplied through <code>playbook_base64</code></li>
+<li>AAP (Ansible Automation Platform) job templates selected with <code>aap_job_template_id</code></li>
 </ul>
-<p>When you intentionally test a failure, the suite validates more than “migration failed.” It checks whether the failure happened in <code>PreHook</code> or <code>PostHook</code>, and it changes later VM validation based on that result.</p>
+<p>When you intentionally test a failure, the suite validates more than “migration failed.” It checks whether the failure happened in <code>PreHook</code> or <code>PostHook</code>, and it changes later VM
+validation based on that result.</p>
+<h2 id="hook-test-classes">Hook Test Classes</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Test class</th>
+<th>Where</th>
+<th>Markers</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TestPostHookRetainFailedVm</code></td>
+<td><code>tests/hooks/test_post_hook_retain_failed_vm.py</code></td>
+<td><code>tier0</code>, <code>incremental</code></td>
+<td>Predefined hooks, post hook fails on purpose, VMs retained</td>
+</tr>
+<tr>
+<td><code>TestAapHookMigration</code></td>
+<td><code>tests/hooks/test_aap_hook_migration.py</code></td>
+<td><code>vsphere</code>, <code>tier1</code>, <code>aap</code>, <code>incremental</code></td>
+<td>AAP hooks: AWX job templates run as PreHook and PostHook</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>TestPostHookRetainFailedVm</code> also carries <code>vsphere</code>, <code>rhv</code>, <code>openstack</code>, and <code>openshift</code>, because it
+is not tied to one source type.</p>
+<p>The <code>aap</code> marker is the one to reach for when you only want the AAP integration test:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>aap<span class="w"> </span>-v<span class="w"> </span>--tc<span class="o">=</span>source_provider:vsphere-8.0.3.00400
+</code></pre></div>
+
 <h2 id="where-hook-configuration-lives">Where Hook Configuration Lives</h2>
 <p>Hook settings live in <code>tests/tests_config/config.py</code>. The repository’s end-to-end hook example looks like this:</p>
-<div class="highlight"><pre><span></span><code>    <span class="s2">&quot;test_post_hook_retain_failed_vm&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_post_hook_retain_failed_vm"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;pre_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;succeed&quot;</span><span class="p">},</span>
-        <span class="s2">&quot;post_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">},</span>
-        <span class="s2">&quot;expected_migration_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">,</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"off"</span><span class="p">,</span>
+        <span class="s2">"pre_hook"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"expected_result"</span><span class="p">:</span> <span class="s2">"succeed"</span><span class="p">},</span>
+        <span class="s2">"post_hook"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"expected_result"</span><span class="p">:</span> <span class="s2">"fail"</span><span class="p">},</span>
+        <span class="s2">"expected_migration_result"</span><span class="p">:</span> <span class="s2">"fail"</span><span class="p">,</span>
     <span class="p">},</span>
 </code></pre></div>
 
 <p>This config uses two different “expected” keys:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -343,24 +379,32 @@
 <td>Tells the test whether the overall migration should raise <code>MigrationPlanExecError</code>.</td>
 </tr>
 </tbody>
-</table>
-<p>Use <code>pre_hook</code> when you want to affect the migration before VM work begins. Use <code>post_hook</code> when you want the migration to reach the end of VM processing and then test what happens after that.</p>
+</table></div>
+<p>Use <code>pre_hook</code> when you want to affect the migration before VM work begins. Use <code>post_hook</code> when you want the migration to reach the end of VM processing and then test what happens
+after that.</p>
+<p>One other plan config in the repository also sets a failing post hook: <code>test_plan_archive_pvc_cleanup</code>.
+That test does not use <code>expected_migration_result</code> at all. It wraps <code>execute_migration()</code> in
+<code>pytest.raises(MigrationPlanExecError)</code> directly, then archives and deletes the <code>Plan</code> to verify the
+leftover <code>DataVolume</code> and PVC cleanup.</p>
 <blockquote>
-<p><strong>Note:</strong> <code>expected_result</code> and <code>expected_migration_result</code> are not interchangeable. The first controls hook behavior. The second controls the expected result of the entire migration test.</p>
+<p><strong>Note:</strong> <code>expected_result</code> and <code>expected_migration_result</code> are not interchangeable. The first controls hook behavior. The second controls the expected result of the entire
+migration test.</p>
 </blockquote>
 <h2 id="how-hooks-get-attached-to-a-plan">How Hooks Get Attached To A Plan</h2>
-<p>During <code>prepared_plan</code>, the suite checks the plan for <code>pre_hook</code> and <code>post_hook</code>. If either exists, it creates the corresponding <code>Hook</code> resource and stores the generated name and namespace back into the plan.</p>
+<p>During <code>prepared_plan</code>, the suite checks the plan for <code>pre_hook</code> and <code>post_hook</code>. If either exists, it creates the corresponding <code>Hook</code> resource and stores the generated name and
+namespace back into the plan.</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">create_hook_if_configured</span><span class="p">(</span>
     <span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">hook_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">hook_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
-    <span class="n">ocp_admin_client</span><span class="p">:</span> <span class="s2">&quot;DynamicClient&quot;</span><span class="p">,</span>
+    <span class="n">ocp_admin_client</span><span class="p">:</span> <span class="s2">"DynamicClient"</span><span class="p">,</span>
     <span class="n">target_namespace</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create hook if configured in plan and store references.</span>
+<span class="w">    </span><span class="sd">"""Create hook if configured in plan and store references.</span>
+
 <span class="sd">    ...</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="n">hook_config</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">hook_key</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">hook_config</span><span class="p">:</span>
         <span class="n">hook_name</span><span class="p">,</span> <span class="n">hook_namespace</span> <span class="o">=</span> <span class="n">create_hook_for_plan</span><span class="p">(</span>
@@ -370,51 +414,60 @@
             <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
             <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">plan</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2">_hook_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook_name</span>
-        <span class="n">plan</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2">_hook_namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook_namespace</span>
+        <span class="n">plan</span><span class="p">[</span><span class="sa">f</span><span class="s2">"_</span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2">_hook_name"</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook_name</span>
+        <span class="n">plan</span><span class="p">[</span><span class="sa">f</span><span class="s2">"_</span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2">_hook_namespace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook_namespace</span>
 </code></pre></div>
 
-<p>When the suite creates the MTV <code>Plan</code>, it passes those hook references into the Plan helper. Pre-hooks use <code>pre_hook_name</code> and <code>pre_hook_namespace</code>. Post-hooks are passed through the helper as <code>after_hook_name</code> and <code>after_hook_namespace</code>.</p>
+<p>The <code>prepared_plan</code> fixture calls this once for <code>pre_hook</code> and once for <code>post_hook</code>. When the suite
+creates the MTV <code>Plan</code>, it passes those hook references into the Plan helper. Pre-hooks use
+<code>pre_hook_name</code> and <code>pre_hook_namespace</code>. Post-hooks are passed through the helper as
+<code>after_hook_name</code> and <code>after_hook_namespace</code>.</p>
 <div class="highlight"><pre><span></span><code>    <span class="n">plan_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;client&quot;</span><span class="p">:</span> <span class="n">ocp_admin_client</span><span class="p">,</span>
-        <span class="s2">&quot;fixture_store&quot;</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
-        <span class="s2">&quot;resource&quot;</span><span class="p">:</span> <span class="n">Plan</span><span class="p">,</span>
-        <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">,</span>
-        <span class="s2">&quot;source_provider_name&quot;</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;source_provider_namespace&quot;</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-        <span class="s2">&quot;destination_provider_name&quot;</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;destination_provider_namespace&quot;</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-        <span class="s2">&quot;storage_map_name&quot;</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;storage_map_namespace&quot;</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-        <span class="s2">&quot;network_map_name&quot;</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;network_map_namespace&quot;</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-        <span class="s2">&quot;virtual_machines_list&quot;</span><span class="p">:</span> <span class="n">virtual_machines_list</span><span class="p">,</span>
-        <span class="s2">&quot;target_namespace&quot;</span><span class="p">:</span> <span class="n">vm_target_namespace</span> <span class="ow">or</span> <span class="n">target_namespace</span><span class="p">,</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">,</span>
-        <span class="s2">&quot;pre_hook_name&quot;</span><span class="p">:</span> <span class="n">pre_hook_name</span><span class="p">,</span>
-        <span class="s2">&quot;pre_hook_namespace&quot;</span><span class="p">:</span> <span class="n">pre_hook_namespace</span><span class="p">,</span>
-        <span class="s2">&quot;after_hook_name&quot;</span><span class="p">:</span> <span class="n">after_hook_name</span><span class="p">,</span>
-        <span class="s2">&quot;after_hook_namespace&quot;</span><span class="p">:</span> <span class="n">after_hook_namespace</span><span class="p">,</span>
-        <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="n">preserve_static_ips</span><span class="p">,</span>
-        <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="n">pvc_name_template</span><span class="p">,</span>
-        <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="n">pvc_name_template_use_generate_name</span><span class="p">,</span>
-        <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="n">target_power_state</span><span class="p">,</span>
+        <span class="s2">"client"</span><span class="p">:</span> <span class="n">ocp_admin_client</span><span class="p">,</span>
+        <span class="s2">"fixture_store"</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
+        <span class="s2">"resource"</span><span class="p">:</span> <span class="n">Plan</span><span class="p">,</span>
+        <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">,</span>
+        <span class="s2">"source_provider_name"</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"source_provider_namespace"</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+        <span class="s2">"destination_provider_name"</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"destination_provider_namespace"</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+        <span class="s2">"storage_map_name"</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"storage_map_namespace"</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+        <span class="s2">"network_map_name"</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"network_map_namespace"</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+        <span class="s2">"virtual_machines_list"</span><span class="p">:</span> <span class="n">virtual_machines_list</span><span class="p">,</span>
+        <span class="s2">"target_namespace"</span><span class="p">:</span> <span class="n">vm_target_namespace</span> <span class="ow">or</span> <span class="n">target_namespace</span><span class="p">,</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">,</span>
+        <span class="s2">"pre_hook_name"</span><span class="p">:</span> <span class="n">pre_hook_name</span><span class="p">,</span>
+        <span class="s2">"pre_hook_namespace"</span><span class="p">:</span> <span class="n">pre_hook_namespace</span><span class="p">,</span>
+        <span class="s2">"after_hook_name"</span><span class="p">:</span> <span class="n">after_hook_name</span><span class="p">,</span>
+        <span class="s2">"after_hook_namespace"</span><span class="p">:</span> <span class="n">after_hook_namespace</span><span class="p">,</span>
+        <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="n">preserve_static_ips</span><span class="p">,</span>
+        <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="n">pvc_name_template</span><span class="p">,</span>
+        <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="n">pvc_name_template_use_generate_name</span><span class="p">,</span>
+        <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="n">target_power_state</span><span class="p">,</span>
     <span class="p">}</span>
 </code></pre></div>
 
+<p>Both hook test classes then read the same four keys back out of <code>prepared_plan</code> when they build their <code>Plan</code>.</p>
 <blockquote>
-<p><strong>Note:</strong> You do not configure hook resource names manually in the test config. The suite generates them and stores them as <code>_pre_hook_name</code>, <code>_pre_hook_namespace</code>, <code>_post_hook_name</code>, and <code>_post_hook_namespace</code>.</p>
-<p><strong>Note:</strong> Hook resources are created in the migration namespace passed as <code>target_namespace</code>. If you also use <code>vm_target_namespace</code>, that changes where migrated VMs land, not where the hook CR itself is created.</p>
+<p><strong>Note:</strong> You do not configure hook resource names manually in the test config. The suite generates them and stores them as <code>_pre_hook_name</code>, <code>_pre_hook_namespace</code>,
+<code>_post_hook_name</code>, and <code>_post_hook_namespace</code>.</p>
+<p><strong>Note:</strong> Hook resources are created in the migration namespace passed as <code>target_namespace</code>. If you also use <code>vm_target_namespace</code>, that changes where migrated VMs land, not
+where the hook CR itself is created.</p>
 </blockquote>
 <h2 id="predefined-playbooks">Predefined Playbooks</h2>
-<p>If you set <code>expected_result</code>, the suite chooses one of two built-in Ansible playbooks stored as base64 strings in <code>utilities/hooks.py</code>. The file includes their decoded content in comments:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># HOOK_PLAYBOOK_SUCCESS decodes to:</span>
+<p>If you set <code>expected_result</code>, the suite chooses one of two built-in Ansible playbooks stored as base64 strings in <code>utilities/hooks.py</code>. The file includes their decoded content in
+comments:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Predefined hook playbooks for testing (base64 encoded Ansible playbooks)</span>
+<span class="c1">#</span>
+<span class="c1"># HOOK_PLAYBOOK_SUCCESS decodes to:</span>
 <span class="c1"># - name: Successful-hook</span>
 <span class="c1">#   hosts: localhost</span>
 <span class="c1">#   tasks:</span>
 <span class="c1">#     - name: Success task</span>
 <span class="c1">#       debug:</span>
-<span class="c1">#         msg: &quot;Hook executed successfully&quot;</span>
+<span class="c1">#         msg: "Hook executed successfully"</span>
 <span class="c1">#</span>
 <span class="c1"># HOOK_PLAYBOOK_FAIL decodes to:</span>
 <span class="c1"># - name: Failing-post-migration</span>
@@ -422,7 +475,7 @@
 <span class="c1">#   tasks:</span>
 <span class="c1">#     - name: Task that will fail</span>
 <span class="c1">#       fail:</span>
-<span class="c1">#         msg: &quot;This hook is designed to fail for testing purposes&quot;</span>
+<span class="c1">#         msg: "This hook is designed to fail for testing purposes"</span>
 </code></pre></div>
 
 <p>In other words:</p>
@@ -432,46 +485,47 @@
 </ul>
 <p>This makes predefined mode the easiest way to test hook behavior without having to build and base64-encode your own playbook.</p>
 <blockquote>
-<p><strong>Tip:</strong> If your goal is to verify that a migration fails specifically in <code>PreHook</code> or <code>PostHook</code>, predefined playbooks are the clearest option because the test can compare the actual failed step against a declared expectation.</p>
+<p><strong>Tip:</strong> If your goal is to verify that a migration fails specifically in <code>PreHook</code> or <code>PostHook</code>, predefined playbooks are the clearest option because the test can compare the
+actual failed step against a declared expectation.</p>
 </blockquote>
 <h2 id="custom-playbooks">Custom Playbooks</h2>
 <p>If the built-in success and failure playbooks are not enough, you can provide your own playbook in <code>playbook_base64</code>.</p>
 <p>Before the suite creates the hook, it enforces several validation rules:</p>
-<div class="highlight"><pre><span></span><code>    <span class="n">expected_result</span> <span class="o">=</span> <span class="n">hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expected_result&quot;</span><span class="p">)</span>
-    <span class="n">custom_playbook</span> <span class="o">=</span> <span class="n">hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;playbook_base64&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code>    <span class="n">expected_result</span> <span class="o">=</span> <span class="n">hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"expected_result"</span><span class="p">)</span>
+    <span class="n">custom_playbook</span> <span class="o">=</span> <span class="n">hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"playbook_base64"</span><span class="p">)</span>
+    <span class="n">aap_job_template_id</span> <span class="o">=</span> <span class="n">hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"aap_job_template_id"</span><span class="p">)</span>
 
-    <span class="c1"># Validate mutual exclusivity</span>
-    <span class="k">if</span> <span class="n">expected_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">custom_playbook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">modes_specified</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">x</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="n">expected_result</span><span class="p">,</span> <span class="n">custom_playbook</span><span class="p">,</span> <span class="n">aap_job_template_id</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">modes_specified</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: &#39;expected_result&#39; and &#39;playbook_base64&#39; are &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;mutually exclusive. Use &#39;expected_result&#39; for predefined playbooks, or &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;&#39;playbook_base64&#39; for custom playbooks.&quot;</span>
+            <span class="sa">f</span><span class="s2">"Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: 'expected_result', 'playbook_base64', and "</span>
+            <span class="sa">f</span><span class="s2">"'aap_job_template_id' are mutually exclusive. Specify exactly one."</span>
         <span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">expected_result</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">custom_playbook</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">modes_specified</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: must specify either &#39;expected_result&#39; or &#39;playbook_base64&#39;.&quot;</span>
+            <span class="sa">f</span><span class="s2">"Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: must specify exactly one of 'expected_result', "</span>
+            <span class="sa">f</span><span class="s2">"'playbook_base64', or 'aap_job_template_id'."</span>
         <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">aap_job_template_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">aap_job_template_id</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">aap_job_template_id</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">aap_job_template_id</span> <span class="o">&lt;=</span> <span class="mi">0</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: 'aap_job_template_id' must be a positive integer, "</span>
+                <span class="sa">f</span><span class="s2">"got: </span><span class="si">{</span><span class="n">aap_job_template_id</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
 
     <span class="c1"># Reject empty strings for both expected_result and custom_playbook</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">expected_result</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">expected_result</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: &#39;expected_result&#39; cannot be empty or whitespace-only.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">expected_result</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">expected_result</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">""</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: 'expected_result' cannot be empty or whitespace-only."</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">custom_playbook</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">custom_playbook</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: &#39;playbook_base64&#39; cannot be empty or whitespace-only.&quot;</span><span class="p">)</span>
-    <span class="o">...</span>
-    <span class="c1"># Validate base64 encoding</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">decoded</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">playbook_base64</span><span class="p">,</span> <span class="n">validate</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">except</span> <span class="n">binascii</span><span class="o">.</span><span class="n">Error</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook playbook_base64: not valid base64 encoding. Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
-
-    <span class="o">...</span>
-    <span class="c1"># Validate Ansible playbook structure (must be a non-empty list)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">playbook_data</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">playbook_data</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook playbook_base64: Ansible playbook must be a non-empty list of plays&quot;</span>
-        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">custom_playbook</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">custom_playbook</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">""</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid </span><span class="si">{</span><span class="n">hook_type</span><span class="si">}</span><span class="s2"> hook config: 'playbook_base64' cannot be empty or whitespace-only."</span><span class="p">)</span>
 </code></pre></div>
 
 <p>A custom hook payload must therefore be:</p>
@@ -482,24 +536,100 @@
 <li>a non-empty list of plays</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>expected_result</code> and <code>playbook_base64</code> are mutually exclusive. You must supply exactly one of them for each hook.</p>
-<p><strong>Warning:</strong> Passing validation only proves the payload is structurally valid. It does not guarantee the playbook will succeed at runtime.</p>
-<p><strong>Note:</strong> This repository has an end-to-end example for predefined hooks, but it does not currently include a dedicated sample test case that uses <code>playbook_base64</code>.</p>
+<p><strong>Warning:</strong> <code>expected_result</code>, <code>playbook_base64</code>, and <code>aap_job_template_id</code> are mutually exclusive. You must supply exactly one of them for each hook.</p>
+<p><strong>Warning:</strong> Passing validation only proves the payload is structurally valid. It does not
+guarantee the playbook will succeed at runtime.</p>
+<p><strong>Note:</strong> This repository has an end-to-end example for predefined hooks and one for AAP hooks, but
+it does not currently include a test case whose plan config uses <code>playbook_base64</code>.</p>
+</blockquote>
+<h2 id="aap-hooks">AAP Hooks</h2>
+<p>The third mode runs the hook as an AWX job template instead of embedding a playbook in the <code>Hook</code> CR.
+Instead of <code>image</code> and <code>playbook</code>, the suite creates the <code>Hook</code> with an <code>aap</code> block:</p>
+<div class="highlight"><pre><span></span><code><span class="n">hook</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span>
+    <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="n">resource</span><span class="o">=</span><span class="n">Hook</span><span class="p">,</span>
+    <span class="n">namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+    <span class="n">aap</span><span class="o">=</span><span class="p">{</span><span class="s2">"jobTemplateId"</span><span class="p">:</span> <span class="n">aap_job_template_id</span><span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p><code>TestAapHookMigration</code> never writes <code>aap_job_template_id</code> into <code>tests/tests_config/config.py</code>.
+Its plan config is a plain cold migration. The fixtures in <code>tests/hooks/conftest.py</code> build everything
+else at runtime:</p>
+<ul>
+<li>
+<p><code>awx_deployment</code> installs the AWX operator via Helm, creates an AWX instance backed by CephFS
+  storage classes, waits for all pods, and returns the AWX route URL. If AWX was already present,
+  the fixture leaves it in place at teardown instead of deleting it.</p>
+</li>
+<li>
+<p><code>awx_api_token</code> creates an AWX OAuth2 API token for the admin user.</p>
+</li>
+<li>
+<p><code>awx_job_templates</code> creates a project from the <code>mtv-aap-test-playbooks</code> git repository, waits for
+  SCM sync, creates an inventory, then creates the <code>mtv-pre-hook</code> and <code>mtv-post-hook</code> job templates
+  and returns their IDs.</p>
+</li>
+<li>
+<p><code>aap_mtv_settings</code> creates a session-unique token <code>Secret</code> in the MTV namespace and patches the
+  <code>ForkliftController</code> with three fields:</p>
+</li>
+<li>
+<p><code>aap_hook_refs</code> creates one <code>Hook</code> per type with <code>spec.aap.jobTemplateId</code> pointing at the matching
+  template ID, then writes <code>_pre_hook_name</code>, <code>_pre_hook_namespace</code>, <code>_post_hook_name</code>, and
+  <code>_post_hook_namespace</code> into <code>prepared_plan</code> — the same four keys the predefined mode writes.</p>
+</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="n">editor</span> <span class="o">=</span> <span class="n">ResourceEditor</span><span class="p">(</span>
+    <span class="n">patches</span><span class="o">=</span><span class="p">{</span>
+        <span class="n">forklift_controller</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"spec"</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">"aap_url"</span><span class="p">:</span> <span class="n">awx_deployment</span><span class="p">,</span>
+                <span class="s2">"aap_token_secret_name"</span><span class="p">:</span> <span class="n">token_secret_name</span><span class="p">,</span>
+                <span class="s2">"aap_insecure_skip_verify"</span><span class="p">:</span> <span class="s2">"true"</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">editor</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">backup_resources</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The patch is restored in the fixture teardown, so MTV goes back to its pre-test AAP configuration
+when the class finishes.</p>
+<p>The migration step of <code>TestAapHookMigration</code> asserts success, not failure. Because the hooks run in
+pipeline order, a passing migration is what proves Forklift launched the AWX jobs and waited for
+them: PreHook runs before disk transfer, PostHook after VM creation.</p>
+<blockquote>
+<p><strong>Warning:</strong> The AAP path mutates cluster-wide MTV settings and installs an AWX instance in the <code>awx</code>
+namespace. It needs <code>ocs-storagecluster-cephfs</code> to exist as a storage class for the AWX project and
+PostgreSQL volumes.
+</p>
+<p><strong>Tip:</strong> If AWX is already deployed in the cluster, the fixture reuses it and skips teardown, so a
+shared AWX is not torn down when the test class ends.</p>
 </blockquote>
 <h2 id="how-expected-failures-are-validated">How Expected Failures Are Validated</h2>
-<p>A correct hook-failure scenario does not show up as a broken test in this suite. The migration itself fails, but the pytest test passes because that failure was expected and was validated.</p>
-<p>The existing hook test does that explicitly. If <code>expected_migration_result</code> is <code>fail</code>, it expects <code>execute_migration()</code> to raise <code>MigrationPlanExecError</code>, and then it asks the hook utility whether VM checks should still run.</p>
-<div class="highlight"><pre><span></span><code>        <span class="n">expected_result</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;expected_migration_result&quot;</span><span class="p">]</span>
+<p>A correct hook-failure scenario does not show up as a broken test in this suite. The migration itself fails, but the pytest test passes because that failure was expected and was
+validated.</p>
+<p>The expected-failure test does that explicitly. If <code>expected_migration_result</code> is <code>fail</code>, it expects
+<code>execute_migration()</code> to raise <code>MigrationPlanExecError</code>, and then it asks the hook utility whether VM
+checks should still run.</p>
+<div class="highlight"><pre><span></span><code>        <span class="n">expected_result</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"expected_migration_result"</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">expected_result</span> <span class="o">==</span> <span class="s2">&quot;fail&quot;</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">MigrationPlanExecError</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">expected_result</span> <span class="o">==</span> <span class="s2">"fail"</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">MigrationPlanExecError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc_info</span><span class="p">:</span>
                 <span class="n">execute_migration</span><span class="p">(</span>
                     <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
                     <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
                     <span class="n">plan</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span>
                     <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
                 <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">should_check_vms</span> <span class="o">=</span> <span class="n">validate_hook_failure_and_check_vms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span> <span class="n">prepared_plan</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">should_check_vms</span> <span class="o">=</span> <span class="n">validate_hook_failure_and_check_vms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span> <span class="n">prepared_plan</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="c1"># Chain with original migration error so the root cause is visible in traceback</span>
+                <span class="n">e</span><span class="o">.</span><span class="n">__cause__</span> <span class="o">=</span> <span class="n">exc_info</span><span class="o">.</span><span class="n">value</span>
+                <span class="k">raise</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">execute_migration</span><span class="p">(</span>
                 <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
@@ -508,95 +638,88 @@
                 <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">should_check_vms</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="o">...</span>
-        <span class="c1"># Runtime skip needed - decision based on previous test&#39;s migration execution result</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">should_check_vms</span><span class="p">:</span>
-            <span class="n">pytest</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="s2">&quot;Skipping VM checks - hook failed before VM migration&quot;</span><span class="p">)</span>
 </code></pre></div>
 
-<p>The suite then looks deeper than the high-level <code>Plan</code> status. It locates the related <code>Migration</code> resource and scans each VM’s pipeline for the first step with an error.</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_get_failed_migration_step</span><span class="p">(</span><span class="n">plan</span><span class="p">:</span> <span class="n">Plan</span><span class="p">,</span> <span class="n">vm_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get step where VM migration failed.</span>
+<p>And the VM step turns that boolean into a skip:</p>
+<div class="highlight"><pre><span></span><code>        <span class="c1"># Runtime skip needed - decision based on previous test's migration execution result</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">should_check_vms</span><span class="p">:</span>
+            <span class="n">pytest</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="s2">"Skipping VM checks - hook failed before VM migration"</span><span class="p">)</span>
+</code></pre></div>
 
-<span class="sd">    Examines the Migration status (not Plan) to find which pipeline step failed.</span>
-<span class="sd">    The Migration CR contains the detailed VM pipeline execution status.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">migration</span> <span class="o">=</span> <span class="n">_find_migration_for_plan</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">migration</span><span class="o">.</span><span class="n">instance</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">migration</span><span class="o">.</span><span class="n">instance</span><span class="o">.</span><span class="n">status</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">MigrationStatusError</span><span class="p">(</span><span class="n">migration_name</span><span class="o">=</span><span class="n">migration</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-
-    <span class="n">vms_status</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">migration</span><span class="o">.</span><span class="n">instance</span><span class="o">.</span><span class="n">status</span><span class="p">,</span> <span class="s2">&quot;vms&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">vms_status</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">MigrationStatusError</span><span class="p">(</span><span class="n">migration_name</span><span class="o">=</span><span class="n">migration</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+<p>The suite then looks past the high-level migration outcome. It reads each VM's pipeline from the
+<code>Plan</code> CR status and returns the first step that carries an error. The <code>Plan</code> CR is the authoritative
+source on purpose: the forklift controller writes it before the <code>Migration</code> CR syncs, so a migration
+that just failed cannot race into a "no error found" result.</p>
+<div class="highlight"><pre><span></span><code>    <span class="n">vms_status</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">instance</span><span class="o">.</span><span class="n">status</span><span class="o">.</span><span class="n">migration</span><span class="o">.</span><span class="n">vms</span>
 
     <span class="k">for</span> <span class="n">vm_status</span> <span class="ow">in</span> <span class="n">vms_status</span><span class="p">:</span>
-        <span class="n">vm_id</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vm_status</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-        <span class="n">vm_status_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vm_status</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">vm_id</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vm_status</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+        <span class="n">vm_status_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vm_status</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">vm_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">vm_id</span><span class="p">,</span> <span class="n">vm_status_name</span><span class="p">):</span>
             <span class="k">continue</span>
 
-        <span class="n">pipeline</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vm_status</span><span class="p">,</span> <span class="s2">&quot;pipeline&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">pipeline</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vm_status</span><span class="p">,</span> <span class="s2">"pipeline"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">pipeline</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">VmPipelineError</span><span class="p">(</span><span class="n">vm_name</span><span class="o">=</span><span class="n">vm_name</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">pipeline</span><span class="p">:</span>
-            <span class="n">step_error</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">step_error</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">"error"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">step_error</span><span class="p">:</span>
                 <span class="n">step_name</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">name</span>
-                <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;VM </span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2"> failed at step &#39;</span><span class="si">{</span><span class="n">step_name</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">step_error</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"VM </span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2"> failed at step '</span><span class="si">{</span><span class="n">step_name</span><span class="si">}</span><span class="s2">': </span><span class="si">{</span><span class="n">step_error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">step_name</span>
+
+        <span class="k">raise</span> <span class="n">VmPipelineError</span><span class="p">(</span><span class="n">vm_name</span><span class="o">=</span><span class="n">vm_name</span><span class="p">)</span>
+
+    <span class="k">raise</span> <span class="n">VmNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"VM '</span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2">' not found in Plan '</span><span class="si">{</span><span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' migration status"</span><span class="p">)</span>
 </code></pre></div>
 
+<p>A VM that is missing from the plan status raises <code>VmNotFoundError</code>; a VM with no pipeline or no failed step raises <code>VmPipelineError</code>.</p>
 <p>Once it knows the actual failed step, the hook utility validates it against the configured hook and decides what to do next:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">validate_expected_hook_failure</span><span class="p">(</span>
     <span class="n">actual_failed_step</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">plan_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Validate the actual failed step matches expected (predefined mode only).</span>
 
 <span class="sd">    For custom playbook mode (no expected_result set), this is a no-op.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="c1"># Extract hook configs with type validation</span>
-    <span class="n">pre_hook_config</span> <span class="o">=</span> <span class="n">plan_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pre_hook&quot;</span><span class="p">)</span>
+    <span class="n">pre_hook_config</span> <span class="o">=</span> <span class="n">plan_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"pre_hook"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">pre_hook_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pre_hook_config</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pre_hook must be a dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">pre_hook_config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="n">pre_hook_expected</span> <span class="o">=</span> <span class="n">pre_hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expected_result&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">pre_hook_config</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"pre_hook must be a dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">pre_hook_config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">pre_hook_expected</span> <span class="o">=</span> <span class="n">pre_hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"expected_result"</span><span class="p">)</span> <span class="k">if</span> <span class="n">pre_hook_config</span> <span class="k">else</span> <span class="kc">None</span>
 
-    <span class="n">post_hook_config</span> <span class="o">=</span> <span class="n">plan_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;post_hook&quot;</span><span class="p">)</span>
+    <span class="n">post_hook_config</span> <span class="o">=</span> <span class="n">plan_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"post_hook"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">post_hook_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">post_hook_config</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;post_hook must be a dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">post_hook_config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="n">post_hook_expected</span> <span class="o">=</span> <span class="n">post_hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expected_result&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">post_hook_config</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"post_hook must be a dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">post_hook_config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">post_hook_expected</span> <span class="o">=</span> <span class="n">post_hook_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"expected_result"</span><span class="p">)</span> <span class="k">if</span> <span class="n">post_hook_config</span> <span class="k">else</span> <span class="kc">None</span>
 
     <span class="c1"># PreHook runs before PostHook, so check PreHook first</span>
-    <span class="k">if</span> <span class="n">pre_hook_expected</span> <span class="o">==</span> <span class="s2">&quot;fail&quot;</span><span class="p">:</span>
-        <span class="n">expected_step</span> <span class="o">=</span> <span class="s2">&quot;PreHook&quot;</span>
-    <span class="k">elif</span> <span class="n">post_hook_expected</span> <span class="o">==</span> <span class="s2">&quot;fail&quot;</span><span class="p">:</span>
-        <span class="n">expected_step</span> <span class="o">=</span> <span class="s2">&quot;PostHook&quot;</span>
+    <span class="k">if</span> <span class="n">pre_hook_expected</span> <span class="o">==</span> <span class="s2">"fail"</span><span class="p">:</span>
+        <span class="n">expected_step</span> <span class="o">=</span> <span class="s2">"PreHook"</span>
+    <span class="k">elif</span> <span class="n">post_hook_expected</span> <span class="o">==</span> <span class="s2">"fail"</span><span class="p">:</span>
+        <span class="n">expected_step</span> <span class="o">=</span> <span class="s2">"PostHook"</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;No expected_result specified - skipping step validation&quot;</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"No expected_result specified - skipping step validation"</span><span class="p">)</span>
         <span class="k">return</span>
 
     <span class="k">if</span> <span class="n">actual_failed_step</span> <span class="o">!=</span> <span class="n">expected_step</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Migration failed at step &#39;</span><span class="si">{</span><span class="n">actual_failed_step</span><span class="si">}</span><span class="s2">&#39; but expected to fail at &#39;</span><span class="si">{</span><span class="n">expected_step</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+            <span class="sa">f</span><span class="s2">"Migration failed at step '</span><span class="si">{</span><span class="n">actual_failed_step</span><span class="si">}</span><span class="s2">' but expected to fail at '</span><span class="si">{</span><span class="n">expected_step</span><span class="si">}</span><span class="s2">'"</span>
         <span class="p">)</span>
 
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Migration correctly failed at expected step &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">expected_step</span><span class="p">)</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Migration correctly failed at expected step '</span><span class="si">%s</span><span class="s2">'"</span><span class="p">,</span> <span class="n">expected_step</span><span class="p">)</span>
+</code></pre></div>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">validate_hook_failure_and_check_vms</span><span class="p">(</span>
-    <span class="n">plan_resource</span><span class="p">:</span> <span class="s2">&quot;Plan&quot;</span><span class="p">,</span>
-    <span class="n">prepared_plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="o">...</span>
-    <span class="k">if</span> <span class="n">actual_failed_step</span> <span class="o">==</span> <span class="s2">&quot;PostHook&quot;</span><span class="p">:</span>
+<div class="highlight"><pre><span></span><code>    <span class="k">if</span> <span class="n">actual_failed_step</span> <span class="o">==</span> <span class="s2">"PostHook"</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">True</span>
-    <span class="k">elif</span> <span class="n">actual_failed_step</span> <span class="o">==</span> <span class="s2">&quot;PreHook&quot;</span><span class="p">:</span>
+    <span class="k">elif</span> <span class="n">actual_failed_step</span> <span class="o">==</span> <span class="s2">"PreHook"</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">False</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected failure step: </span><span class="si">{</span><span class="n">actual_failed_step</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unexpected failure step: </span><span class="si">{</span><span class="n">actual_failed_step</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>That leads to a simple rule set:</p>
@@ -607,21 +730,26 @@
 <li>If the failure happened in <code>PostHook</code>, VM checks still run because the VMs should already exist.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> For multi-VM plans, the suite expects all VMs to fail in the same step. If different VMs fail in different pipeline steps, validation fails with <code>VmMigrationStepMismatchError</code>.</p>
-<p><strong>Note:</strong> In custom-playbook mode, the suite still determines whether the failure happened in <code>PreHook</code> or <code>PostHook</code>. What it skips is the comparison against a declared expected step, because custom mode does not use <code>expected_result</code>.</p>
+<p><strong>Warning:</strong> For multi-VM plans, the suite expects all VMs to fail in the same step.
+<code>validate_all_vms_same_step()</code> collects one failed step per VM name and raises
+<code>VmMigrationStepMismatchError</code> when the values differ, or when no VM produced a step at all.</p>
+<p><strong>Note:</strong> In custom-playbook mode, the suite still determines whether the failure happened in <code>PreHook</code> or <code>PostHook</code>. What it skips is the comparison against a declared expected
+step, because custom mode does not use <code>expected_result</code>.</p>
 </blockquote>
 <h2 id="pytest-and-reporting-behavior">Pytest And Reporting Behavior</h2>
-<p>These hook tests use the repository’s standard incremental class pattern. If an earlier step in the class fails unexpectedly, later steps are marked <code>xfail</code> instead of running anyway.</p>
+<p>Both hook test classes use the repository's standard incremental class pattern. If an earlier step in
+the class fails unexpectedly, later steps are marked <code>xfail</code> instead of running anyway.</p>
 <div class="highlight"><pre><span></span><code>    <span class="c1"># Incremental test support - track failures for class-based tests</span>
-    <span class="k">if</span> <span class="s2">&quot;incremental&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">when</span> <span class="o">==</span> <span class="s2">&quot;call&quot;</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">failed</span><span class="p">:</span>
+    <span class="k">if</span> <span class="s2">"incremental"</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">when</span> <span class="o">==</span> <span class="s2">"call"</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">failed</span><span class="p">:</span>
         <span class="n">item</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">_previousfailed</span> <span class="o">=</span> <span class="n">item</span>
-    <span class="o">...</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">pytest_runtest_setup</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_runtest_setup</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
     <span class="c1"># Incremental test support - xfail if previous test in class failed</span>
-    <span class="k">if</span> <span class="s2">&quot;incremental&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
-        <span class="n">previousfailed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;_previousfailed&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"incremental"</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
+        <span class="n">previousfailed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="s2">"_previousfailed"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">previousfailed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">pytest</span><span class="o">.</span><span class="n">xfail</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;previous test failed (</span><span class="si">{</span><span class="n">previousfailed</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="n">pytest</span><span class="o">.</span><span class="n">xfail</span><span class="p">(</span><span class="sa">f</span><span class="s2">"previous test failed (</span><span class="si">{</span><span class="n">previousfailed</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>This is different from hook expected-failure validation:</p>
@@ -632,7 +760,8 @@
 <blockquote>
 <p><strong>Tip:</strong> If a hook failure is part of the test’s intended behavior, model it with <code>expected_migration_result: fail</code> and hook-step validation, not with <code>pytest.xfail()</code>.</p>
 </blockquote>
-<p>The test runner is also configured to write <code>junit-report.xml</code>, so correctly validated hook-failure scenarios appear as normal passed or skipped test steps in standard reporting. The migration failed, but the test did exactly what it was supposed to do.</p>
+<p>The test runner is also configured to write <code>junit-report.xml</code>, so correctly validated hook-failure scenarios appear as normal passed or skipped test steps in standard reporting.
+The migration failed, but the test did exactly what it was supposed to do.</p>
                 </div>
             </article>
             <nav class="page-nav">
@@ -655,10 +784,12 @@
                     <h3>On this page</h3>
                     <div class="toc">
 <ul>
+<li><a href="#hook-test-classes">Hook Test Classes</a></li>
 <li><a href="#where-hook-configuration-lives">Where Hook Configuration Lives</a></li>
 <li><a href="#how-hooks-get-attached-to-a-plan">How Hooks Get Attached To A Plan</a></li>
 <li><a href="#predefined-playbooks">Predefined Playbooks</a></li>
 <li><a href="#custom-playbooks">Custom Playbooks</a></li>
+<li><a href="#aap-hooks">AAP Hooks</a></li>
 <li><a href="#how-expected-failures-are-validated">How Expected Failures Are Validated</a></li>
 <li><a href="#pytest-and-reporting-behavior">Pytest And Reporting Behavior</a></li>
 </ul>
@@ -667,24 +798,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -730,5 +864,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Troubleshooting And Diagnostics - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -211,7 +212,7 @@
 
                     <li>
                         <a href="troubleshooting-and-diagnostics.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Troubleshooting And Diagnostics
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -310,26 +312,42 @@
 <p>This repository already generates most of those artifacts for you by default.</p>
 <h2 id="start-here">Start Here</h2>
 <p>The repo enables JUnit reporting for every run and includes pytest logging in the XML:</p>
-<div class="highlight"><pre><span></span><code><span class="na">addopts</span><span class="w"> </span><span class="o">=</span>
+<div class="highlight"><pre><span></span><code><span class="k">[pytest]</span>
+<span class="na">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">tests</span>
+
+<span class="na">addopts</span><span class="w"> </span><span class="o">=</span>
 <span class="w">  </span><span class="na">-s</span>
 <span class="w">  </span><span class="na">-o log_cli</span><span class="o">=</span><span class="s">true</span>
 <span class="w">  </span><span class="na">-p no</span><span class="o">:</span><span class="s">logging</span>
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
 <span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
-<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
 <span class="w">  </span><span class="na">--show-progress</span>
 <span class="w">  </span><span class="na">--strict-markers</span>
-<span class="w">  </span><span class="na">--jira</span>
 <span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
 
 <span class="na">markers</span><span class="w"> </span><span class="o">=</span>
 <span class="w">    </span><span class="na">tier0</span><span class="o">:</span><span class="w"> </span><span class="s">Core functionality tests (smoke tests)</span>
+<span class="w">    </span><span class="na">tier1</span><span class="o">:</span><span class="w"> </span><span class="s">Extended functionality tests</span>
 <span class="w">    </span><span class="na">remote</span><span class="o">:</span><span class="w"> </span><span class="s">Remote cluster migration tests</span>
 <span class="w">    </span><span class="na">warm</span><span class="o">:</span><span class="w"> </span><span class="s">Warm migration tests</span>
 <span class="w">    </span><span class="na">copyoffload</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload (XCOPY) tests</span>
+<span class="w">    </span><span class="na">copyoffload_sanity</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload sanity tests - core scenarios for quick validation</span>
+<span class="w">    </span><span class="na">copyoffload_snapshots</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload snapshot tests (vSphere only)</span>
+<span class="w">    </span><span class="na">shared_disk</span><span class="o">:</span><span class="w"> </span><span class="s">Shared disk migration tests (vSphere only)</span>
 <span class="w">    </span><span class="na">incremental</span><span class="o">:</span><span class="w"> </span><span class="s">marks tests as incremental (xfail on previous failure)</span>
-<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version(&quot;2.6.0&quot;))</span>
+<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version("2.6.0"))</span>
+<span class="w">    </span><span class="na">ova</span><span class="o">:</span><span class="w"> </span><span class="s">OVA provider-specific tests</span>
+<span class="w">    </span><span class="na">vsphere</span><span class="o">:</span><span class="w"> </span><span class="s">vSphere provider-specific tests</span>
+<span class="w">    </span><span class="na">esxi</span><span class="o">:</span><span class="w"> </span><span class="s">ESXi provider-specific tests</span>
+<span class="w">    </span><span class="na">rhv</span><span class="o">:</span><span class="w"> </span><span class="s">RHV provider-specific tests</span>
+<span class="w">    </span><span class="na">hyperv</span><span class="o">:</span><span class="w"> </span><span class="s">Hyper-V provider-specific tests</span>
+<span class="w">    </span><span class="na">openstack</span><span class="o">:</span><span class="w"> </span><span class="s">OpenStack provider-specific tests</span>
+<span class="w">    </span><span class="na">openshift</span><span class="o">:</span><span class="w"> </span><span class="s">OpenShift provider-specific tests</span>
+<span class="w">    </span><span class="na">deep_inspection</span><span class="o">:</span><span class="w"> </span><span class="s">Deep Inspection / Conversion CR tests (vSphere only)</span>
+<span class="w">    </span><span class="na">ca_crt</span><span class="o">:</span><span class="w"> </span><span class="s">CA certificate field (ca.crt) provider secret tests</span>
+<span class="w">    </span><span class="na">aap</span><span class="o">:</span><span class="w"> </span><span class="s">AAP (Ansible Automation Platform) hook integration tests (vSphere only)</span>
+<span class="w">    </span><span class="na">upgrade</span><span class="o">:</span><span class="w"> </span><span class="s">MTV operator upgrade tests</span>
 
 <span class="na">junit_logging</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
@@ -340,22 +358,36 @@
 <li><code>junit-report.xml</code>: the structured result file that CI systems can ingest.</li>
 <li>Console output with the same high-level status markers.</li>
 </ul>
+<p><code>pytest-tests.log</code> is not a <code>pytest.ini</code> setting. <code>conftest.py</code> deletes any stale copy at session start and defaults the path to
+<code>pytest-tests.log</code> in the working directory; override it with pytest's own <code>--log-file</code> option.</p>
 <p>If you run tests inside a container or an OpenShift Job, the default working directory is <code>/app</code>, so the JUnit file usually ends up at <code>/app/junit-report.xml</code>.</p>
 <blockquote>
-<p><strong>Tip:</strong> Test names are rewritten during collection to include the selected <code>source_provider</code> and <code>storage_class</code>, so those suffixes are useful when you are matching a JUnit failure back to the exact environment that ran.</p>
+<p><strong>Note:</strong> <code>pytest-jira</code> is an installed dependency, but <code>--jira</code> is <strong>not</strong> in <code>addopts</code>. JUnit XML is the only reporting format enabled by default.
+</p>
+<p><strong>Note:</strong> <code>--strict-markers</code> is on, so a test using a marker that is not listed in <code>pytest.ini</code> errors at collection time instead of running unfiltered.
+</p>
+<p><strong>Tip:</strong> Test names are rewritten during collection to include the selected <code>source_provider</code> and <code>storage_class</code>, so those suffixes are useful when you are matching a JUnit
+failure back to the exact environment that ran.</p>
 </blockquote>
 <h2 id="diagnostic-flags-that-matter">Diagnostic Flags That Matter</h2>
 <p>A few pytest options change what diagnostics you get back:</p>
 <ul>
-<li><code>--analyze-with-ai</code> enables post-failure AI enrichment of the JUnit XML.</li>
+<li><code>--analyze-with-ai</code> enables post-failure AI enrichment of the JUnit XML through a rootcoz server.</li>
 <li><code>--skip-data-collector</code> disables automatic artifact collection under <code>.data-collector/</code>.</li>
 <li><code>--data-collector-path</code> changes the artifact directory from the default <code>.data-collector</code>.</li>
 <li><code>--skip-teardown</code> leaves created resources in place so you can inspect them live.</li>
 <li><code>--openshift-python-wrapper-log-debug</code> turns on deeper wrapper-level logging, which is useful when CR creation or wait logic is failing.</li>
+<li><code>--providers-json</code> points at a providers file other than the default, which is the fastest way to tell "wrong file" from "wrong provider".</li>
 </ul>
+<p><code>--openshift-python-wrapper-log-debug</code> works by exporting <code>OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG</code> into the environment at session start,
+so it affects every wrapper log record in the run, not just a single test.</p>
+<p><code>--providers-json</code> resolution order is: the CLI flag, then the <code>PROVIDERS_JSON_PATH</code> environment variable, then <code>.providers.json</code> in the
+current working directory. That same order is what <code>mtv-api-tests generate</code> and <code>mtv-api-tests run</code> use when they read the providers file.</p>
 <blockquote>
-<p><strong>Warning:</strong> <code>--skip-data-collector</code> disables both <code>resources.json</code> tracking and automatic must-gather collection.</p>
-<p><strong>Warning:</strong> <code>--skip-teardown</code> is very useful for debugging, but it also means cleanup becomes your responsibility.</p>
+<p><strong>Warning:</strong> <code>--skip-data-collector</code> disables both <code>resources.json</code> tracking and automatic must-gather collection.
+</p>
+<p><strong>Warning:</strong> <code>--skip-teardown</code> is very useful for debugging, but it also means cleanup becomes your responsibility.
+</p>
 <p><strong>Tip:</strong> If the failure is happening before MTV even starts a migration, <code>--openshift-python-wrapper-log-debug</code> often gives the most useful extra detail.</p>
 </blockquote>
 <h2 id="junit-output">JUnit Output</h2>
@@ -369,56 +401,111 @@
 <li>teardown</li>
 </ul>
 <p>A passing example in the repo is very small:</p>
-<div class="highlight"><pre><span></span><code><span class="cp">&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;</span><span class="nt">&lt;testsuites&gt;&lt;testsuite</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;pytest&quot;</span><span class="w"> </span><span class="na">errors=</span><span class="s">&quot;0&quot;</span><span class="w"> </span><span class="na">failures=</span><span class="s">&quot;0&quot;</span><span class="w"> </span><span class="na">skipped=</span><span class="s">&quot;0&quot;</span><span class="w"> </span><span class="na">tests=</span><span class="s">&quot;1&quot;</span><span class="w"> </span><span class="na">time=</span><span class="s">&quot;231.588&quot;</span><span class="w"> </span><span class="na">timestamp=</span><span class="s">&quot;2021-09-15T02:34:21.557789&quot;</span><span class="w"> </span><span class="na">hostname=</span><span class="s">&quot;fedora&quot;</span><span class="nt">&gt;&lt;testcase</span><span class="w"> </span><span class="na">classname=</span><span class="s">&quot;test_mtv&quot;</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;test_mtv_migration_interop[plans0]&quot;</span><span class="w"> </span><span class="na">time=</span><span class="s">&quot;231.539&quot;</span><span class="w"> </span><span class="nt">/&gt;&lt;/testsuite&gt;&lt;/testsuites&gt;</span>
+<div class="highlight"><pre><span></span><code><span class="cp">&lt;?xml version="1.0" encoding="utf-8"?&gt;</span><span class="nt">&lt;testsuites&gt;&lt;testsuite</span><span class="w"> </span><span class="na">name=</span><span class="s">"pytest"</span><span class="w"> </span><span class="na">errors=</span><span class="s">"0"</span><span class="w"> </span><span class="na">failures=</span><span class="s">"0"</span><span class="w"> </span><span class="na">skipped=</span><span class="s">"0"</span><span class="w"> </span><span class="na">tests=</span><span class="s">"1"</span><span class="w"> </span><span class="na">time=</span><span class="s">"231.588"</span><span class="w"> </span><span class="na">timestamp=</span><span class="s">"2021-09-15T02:34:21.557789"</span><span class="w"> </span><span class="na">hostname=</span><span class="s">"fedora"</span><span class="nt">&gt;&lt;testcase</span><span class="w"> </span><span class="na">classname=</span><span class="s">"test_mtv"</span><span class="w"> </span><span class="na">name=</span><span class="s">"test_mtv_migration_interop[plans0]"</span><span class="w"> </span><span class="na">time=</span><span class="s">"231.539"</span><span class="w"> </span><span class="nt">/&gt;&lt;/testsuite&gt;&lt;/testsuites&gt;</span>
 </code></pre></div>
 
 <p>In real failure runs, the XML is much more informative because it includes logging and failure details from pytest.</p>
 <h2 id="ai-enrichment">AI Enrichment</h2>
-<p>When you pass <code>--analyze-with-ai</code>, the suite can send the raw JUnit XML to an analysis service and write the enriched XML back to the same file.</p>
-<div class="highlight"><pre><span></span><code><span class="n">xml_path_raw</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="p">,</span> <span class="s2">&quot;xmlpath&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">xml_path_raw</span><span class="p">:</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;xunit file not found; pass --junitxml. Skipping AI analysis enrichment&quot;</span><span class="p">)</span>
-    <span class="k">return</span>
+<p>When you pass <code>--analyze-with-ai</code>, the suite posts the raw JUnit XML to a <strong>rootcoz</strong> server and writes the enriched XML back to the same
+file. rootcoz is an external service, not part of this repository; this page only documents the client half of the contract.</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">enrich_junit_xml</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Read JUnit XML, send to server for analysis, write enriched XML back.</span>
 
-<span class="n">xml_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">xml_path_raw</span><span class="p">)</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">xml_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-        <span class="s2">&quot;xunit file not found under </span><span class="si">%s</span><span class="s2">. Skipping AI analysis enrichment&quot;</span><span class="p">,</span>
-        <span class="n">xml_path_raw</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span>
+<span class="sd">    Reads the JUnit XML that pytest generated, POSTs the raw content to the</span>
+<span class="sd">    rootcoz server's /analyze-failures endpoint, and writes the enriched XML</span>
+<span class="sd">    (with analysis results) back to the same file.</span>
+<span class="sd">    """</span>
+    <span class="n">xml_path_raw</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="p">,</span> <span class="s2">"xmlpath"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">xml_path_raw</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"xunit file not found; pass --junitxml. Skipping AI analysis enrichment"</span><span class="p">)</span>
+        <span class="k">return</span>
 
-<span class="c1"># ... provider/model validation omitted ...</span>
+    <span class="n">xml_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">xml_path_raw</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">xml_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">"xunit file not found under </span><span class="si">%s</span><span class="s2">. Skipping AI analysis enrichment"</span><span class="p">,</span>
+            <span class="n">xml_path_raw</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
 
-<span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">server_url</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">/analyze-failures&quot;</span><span class="p">,</span>
-    <span class="n">json</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;raw_xml&quot;</span><span class="p">:</span> <span class="n">raw_xml</span><span class="p">,</span>
-        <span class="s2">&quot;ai_provider&quot;</span><span class="p">:</span> <span class="n">ai_provider</span><span class="p">,</span>
-        <span class="s2">&quot;ai_model&quot;</span><span class="p">:</span> <span class="n">ai_model</span><span class="p">,</span>
-    <span class="p">},</span>
-    <span class="n">timeout</span><span class="o">=</span><span class="n">timeout_value</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+    <span class="n">server_url</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"ROOTCOZ_SERVER_URL"</span><span class="p">]</span>
+    <span class="n">raw_xml</span> <span class="o">=</span> <span class="n">xml_path</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span>
 
-<span class="k">if</span> <span class="n">enriched_xml</span> <span class="o">:=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;enriched_xml&quot;</span><span class="p">):</span>
-    <span class="n">xml_path</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">enriched_xml</span><span class="p">)</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;JUnit XML enriched with AI analysis: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">xml_path</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">timeout_value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_TIMEOUT"</span><span class="p">,</span> <span class="s2">"600"</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Invalid ROOTCOZ_TIMEOUT value, using default 600 seconds"</span><span class="p">)</span>
+        <span class="n">timeout_value</span> <span class="o">=</span> <span class="mi">600</span>
+
+    <span class="c1"># Optional overrides; when omitted, rootcoz uses .rootcoz/settings.json</span>
+    <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"raw_xml"</span><span class="p">:</span> <span class="n">raw_xml</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">ai_provider</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_AI_PROVIDER"</span><span class="p">):</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">"ai_provider"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ai_provider</span>
+    <span class="k">if</span> <span class="n">ai_model</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_AI_MODEL"</span><span class="p">):</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">"ai_model"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ai_model</span>
+
+    <span class="c1"># ... requests.post(f"{server_url.rstrip('/')}/analyze-failures", ...) omitted ...</span>
+
+    <span class="k">if</span> <span class="n">enriched_xml</span> <span class="o">:=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"enriched_xml"</span><span class="p">):</span>
+        <span class="n">xml_path</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">enriched_xml</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"JUnit XML enriched with AI analysis: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">xml_path</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"No enriched XML returned (no failures or analysis failed)"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>Important behavior:</p>
 <ul>
-<li>AI enrichment only runs when the session exits with failures.</li>
+<li>AI enrichment only runs when the session exits with a non-zero code.</li>
+<li>It is force-disabled under <code>--collect-only</code> and <code>--setup-plan</code>, which is what makes the <code>tox -e pytest-check</code> environments safe to run.</li>
 <li>It requires a JUnit XML path to exist.</li>
-<li>It requires <code>JJI_SERVER_URL</code>.</li>
-<li>If <code>JJI_AI_PROVIDER</code> and <code>JJI_AI_MODEL</code> are not set, the code defaults them to <code>claude</code> and <code>claude-opus-4-6[1m]</code>.</li>
-<li><code>JJI_TIMEOUT</code> controls the request timeout and defaults to <code>600</code> seconds.</li>
-<li>If enrichment fails, the original JUnit file is preserved.</li>
+<li>It requires <code>ROOTCOZ_SERVER_URL</code>.
+The client-side environment variables are:</li>
 </ul>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ROOTCOZ_SERVER_URL</code></td>
+<td>Yes</td>
+<td>-</td>
+<td>rootcoz server base URL; the suite appends <code>/analyze-failures</code></td>
+</tr>
+<tr>
+<td><code>ROOTCOZ_AI_PROVIDER</code></td>
+<td>No</td>
+<td>applied server-side</td>
+<td>Optional provider override included in the request body</td>
+</tr>
+<tr>
+<td><code>ROOTCOZ_AI_MODEL</code></td>
+<td>No</td>
+<td>applied server-side</td>
+<td>Optional model override included in the request body</td>
+</tr>
+<tr>
+<td><code>ROOTCOZ_TIMEOUT</code></td>
+<td>No</td>
+<td><code>600</code></td>
+<td>Request timeout in seconds</td>
+</tr>
+</tbody>
+</table></div>
+<p>Those defaults are <strong>not</strong> hardcoded in pytest. When <code>ROOTCOZ_AI_PROVIDER</code> and <code>ROOTCOZ_AI_MODEL</code> are unset, the request body simply omits
+those keys and rootcoz falls back to <code>.rootcoz/settings.json</code> in this repository. That file holds the provider and model, the AI call timeout,
+peer AI configs, and the list of <code>additional_repos</code> rootcoz may consult about this project.</p>
+<p>Environment variables are read after <code>load_dotenv()</code>, so a <code>.env</code> file in the project root is enough — nothing has to be exported.</p>
 <blockquote>
-<p><strong>Note:</strong> If <code>JJI_SERVER_URL</code> is not set, the suite logs a warning and disables AI analysis instead of failing the run.</p>
-<p><strong>Warning:</strong> AI enrichment rewrites the existing <code>junit-report.xml</code> in place.</p>
+<p><strong>Note:</strong> If <code>ROOTCOZ_SERVER_URL</code> is not set, the suite logs <code>ROOTCOZ_SERVER_URL is not set. Analyze with AI features will be disabled.</code>
+and turns the feature off instead of failing the run.
+</p>
+<p><strong>Warning:</strong> AI enrichment rewrites the existing <code>junit-report.xml</code> in place. Archive a copy first if you need the raw file.</p>
 </blockquote>
 <h2 id="collected-resource-artifacts">Collected Resource Artifacts</h2>
 <p>Unless you use <code>--skip-data-collector</code>, the suite prepares a clean <code>.data-collector/</code> directory at session start and writes run artifacts there.</p>
@@ -428,53 +515,75 @@
 <li><code>.data-collector/&lt;pytest-node-name&gt;/...</code>: per-failure must-gather output when the failure hook runs.</li>
 <li><code>.data-collector/...</code> at the root: session-level must-gather output when teardown cleanup fails.</li>
 </ul>
-<p>The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces were created. The cleanup helper in <code>tools/clean_cluster.py</code> is built to consume that file.</p>
-<p>The suite stores resource metadata as it creates objects, including <code>name</code>, <code>namespace</code>, <code>module</code>, and sometimes <code>test_name</code>. That gives you a practical bridge from “the test failed” to “which exact <code>Plan</code>, <code>Provider</code>, <code>StorageMap</code>, or <code>NetworkMap</code> should I inspect?”</p>
+<p>The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
+were created. The cleanup helper in <code>tools/clean_cluster.py</code> consumes that file directly:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>tools/clean_cluster.py<span class="w"> </span>.data-collector/resources.json
+</code></pre></div>
+
+<p>It reads each entry's <code>module</code> and resource kind, imports the matching wrapper class, and calls <code>clean_up()</code> on each object.</p>
+<p>The suite stores resource metadata as it creates objects, including <code>name</code>, <code>namespace</code>, <code>module</code>, and sometimes <code>test_name</code>. That gives you a practical bridge from “the test
+failed” to “which exact <code>Plan</code>, <code>Provider</code>, <code>StorageMap</code>, or <code>NetworkMap</code> should I inspect?”</p>
 <blockquote>
 <p><strong>Tip:</strong> If you rerun the test suite, the base data collector path is recreated. Move or archive old artifacts first if you want to keep them.</p>
 </blockquote>
 <h2 id="must-gather-support">Must-Gather Support</h2>
-<p>The suite has built-in must-gather support. When it can match a failure to a specific plan, it can run a targeted gather. Otherwise it falls back to an MTV-namespace gather.</p>
+<p>The suite has built-in must-gather support. When it can match a failure to a specific plan, it runs a targeted gather. Otherwise it runs a
+full, cluster-wide gather.</p>
 <div class="highlight"><pre><span></span><code><span class="n">must_gather_image</span> <span class="o">=</span> <span class="n">_resolve_must_gather_image</span><span class="p">(</span>
     <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
     <span class="n">mtv_subs</span><span class="o">=</span><span class="n">mtv_subs</span><span class="p">,</span>
     <span class="n">mtv_csv</span><span class="o">=</span><span class="n">mtv_csv</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">_must_gather_base_cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;oc adm must-gather --image=</span><span class="si">{</span><span class="n">must_gather_image</span><span class="si">}</span><span class="s2"> --dest-dir=</span><span class="si">{</span><span class="n">data_collector_path</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="n">_must_gather_base_cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"oc adm must-gather --image=</span><span class="si">{</span><span class="n">must_gather_image</span><span class="si">}</span><span class="s2"> --dest-dir=</span><span class="si">{</span><span class="n">data_collector_path</span><span class="si">}</span><span class="s2">"</span>
 
 <span class="k">if</span> <span class="n">plan</span><span class="p">:</span>
-    <span class="n">plan_name</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-    <span class="n">plan_namespace</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span>
+    <span class="n">plan_name</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+    <span class="n">plan_namespace</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Running targeted must-gather for plan '</span><span class="si">{</span><span class="n">plan_name</span><span class="si">}</span><span class="s2">' in namespace '</span><span class="si">{</span><span class="n">plan_namespace</span><span class="si">}</span><span class="s2">'"</span><span class="p">)</span>
     <span class="n">run_command</span><span class="p">(</span>
-        <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_must_gather_base_cmd</span><span class="si">}</span><span class="s2"> -- NS=</span><span class="si">{</span><span class="n">plan_namespace</span><span class="si">}</span><span class="s2"> PLAN=</span><span class="si">{</span><span class="n">plan_name</span><span class="si">}</span><span class="s2"> /usr/bin/targeted&quot;</span><span class="p">)</span>
+        <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_must_gather_base_cmd</span><span class="si">}</span><span class="s2"> -- NS=</span><span class="si">{</span><span class="n">plan_namespace</span><span class="si">}</span><span class="s2"> PLAN=</span><span class="si">{</span><span class="n">plan_name</span><span class="si">}</span><span class="s2"> /usr/bin/targeted"</span><span class="p">),</span>
+        <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="n">run_command</span><span class="p">(</span><span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_must_gather_base_cmd</span><span class="si">}</span><span class="s2"> -- -- NS=</span><span class="si">{</span><span class="n">mtv_namespace</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Running full must-gather collection"</span><span class="p">)</span>
+    <span class="n">run_command</span><span class="p">(</span><span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">_must_gather_base_cmd</span><span class="p">),</span> <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </code></pre></div>
 
 <p>What this means in practice:</p>
 <ul>
-<li>If the failure can be tied back to a specific plan, the gather can be scoped to that plan.</li>
-<li>If the failure happens earlier, or there is no plan match, the gather is scoped to the MTV namespace instead.</li>
-<li>If teardown leaves leftovers behind, a session-level must-gather is collected as a fallback.</li>
+<li>If the failure can be tied back to a specific plan, the gather is scoped to that plan with <code>/usr/bin/targeted</code>.</li>
+<li>Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.</li>
+<li>The per-test gather is triggered from <code>pytest_exception_interact</code>, which passes the test class's <code>plan_resource</code> when one exists.</li>
+<li>If teardown leaves leftovers behind, a second unscoped gather runs at session finish as a fallback.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> The must-gather image is not hardcoded. The code resolves it from the installed MTV operator CSV and ImageDigestMirrorSet, so the gather matches the cluster’s installed MTV build.</p>
+<p><strong>Note:</strong> The must-gather image is not hardcoded. The code resolves it from the installed MTV operator CSV and the ImageDigestMirrorSet, so the
+gather matches the cluster’s installed MTV build.
+</p>
+<p><strong>Note:</strong> must-gather resolution and execution are wrapped in a broad <code>try</code>, so a must-gather problem is logged but never fails your test run.
+</p>
 <p><strong>Tip:</strong> A per-test must-gather directory is often the quickest way to answer “what did the cluster look like at the moment this test failed?”</p>
 </blockquote>
 <h2 id="common-failure-points">Common Failure Points</h2>
 <p>Most failures in this repo fall into one of these buckets.</p>
 <h3 id="before-migration-starts">Before Migration Starts</h3>
 <ul>
-<li>Missing required config such as <code>storage_class</code> or <code>source_provider</code>.</li>
-<li>Missing or empty <code>.providers.json</code>.</li>
+<li>
+<p>Missing required config such as <code>storage_class</code> or <code>source_provider</code>. <code>pytest_sessionstart</code> treats exactly these two as required and
+  calls <code>pytest.exit</code> with code 1 when either is absent.</p>
+</li>
+<li>
+<p>Missing or empty <code>.providers.json</code>.</p>
+</li>
 <li>A provider key passed with <code>--tc=source_provider:...</code> that does not exist in <code>.providers.json</code>.</li>
 <li>Wrong cluster credentials from <code>cluster_host</code>, <code>cluster_username</code>, or <code>cluster_password</code>.</li>
-<li>SSL verification mismatches between your config and the created provider secret.</li>
+<li>SSL verification mismatches between your config and the created provider secret. Note the config default is <code>insecure_verify_skip: str = "true"</code>.</li>
 <li><code>forklift-*</code> pods not being healthy before tests begin.</li>
 </ul>
 <p>These failures usually show up in fixtures or session startup, before you ever get a <code>Migration</code> CR.</p>
+<p>That required-config check is skipped under <code>--collect-only</code> and <code>--setup-plan</code>, which is why the fast wiring checks can run without a configured
+cluster at all.</p>
 <h3 id="during-provider-map-or-plan-setup">During Provider, Map, or Plan Setup</h3>
 <ul>
 <li>The source <code>Provider</code> CR never becomes ready.</li>
@@ -497,6 +606,7 @@
 <ul>
 <li><code>plan_wait_timeout</code> defaults to <code>3600</code> seconds.</li>
 <li><code>mins_before_cutover</code> defaults to <code>5</code>.</li>
+<li><code>mtv_namespace</code> defaults to <code>openshift-mtv</code>.</li>
 </ul>
 <p>If a migration is stuck, the most important resources are the <code>Plan</code>, the <code>Migration</code>, and the relevant MTV controller or conversion pod logs.</p>
 <h3 id="after-migration-completes">After Migration Completes</h3>
@@ -518,38 +628,45 @@
 </ul>
 <p>So “migration failed” and “test failed” are not always the same thing.</p>
 <blockquote>
-<p><strong>Tip:</strong> If the test only fails in <code>test_check_vms</code>, the migration itself may already be complete. At that point, spend less time in the initial <code>Plan</code> conditions and more time on the migrated VM, its PVCs, its launcher/VMI state, and guest-level checks.</p>
+<p><strong>Tip:</strong> If the test only fails in <code>test_check_vms</code>, the migration itself may already be complete. At that point, spend less time in the initial <code>Plan</code> conditions and more time
+on the migrated VM, its PVCs, its launcher/VMI state, and guest-level checks.</p>
 </blockquote>
 <h2 id="copy-offload-specific-checks">Copy-Offload-Specific Checks</h2>
 <p>Copy-offload adds extra prerequisites, so it also adds extra failure modes.</p>
-<div class="highlight"><pre><span></span><code>&quot;copyoffload&quot;: {
-  # Supported storage_vendor_product values:
-  # - &quot;ontap&quot;           (NetApp ONTAP)
-  # - &quot;vantara&quot;         (Hitachi Vantara)
-  # - &quot;primera3par&quot;     (HPE Primera/3PAR)
-  # - &quot;pureFlashArray&quot;  (Pure Storage FlashArray)
-  # - &quot;powerflex&quot;       (Dell PowerFlex)
-  # - &quot;powermax&quot;        (Dell PowerMax)
-  # - &quot;powerstore&quot;      (Dell PowerStore)
-  # - &quot;infinibox&quot;       (Infinidat InfiniBox)
-  # - &quot;flashsystem&quot;     (IBM FlashSystem)
-  &quot;storage_vendor_product&quot;: &quot;ontap&quot;,
+<div class="highlight"><pre><span></span><code>    "copyoffload": {
+      # Supported storage_vendor_product values:
+      # - "ontap"           (NetApp ONTAP)
+      # - "vantara"         (Hitachi Vantara)
+      # - "primera3par"     (HPE Primera/3PAR)
+      # - "pureFlashArray"  (Pure Storage FlashArray)
+      # - "powerflex"       (Dell PowerFlex)
+      # - "powermax"        (Dell PowerMax)
+      # - "powerstore"      (Dell PowerStore)
+      # - "infinibox"       (Infinidat InfiniBox)
+      # - "flashsystem"     (IBM FlashSystem)
+      "storage_vendor_product": "ontap",
 
-  # Primary datastore for copy-offload operations (required)
-  &quot;datastore_id&quot;: &quot;datastore-12345&quot;,
+      # Primary datastore for copy-offload operations (required)
+      "datastore_id": "datastore-12345",
 
-  # Optional: Secondary datastore for multi-datastore copy-offload tests
-  &quot;secondary_datastore_id&quot;: &quot;datastore-67890&quot;,
+      # Optional: Secondary datastore for multi-datastore copy-offload tests
+      "secondary_datastore_id": "datastore-67890",
 
-  # Optional: Non-XCOPY datastore for mixed datastore tests
-  &quot;non_xcopy_datastore_id&quot;: &quot;datastore-99999&quot;,
+      # Optional: Non-XCOPY datastore for mixed datastore tests
+      "non_xcopy_datastore_id": "datastore-99999",
 
-  &quot;default_vm_name&quot;: &quot;rhel9-template&quot;,
-  &quot;storage_hostname&quot;: &quot;storage.example.com&quot;,
-  &quot;storage_username&quot;: &quot;admin&quot;,
-  &quot;storage_password&quot;: &quot;your-password-here&quot;,  # pragma: allowlist secret
+      "default_vm_name": "rhel9-template",
+
+      # ... the optional "resource_pool" guidance block is elided here ...
+
+      "storage_hostname": "storage.example.com",
+      "storage_username": "admin",
+      "storage_password": "your-password-here",  # pragma: allowlist secret
 </code></pre></div>
 
+<p>The same block also accepts an optional <code>esxi_clone_method</code> of <code>"vib"</code> (the default) or <code>"ssh"</code> with matching <code>esxi_host</code>, <code>esxi_user</code>, and
+<code>esxi_password</code>, plus an optional <code>rdm_lun_uuid</code> for RDM disk tests. The ESXi values can also be overridden through the <code>COPYOFFLOAD_ESXI_HOST</code>,
+<code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code> environment variables.</p>
 <p>Check these first for copy-offload failures:</p>
 <ul>
 <li><code>storage_vendor_product</code> is correct for your storage backend.</li>
@@ -558,25 +675,31 @@
 <li>Storage credentials are present either in <code>.providers.json</code> or the matching <code>COPYOFFLOAD_*</code> environment variables.</li>
 <li>Vendor-specific fields are set when your selected storage vendor requires them.</li>
 <li>If you use SSH cloning, the ESXi host, user, and password are correct.</li>
-<li>If the offload path itself is the problem, inspect <code>vsphere-xcopy-volume-populator</code> logs in <code>openshift-mtv</code> in addition to the normal MTV controller logs.</li>
+<li>If the offload path itself is the problem, inspect the <code>forklift-volume-populator-controller</code> logs in <code>openshift-mtv</code> in addition to the normal MTV controller logs.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> Copy-offload failures are often configuration issues first, product issues second. Always verify the storage backend, datastore IDs, and vendor-specific fields before assuming the migration code is at fault.</p>
+<p><strong>Warning:</strong> Copy-offload failures are often configuration issues first, product issues second. Always verify the storage backend, datastore IDs, and vendor-specific fields
+before assuming the migration code is at fault.</p>
 </blockquote>
 <h2 id="expected-failures-and-hook-tests">Expected Failures and Hook Tests</h2>
 <p>Not every <code>MigrationPlanExecError</code> means something is wrong. This repo contains tests that intentionally expect migration failure and then validate how that failure happened.</p>
 <p>A good example is <code>test_post_hook_retain_failed_vm</code>, which expects the migration to fail and then checks whether the failure happened at the expected hook step:</p>
-<div class="highlight"><pre><span></span><code><span class="n">expected_result</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;expected_migration_result&quot;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><span class="n">expected_result</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"expected_migration_result"</span><span class="p">]</span>
 
-<span class="k">if</span> <span class="n">expected_result</span> <span class="o">==</span> <span class="s2">&quot;fail&quot;</span><span class="p">:</span>
-    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">MigrationPlanExecError</span><span class="p">):</span>
+<span class="k">if</span> <span class="n">expected_result</span> <span class="o">==</span> <span class="s2">"fail"</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">MigrationPlanExecError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc_info</span><span class="p">:</span>
         <span class="n">execute_migration</span><span class="p">(</span>
             <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
             <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
             <span class="n">plan</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span>
             <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
         <span class="p">)</span>
-    <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">should_check_vms</span> <span class="o">=</span> <span class="n">validate_hook_failure_and_check_vms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span> <span class="n">prepared_plan</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">should_check_vms</span> <span class="o">=</span> <span class="n">validate_hook_failure_and_check_vms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span> <span class="n">prepared_plan</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># Chain with original migration error so the root cause is visible in traceback</span>
+        <span class="n">e</span><span class="o">.</span><span class="n">__cause__</span> <span class="o">=</span> <span class="n">exc_info</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">raise</span>
 </code></pre></div>
 
 <p>Why this matters:</p>
@@ -586,10 +709,12 @@
 <li>The real question is often not “did it fail?” but “did it fail at the expected step?”</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> In class-based incremental tests, focus on the first real failure. Later tests in the same class may be marked <code>xfail</code> because the earlier step already failed.</p>
+<p><strong>Tip:</strong> In class-based incremental tests, focus on the first real failure. Later tests in the same class may be marked <code>xfail</code> because
+the earlier step already failed. <code>conftest.py</code> implements this by recording the first failed <code>incremental</code>-marked test and xfail-ing every
+later test in the same class.</p>
 </blockquote>
 <h2 id="best-places-to-inspect-when-migrations-fail">Best Places To Inspect When Migrations Fail</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Inspect This</th>
@@ -639,9 +764,9 @@
 <td>Plan or migration logic failures</td>
 </tr>
 <tr>
-<td><code>forklift-inventory</code> logs</td>
-<td>Inventory sync and source discovery issues</td>
-<td>VM lookup and provider inventory problems</td>
+<td><code>forklift-volume-populator-controller</code> logs</td>
+<td>Populator scheduling and throttling for volume copy</td>
+<td>Copy-offload and long-transfer stalls</td>
 </tr>
 <tr>
 <td>Target namespace events and pods</td>
@@ -654,17 +779,18 @@
 <td>External provider problems</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>A practical first command set is:</p>
 <ul>
 <li><code>oc logs -n openshift-mtv deployment/forklift-controller</code></li>
+<li><code>oc logs -n openshift-mtv deployment/forklift-volume-populator-controller</code></li>
 <li><code>oc get migration &lt;name&gt; -n &lt;namespace&gt; -o yaml</code></li>
 <li><code>oc get plan &lt;name&gt; -n &lt;namespace&gt; -o yaml</code></li>
 <li><code>oc get provider &lt;name&gt; -n &lt;namespace&gt; -o yaml</code></li>
 <li><code>oc get vm &lt;name&gt; -n &lt;namespace&gt; -o yaml</code></li>
 <li><code>oc get events -n &lt;namespace&gt; --sort-by='.lastTimestamp'</code></li>
 </ul>
-<p>For copy-offload runs, also inspect the volume populator logs in <code>openshift-mtv</code>.</p>
+<p><code>openshift-mtv</code> is the default <code>mtv_namespace</code>; pass <code>--tc=mtv_namespace:&lt;ns&gt;</code> to target a different operator namespace.</p>
 <h2 id="a-good-debugging-order">A Good Debugging Order</h2>
 <p>If you want one repeatable process, use this:</p>
 <ol>
@@ -673,8 +799,9 @@
 <li>Read <code>junit-report.xml</code> for the same test case and capture the resource names involved.</li>
 <li>Open <code>.data-collector/resources.json</code> and any must-gather output under <code>.data-collector/</code>.</li>
 <li>Inspect the <code>Plan</code>, <code>Migration</code>, and <code>Provider</code> CRs.</li>
-<li>Check <code>forklift-controller</code>, <code>forklift-inventory</code>, and target-namespace pod logs.</li>
-<li>If the migration succeeded but the test still failed, inspect the migrated VM, its PVCs, its VMI/launcher state, and guest-level connectivity instead of only looking at the controller.</li>
+<li>Check <code>forklift-controller</code>, <code>forklift-volume-populator-controller</code>, and target-namespace pod logs.</li>
+<li>If the migration succeeded but the test still failed, inspect the migrated VM, its PVCs, its VMI/launcher state, and guest-level connectivity instead of only looking at the
+   controller.</li>
 </ol>
 <p>That order lines up with how this repository itself reports and classifies failures, and it usually gets you to the root cause faster than starting from cluster logs alone.</p>
                 </div>
@@ -722,24 +849,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -785,5 +915,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

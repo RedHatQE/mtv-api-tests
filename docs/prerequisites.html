@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Prerequisites - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -64,7 +65,7 @@
 
                     <li>
                         <a href="prerequisites.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Prerequisites
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,28 +302,43 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="prerequisites">Prerequisites</h1>
-<p><code>mtv-api-tests</code> runs live end-to-end migrations. It talks to a real OpenShift cluster, a real MTV installation, and a real source provider. Before you run it, make sure the target cluster, source environment, storage, network, and RBAC are ready for destructive integration testing.</p>
+<p><code>mtv-api-tests</code> runs live end-to-end migrations. It talks to a real OpenShift cluster, a real MTV installation, and a real source provider.
+Before you run it, make sure the target cluster, source environment, storage, network, and RBAC are ready for destructive integration testing.</p>
 <blockquote>
-<p><strong>Warning:</strong> Run this suite only in a lab or other disposable environment. The tests create and delete <code>Namespace</code>, <code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, <code>Migration</code>, <code>Hook</code>, <code>Secret</code>, <code>NetworkAttachmentDefinition</code>, <code>Pod</code>, and <code>VirtualMachine</code> resources. Some scenarios also clone source VMs, change source power state, add disks, and create snapshots.</p>
+<p><strong>Warning:</strong> Run this suite only in a lab or other disposable environment.
+The tests create and delete <code>Namespace</code>, <code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, <code>Migration</code>, <code>Hook</code>, <code>Secret</code>,
+<code>NetworkAttachmentDefinition</code>, <code>Pod</code>, and <code>VirtualMachine</code> resources.
+Some scenarios also clone source VMs, change source power state, add disks, and create snapshots.</p>
 </blockquote>
 <p>Example test definitions in <code>tests/tests_config/config.py</code> show that clearly:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_thin_snapshots_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_copyoffload_thin_snapshots_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;snapshots&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+            <span class="s2">"snapshots"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>  <span class="c1"># Number of snapshots to create on the source VM before migration</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
 <p>Choose source VMs that match the scenario you plan to run. Do not point the suite at production VMs or production-only datastores.</p>
+<h2 id="local-tooling">Local tooling</h2>
+<ul>
+<li>Python 3.12 or 3.13, and <a href="https://docs.astral.sh/uv/"><code>uv</code></a> for environment and test execution.</li>
+<li><code>oc</code> for cluster inspection, and for the <code>oc adm must-gather</code> call the data collector makes on failures.</li>
+<li>Podman or Docker if you run the suite from the container image.</li>
+<li><code>virtctl</code> is not required. The suite downloads it from the cluster when it is missing from <code>PATH</code>.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> Jenkins and rootcoz are optional. Jenkins orchestration is used by the project team, but nothing in the
+suite requires it. rootcoz is only used by the optional <code>--analyze-with-ai</code> flag; without it the suite logs a
+warning and disables AI analysis.</p>
+</blockquote>
 <h2 id="minimum-environment">Minimum environment</h2>
 <p>Every run needs all of the following:</p>
 <ul>
@@ -332,31 +349,51 @@
 <li>A usable destination <code>storage_class</code>.</li>
 <li>A <code>source_provider</code> value that matches a key in <code>.providers.json</code>.</li>
 </ul>
-<p>The cluster client is created from these settings:</p>
+<p>The cluster client resolves credentials from <code>pytest-testconfig</code> first and falls back to environment variables:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_host&quot;</span><span class="p">)</span>
-    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_username&quot;</span><span class="p">)</span>
-    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_password&quot;</span><span class="p">)</span>
-    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;insecure_verify_skip&quot;</span><span class="p">)</span>
-    <span class="n">_client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">host</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">host</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_HOST"</span><span class="p">)</span>
+
+    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_USERNAME"</span><span class="p">)</span>
+
+    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">password</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">password</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_PASSWORD"</span><span class="p">)</span>
+    <span class="n">verify_ssl_env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_VERIFY_SSL"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">verify_ssl_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">verify_ssl_env</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"true"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">,</span> <span class="s2">"yes"</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"insecure_verify_skip"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">insecure_verify_skip</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
 </code></pre></div>
 
+<blockquote>
+<p><strong>Note:</strong> <code>CLUSTER_VERIFY_SSL</code> has inverted semantics relative to <code>insecure_verify_skip</code>: <code>CLUSTER_VERIFY_SSL=true</code>
+means <code>insecure_verify_skip=False</code>. It wins over the <code>--tc</code> value when both are set.</p>
+</blockquote>
 <p>The built-in test config also defines the key global defaults:</p>
-<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>
-<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>
-<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
-<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"true"</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"false"</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"openshift-mtv"</span>
+<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
 <span class="n">snapshots_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">mins_before_cutover</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
 <span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Note:</strong> <code>insecure_verify_skip</code> controls TLS verification for the OpenShift API connection. <code>source_provider_insecure_skip_verify</code> is separate and defaults to <code>false</code>, so source-provider certificate verification is on unless you change it.</p>
+<p><strong>Note:</strong> <code>insecure_verify_skip</code> controls TLS verification for the OpenShift API connection.
+<code>source_provider_insecure_skip_verify</code> is separate and defaults to <code>false</code>, so source-provider certificate verification is on unless you change it.</p>
 </blockquote>
 <p>Before tests start, the suite checks <code>forklift-*</code> pods in the MTV namespace and fails if the <code>forklift-controller</code> pod is missing or any <code>forklift</code> pod is not healthy.</p>
 <h2 id="source-provider-configuration">Source provider configuration</h2>
-<p>The code supports these source provider types:</p>
-<table>
+<p>The code supports these source provider types, taken from the <code>oneOf</code> branches in <code>providers_schema.json</code>:</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Source provider</th>
@@ -396,53 +433,75 @@
 <td>No</td>
 <td>No</td>
 </tr>
+<tr>
+<td><code>hyperv</code></td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+</tr>
 </tbody>
-</table>
-<p>Your <code>.providers.json</code> file must exist, must be non-empty, and must contain a key that exactly matches the <code>source_provider</code> value you pass at runtime.</p>
+</table></div>
+<p>vSphere also supports direct ESXi connections. Set <code>"endpoint_type": "esxi"</code> on the provider entry and point
+<code>clone_provider</code> at a separate vCenter entry, because cloning still goes through vCenter.</p>
+<p>Your <code>.providers.json</code> file must exist, must be non-empty, and must contain a key that exactly matches the <code>source_provider</code> value you pass at runtime.
+The loader raises <code>ProviderEmptyContentError</code> on an empty file and <code>ValueError</code> when the top level is not a JSON object.</p>
+<p>Three variables decide where the file is read from, in priority order: <code>--providers-json</code>, then <code>PROVIDERS_JSON_PATH</code>, then <code>.providers.json</code> in the current working directory.</p>
 <p>A trimmed example from <code>.providers.json.example</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;vsphere&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vsphere&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER VERSION&gt;&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SERVER FQDN/IP&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;api_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;USERNAME&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_linux_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS USERNAME&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_linux_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;LINUX VMS PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_win_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS USERNAME&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;guest_vm_win_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WINDOWS VMS PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;vddk_init_image&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;</span>
+<span class="w">  </span><span class="nt">"vsphere"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vsphere"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SERVER VERSION&gt;"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"fqdn"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SERVER FQDN/IP"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"api_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SERVER FQDN/IP&gt;/sdk"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"username"</span><span class="p">:</span><span class="w"> </span><span class="s2">"USERNAME"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PASSWORD"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_linux_user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LINUX VMS USERNAME"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_linux_password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LINUX VMS PASSWORD"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_win_user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"WINDOWS VMS USERNAME"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"guest_vm_win_password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"WINDOWS VMS PASSWORD"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"luks_passphrase"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LUKS DISK ENCRYPTION PASSPHRASE"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"vddk_init_image"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;PATH TO VDDK INIT IMAGE&gt;"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"endpoint_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vcenter"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> <code>.providers.json.example</code> is only an example. The real <code>.providers.json</code> is loaded with <code>json.loads()</code>, so it must be strict JSON. Remove example comments before you use it.</p>
+<p><strong>Warning:</strong> <code>.providers.json.example</code> is only an example. The real <code>.providers.json</code> is loaded with <code>json.loads()</code>, so it must be strict JSON.
+Remove example comments before you use it.</p>
 </blockquote>
 <p>Provider-specific expectations:</p>
 <ul>
-<li><code>vsphere</code> needs <code>fqdn</code>, <code>api_url</code>, username/password, and usually guest credentials for post-migration validation. If your MTV deployment expects VDDK, include <code>vddk_init_image</code>.</li>
+<li><code>vsphere</code> needs <code>fqdn</code>, <code>api_url</code>, username/password, and usually guest credentials for post-migration validation.</li>
+<li>If your MTV deployment expects VDDK, include <code>vddk_init_image</code>. LUKS tests also read <code>luks_passphrase</code>.</li>
 <li><code>ovirt</code> / RHV needs an API URL and username/password.</li>
 <li><code>openstack</code> needs extra auth fields: <code>project_name</code>, <code>user_domain_name</code>, <code>region_name</code>, <code>user_domain_id</code>, and <code>project_domain_id</code>.</li>
 <li><code>openshift</code> uses the local cluster as the source provider.</li>
 <li><code>ova</code> expects <code>api_url</code> to point at the OVA source location.</li>
+<li><code>hyperv</code> needs the provider fields plus <code>smb_url</code>, and optionally <code>smb_user</code> and <code>smb_password</code> when the SMB share uses different credentials.</li>
 </ul>
-<p>Post-migration validation also uses guest credentials from <code>.providers.json</code>. Linux checks read <code>guest_vm_linux_user</code> and <code>guest_vm_linux_password</code>. Windows checks read <code>guest_vm_win_user</code> and <code>guest_vm_win_password</code>.</p>
 <blockquote>
-<p><strong>Note:</strong> With the default <code>source_provider_insecure_skip_verify: "false"</code>, the suite validates source-provider TLS. vSphere and OpenStack provider setup fetch CA data from <code>fqdn:443</code>, and RHV always pulls a CA certificate. Use insecure provider connections only in lab environments where that is acceptable.</p>
+<p><strong>Tip:</strong> <code>mtv-api-tests generate</code> writes <code>.providers.json</code> for you with <code>0600</code> permissions, so the
+credentials never sit in a file you created by hand.</p>
+</blockquote>
+<p>Post-migration validation also uses guest credentials from <code>.providers.json</code>. Linux checks read <code>guest_vm_linux_user</code> and <code>guest_vm_linux_password</code>.
+Windows checks read <code>guest_vm_win_user</code> and <code>guest_vm_win_password</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> With the default <code>source_provider_insecure_skip_verify: "false"</code>, the suite validates source-provider TLS.
+vSphere and OpenStack provider setup fetch CA data from <code>fqdn:443</code>, and RHV always pulls a CA certificate.
+Use insecure provider connections only in lab environments where that is acceptable.</p>
 </blockquote>
 <p>If you use OpenShift as the source provider, the suite expects OpenShift Virtualization template assets that match the hard-coded source VM fixture:</p>
 <div class="highlight"><pre><span></span><code><span class="n">create_and_store_resource</span><span class="p">(</span>
     <span class="n">resource</span><span class="o">=</span><span class="n">VirtualMachineFromInstanceType</span><span class="p">,</span>
     <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
-    <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">vm_dict</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}{</span><span class="n">vm_name_suffix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">vm_dict</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}{</span><span class="n">vm_name_suffix</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
     <span class="n">namespace</span><span class="o">=</span><span class="n">namespace</span><span class="p">,</span>
     <span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">,</span>
-    <span class="n">instancetype_name</span><span class="o">=</span><span class="s2">&quot;u1.small&quot;</span><span class="p">,</span>
-    <span class="n">preference_name</span><span class="o">=</span><span class="s2">&quot;rhel.9&quot;</span><span class="p">,</span>
-    <span class="n">datasource_name</span><span class="o">=</span><span class="s2">&quot;rhel9&quot;</span><span class="p">,</span>
-    <span class="n">storage_size</span><span class="o">=</span><span class="s2">&quot;30Gi&quot;</span><span class="p">,</span>
+    <span class="n">instancetype_name</span><span class="o">=</span><span class="s2">"u1.small"</span><span class="p">,</span>
+    <span class="n">preference_name</span><span class="o">=</span><span class="s2">"rhel.9"</span><span class="p">,</span>
+    <span class="n">datasource_name</span><span class="o">=</span><span class="s2">"rhel9"</span><span class="p">,</span>
+    <span class="n">storage_size</span><span class="o">=</span><span class="s2">"30Gi"</span><span class="p">,</span>
     <span class="n">additional_networks</span><span class="o">=</span><span class="p">[</span><span class="n">network_name</span><span class="p">],</span>
 <span class="p">)</span>
 </code></pre></div>
@@ -453,8 +512,10 @@
 <li>The <code>u1.small</code> <code>VirtualMachineClusterInstancetype</code>.</li>
 <li>The <code>rhel.9</code> <code>VirtualMachineClusterPreference</code>.</li>
 </ul>
+<p>The helper also sets a <code>rhel</code> user with password <code>123456</code> via cloud-init and starts each VM it creates, so the suite can reach the guests over SSH.</p>
 <h2 id="storage-prerequisites">Storage prerequisites</h2>
-<p>The <code>storage_class</code> you choose must be a real, usable storage class for OpenShift Virtualization VM disks. The suite validates that migrated disks land on that exact storage class after migration.</p>
+<p>The <code>storage_class</code> you choose must be a real, usable storage class for OpenShift Virtualization VM disks.
+The suite validates that migrated disks land on that exact storage class after migration.</p>
 <p>For standard cold and warm migration tests, that usually means:</p>
 <ul>
 <li>the storage class can provision PVCs for KubeVirt,</li>
@@ -470,28 +531,28 @@
 </ul>
 <p>The example provider file shows the copy-offload fields the suite expects:</p>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;vsphere-copy-offload&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vsphere&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER VERSION&gt;&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SERVER FQDN/IP&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;api_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;USERNAME&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;copyoffload&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;storage_vendor_product&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ontap&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;datastore_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;datastore-12345&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;secondary_datastore_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;datastore-67890&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;non_xcopy_datastore_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;datastore-99999&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;default_vm_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rhel9-template&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;storage_hostname&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;storage.example.com&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;storage_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;admin&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;storage_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-password-here&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;ontap_svm&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vserver-name&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;esxi_clone_method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ssh&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;esxi_host&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-esxi-host.example.com&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;esxi_user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;root&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;esxi_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-esxi-password&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;rdm_lun_uuid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;</span>
+<span class="w">  </span><span class="nt">"vsphere-copy-offload"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vsphere"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SERVER VERSION&gt;"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"fqdn"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SERVER FQDN/IP"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"api_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SERVER FQDN/IP&gt;/sdk"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"username"</span><span class="p">:</span><span class="w"> </span><span class="s2">"USERNAME"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PASSWORD"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"copyoffload"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"storage_vendor_product"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ontap"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"datastore_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"datastore-12345"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"secondary_datastore_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"datastore-67890"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"non_xcopy_datastore_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"datastore-99999"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"default_vm_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"rhel9-template"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"storage_hostname"</span><span class="p">:</span><span class="w"> </span><span class="s2">"storage.example.com"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"storage_username"</span><span class="p">:</span><span class="w"> </span><span class="s2">"admin"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"storage_password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"your-password-here"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"ontap_svm"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vserver-name"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"esxi_clone_method"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ssh"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"esxi_host"</span><span class="p">:</span><span class="w"> </span><span class="s2">"your-esxi-host.example.com"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"esxi_user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"root"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"esxi_password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"your-esxi-password"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"rdm_lun_uuid"</span><span class="p">:</span><span class="w"> </span><span class="s2">"naa.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -501,22 +562,62 @@
 <ul>
 <li><code>ontap</code></li>
 <li><code>vantara</code></li>
-<li><code>primera3par</code></li>
 <li><code>pureFlashArray</code></li>
 <li><code>powerflex</code></li>
 <li><code>powermax</code></li>
 <li><code>powerstore</code></li>
+<li><code>primera3par</code></li>
 <li><code>infinibox</code></li>
 <li><code>flashsystem</code></li>
 </ul>
+<p><code>ontap</code>, <code>vantara</code>, <code>pureFlashArray</code>, <code>powerflex</code>, and <code>powermax</code> each need one extra field. The other four need only the common fields:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Vendor</th>
+<th>Extra field</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ontap</code></td>
+<td><code>ontap_svm</code></td>
+</tr>
+<tr>
+<td><code>vantara</code></td>
+<td><code>vantara_storage_id</code>, <code>vantara_storage_port</code>, <code>vantara_hostgroup_id_list</code></td>
+</tr>
+<tr>
+<td><code>pureFlashArray</code></td>
+<td><code>pure_cluster_prefix</code></td>
+</tr>
+<tr>
+<td><code>powerflex</code></td>
+<td><code>powerflex_system_id</code></td>
+</tr>
+<tr>
+<td><code>powermax</code></td>
+<td><code>powermax_symmetrix_id</code></td>
+</tr>
+</tbody>
+</table></div>
 <p>Some copy-offload scenarios need extra fields:</p>
 <ul>
 <li><code>secondary_datastore_id</code> for multi-datastore tests</li>
 <li><code>non_xcopy_datastore_id</code> for mixed XCOPY/non-XCOPY tests</li>
-<li><code>rdm_lun_uuid</code> for RDM disk tests</li>
+<li><code>rdm_lun_uuid</code> for RDM disk tests, and <code>datastore_id</code> must point at a VMFS datastore for RDM to work</li>
+<li><code>dedicated_migration_hosts</code> for the dedicated-migration-host scenario</li>
+<li><code>resource_pool</code> to pin cloned VM placement, if auto-selection does not pick a compatible pool</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> Copy-offload is not an NFS scenario. The project’s copy-offload guide requires shared SAN/block storage and explicitly states that NFS is not supported for copy-offload.</p>
+<p><strong>Warning:</strong> <code>datastore_id</code> and <code>secondary_datastore_id</code> must live on the same storage array and both support
+XCOPY/VAAI primitives, otherwise copy-offload silently falls back to the regular transfer path.</p>
+</blockquote>
+<p>For array-specific Secret keys the vendor fields do not cover, add <code>storage_secret_extra</code> to the <code>copyoffload</code>
+block. Keys must match the Forklift Secret <code>stringData</code> names, which are uppercase.</p>
+<blockquote>
+<p><strong>Warning:</strong> Copy-offload is not an NFS scenario.
+The project’s copy-offload guide requires shared SAN/block storage and explicitly states that NFS is not supported for copy-offload.</p>
 </blockquote>
 <p>If you set <code>storage_class</code> to <code>nfs</code>, the suite patches the cluster <code>nfs</code> <code>StorageProfile</code> to <code>ReadWriteOnce</code> and <code>Filesystem</code> before running.</p>
 <blockquote>
@@ -531,18 +632,18 @@
 </ul>
 <p>That behavior comes directly from the network mapping helper:</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">pod_only</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-    <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pod&quot;</span><span class="p">}</span>
+    <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"pod"</span><span class="p">}</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
-        <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
-        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;multus&quot;</span><span class="p">,</span>
+        <span class="s2">"name"</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
+        <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
+        <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"multus"</span><span class="p">,</span>
     <span class="p">}</span>
 </code></pre></div>
 
 <p>The default <code>Multus</code> CNI config created by the suite is a bridge called <code>cnv-bridge</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">bridge_type_and_name</span> <span class="o">=</span> <span class="s2">&quot;cnv-bridge&quot;</span>
-<span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;cniVersion&quot;</span><span class="p">:</span> <span class="s2">&quot;0.3.1&quot;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;bridge&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><span class="n">bridge_type_and_name</span> <span class="o">=</span> <span class="s2">"cnv-bridge"</span>
+<span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"cniVersion"</span><span class="p">:</span> <span class="s2">"0.3.1"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"bridge"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">bridge_type_and_name</span><span class="si">}</span><span class="s2">"</span><span class="p">}</span>
 </code></pre></div>
 
 <p>In practice:</p>
@@ -579,16 +680,69 @@
 </ul>
 <p>The copy-offload credential helper lets you supply sensitive values either in <code>.providers.json</code> or through environment variables, with environment variables taking precedence.</p>
 <blockquote>
-<p><strong>Tip:</strong> Useful copy-offload overrides include <code>COPYOFFLOAD_STORAGE_HOSTNAME</code>, <code>COPYOFFLOAD_STORAGE_USERNAME</code>, <code>COPYOFFLOAD_STORAGE_PASSWORD</code>, <code>COPYOFFLOAD_ESXI_HOST</code>, <code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code>.</p>
+<p><strong>Tip:</strong> Useful copy-offload overrides include <code>COPYOFFLOAD_STORAGE_HOSTNAME</code>, <code>COPYOFFLOAD_STORAGE_USERNAME</code>, <code>COPYOFFLOAD_STORAGE_PASSWORD</code>, <code>COPYOFFLOAD_ESXI_HOST</code>,
+<code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code>.</p>
 </blockquote>
 <p>For MTV versions earlier than 2.11, copy-offload must already be enabled on the <code>ForkliftController</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">feature_copy_offload</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;true&#39;</span>
+<span class="w">  </span><span class="nt">feature_copy_offload</span><span class="p">:</span><span class="w"> </span><span class="s">'true'</span>
 </code></pre></div>
 
+<h3 id="luks-encrypted-disks">LUKS-encrypted disks</h3>
+<p><code>tests/luks/test_luks_cold_migration.py</code> is <code>vSphere</code>-only and marked <code>tier1</code>. It needs:</p>
+<ul>
+<li>a source VM whose disks are LUKS-encrypted,</li>
+<li>a LUKS passphrase, either in the provider field <code>luks_passphrase</code>, or overridden per VM with a <code>luks_passphrase</code> key inside that VM's <code>virtual_machines</code> entry,</li>
+<li>one of the two built-in plans, <code>test_luks_cold_migration</code> or <code>test_luks_cold_migration_wrong_key</code>.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> The wrong-key plan deliberately supplies a bad passphrase and expects the migration to fail. It is a
+negative test, not a broken lab.</p>
+</blockquote>
+<h3 id="xfs-source-and-target-disks">XFS source and target disks</h3>
+<p><code>tests/cold/test_cold_migration_xfs.py</code> and <code>tests/warm/test_warm_migration_xfs.py</code> are <code>vSphere</code>-only and marked <code>tier1</code>. They need:</p>
+<ul>
+<li>an XFS-formatted source VM matching <code>test_cold_migration_xfs</code> or <code>test_warm_migration_xfs</code>,</li>
+<li><code>xfs_compatibility: True</code> in the plan, plus an <code>xfs_check</code> block naming the on-guest command, mount point, and expected output,</li>
+<li>SSH access to the migrated guest, because the XFS check runs inside the VM.</li>
+</ul>
+<p>The built-in plans check <code>crc=0</code> from <code>/usr/sbin/xfs_info</code> on <code>/</code> and on a secondary partition such as <code>/sdb1</code>.</p>
+<h3 id="deep-inspection">Deep Inspection</h3>
+<p><code>tests/deep_inspection/</code> is <code>vSphere</code>-only and marked <code>deep_inspection</code>. It runs MTV deep inspection / Conversion CRs and needs:</p>
+<ul>
+<li>a source VM matching <code>test_standalone_di_vsphere</code> or <code>test_warm_di_concerns</code>,</li>
+<li>the deep-inspection feature available in your MTV version,</li>
+<li>an MTV version new enough to surface the capture results the suite asserts on.</li>
+</ul>
+<h3 id="ca-certificate-field">CA certificate field</h3>
+<p><code>tests/cold/test_ca_crt_migration.py</code> is marked <code>ca_crt</code> and <code>tier1</code>.
+It is skipped at collection time for <code>openshift</code> and <code>ova</code> providers, because those provider types do not carry a <code>ca.crt</code> field in their provider secrets.</p>
+<h3 id="shared-disks">Shared disks</h3>
+<p><code>tests/shared_disk/</code> is <code>vSphere</code>-only and marked <code>shared_disk</code>.
+Both plans need paired source VMs: one with <code>migrate_shared_disks: True</code> and one with <code>migrate_shared_disks: False</code>, so the suite can verify that shared-disk policy is honored.</p>
+<h3 id="hooks-and-aap">Hooks and AAP</h3>
+<p><code>tests/hooks/</code> covers post-hook failure handling and AAP (Ansible Automation Platform) hook integration.
+The AAP test is <code>vSphere</code>-only and needs a reachable AWX/AAP instance, including its API token and a project with the pre-hook and post-hook job templates.
+Hook scenarios also leave a failed migration behind on purpose; use <code>--skip-teardown</code> when you want to inspect it.</p>
+<h3 id="mtv-operator-upgrade">MTV operator upgrade</h3>
+<p><code>tests/upgrade/test_upgrade_migration.py</code> is marked <code>upgrade</code> and <code>vSphere</code>-only. It clones the <code>mtv-autodeploy</code> repository at test time and runs its upgrade script, so it needs:</p>
+<ul>
+<li><code>git</code> available where pytest runs,</li>
+<li><code>--tc=upgrade_repo_url:&lt;url&gt;</code>, <code>--tc=upgrade_repo_ref:&lt;ref&gt;</code>, and <code>--tc=upgrade_script_path:&lt;relative-path&gt;</code>; the fixture raises <code>ValueError</code> if any of the three is missing,</li>
+<li>outbound network access to clone that repository,</li>
+<li>a cluster you are willing to upgrade, since the operator is left on the newer version after the test.</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> This is the only scenario that mutates the cluster beyond per-test namespaces, and the only one that
+needs config keys that are not in <code>tests/tests_config/config.py</code>. Do not run it on a shared cluster.</p>
+</blockquote>
+<h3 id="copy-offload-snapshots">Copy-offload snapshots</h3>
+<p><code>tests/copyoffload/test_copyoffload_migration.py</code> contains snapshot scenarios marked <code>copyoffload_snapshots</code>.
+They need a vSphere provider with XCOPY-capable storage and <code>snapshots: 2</code> set on the plan VM, which the suite creates and deletes on the source.</p>
 <h3 id="remote-scenarios">Remote scenarios</h3>
 <p>Tests marked <code>remote</code> are skipped unless <code>remote_ocp_cluster</code> is set.</p>
-<p>In the current fixture implementation, that value is also validated against the connected cluster host string, so set it deliberately and make sure it matches your target environment naming.</p>
+<p>In the current fixture implementation, that value is also validated against the connected cluster host string, so set it deliberately and make sure it matches your target
+environment naming.</p>
 <h3 id="scheduling-and-labeling-scenarios">Scheduling and labeling scenarios</h3>
 <p>The comprehensive cold scenario can:</p>
 <ul>
@@ -605,8 +759,17 @@
 <li>permission to create resources in any custom target namespace.</li>
 </ul>
 <p>The node-selection helper prefers Prometheus metrics, but it falls back to the first worker node if monitoring access is not available.</p>
+<h2 id="provider-type-skipping">Provider-type skipping</h2>
+<p>The suite decides which tests apply at collection time, by reading the <code>type</code> field of the provider you selected in <code>.providers.json</code>:</p>
+<ul>
+<li>warm migration tests are skipped for <code>openstack</code>, <code>openshift</code>, <code>ova</code>, and <code>hyperv</code>,</li>
+<li>tests marked <code>copyoffload</code>, <code>shared_disk</code>, <code>deep_inspection</code>, <code>aap</code>, or <code>luks</code> are skipped for any non-vSphere provider,</li>
+<li><code>ca_crt</code> tests are skipped for <code>openshift</code> and <code>ova</code>.</li>
+</ul>
+<p>This means you can point a full run at one provider without hand-picking tests.</p>
 <h2 id="permission-prerequisites">Permission prerequisites</h2>
-<p>The easiest lab setup is <code>cluster-admin</code>. In shared environments, least-privilege RBAC is possible, but it still needs to cover the resources the suite actually creates, patches, reads, and deletes.</p>
+<p>The easiest lab setup is <code>cluster-admin</code>.
+In shared environments, least-privilege RBAC is possible, but it still needs to cover the resources the suite actually creates, patches, reads, and deletes.</p>
 <p>At minimum, the account running the suite should be able to:</p>
 <ul>
 <li>Create and delete <code>Namespace</code> resources.</li>
@@ -618,6 +781,8 @@
 <li>Read <code>ClusterVersion</code>.</li>
 <li>List and patch <code>Node</code> resources if you run the scheduling tests.</li>
 <li>Create resources in any custom <code>vm_target_namespace</code> or <code>multus_namespace</code> you configure.</li>
+<li>Update the MTV operator subscription if you run the <code>upgrade</code> scenario.</li>
+<li>Read and manage <code>Node</code> objects in the destination cluster for the worker-node labeling fixtures.</li>
 </ul>
 <p>Source-side permissions matter too. Depending on the provider and scenario, the suite may also need to:</p>
 <ul>
@@ -629,18 +794,26 @@
 <li>attach extra test disks.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> Cleanup is best-effort, not a guarantee. If the run is interrupted, if you use <code>--skip-teardown</code>, or if the test account cannot clean up provider-side clones or snapshots, test artifacts can remain behind.</p>
+<p><strong>Warning:</strong> Cleanup is best-effort, not a guarantee.
+If the run is interrupted, if you use <code>--skip-teardown</code>, or if the test account cannot clean up provider-side clones or snapshots, test artifacts can remain behind.</p>
 </blockquote>
 <h2 id="secure-configuration-handoff">Secure configuration handoff</h2>
-<p>If you run the suite in-cluster as an OpenShift <code>Job</code>, the project already includes a working secret example that packages the core prerequisites:</p>
+<p>If you run the suite in-cluster as an OpenShift <code>Job</code>, the supported path is to let the CLI generate the manifest for you:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w"> </span>generate
+uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w"> </span>run<span class="w"> </span>--mode<span class="w"> </span>job
+</code></pre></div>
+
+<p><code>generate</code> writes a self-contained <code>mtv-api-tests-manifests.yaml</code> holding a <code>Namespace</code>, a <code>Secret</code>, and a <code>Job</code>, with <code>0600</code> permissions.
+The Secret carries <code>providers.json</code>, <code>cluster_host</code>, <code>cluster_username</code>, <code>cluster_password</code>, and <code>cluster_verify_ssl</code>, all base64 encoded.</p>
+<p>If you prefer to build the Secret yourself, this is the same minimum set:</p>
 <div class="highlight"><pre><span></span><code>oc<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>mtv-tests
 
-<span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">&quot;Enter cluster password: &quot;</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
+<span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">"Enter cluster password: "</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
 oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>mtv-test-config<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--from-file<span class="o">=</span>providers.json<span class="o">=</span>.providers.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_host</span><span class="o">=</span>https://api.your-cluster.com:6443<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_username</span><span class="o">=</span>kubeadmin<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_password</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_password</span><span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-n<span class="w"> </span>mtv-tests
 <span class="nb">unset</span><span class="w"> </span>CLUSTER_PASSWORD
 </code></pre></div>
@@ -657,7 +830,12 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
 <li><code>source_provider</code></li>
 <li><code>storage_class</code></li>
 </ul>
-<p>If all of the prerequisites above are in place, the suite can create its migration resources, run real MTV workflows, validate the results, and clean up in the way the codebase expects.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>generate</code> bakes credentials into <code>mtv-api-tests-manifests.yaml</code>. It is listed in <code>.dockerignore</code>
+and <code>.gitignore</code>; do not commit it.</p>
+</blockquote>
+<p>If all of the prerequisites above are in place, the suite can create its migration resources, run real MTV workflows, validate the results, and clean up in the way the codebase
+expects.</p>
                 </div>
             </article>
             <nav class="page-nav">
@@ -680,6 +858,7 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
                     <h3>On this page</h3>
                     <div class="toc">
 <ul>
+<li><a href="#local-tooling">Local tooling</a></li>
 <li><a href="#minimum-environment">Minimum environment</a></li>
 <li><a href="#source-provider-configuration">Source provider configuration</a></li>
 <li><a href="#storage-prerequisites">Storage prerequisites</a></li>
@@ -687,10 +866,19 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
 <li><a href="#optional-scenario-prerequisites">Optional scenario prerequisites</a><ul>
 <li><a href="#warm-migration">Warm migration</a></li>
 <li><a href="#copy-offload">Copy-offload</a></li>
+<li><a href="#luks-encrypted-disks">LUKS-encrypted disks</a></li>
+<li><a href="#xfs-source-and-target-disks">XFS source and target disks</a></li>
+<li><a href="#deep-inspection">Deep Inspection</a></li>
+<li><a href="#ca-certificate-field">CA certificate field</a></li>
+<li><a href="#shared-disks">Shared disks</a></li>
+<li><a href="#hooks-and-aap">Hooks and AAP</a></li>
+<li><a href="#mtv-operator-upgrade">MTV operator upgrade</a></li>
+<li><a href="#copy-offload-snapshots">Copy-offload snapshots</a></li>
 <li><a href="#remote-scenarios">Remote scenarios</a></li>
 <li><a href="#scheduling-and-labeling-scenarios">Scheduling and labeling scenarios</a></li>
 </ul>
 </li>
+<li><a href="#provider-type-skipping">Provider-type skipping</a></li>
 <li><a href="#permission-prerequisites">Permission prerequisites</a></li>
 <li><a href="#secure-configuration-handoff">Secure configuration handoff</a></li>
 </ul>
@@ -699,24 +887,27 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -762,5 +953,6 @@ oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> <
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

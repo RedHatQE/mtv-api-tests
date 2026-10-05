@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supported Providers And Scenarios - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -50,7 +51,7 @@
 
                     <li>
                         <a href="supported-providers-and-scenarios.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Supported Providers And Scenarios
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,36 +302,49 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="supported-providers-and-scenarios">Supported Providers And Scenarios</h1>
-<p><code>mtv-api-tests</code> is an integration test suite for real MTV migrations into OpenShift Virtualization. The support matrix in this repository comes from three places: provider profiles in <code>.providers.json</code>, scenario definitions in <code>tests/tests_config/config.py</code>, and pytest markers in <code>pytest.ini</code>.</p>
+<p><code>mtv-api-tests</code> is an integration test suite for real MTV migrations into OpenShift Virtualization. The support matrix in this repository comes from three places: provider profiles
+in <code>.providers.json</code>, scenario definitions in <code>tests/tests_config/config.py</code>, and pytest markers in <code>pytest.ini</code>. Collection-time skipping in <code>conftest.py</code> then narrows the matrix
+further, based on the provider you actually configure.</p>
 <h2 id="supported-source-providers">Supported Source Providers</h2>
-<p>The <code>source_provider</code> setting points to a named profile in <code>.providers.json</code>. That means you can keep multiple profiles for the same platform, such as different vSphere versions or labs, and select the one you want by profile name.</p>
-<div class="highlight"><pre><span></span><code>  &quot;vsphere&quot;: {
-    &quot;type&quot;: &quot;vsphere&quot;,
-    &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-    &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-    &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-    &quot;username&quot;: &quot;USERNAME&quot;,
-    &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-    &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-    &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
-    &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
-    &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
-    &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+<p>The <code>source_provider</code> setting points to a named profile in <code>.providers.json</code>. That means you can keep multiple profiles for the same platform, such as different vSphere versions or
+labs, and select the one you want by profile name.</p>
+<div class="highlight"><pre><span></span><code>  "$schema": "https://raw.githubusercontent.com/RedHatQE/mtv-api-tests/main/providers_schema.json",
+  "vsphere": {
+    "type": "vsphere",
+    "version": "&lt;SERVER VERSION&gt;",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",  # pragma: allowlist secret
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+    "guest_vm_win_user": "WINDOWS VMS USERNAME",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+    "luks_passphrase": "LUKS DISK ENCRYPTION PASSPHRASE",  # pragma: allowlist secret
+    "vddk_init_image": "&lt;PATH TO VDDK INIT IMAGE&gt;",
+    "endpoint_type": "vcenter",
   },
-
-  &quot;vsphere-copy-offload&quot;: {
-    &quot;type&quot;: &quot;vsphere&quot;,
-    &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-    &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-    &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-    &quot;username&quot;: &quot;USERNAME&quot;,
-    &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-    // ... same guest credentials ...
-    &quot;copyoffload&quot;: {
 </code></pre></div>
 
-<p>The shipped example file also includes profiles for <code>ovirt</code>, <code>openstack</code>, <code>openshift</code>, and <code>ova</code>.</p>
-<table>
+<p>Copy-offload is the same provider type with an extra section:</p>
+<div class="highlight"><pre><span></span><code>  "vsphere-copy-offload": {
+    "type": "vsphere",
+    "version": "&lt;SERVER VERSION&gt;",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",  # pragma: allowlist secret
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+    "guest_vm_win_user": "WINDOWS VMS USERNAME",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+    "copyoffload": {
+</code></pre></div>
+
+<p>The shipped example file also includes <code>vsphere-esxi</code>, <code>ovirt</code>, <code>openstack</code>, <code>openshift</code>, <code>ova</code>, and <code>hyperv</code> profiles.</p>
+<p>The <code>type</code> values come from the Forklift provider-type constants: <code>vsphere</code>, <code>openshift</code>, <code>ovirt</code>, <code>ova</code>, <code>openstack</code>, and
+<code>hyperv</code>. The provider adapters in <code>libs/providers/</code> map one-to-one onto them.</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Source provider</th>
@@ -342,20 +357,28 @@
 </thead>
 <tbody>
 <tr>
-<td>VMware vSphere</td>
+<td>VMware vSphere (vCenter)</td>
 <td><code>vsphere</code></td>
 <td>Yes</td>
 <td>Yes</td>
 <td>Yes</td>
-<td>This is the broadest coverage area in the suite. Copy-offload is implemented as a vSphere profile with an extra <code>copyoffload</code> section.</td>
+<td>This is the broadest coverage area in the suite. Copy-offload is a vSphere profile with an extra <code>copyoffload</code> section.</td>
+</tr>
+<tr>
+<td>VMware ESXi</td>
+<td><code>vsphere</code> with <code>"endpoint_type": "esxi"</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>No</td>
+<td>A standalone host cannot clone, so <code>clone_provider</code> names the vCenter profile that clones.</td>
 </tr>
 <tr>
 <td>RHV / oVirt</td>
 <td><code>ovirt</code></td>
 <td>Yes</td>
-<td>Yes, with extra suite gating</td>
+<td>Yes</td>
 <td>No</td>
-<td>Standard MTV cold and warm scenarios exist in the codebase.</td>
+<td>Cold, warm, comprehensive, and post-hook scenarios exist for RHV.</td>
 </tr>
 <tr>
 <td>OpenStack</td>
@@ -363,7 +386,7 @@
 <td>Yes</td>
 <td>No</td>
 <td>No</td>
-<td>Warm tests explicitly skip this provider family.</td>
+<td>Warm tests are skipped for this provider family.</td>
 </tr>
 <tr>
 <td>OpenShift</td>
@@ -371,7 +394,7 @@
 <td>Yes</td>
 <td>No</td>
 <td>No</td>
-<td>Supported as a source provider, but not for warm scenarios.</td>
+<td>Supported as a source provider for OCP-to-OCP migrations, but not for warm scenarios.</td>
 </tr>
 <tr>
 <td>OVA</td>
@@ -379,21 +402,45 @@
 <td>Yes</td>
 <td>No</td>
 <td>No</td>
-<td>Supported for cold-style scenarios. The built-in OVA path uses a fixed imported VM name during plan preparation.</td>
+<td>Cold-style scenarios only. OVA VMs are never cloned; the destination name gets a session UUID prefix.</td>
+</tr>
+<tr>
+<td>Hyper-V</td>
+<td><code>hyperv</code></td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+<td>Cold and comprehensive scenarios, including static IP preservation checks.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <blockquote>
-<p><strong>Note:</strong> <code>vsphere-copy-offload</code> is not a separate provider family. It is still <code>type: "vsphere"</code> with additional copy-offload settings.</p>
-<p><strong>Warning:</strong> Warm migration is not available for every source provider. The warm test modules explicitly skip <code>openstack</code>, <code>openshift</code>, and <code>ova</code>.</p>
+<p><strong>Note:</strong> <code>vsphere-copy-offload</code> and <code>vsphere-esxi</code> are not separate provider families. Both are <code>type: "vsphere"</code>; the difference is configuration, not provider type.</p>
+<p><strong>Warning:</strong> Warm migration is not available for every source provider. The collection hook in <code>conftest.py</code> skips every <code>warm</code> item when the configured source provider cannot do
+warm migrations.</p>
 </blockquote>
-<div class="highlight"><pre><span></span><code><span class="n">pytestmark</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span>
-        <span class="n">_SOURCE_PROVIDER_TYPE</span>
-        <span class="ow">in</span> <span class="p">(</span><span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">,</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">,</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">),</span>
-        <span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_SOURCE_PROVIDER_TYPE</span><span class="si">}</span><span class="s2"> warm migration is not supported.&quot;</span><span class="p">,</span>
-    <span class="p">),</span>
-<span class="p">]</span>
+<div class="highlight"><pre><span></span><code>            <span class="n">warm_unsupported</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">,</span>
+                <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">,</span>
+                <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">,</span>
+                <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">source_provider_type</span> <span class="ow">in</span> <span class="n">warm_unsupported</span><span class="p">:</span>
+                <span class="n">warm_skip</span> <span class="o">=</span> <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">source_provider_type</span><span class="si">}</span><span class="s2"> warm migration is not supported."</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="s2">"warm"</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
+</code></pre></div>
+
+<p>Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere-only, and <code>ca_crt</code> tests are skipped for
+<code>openshift</code> and <code>ova</code> sources, because those providers do not carry a CA certificate in their provider secret.
+The same hook enforces that:</p>
+<div class="highlight"><pre><span></span><code>            <span class="k">if</span> <span class="n">source_provider_type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span>
+                <span class="n">vsphere_only_skip</span> <span class="o">=</span> <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"Test is only applicable to vSphere source providers"</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+                        <span class="n">kw</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"copyoffload"</span><span class="p">,</span> <span class="s2">"shared_disk"</span><span class="p">,</span> <span class="s2">"deep_inspection"</span><span class="p">,</span> <span class="s2">"aap"</span><span class="p">,</span> <span class="s2">"luks"</span><span class="p">)</span>
+                    <span class="p">):</span>
+                        <span class="n">item</span><span class="o">.</span><span class="n">add_marker</span><span class="p">(</span><span class="n">vsphere_only_skip</span><span class="p">)</span>
 </code></pre></div>
 
 <h2 id="migration-modes">Migration Modes</h2>
@@ -404,22 +451,22 @@
 <li>Copy-offload: the accelerated vSphere path, represented by scenarios where <code>copyoffload</code> is <code>True</code>.</li>
 </ul>
 <p>A simple warm scenario in the built-in test matrix looks like this:</p>
-<div class="highlight"><pre><span></span><code>    <span class="s2">&quot;test_sanity_warm_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_sanity_warm_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="p">},</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 </code></pre></div>
 
-<p>There is no separate <code>cold</code> marker. In this repository, “cold” is the normal case when <code>warm_migration</code> is not enabled.</p>
+<p>There is no separate <code>cold</code> marker. In this repository, "cold" is the normal case when <code>warm_migration</code> is not enabled.</p>
 <h3 id="copy-offload-specifics">Copy-offload specifics</h3>
 <p>Copy-offload is the most specialized mode in the suite. It is vSphere-only, and the repository includes both cold copy-offload coverage and a dedicated warm copy-offload scenario.</p>
-<p>The accepted <code>storage_vendor_product</code> values in the code are:</p>
+<p>The accepted <code>storage_vendor_product</code> values are defined in <code>utilities/copyoffload_constants.py</code>:</p>
 <ul>
 <li><code>ontap</code></li>
 <li><code>vantara</code></li>
@@ -431,7 +478,7 @@
 <li><code>infinibox</code></li>
 <li><code>flashsystem</code></li>
 </ul>
-<p>Base copy-offload storage credentials are always required:</p>
+<p><code>storage_vendor_product</code> and <code>datastore_id</code> are always required, and base copy-offload storage credentials are always required:</p>
 <ul>
 <li><code>storage_hostname</code></li>
 <li><code>storage_username</code></li>
@@ -446,48 +493,126 @@
 <li><code>powermax</code>: <code>powermax_symmetrix_id</code></li>
 <li><code>primera3par</code>, <code>powerstore</code>, <code>infinibox</code>, <code>flashsystem</code>: no extra vendor-specific fields beyond the base storage credentials</li>
 </ul>
+<p>Optional fields unlock specific scenarios:</p>
+<ul>
+<li><code>secondary_datastore_id</code>: required by the multi-datastore tests</li>
+<li><code>non_xcopy_datastore_id</code>: required by the mixed XCOPY/non-XCOPY datastore test</li>
+<li><code>dedicated_migration_hosts</code>: required by the dedicated-migration-host tests, which set <code>StorageMap</code> <code>offloadPlugin.vsphereXcopyConfig.dedicatedMigrationHosts</code></li>
+<li><code>rdm_lun_uuid</code>: LUN used by the RDM disk tests</li>
+<li><code>storage_secret_extra</code>: extra Secret <code>stringData</code> keys not covered by the vendor fields, or the <code>COPYOFFLOAD_STORAGE_SECRET_EXTRA</code> environment variable</li>
+</ul>
 <p>If you use SSH-based ESXi cloning for copy-offload, the suite also expects <code>esxi_clone_method: "ssh"</code> plus <code>esxi_host</code>, <code>esxi_user</code>, and <code>esxi_password</code>.</p>
 <blockquote>
-<p><strong>Tip:</strong> Copy-offload credentials can come from <code>.providers.json</code> or from <code>COPYOFFLOAD_...</code> environment variables. Environment variables win, which is useful when you do not want secrets stored in files.</p>
+<p><strong>Tip:</strong> Copy-offload credentials can come from <code>.providers.json</code> or from <code>COPYOFFLOAD_...</code> environment variables. Environment variables win, which is useful when you do not want
+secrets stored in files.</p>
 </blockquote>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_copyoffload_credential</span><span class="p">(</span>
     <span class="n">credential_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">copyoffload_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Get a copyoffload credential from environment variable or config file.</span>
 
 <span class="sd">    Environment variables take precedence over config file values.</span>
 <span class="sd">    Environment variable names are constructed as COPYOFFLOAD_{credential_name.upper()}.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        credential_name: Name of the credential (e.g., "storage_hostname", "ontap_svm",</span>
+<span class="sd">                        "vantara_hostgroup_id_list")</span>
+<span class="sd">        copyoffload_config: Copyoffload configuration dictionary</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str | None: Credential value from env var or config, or None if not found</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        - "storage_hostname" → "COPYOFFLOAD_STORAGE_HOSTNAME"</span>
+<span class="sd">        - "ontap_svm" → "COPYOFFLOAD_ONTAP_SVM"</span>
+<span class="sd">        - "vantara_hostgroup_id_list" → "COPYOFFLOAD_VANTARA_HOSTGROUP_ID_LIST"</span>
+<span class="sd">    """</span>
+    <span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span>
     <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">env_var_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">copyoffload_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">credential_name</span><span class="p">)</span>
 </code></pre></div>
 
+<h3 id="plan-flags-that-shape-source-side-preparation">Plan flags that shape source-side preparation</h3>
+<p>Several scenario keys do not appear in the <code>Plan</code> CR. They change how the suite prepares the source side before the migration starts:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Plan flag</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rdm_as_lun</code></td>
+<td>Maps RDM disks as LUN devices on the SCSI bus instead of as virtual disks. Used by the RDM copy-offload scenarios.</td>
+</tr>
+<tr>
+<td><code>per_nic_network_map</code></td>
+<td>Creates one <code>NetworkMap</code> entry per NIC instead of deduplicating identical mappings.</td>
+</tr>
+<tr>
+<td><code>clone_to_same_host</code></td>
+<td>Pins every VM after the first to the ESXi host used for the first clone. Required for per-host inflight throttling.</td>
+</tr>
+<tr>
+<td><code>disable_drs_for_vms</code></td>
+<td>Applies a per-VM DRS override after cloning so vCenter cannot relocate the VM. Requires a VMware clone provider, and is rejected for OVA sources.</td>
+</tr>
+<tr>
+<td><code>pin_to_non_dedicated_host</code></td>
+<td>Resolves an ESXi host outside <code>dedicated_migration_hosts</code> and pins the clones to it, so dedicated-host verification can never pass by coincidence.</td>
+</tr>
+</tbody>
+</table></div>
 <h2 id="pytest-markers">Pytest Markers</h2>
 <p>The repository defines these markers in <code>pytest.ini</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="na">markers</span><span class="w"> </span><span class="o">=</span>
 <span class="w">    </span><span class="na">tier0</span><span class="o">:</span><span class="w"> </span><span class="s">Core functionality tests (smoke tests)</span>
+<span class="w">    </span><span class="na">tier1</span><span class="o">:</span><span class="w"> </span><span class="s">Extended functionality tests</span>
 <span class="w">    </span><span class="na">remote</span><span class="o">:</span><span class="w"> </span><span class="s">Remote cluster migration tests</span>
 <span class="w">    </span><span class="na">warm</span><span class="o">:</span><span class="w"> </span><span class="s">Warm migration tests</span>
 <span class="w">    </span><span class="na">copyoffload</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload (XCOPY) tests</span>
+<span class="w">    </span><span class="na">copyoffload_sanity</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload sanity tests - core scenarios for quick validation</span>
+<span class="w">    </span><span class="na">copyoffload_snapshots</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload snapshot tests (vSphere only)</span>
+<span class="w">    </span><span class="na">shared_disk</span><span class="o">:</span><span class="w"> </span><span class="s">Shared disk migration tests (vSphere only)</span>
 <span class="w">    </span><span class="na">incremental</span><span class="o">:</span><span class="w"> </span><span class="s">marks tests as incremental (xfail on previous failure)</span>
-<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version(&quot;2.6.0&quot;))</span>
+<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version("2.6.0"))</span>
+<span class="w">    </span><span class="na">ova</span><span class="o">:</span><span class="w"> </span><span class="s">OVA provider-specific tests</span>
+<span class="w">    </span><span class="na">vsphere</span><span class="o">:</span><span class="w"> </span><span class="s">vSphere provider-specific tests</span>
+<span class="w">    </span><span class="na">esxi</span><span class="o">:</span><span class="w"> </span><span class="s">ESXi provider-specific tests</span>
+<span class="w">    </span><span class="na">rhv</span><span class="o">:</span><span class="w"> </span><span class="s">RHV provider-specific tests</span>
+<span class="w">    </span><span class="na">hyperv</span><span class="o">:</span><span class="w"> </span><span class="s">Hyper-V provider-specific tests</span>
+<span class="w">    </span><span class="na">openstack</span><span class="o">:</span><span class="w"> </span><span class="s">OpenStack provider-specific tests</span>
+<span class="w">    </span><span class="na">openshift</span><span class="o">:</span><span class="w"> </span><span class="s">OpenShift provider-specific tests</span>
+<span class="w">    </span><span class="na">deep_inspection</span><span class="o">:</span><span class="w"> </span><span class="s">Deep Inspection / Conversion CR tests (vSphere only)</span>
+<span class="w">    </span><span class="na">ca_crt</span><span class="o">:</span><span class="w"> </span><span class="s">CA certificate field (ca.crt) provider secret tests</span>
+<span class="w">    </span><span class="na">aap</span><span class="o">:</span><span class="w"> </span><span class="s">AAP (Ansible Automation Platform) hook integration tests (vSphere only)</span>
+<span class="w">    </span><span class="na">upgrade</span><span class="o">:</span><span class="w"> </span><span class="s">MTV operator upgrade tests</span>
 </code></pre></div>
 
 <p>In practice:</p>
 <ul>
-<li><code>tier0</code> is the smoke or core regression slice.</li>
+<li><code>tier0</code> is the smoke or core regression slice, and <code>tier1</code> covers extended functionality.</li>
 <li><code>warm</code>, <code>remote</code>, and <code>copyoffload</code> are the main user-facing selectors for scenario families.</li>
-<li><code>incremental</code> is execution behavior, not a functional feature area. These class-based tests move step by step through StorageMap, NetworkMap, Plan, migration execution, and validation.</li>
-<li><code>min_mtv_version</code> is available when a scenario needs a newer MTV version.</li>
+<li><code>copyoffload_sanity</code> selects the curated quick copy-offload subset, and <code>copyoffload_snapshots</code> selects the snapshot-based copy-offload classes.</li>
+<li><code>shared_disk</code>, <code>deep_inspection</code>, <code>aap</code>, and <code>ca_crt</code> select feature suites that have no single-mode marker of their own.</li>
+<li><code>vsphere</code>, <code>esxi</code>, <code>rhv</code>, <code>hyperv</code>, <code>openstack</code>, <code>openshift</code>, and <code>ova</code> mark which providers a test is written for. They also drive collection-time skipping.</li>
+<li><code>upgrade</code> selects the MTV operator upgrade scenarios.</li>
+<li>
+<p><code>incremental</code> is execution behavior, not a functional feature area. These class-based tests move step by step through
+  StorageMap, NetworkMap, Plan, migration execution, and validation.</p>
+</li>
+<li>
+<p><code>min_mtv_version</code> is available when a scenario needs a newer MTV version.</p>
+</li>
 </ul>
 <blockquote>
 <p><strong>Note:</strong> <code>comprehensive</code> is a scenario family in this repository, not a pytest marker. You select it by file or class, not with <code>-m comprehensive</code>.</p>
 <p><strong>Note:</strong> Remote scenarios are opt-in. They are skipped unless <code>remote_ocp_cluster</code> is set.</p>
 </blockquote>
 <h2 id="major-scenario-families">Major Scenario Families</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Family</th>
@@ -499,31 +624,72 @@
 <tr>
 <td>Tier0</td>
 <td><code>@pytest.mark.tier0</code></td>
-<td>Core smoke coverage: sanity cold, sanity warm, comprehensive cold, comprehensive warm, and the post-hook retention failure scenario</td>
+<td>Core smoke coverage: sanity cold and warm, comprehensive cold and warm, OVA, shared-disk RHEL, cluster-role warm, post-hook failure</td>
+</tr>
+<tr>
+<td>Tier1</td>
+<td><code>@pytest.mark.tier1</code></td>
+<td>Extended coverage: XFS, LUKS, dual-NIC, CA certificate, insecure skip-verify, deep inspection, AAP hooks, shared-disk Windows</td>
 </tr>
 <tr>
 <td>Warm</td>
 <td><code>@pytest.mark.warm</code></td>
-<td>Standard warm flows, a 2-disks/2-NICs case, remote warm, comprehensive warm, and warm copy-offload</td>
+<td>Standard warm flows, a 2-disks/2-NICs case, remote warm, comprehensive warm, XFS warm, plan-driven deep inspection, warm copy-offload</td>
 </tr>
 <tr>
 <td>Remote</td>
 <td><code>@pytest.mark.remote</code></td>
-<td>Remote OpenShift destination scenarios for both cold and warm flows</td>
+<td>Remote OpenShift destination scenarios for cold, warm, and cluster-role flows</td>
 </tr>
 <tr>
 <td>Comprehensive</td>
 <td>Dedicated files and classes</td>
-<td>Advanced plan options such as static IP preservation, custom VM namespaces, PVC naming templates, labels, affinity, and node placement</td>
+<td>Plan options such as static IP preservation, custom VM namespaces, PVC naming templates, labels, affinity, node placement</td>
 </tr>
 <tr>
 <td>Copy-offload</td>
 <td><code>@pytest.mark.copyoffload</code></td>
-<td>XCOPY/offload coverage across disk types, snapshots, datastores, naming behavior, scale, and concurrency</td>
+<td>XCOPY coverage across disk types, snapshots, datastores, RDM disks, naming, dedicated migration hosts, scale, concurrency</td>
+</tr>
+<tr>
+<td>Shared disk</td>
+<td><code>@pytest.mark.shared_disk</code></td>
+<td><code>migrateSharedDisks</code> ownership between an owner VM and a consumer VM, for RHEL and Windows guests</td>
+</tr>
+<tr>
+<td>Deep inspection</td>
+<td><code>@pytest.mark.deep_inspection</code></td>
+<td>The <code>Conversion</code> CR lifecycle: standalone, cancel, validation conditions, and plan-driven concerns blocking migration</td>
+</tr>
+<tr>
+<td>LUKS</td>
+<td><code>tests/luks/</code> plus <code>-k luks</code></td>
+<td>LUKS-encrypted disk migration, plus the expected failure path with a wrong passphrase</td>
+</tr>
+<tr>
+<td>XFS</td>
+<td><code>xfs_compatibility</code> scenario key</td>
+<td>XFS v4 compatibility for cold and warm migrations, verified with <code>xfs_info</code> in the guest</td>
+</tr>
+<tr>
+<td>Hooks</td>
+<td><code>tests/hooks/</code></td>
+<td>A pre-hook success plus post-hook failure scenario, and an AAP-based hook scenario</td>
+</tr>
+<tr>
+<td>Plan lifecycle</td>
+<td><code>tests/plan_lifecycle/</code></td>
+<td>PVC and DataVolume cleanup after a failed plan is archived</td>
+</tr>
+<tr>
+<td>Upgrade</td>
+<td><code>@pytest.mark.upgrade</code></td>
+<td>Migration resources created pre-upgrade, migrated after the MTV operator upgrade</td>
 </tr>
 </tbody>
-</table>
-<p>Scenario families are intentionally allowed to overlap. For example, comprehensive warm coverage is both <code>tier0</code> and <code>warm</code>, and warm copy-offload belongs to both <code>warm</code> and <code>copyoffload</code>.</p>
+</table></div>
+<p>Scenario families are intentionally allowed to overlap. For example, comprehensive warm coverage is both <code>tier0</code> and <code>warm</code>,
+warm copy-offload belongs to both <code>warm</code> and <code>copyoffload</code>, and the sanity warm class carries <code>tier0</code>, <code>warm</code>, and <code>upgrade</code>.</p>
 <h3 id="tier0-coverage">Tier0 coverage</h3>
 <p>The <code>tier0</code> slice in this repository is broader than a single smoke test. It includes:</p>
 <ul>
@@ -531,95 +697,153 @@
 <li><code>TestSanityWarmMtvMigration</code></li>
 <li><code>TestColdMigrationComprehensive</code></li>
 <li><code>TestWarmMigrationComprehensive</code></li>
+<li><code>TestOvaColdMigration</code></li>
+<li><code>TestSharedDiskRhelMigration</code></li>
+<li><code>TestClusterroleWarmWithSccMigration</code></li>
 <li><code>TestPostHookRetainFailedVm</code></li>
 </ul>
-<p>That last case matters because it covers a failure path: the migration is expected to fail in the post-hook stage while the migrated VMs are retained for verification.</p>
+<p>Two of those need something extra before they run: the OVA class needs an <code>ova</code> source provider, and
+<code>TestClusterroleWarmWithSccMigration</code> is remote and is skipped without <code>remote_ocp_cluster</code>.
+The last case matters because it covers a failure path: the migration is expected to fail in the post-hook stage while
+the migrated VMs are retained for verification.</p>
 <h3 id="remote-coverage">Remote coverage</h3>
 <p>The built-in remote scenarios are:</p>
 <ul>
 <li><code>TestColdRemoteOcp</code></li>
 <li><code>TestWarmRemoteOcp</code></li>
+<li><code>TestClusterroleWarmMtvMigration</code></li>
+<li><code>TestClusterroleWarmWithSccMigration</code></li>
 </ul>
 <p>These are gated by the <code>remote</code> marker and the <code>remote_ocp_cluster</code> setting. If you do not provide that setting, pytest skips them instead of failing later during migration setup.</p>
 <h3 id="comprehensive-coverage">Comprehensive coverage</h3>
-<p>The comprehensive tests are the best place to look when you want end-to-end coverage of plan options beyond “can the VM migrate.”</p>
+<p>The comprehensive tests are the best place to look when you want end-to-end coverage of plan options beyond "can the VM migrate."</p>
 <p>A warm comprehensive scenario is configured like this:</p>
-<div class="highlight"><pre><span></span><code>    <span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_warm_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2022-ip-3disks"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
-        <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-        <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-            <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+        <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-warm-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+        <span class="c1"># Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default".</span>
+        <span class="c1"># vsphere uses .FileName; default truncates VmName to stay within 63 chars.</span>
+        <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"vsphere"</span><span class="p">:</span> <span class="s1">'{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}'</span><span class="p">,</span>
+            <span class="s2">"default"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
         <span class="p">},</span>
-        <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-                <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"mtv-comprehensive-test"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+            <span class="s2">"static-label"</span><span class="p">:</span> <span class="s2">"static-value"</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
                     <span class="p">{</span>
-                        <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                            <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
-                            <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                        <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"comprehensive-test"</span><span class="p">}},</span>
+                            <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
                         <span class="p">},</span>
-                        <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
+                        <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
                     <span class="p">}</span>
                 <span class="p">]</span>
             <span class="p">}</span>
         <span class="p">},</span>
+        <span class="s2">"guest_agent_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
     <span class="p">},</span>
 </code></pre></div>
 
-<p>The cold comprehensive scenario follows the same idea, but adds cold-specific scheduling and naming checks such as <code>target_node_selector</code>, fixed PVC naming, and <code>warm_migration: False</code>.</p>
+<p>The cold comprehensive scenario follows the same idea, but adds cold-specific scheduling and naming checks such as
+<code>target_node_selector</code>, fixed PVC naming, and <code>warm_migration: False</code>.</p>
 <h3 id="copy-offload-coverage">Copy-offload coverage</h3>
-<p><code>tests/test_copyoffload_migration.py</code> is the largest single scenario matrix in the repository. It covers:</p>
+<p><code>tests/copyoffload/test_copyoffload_migration.py</code> is the largest single scenario matrix in the repository. It covers:</p>
 <ul>
-<li>Thin and thick-lazy disk migrations</li>
+<li>Thin, thick-lazy, and thick-eager disk migrations</li>
 <li>Snapshot-based cases, including a 2 TB VM with snapshots</li>
 <li>Multi-disk and multi-datastore layouts</li>
 <li>Mixed XCOPY and non-XCOPY datastore behavior, including fallback paths</li>
-<li>RDM virtual disks</li>
+<li>RDM virtual disks and RDM physical disks, cold and warm</li>
 <li>Independent persistent and independent nonpersistent disks</li>
+<li>A VM with 10 mixed thin and thick disks</li>
 <li>Nonconforming source VM names</li>
+<li>Dedicated migration hosts, including the invalid-host-id failure case</li>
+<li>Populator and VM inflight throttling</li>
 <li>Warm copy-offload</li>
 <li>Scale coverage with 5 VMs in one run</li>
 <li>Simultaneous copy-offload plans</li>
 <li>Concurrent XCOPY and VDDK plans in the same suite</li>
 </ul>
+<p><code>copyoffload_sanity</code> selects a seven-class subset for quick validation: thick-eager snapshots, RDM virtual disk,
+multi-datastore, mixed datastore, 10 mixed disks, warm copy-offload, and the 5-VM scale run.</p>
 <blockquote>
 <p><strong>Warning:</strong> Copy-offload is intentionally strict about prerequisites. The suite fails early if the source provider is not vSphere or if required copy-offload fields are missing.</p>
 </blockquote>
+<h3 id="feature-suites-worth-knowing-about">Feature suites worth knowing about</h3>
+<ul>
+<li>
+<p><strong>LUKS.</strong> <code>tests/luks/</code> migrates a LUKS-encrypted VM and then verifies <code>crypto_LUKS</code> from inside the migrated guest. A
+  second class feeds a wrong passphrase and expects the migration to fail. The passphrase comes from <code>luks_passphrase</code> in
+  <code>.providers.json</code>, with a per-VM override in the scenario.</p>
+</li>
+<li>
+<p><strong>XFS.</strong> <code>tests/cold/test_cold_migration_xfs.py</code> and <code>tests/warm/test_warm_migration_xfs.py</code> set <code>xfs_compatibility: True</code>
+  and verify the guest filesystem with an <code>xfs_check</code> command, expecting <code>crc=0</code> in <code>xfs_info</code> output.</p>
+</li>
+<li>
+<p><strong>Shared disk.</strong> <code>tests/shared_disk/</code> migrates an owner VM with <code>migrateSharedDisks: True</code> and a consumer VM with it
+  <code>False</code>, then verifies the shared disk data on both.</p>
+</li>
+<li>
+<p><strong>Deep inspection.</strong> <code>tests/deep_inspection/</code> drives Forklift <code>Conversion</code> resources: standalone conversion with cancel
+  and validation-condition cases, plus a plan-driven case where inspection concerns must block a warm migration.</p>
+</li>
+<li>
+<p><strong>Plan lifecycle.</strong> <code>tests/plan_lifecycle/test_plan_archive_pvc_cleanup.py</code> fails a plan in the post-hook stage, archives
+  it, and waits for the leftover PVCs and DataVolumes to disappear.</p>
+</li>
+<li>
+<p><strong>Upgrade.</strong> <code>tests/upgrade/test_upgrade_migration.py</code> creates StorageMap, NetworkMap, and Plan on the pre-upgrade
+  operator, upgrades MTV from an external upgrade repository, and then migrates. It needs <code>upgrade_repo_url</code>,
+  <code>upgrade_repo_ref</code>, <code>upgrade_script_path</code>, and the target version settings.</p>
+</li>
+<li>
+<p><strong>Hooks and AAP.</strong> <code>tests/hooks/</code> covers a pre-hook that must succeed followed by a post-hook that must fail, with the
+  migrated VMs retained for verification, plus an AAP-based hook scenario where the suite installs or uses an AAP
+  deployment, syncs the test playbooks project, and creates the hook.</p>
+</li>
+</ul>
 <h2 id="practical-tip">Practical Tip</h2>
 <blockquote>
-<p><strong>Tip:</strong> Before running live migrations, use <code>uv run pytest --collect-only</code> to confirm what your current provider profile and markers will collect. The repository already uses that pattern in <code>tox.toml</code>, and the container image defaults to it.</p>
+<p><strong>Tip:</strong> Before running live migrations, use <code>uv run pytest --collect-only</code> to confirm what your current provider profile and markers will collect. The repository already uses
+that pattern in <code>tox.toml</code>, and the container image defaults to it.</p>
 </blockquote>
 <div class="highlight"><pre><span></span><code><span class="k">[env.pytest-check]</span>
 <span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--setup-plan&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--setup-plan"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--collect-only"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="p">]</span>
 </code></pre></div>
 
-<p>If you only remember one rule for this page, make it this: vSphere has the broadest coverage, copy-offload is vSphere-only, warm migration is not supported for every provider, and <code>tier0</code>, <code>warm</code>, <code>remote</code>, and <code>copyoffload</code> are the markers you will use most often to slice the suite.</p>
+<p>If you only remember one rule for this page, make it this: vSphere has the broadest coverage, copy-offload is vSphere-only,
+warm migration is not supported for every provider, and <code>tier0</code>, <code>tier1</code>, <code>warm</code>, <code>remote</code>, <code>copyoffload</code>, <code>shared_disk</code>,
+<code>deep_inspection</code>, and <code>upgrade</code> are the markers you will use most often to slice the suite.</p>
                 </div>
             </article>
             <nav class="page-nav">
@@ -645,6 +869,7 @@
 <li><a href="#supported-source-providers">Supported Source Providers</a></li>
 <li><a href="#migration-modes">Migration Modes</a><ul>
 <li><a href="#copy-offload-specifics">Copy-offload specifics</a></li>
+<li><a href="#plan-flags-that-shape-source-side-preparation">Plan flags that shape source-side preparation</a></li>
 </ul>
 </li>
 <li><a href="#pytest-markers">Pytest Markers</a></li>
@@ -653,6 +878,7 @@
 <li><a href="#remote-coverage">Remote coverage</a></li>
 <li><a href="#comprehensive-coverage">Comprehensive coverage</a></li>
 <li><a href="#copy-offload-coverage">Copy-offload coverage</a></li>
+<li><a href="#feature-suites-worth-knowing-about">Feature suites worth knowing about</a></li>
 </ul>
 </li>
 <li><a href="#practical-tip">Practical Tip</a></li>
@@ -662,24 +888,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=5a6efa51d2"></script>
+
+    <script src="assets/search.js?v=5a6efa51d2"></script>
+    <script src="assets/copy.js?v=5a6efa51d2"></script>
+    <script src="assets/callouts.js?v=5a6efa51d2"></script>
+    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
+    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
+    <script src="assets/github.js?v=5a6efa51d2"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -725,5 +954,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

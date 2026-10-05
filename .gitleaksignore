@@ -1,7 +1,13 @@
-docs/container-and-openshift-job-execution.md:generic-api-key:53
-docs/prerequisites.md:generic-api-key:47
-docs/remote-openshift-migrations.md:generic-api-key:142
+# Generated documentation pages: the flagged lines are code examples
+# (e.g. `get_client(host=..., password=password)`), not real credentials.
+# Regenerate these fingerprints after rebuilding the site with pi-docsite.
+docs/container-and-openshift-job-execution.md:generic-api-key:72
+docs/prerequisites.md:generic-api-key:75
+docs/remote-openshift-migrations.md:generic-api-key:232
+docs/llms-full.txt:generic-api-key:2305
+docs/llms-full.txt:generic-api-key:2307
+docs/llms-full.txt:generic-api-key:3412
+docs/llms-full.txt:generic-api-key:3511
+docs/llms-full.txt:generic-api-key:7410
+docs/llms-full.txt:generic-api-key:7503
 docs/search-index.json:generic-api-key:1
-docs/llms-full.txt:generic-api-key:1698
-docs/llms-full.txt:generic-api-key:2640
-docs/llms-full.txt:generic-api-key:5604
