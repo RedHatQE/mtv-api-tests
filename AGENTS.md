@@ -57,7 +57,9 @@ Rules:
 - Reorder by reordering `nav.json` arrays. Never rename files to reorder; that breaks existing links.
 - A `nav.json` slug with no `.md` behind it is a build error.
 - Search only works when `docs/` is served over HTTP (`fetch()` of `search-index.json` is blocked over `file://`).
-- Output is byte-for-byte reproducible: a rebuild showing churn in untouched files means the generator changed, not a stale build.
+- Output is byte-for-byte reproducible **for a given dependency resolution**. The generator is not version-pinned, so a rebuild after an upstream `pi-docsite`,
+  `markdown`, `jinja2` or `pygments` release can produce cosmetic diffs (typically line wrapping inside highlighted code blocks) even when no `.md` changed.
+  That is dependency drift, not a stale build: rebuild, then commit the regenerated output together with whatever `.md` change caused it. Never hand-merge generated HTML.
 
 ## Code Standards
 
