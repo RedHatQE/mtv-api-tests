@@ -290,8 +290,9 @@ def create_and_store_resource(
 
 The `Any` types are load-bearing, not placeholders:
 
-- `fixture_store: dict[str, Any]` — the session registry is keyed by resource kind (`Namespace`, `VirtualMachine`, `Migration`, ...) and holds descriptors built at runtime,
-  so one union type per kind would have to be imported by every caller.
+- `fixture_store: dict[str, Any]` — the session store is a heterogeneous registry: tracked resources live under `fixture_store["teardown"]`, keyed by
+  resource kind (`Namespace`, `VirtualMachine`, `Migration`, ...) with descriptors built at runtime by `create_and_store_resource()`, so one union type per kind would
+  have to be imported by every caller.
 - `**kwargs: Any` and `-> Any` — this helper is deliberately generic over `ocp_resources` classes: the kwargs are whatever `resource(**kwargs)` accepts, and the return value
   is that constructed resource, whose type is only known at the call site.
 

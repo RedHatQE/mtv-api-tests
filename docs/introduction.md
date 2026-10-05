@@ -299,7 +299,7 @@ if vm_ssh_connections is not None and destination_vm.get("power_state") == "on":
                 source_vm_data=source_vm_data,
                 destination_vm=destination_vm,
             )
-        except Exception as exp:
+        except (AssertionError, ValueError) as exp:
             res[vm_name].append(f"check_nic_name_preservation - {str(exp)}")
 
 # Check node placement if configured

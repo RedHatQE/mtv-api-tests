@@ -738,8 +738,9 @@ cases it raises — read <code>utilities/mtv_migration.py:216-240</code> for tha
 <p>The two <code>Any</code> types are deliberate, not laziness:</p>
 <ul>
 <li>
-<p><code>fixture_store: dict[str, Any]</code> — the store is a heterogeneous session registry keyed by resource kind (<code>Namespace</code>, <code>VirtualMachine</code>, <code>Migration</code>, ...) whose
-  values are resource descriptors built at runtime by <code>create_and_store_resource()</code>. One union type per kind would have to be imported by every caller for no gain.</p>
+<p><code>fixture_store: dict[str, Any]</code> — the store is a heterogeneous session registry: tracked resources live under <code>fixture_store["teardown"]</code>, keyed by resource
+  kind (<code>Namespace</code>, <code>VirtualMachine</code>, <code>Migration</code>, ...), whose values are resource descriptors built at runtime by <code>create_and_store_resource()</code>.
+  One union type per kind would have to be imported by every caller for no gain.</p>
 </li>
 <li>
 <p><code>target_affinity: dict[str, Any]</code> — Kubernetes affinity accepts node selector terms, pod affinity/anti-affinity terms, and their weights, so the value is a nested

@@ -691,8 +691,9 @@ needed, deploys the resource, and registers it in the fixture store for teardown
 <p>The <code>Any</code> types are load-bearing, not placeholders:</p>
 <ul>
 <li>
-<p><code>fixture_store: dict[str, Any]</code> — the session registry is keyed by resource kind (<code>Namespace</code>, <code>VirtualMachine</code>, <code>Migration</code>, ...) and holds descriptors built at runtime,
-  so one union type per kind would have to be imported by every caller.</p>
+<p><code>fixture_store: dict[str, Any]</code> — the session store is a heterogeneous registry: tracked resources live under <code>fixture_store["teardown"]</code>, keyed by
+  resource kind (<code>Namespace</code>, <code>VirtualMachine</code>, <code>Migration</code>, ...) with descriptors built at runtime by <code>create_and_store_resource()</code>, so one union type per kind would
+  have to be imported by every caller.</p>
 </li>
 <li>
 <p><code>**kwargs: Any</code> and <code>-&gt; Any</code> — this helper is deliberately generic over <code>ocp_resources</code> classes: the kwargs are whatever <code>resource(**kwargs)</code> accepts, and the return value

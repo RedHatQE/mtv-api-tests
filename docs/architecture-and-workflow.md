@@ -408,8 +408,9 @@ cases it raises — read `utilities/mtv_migration.py:216-240` for that contract.
 
 The two `Any` types are deliberate, not laziness:
 
-- `fixture_store: dict[str, Any]` — the store is a heterogeneous session registry keyed by resource kind (`Namespace`, `VirtualMachine`, `Migration`, ...) whose
-  values are resource descriptors built at runtime by `create_and_store_resource()`. One union type per kind would have to be imported by every caller for no gain.
+- `fixture_store: dict[str, Any]` — the store is a heterogeneous session registry: tracked resources live under `fixture_store["teardown"]`, keyed by resource
+  kind (`Namespace`, `VirtualMachine`, `Migration`, ...), whose values are resource descriptors built at runtime by `create_and_store_resource()`.
+  One union type per kind would have to be imported by every caller for no gain.
 - `target_affinity: dict[str, Any]` — Kubernetes affinity accepts node selector terms, pod affinity/anti-affinity terms, and their weights, so the value is a nested
   structure whose leaf types differ per provider. Pinning it to one concrete type would reject valid plans.
 
