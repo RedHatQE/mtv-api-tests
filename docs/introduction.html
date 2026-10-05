@@ -639,7 +639,7 @@ is tunable, and migrations are expected to run long enough to justify an explici
             <span class="n">destination_vm</span><span class="o">=</span><span class="n">destination_vm</span><span class="p">,</span>
             <span class="n">expected_features</span><span class="o">=</span><span class="n">_NESTED_VIRT_DISABLED_FEATURES</span><span class="p">,</span>
         <span class="p">)</span>
-    <span class="k">except</span> <span class="ne">AssertionError</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">AssertionError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
         <span class="n">res</span><span class="p">[</span><span class="n">vm_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"check_cpu_features - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
 

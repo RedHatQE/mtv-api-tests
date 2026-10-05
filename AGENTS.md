@@ -1134,9 +1134,9 @@ Test classes for marker-gated features must include the feature name in the clas
 - Copy-offload → class name must contain `Copyoffload` (e.g., `TestCopyoffloadThinMigration`)
 - Tier1 features → class name must include the feature name (e.g., `TestLuksColdMigration`)
 
-This ensures discoverability and consistency with the markers applied to the class. The rule is about discoverability, not enforcement: a class whose
-scenario mixes two features may name both, as `TestConcurrentXcopyVddkMigration` does. Marker-based selection and the collection-time provider gates key off
-the marker, so the name never decides whether a test runs.
+This ensures discoverability and consistency with the markers applied to the class. A class covering a mixed scenario names both halves — see
+`TestCopyoffloadConcurrentXcopyVddkMigration`, which carries `Copyoffload` for the feature and `XcopyVddk` for the pair it exercises. Marker-based selection
+and the collection-time provider gates key off the marker, so the name never decides whether a test runs; it only decides how findable the class is.
 
 ```python
 @pytest.mark.tier0

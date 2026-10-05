@@ -816,9 +816,13 @@ def check_cpu_features(
             e.g. [{"name": "vmx", "policy": "disable"}, {"name": "svm", "policy": "disable"}]
 
     Raises:
+        ValueError: If the migrated VM payload carries no CPU data
         AssertionError: If CPU features do not match expected configuration
     """
-    actual_features: list[dict[str, Any]] = destination_vm["cpu"].get("features", [])
+    cpu = destination_vm.get("cpu")
+    if not cpu:
+        raise ValueError(f"Migrated VM payload carries no cpu data: {destination_vm.get('name', 'unknown')}")
+    actual_features: list[dict[str, Any]] = cpu.get("features", [])
     for expected in expected_features:
         feature_name = expected["name"]
         expected_policy = expected["policy"]
@@ -1964,7 +1968,7 @@ def check_vms(
                     destination_vm=destination_vm,
                     expected_features=_NESTED_VIRT_DISABLED_FEATURES,
                 )
-            except AssertionError as exp:
+            except (AssertionError, ValueError) as exp:
                 res[vm_name].append(f"check_cpu_features - {str(exp)}")
 
             if (

@@ -520,11 +520,10 @@ paired with the plan-config key it reads.
 | `TestCopyoffloadWarmMigration` | `test_copyoffload_warm_migration` | Live warm migration with a cutover value |
 | `TestCopyoffloadScaleMigration` | `test_copyoffload_scale_migration` | Five thick-lazy VMs in one plan |
 | `TestSimultaneousCopyoffloadMigrations` | `test_simultaneous_copyoffload_migrations` | Two copy-offload plans executing simultaneously |
-| `TestConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
+| `TestCopyoffloadConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
 
-`TestConcurrentXcopyVddkMigration` is the one class in this suite that carries `@pytest.mark.copyoffload` without `Copyoffload` in its name: it exercises a mixed
-scenario, so the name says XCOPY and VDDK rather than only XCOPY. Marker selection and the collection-time vSphere gate both key off the marker, not the name, so
-`-m copyoffload` still collects it. Renaming it would change its pytest node id, which any external CI job referencing it would break.
+The class name states both halves of its scenario — `Copyoffload` for the feature marker and `XcopyVddk` for the mixed pair it exercises — so it stays discoverable by
+either keyword while satisfying the class-naming convention. Marker selection and the collection-time vSphere gate key off `@pytest.mark.copyoffload` regardless.
 
 ### Snapshot Scenarios
 
