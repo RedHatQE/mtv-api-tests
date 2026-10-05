@@ -167,8 +167,9 @@ Guest credentials are separate from provider credentials.
 The provider `username` and `password` fields log in to the source platform itself. The `guest_vm_*` fields are read later by post-migration SSH or WinRM checks when the
 destination VM is powered on. If those checks run and the matching guest credentials are missing, validation fails.
 
-This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so it is fine to add `guest_vm_linux_*` and `guest_vm_win_*`
-to any provider entry when your selected tests need them.
+This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so you can add `guest_vm_linux_*` and `guest_vm_win_*`
+to a `vsphere`, `ovirt`, `openstack`, `ova`, or `hyperv` provider entry when your selected tests need them. The `openshift` entry is the exception: its schema block sets
+`additionalProperties: false`, so guest credential keys there fail schema validation in your editor and must be left out.
 
 > **Tip:** Think of `guest_vm_linux_*` and `guest_vm_win_*` as per-guest test credentials, not part of the provider login.
 

@@ -703,6 +703,11 @@ file is preserved if the call fails.
 > Register this repository with the server if you want `.rootcoz/settings.json` applied, or set `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL`
 > explicitly. If you do not, the feature is simply off and nothing changes about your test run.
 
+> **Warning:** `enrich_junit_xml()` sends no credentials — no token, no `Authorization` header, no cookie — because the request is a bare
+> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:501-506`). A rootcoz deployment that requires an authenticated operator or admin will reject
+> these calls, and enrichment then fails with the exception logged while the original JUnit file is preserved. Use a server that permits this client anonymously, or
+> put an authenticating proxy in front of `ROOTCOZ_SERVER_URL`.
+
 ## Documentation Site Rebuild
 
 The `docs/` tree is a [pi-docsite](https://pypi.org/project/pi-docsite/) project. Only the Markdown sources and `docs/nav.json` are hand-edited;

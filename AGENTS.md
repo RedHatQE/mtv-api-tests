@@ -61,7 +61,10 @@ Rules:
   produces HTML for a state that never existed, and the next rebuild then shows unrelated churn. Verify with two consecutive builds before committing:
   if the second build changes nothing, the committed output matches the committed Markdown.
 - The generator runs through `uvx` and is deliberately not a repository dependency, so `pyproject.toml` and `uv.lock` never change. Never hand-merge generated
-  HTML, and never edit it to silence a diff — fix the Markdown and rebuild.
+  HTML, and never edit it to silence a diff — fix the Markdown and rebuild. The generator is also deliberately unpinned, so an upstream `pi-docsite`,
+  `markdown`, `jinja2` or `pygments` release can change the output with no Markdown change at all. When that happens a rebuild touches many or all pages even though
+  you edited nothing: commit it on its own as `chore(docs): regenerate site after upstream generator release`, never mixed into a documentation change, so the churn is
+  reviewable on its own.
 
 ## Code Standards
 
@@ -686,7 +689,8 @@ if not vm_id:
 - `.get("key")` on external data without validation afterward
 - Using `False` as default when the key is always present in config
   (exception: `warm_migration`, `copyoffload`, `enable_nested_virtualization`, `xfs_compatibility`,
-  `skip_clone`, and `per_nic_network_map` are optional flags — `.get()` is correct)
+  `skip_clone`, `per_nic_network_map`, `inventory_timeout`, `clone_to_same_host`, `pin_to_non_dedicated_host`,
+  and `disable_drs_for_vms` are optional flags — `.get()` with a documented default is correct)
 
 ### Provider Config Key Access (MUST)
 

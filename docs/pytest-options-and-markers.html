@@ -851,7 +851,11 @@ failure does.</p>
 <li>Keeping related tests together on one worker reduces the chance of splitting a multi-step class across workers.</li>
 </ul>
 <p><code>pytest-harvest</code> needs explicit xdist plumbing, and the suite provides all four hooks. The worker-side dump persists each worker’s session state to disk:</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_harvest_xdist_worker_dump</span><span class="p">(</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">session_items</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_harvest_xdist_worker_dump</span><span class="p">(</span>
+    <span class="n">worker_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">session_items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="c1"># persist session_items and fixture_store in the file system</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">RESULTS_PATH</span> <span class="o">/</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">.pkl"</span><span class="p">),</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
@@ -867,7 +871,7 @@ failure does.</p>
 </blockquote>
 <h2 id="suite-specific-pytest-options">Suite-specific pytest options</h2>
 <p><code>conftest.py</code> registers six custom options across five groups. All of them are real flags you can pass on any run.</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_addoption</span><span class="p">(</span><span class="n">parser</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_addoption</span><span class="p">(</span><span class="n">parser</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Parser</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">data_collector_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"DataCollector"</span><span class="p">)</span>
     <span class="n">teardown_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Teardown"</span><span class="p">)</span>
     <span class="n">openshift_python_wrapper_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Openshift Python Wrapper"</span><span class="p">)</span>

@@ -184,8 +184,9 @@ No `--tc=cluster_*` flags are needed here.
 `get_cluster_client()` falls back to `CLUSTER_HOST`, `CLUSTER_USERNAME`, and `CLUSTER_PASSWORD` from the environment, which keeps the credentials out of the process arguments.
 
 > **Warning:** The container runs as UID `1001`. A `results` directory created by your own user is usually not
-> writable by that UID, so either `chmod 777 results` or add `,z` on SELinux-enforcing hosts, or mount a directory
-> that UID `1001` can already write to.
+> writable by that UID, so grant write access first (`chmod 777 results`, or create it owned by UID `1001`). The `,z` suffix on an SELinux-enforcing host only
+> relabels the mount for SELinux; it does not grant filesystem write permission, so on its own it leaves the bind-mounted results path unwritable and the documented
+> JUnit and log outputs cannot be written.
 
 Useful marker selections come directly from `pytest.ini` and the test modules:
 

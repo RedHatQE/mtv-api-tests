@@ -784,8 +784,9 @@ session's own token secret, which is always created with <code>insecureSkipVerif
 <p>Guest credentials are separate from provider credentials.</p>
 <p>The provider <code>username</code> and <code>password</code> fields log in to the source platform itself. The <code>guest_vm_*</code> fields are read later by post-migration SSH or WinRM checks when the
 destination VM is powered on. If those checks run and the matching guest credentials are missing, validation fails.</p>
-<p>This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so it is fine to add <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code>
-to any provider entry when your selected tests need them.</p>
+<p>This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so you can add <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code>
+to a <code>vsphere</code>, <code>ovirt</code>, <code>openstack</code>, <code>ova</code>, or <code>hyperv</code> provider entry when your selected tests need them. The <code>openshift</code> entry is the exception: its schema block sets
+<code>additionalProperties: false</code>, so guest credential keys there fail schema validation in your editor and must be left out.</p>
 <blockquote>
 <p><strong>Tip:</strong> Think of <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code> as per-guest test credentials, not part of the provider login.</p>
 </blockquote>

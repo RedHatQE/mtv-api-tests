@@ -459,8 +459,9 @@ podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </
 <code>get_cluster_client()</code> falls back to <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and <code>CLUSTER_PASSWORD</code> from the environment, which keeps the credentials out of the process arguments.</p>
 <blockquote>
 <p><strong>Warning:</strong> The container runs as UID <code>1001</code>. A <code>results</code> directory created by your own user is usually not
-writable by that UID, so either <code>chmod 777 results</code> or add <code>,z</code> on SELinux-enforcing hosts, or mount a directory
-that UID <code>1001</code> can already write to.</p>
+writable by that UID, so grant write access first (<code>chmod 777 results</code>, or create it owned by UID <code>1001</code>). The <code>,z</code> suffix on an SELinux-enforcing host only
+relabels the mount for SELinux; it does not grant filesystem write permission, so on its own it leaves the bind-mounted results path unwritable and the documented
+JUnit and log outputs cannot be written.</p>
 </blockquote>
 <p>Useful marker selections come directly from <code>pytest.ini</code> and the test modules:</p>
 <ul>

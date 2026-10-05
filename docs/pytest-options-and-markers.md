@@ -424,7 +424,11 @@ What is preconfigured is the distribution strategy:
 `pytest-harvest` needs explicit xdist plumbing, and the suite provides all four hooks. The worker-side dump persists each worker’s session state to disk:
 
 ```python
-def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
+def pytest_harvest_xdist_worker_dump(
+    worker_id: str,
+    session_items: list[Any],
+    fixture_store: dict[str, Any],
+) -> None:
     # persist session_items and fixture_store in the file system
     with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:
         try:
@@ -444,7 +448,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 `conftest.py` registers six custom options across five groups. All of them are real flags you can pass on any run.
 
 ```python
-def pytest_addoption(parser):
+def pytest_addoption(parser: pytest.Parser) -> None:
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")

@@ -1364,7 +1364,8 @@ if requested, adjusts source power state, stores source-side metadata, and creat
 ```
 
 Cloning runs in two phases. First every VM is cloned, powered to `source_vm_power`, described through `vm_dict()`, and recorded
-in `plan["source_vms_data"]`. Then a single blocking wait covers all of them:
+in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
+when a config omits it, which is why this is the one place `.get()` is correct here; every other plan key is read with direct indexing:
 
 ```1367:1375:conftest.py
                 # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
@@ -3619,8 +3620,9 @@ No `--tc=cluster_*` flags are needed here.
 `get_cluster_client()` falls back to `CLUSTER_HOST`, `CLUSTER_USERNAME`, and `CLUSTER_PASSWORD` from the environment, which keeps the credentials out of the process arguments.
 
 > **Warning:** The container runs as UID `1001`. A `results` directory created by your own user is usually not
-> writable by that UID, so either `chmod 777 results` or add `,z` on SELinux-enforcing hosts, or mount a directory
-> that UID `1001` can already write to.
+> writable by that UID, so grant write access first (`chmod 777 results`, or create it owned by UID `1001`). The `,z` suffix on an SELinux-enforcing host only
+> relabels the mount for SELinux; it does not grant filesystem write permission, so on its own it leaves the bind-mounted results path unwritable and the documented
+> JUnit and log outputs cannot be written.
 
 Useful marker selections come directly from `pytest.ini` and the test modules:
 
@@ -4355,8 +4357,9 @@ Guest credentials are separate from provider credentials.
 The provider `username` and `password` fields log in to the source platform itself. The `guest_vm_*` fields are read later by post-migration SSH or WinRM checks when the
 destination VM is powered on. If those checks run and the matching guest credentials are missing, validation fails.
 
-This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so it is fine to add `guest_vm_linux_*` and `guest_vm_win_*`
-to any provider entry when your selected tests need them.
+This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so you can add `guest_vm_linux_*` and `guest_vm_win_*`
+to a `vsphere`, `ovirt`, `openstack`, `ova`, or `hyperv` provider entry when your selected tests need them. The `openshift` entry is the exception: its schema block sets
+`additionalProperties: false`, so guest credential keys there fail schema validation in your editor and must be left out.
 
 > **Tip:** Think of `guest_vm_linux_*` and `guest_vm_win_*` as per-guest test credentials, not part of the provider login.
 
@@ -9313,7 +9316,11 @@ What is preconfigured is the distribution strategy:
 `pytest-harvest` needs explicit xdist plumbing, and the suite provides all four hooks. The worker-side dump persists each worker’s session state to disk:
 
 ```python
-    def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
+    def pytest_harvest_xdist_worker_dump(
+        worker_id: str,
+        session_items: list[Any],
+        fixture_store: dict[str, Any],
+    ) -> None:
         # persist session_items and fixture_store in the file system
         with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:
             try:
@@ -9333,7 +9340,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 `conftest.py` registers six custom options across five groups. All of them are real flags you can pass on any run.
 
 ```python
-    def pytest_addoption(parser):
+    def pytest_addoption(parser: pytest.Parser) -> None:
         data_collector_group = parser.getgroup(name="DataCollector")
         teardown_group = parser.getgroup(name="Teardown")
         openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")
@@ -13548,6 +13555,11 @@ file is preserved if the call fails.
 > **Note:** If you operate rootcoz yourself, `ROOTCOZ_SERVER_URL` is the only required setting, plus a server that exposes `/analyze-failures`.
 > Register this repository with the server if you want `.rootcoz/settings.json` applied, or set `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL`
 > explicitly. If you do not, the feature is simply off and nothing changes about your test run.
+
+> **Warning:** `enrich_junit_xml()` sends no credentials — no token, no `Authorization` header, no cookie — because the request is a bare
+> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:501-506`). A rootcoz deployment that requires an authenticated operator or admin will reject
+> these calls, and enrichment then fails with the exception logged while the original JUnit file is preserved. Use a server that permits this client anonymously, or
+> put an authenticating proxy in front of `ROOTCOZ_SERVER_URL`.
 
 ## Documentation Site Rebuild
 

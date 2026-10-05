@@ -258,7 +258,8 @@ if requested, adjusts source power state, stores source-side metadata, and creat
 ```
 
 Cloning runs in two phases. First every VM is cloned, powered to `source_vm_power`, described through `vm_dict()`, and recorded
-in `plan["source_vms_data"]`. Then a single blocking wait covers all of them:
+in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
+when a config omits it, which is why this is the one place `.get()` is correct here; every other plan key is read with direct indexing:
 
 ```1367:1375:conftest.py
             # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
