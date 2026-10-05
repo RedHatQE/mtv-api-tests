@@ -73,9 +73,19 @@ DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
 def resolve_providers_json_path(cli_path: str | None = None) -> str:
     """Resolve providers JSON path with priority order.
 
-    1. ``cli_path`` argument (e.g. from ``--providers-json`` pytest CLI arg).
-    2. ``PROVIDERS_JSON_PATH`` environment variable.
-    3. Default ``.providers.json`` in the current working directory.
+    Resolution order:
+        1. ``cli_path`` argument (e.g. from ``--providers-json`` pytest CLI arg).
+        2. ``PROVIDERS_JSON_PATH`` environment variable.
+        3. Default ``.providers.json`` in the current working directory.
+
+    Args:
+        cli_path (str | None): Explicit path from the CLI argument.
+
+    Returns:
+        str: The resolved file path.
+
+    Raises:
+        FileNotFoundError: If the resolved file does not exist.
     """
 ```
 

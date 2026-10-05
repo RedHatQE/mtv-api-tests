@@ -1919,7 +1919,7 @@ def check_vms(
                         source_vm_data=source_vm_data,
                         destination_vm=destination_vm,
                     )
-                except Exception as exp:
+                except ValueError as exp:
                     res[vm_name].append(f"check_nic_name_preservation - {str(exp)}")
         elif vm_ssh_connections is not None:
             LOGGER.info(
@@ -1964,7 +1964,7 @@ def check_vms(
                     destination_vm=destination_vm,
                     expected_features=_NESTED_VIRT_DISABLED_FEATURES,
                 )
-            except Exception as exp:
+            except AssertionError as exp:
                 res[vm_name].append(f"check_cpu_features - {str(exp)}")
 
             if (

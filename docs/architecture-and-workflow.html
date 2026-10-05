@@ -733,6 +733,8 @@ features become an MTV <code>Plan</code> custom resource.</p>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Plan</span><span class="p">:</span>
 </code></pre></div>
 
+<p>The excerpt above shows the signature only. The function itself carries a full docstring documenting every argument, the returned <code>Plan</code>, and the <code>ValueError</code>
+cases it raises — read <code>utilities/mtv_migration.py:216-240</code> for that contract.</p>
 <p>The two <code>Any</code> types are deliberate, not laziness:</p>
 <ul>
 <li>
@@ -832,6 +834,19 @@ Plan status until it becomes <code>Succeeded</code> or <code>Failed</code>.</p>
   <code>tests/tests_config/config.py</code>.</li>
 </ul>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cutover_value</span><span class="p">(</span><span class="n">current_cutover</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">datetime</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the timestamp to set as the warm migration cutover time.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        current_cutover (bool): When True, cut over immediately and return the current</span>
+<span class="sd">            UTC time. When False, return the current UTC time plus</span>
+<span class="sd">            ``py_config["mins_before_cutover"]`` minutes.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        datetime: Timezone-aware UTC cutover timestamp.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        KeyError: If ``mins_before_cutover`` is missing from the test configuration.</span>
+<span class="sd">    """</span>
     <span class="n">datetime_utc</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">pytz</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">current_cutover</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">datetime_utc</span>

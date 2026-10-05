@@ -429,6 +429,13 @@ def pytest_harvest_xdist_worker_dump(
     session_items: list[Any],
     fixture_store: dict[str, Any],
 ) -> None:
+    """Persist this xdist worker's harvested results so the controller can merge them.
+
+    Args:
+        worker_id: Identifier of the xdist worker
+        session_items: Harvested test items collected on this worker
+        fixture_store: Fixture store captured on this worker
+    """
     # persist session_items and fixture_store in the file system
     with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:
         try:
@@ -449,6 +456,11 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 
 ```python
 def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register the suite's custom pytest options in their groups.
+
+    Args:
+        parser: Pytest command line parser
+    """
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
     openshift_python_wrapper_group = parser.getgroup(name="Openshift Python Wrapper")

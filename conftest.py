@@ -1624,10 +1624,15 @@ def cleanup_migrated_vms(
     Teardown-only fixture that deletes VMs migrated during the test class.
     Honors --skip-teardown flag. Session teardown handles any leftovers.
 
+    The namespace is read from ``prepared_plan["_vm_target_namespace"]``, which
+    ``prepared_plan`` always sets - to the plan's ``vm_target_namespace`` when the
+    test overrides it, otherwise to ``target_namespace``.
+
     Args:
         request: Pytest fixture request for accessing config options
         ocp_admin_client: OpenShift client
-        target_namespace: Namespace where VMs were migrated
+        target_namespace: Default namespace for migrated VMs, used by ``prepared_plan``
+            as the fallback when the plan does not set ``vm_target_namespace``
         prepared_plan: Plan containing virtual_machines list
 
     Yields:
@@ -1713,6 +1718,16 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 def source_provider_inventory(
     ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
+    """Build the Forklift inventory object for the configured source provider.
+
+    Args:
+        ocp_admin_client: OpenShift client used to read Forklift inventory CRs
+        mtv_namespace: Namespace the MTV operator is installed in
+        source_provider: Connected source provider adapter
+
+    Returns:
+        ForkliftInventory: The inventory implementation matching the provider type.
+    """
     return create_forklift_inventory(client=ocp_admin_client, mtv_namespace=mtv_namespace, provider=source_provider)
 
 

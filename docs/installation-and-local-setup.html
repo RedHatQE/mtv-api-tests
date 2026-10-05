@@ -362,9 +362,19 @@ the <code>--providers-json</code> pytest argument, the <code>PROVIDERS_JSON_PATH
 <span class="k">def</span><span class="w"> </span><span class="nf">resolve_providers_json_path</span><span class="p">(</span><span class="n">cli_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Resolve providers JSON path with priority order.</span>
 
-<span class="sd">    1. ``cli_path`` argument (e.g. from ``--providers-json`` pytest CLI arg).</span>
-<span class="sd">    2. ``PROVIDERS_JSON_PATH`` environment variable.</span>
-<span class="sd">    3. Default ``.providers.json`` in the current working directory.</span>
+<span class="sd">    Resolution order:</span>
+<span class="sd">        1. ``cli_path`` argument (e.g. from ``--providers-json`` pytest CLI arg).</span>
+<span class="sd">        2. ``PROVIDERS_JSON_PATH`` environment variable.</span>
+<span class="sd">        3. Default ``.providers.json`` in the current working directory.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cli_path (str | None): Explicit path from the CLI argument.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: The resolved file path.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        FileNotFoundError: If the resolved file does not exist.</span>
 <span class="sd">    """</span>
 </code></pre></div>
 

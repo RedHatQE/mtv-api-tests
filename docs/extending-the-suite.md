@@ -373,6 +373,16 @@ The `source_provider_inventory` fixture in `conftest.py` is just a thin wrapper 
 def source_provider_inventory(
     ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
+    """Build the Forklift inventory object for the configured source provider.
+
+    Args:
+        ocp_admin_client: OpenShift client used to read Forklift inventory CRs
+        mtv_namespace: Namespace the MTV operator is installed in
+        source_provider: Connected source provider adapter
+
+    Returns:
+        ForkliftInventory: The inventory implementation matching the provider type.
+    """
     return create_forklift_inventory(client=ocp_admin_client, mtv_namespace=mtv_namespace, provider=source_provider)
 ```
 

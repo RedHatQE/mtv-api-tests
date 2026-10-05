@@ -767,6 +767,16 @@ coverage usually means keeping the same five-step class and passing a few extra 
 <span class="k">def</span><span class="w"> </span><span class="nf">source_provider_inventory</span><span class="p">(</span>
     <span class="n">ocp_admin_client</span><span class="p">:</span> <span class="n">DynamicClient</span><span class="p">,</span> <span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">source_provider</span><span class="p">:</span> <span class="n">BaseProvider</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ForkliftInventory</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build the Forklift inventory object for the configured source provider.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ocp_admin_client: OpenShift client used to read Forklift inventory CRs</span>
+<span class="sd">        mtv_namespace: Namespace the MTV operator is installed in</span>
+<span class="sd">        source_provider: Connected source provider adapter</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        ForkliftInventory: The inventory implementation matching the provider type.</span>
+<span class="sd">    """</span>
     <span class="k">return</span> <span class="n">create_forklift_inventory</span><span class="p">(</span><span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">mtv_namespace</span><span class="o">=</span><span class="n">mtv_namespace</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">)</span>
 </code></pre></div>
 

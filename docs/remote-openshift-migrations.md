@@ -8,7 +8,7 @@ provider changes from the implicit local form to an explicit provider that inclu
 
 ## What "remote" means in this repository
 
-The repository exposes remote scenarios as dedicated pytest classes marked with `remote`. There are three of them:
+The repository exposes remote scenarios as dedicated pytest classes marked with `remote`. There are four of them:
 
 | Class | Plan config | `ids` |
 | --- | --- | --- |

@@ -403,6 +403,9 @@ def create_plan_resource(
 ) -> Plan:
 ```
 
+The excerpt above shows the signature only. The function itself carries a full docstring documenting every argument, the returned `Plan`, and the `ValueError`
+cases it raises — read `utilities/mtv_migration.py:216-240` for that contract.
+
 The two `Any` types are deliberate, not laziness:
 
 - `fixture_store: dict[str, Any]` — the store is a heterogeneous session registry keyed by resource kind (`Namespace`, `VirtualMachine`, `Migration`, ...) whose
@@ -496,8 +499,21 @@ Cold migrations create the `Migration` immediately. Warm migrations do two extra
 - They pass `get_cutover_value()` when creating the `Migration`, which schedules cutover using `mins_before_cutover` from
   `tests/tests_config/config.py`.
 
-```195:200:utilities/migration_utils.py
+```python
 def get_cutover_value(current_cutover: bool = False) -> datetime:
+    """Return the timestamp to set as the warm migration cutover time.
+
+    Args:
+        current_cutover (bool): When True, cut over immediately and return the current
+            UTC time. When False, return the current UTC time plus
+            ``py_config["mins_before_cutover"]`` minutes.
+
+    Returns:
+        datetime: Timezone-aware UTC cutover timestamp.
+
+    Raises:
+        KeyError: If ``mins_before_cutover`` is missing from the test configuration.
+    """
     datetime_utc = datetime.now(pytz.utc)
     if current_cutover:
         return datetime_utc

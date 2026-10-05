@@ -401,6 +401,7 @@ def create_source_provider(
     Raises:
         ValueError: If the provider type cannot be determined from source_provider_data.
         ValueError: If the provider secret fails to create.
+        ConnectionError: If the provider cannot be reached once the Provider CR is READY.
     """
     # common
     source_provider_secret: Secret | None = None
@@ -804,6 +805,9 @@ def get_cluster_client() -> DynamicClient:
 
     Returns:
         DynamicClient: The cluster client.
+
+    Raises:
+        ConnectionError: If the client could not be constructed for ``host``.
     """
     host = get_value_from_py_config("cluster_host")
     if host is None:
