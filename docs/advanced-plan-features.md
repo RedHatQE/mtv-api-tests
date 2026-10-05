@@ -666,8 +666,11 @@ Real configs, from the throttling and dedicated-host suites:
 ## Skipping the clone phase
 
 `skip_clone: True` makes `prepared_plan` use the existing source VMs instead of cloning them, which is how plan-readiness
-and CA-certificate field tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
+tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
 state during teardown, because these are real, shared VMs rather than disposable clones.
+
+The CA-certificate field tests (`tests/cold/test_ca_crt_cold_migration.py`) do **not** use it: their plan config carries no
+`skip_clone`, so they follow the normal cloning path like every other cold test.
 
 > **Warning:** `skip_clone` is incompatible with `disable_drs_for_vms`, `clone_to_same_host`, `preserve_static_ips` on
 > non-Hyper-V providers, `migrate_shared_disks`, and `add_nic` — all of those need the cloning phase. It also raises

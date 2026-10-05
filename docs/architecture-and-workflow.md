@@ -97,25 +97,33 @@ class TestSanityColdMtvMigration:
     network_map: NetworkMap
     plan_resource: Plan
 
-    def test_create_storagemap(self, prepared_plan, fixture_store, ...):
+    def test_create_storagemap(self, prepared_plan: dict[str, Any], fixture_store: dict[str, Any], ...) -> None:
         self.__class__.storage_map = get_storage_migration_map(...)
         assert self.storage_map, "StorageMap creation failed"
 
-    def test_create_networkmap(self, prepared_plan, fixture_store, ..., multus_network_name):
+    def test_create_networkmap(self, prepared_plan: dict[str, Any], multus_network_name: str, ...) -> None:
         self.__class__.network_map = get_network_migration_map(...)
         assert self.network_map, "NetworkMap creation failed"
 
-    def test_create_plan(self, prepared_plan, fixture_store, ..., source_provider_inventory):
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        source_provider_inventory: ForkliftInventory,
+        ...,
+    ) -> None:
         populate_vm_ids(prepared_plan, source_provider_inventory)
         self.__class__.plan_resource = create_plan_resource(...)
         assert self.plan_resource, "Plan creation failed"
 
-    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+    def test_migrate_vms(self, ocp_admin_client: DynamicClient, target_namespace: str, ...) -> None:
         execute_migration(...)
 
-    def test_check_vms(self, prepared_plan, source_provider, destination_provider, ..., vm_ssh_connections):
+    def test_check_vms(self, prepared_plan: dict[str, Any], vm_ssh_connections: SSHConnectionManager) -> None:
         check_vms(...)
 ```
+
+Every parameter above is a pytest fixture, so the annotations document what each step consumes. The suite's own test methods are currently written
+without parameter annotations - that is existing practice, not the rule; new framework code and helpers are annotated, and annotating test methods costs nothing.
 
 Note the shape of the two middle steps. `test_create_plan` calls `populate_vm_ids(prepared_plan, source_provider_inventory)`
 before `create_plan_resource()`, and `test_migrate_vms` requests only the fixtures it needs, because the resource it waits on is

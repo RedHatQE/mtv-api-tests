@@ -1205,25 +1205,33 @@ validate VMs. Condensed from `tests/cold/test_mtv_cold_migration.py:19-147`:
         network_map: NetworkMap
         plan_resource: Plan
 
-        def test_create_storagemap(self, prepared_plan, fixture_store, ...):
+        def test_create_storagemap(self, prepared_plan: dict[str, Any], fixture_store: dict[str, Any], ...) -> None:
             self.__class__.storage_map = get_storage_migration_map(...)
             assert self.storage_map, "StorageMap creation failed"
 
-        def test_create_networkmap(self, prepared_plan, fixture_store, ..., multus_network_name):
+        def test_create_networkmap(self, prepared_plan: dict[str, Any], multus_network_name: str, ...) -> None:
             self.__class__.network_map = get_network_migration_map(...)
             assert self.network_map, "NetworkMap creation failed"
 
-        def test_create_plan(self, prepared_plan, fixture_store, ..., source_provider_inventory):
+        def test_create_plan(
+            self,
+            prepared_plan: dict[str, Any],
+            source_provider_inventory: ForkliftInventory,
+            ...,
+        ) -> None:
             populate_vm_ids(prepared_plan, source_provider_inventory)
             self.__class__.plan_resource = create_plan_resource(...)
             assert self.plan_resource, "Plan creation failed"
 
-        def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+        def test_migrate_vms(self, ocp_admin_client: DynamicClient, target_namespace: str, ...) -> None:
             execute_migration(...)
 
-        def test_check_vms(self, prepared_plan, source_provider, destination_provider, ..., vm_ssh_connections):
+        def test_check_vms(self, prepared_plan: dict[str, Any], vm_ssh_connections: SSHConnectionManager) -> None:
             check_vms(...)
 ```
+
+Every parameter above is a pytest fixture, so the annotations document what each step consumes. The suite's own test methods are currently written
+without parameter annotations - that is existing practice, not the rule; new framework code and helpers are annotated, and annotating test methods costs nothing.
 
 Note the shape of the two middle steps. `test_create_plan` calls `populate_vm_ids(prepared_plan, source_provider_inventory)`
 before `create_plan_resource()`, and `test_migrate_vms` requests only the fixtures it needs, because the resource it waits on is
@@ -3697,9 +3705,11 @@ The supported way to get a `Job` manifest is to let the CLI generate one. Do not
 `generate` writes `mtv-api-tests-manifests.yaml`, a single self-contained file with a `Namespace`, a `Secret`, and a `Job`.
 The namespace name carries a random suffix, so parallel runs do not collide. `run --mode job` applies it with `oc apply -f` and prints the namespace and job name to follow.
 
-The manifest looks roughly like this. The `Secret` supplies the credentials as environment variables, and the `Job` command maps only two of them into `--tc=` flags:
-`CLUSTER_HOST` becomes `--tc=cluster_host` and `CLUSTER_VERIFY_SSL` becomes `--tc=insecure_verify_skip` (`cli/mtv_api_tests/common.py:934-941`). `CLUSTER_USERNAME` and
-`CLUSTER_PASSWORD` are deliberately left as environment variables so the credentials never appear in the process arguments.
+The manifest looks roughly like this. The `Secret` supplies the credentials as environment variables, and the `Job` command maps one of them into a `--tc=` flag:
+`CLUSTER_HOST` becomes `--tc=cluster_host` (`cli/mtv_api_tests/common.py:939`). `CLUSTER_USERNAME` and `CLUSTER_PASSWORD` are deliberately left as environment
+variables so the credentials never appear in the process arguments. `--tc=insecure_verify_skip` is not read from an environment variable — the wizard resolves the
+value when it writes the manifest and `_build_pytest_command()` embeds that literal (`cli/mtv_api_tests/common.py:1063,940`), while `CLUSTER_VERIFY_SSL` is mounted
+only so `get_cluster_client()` can honour it when the container reads its own environment.
 
 ```yaml
     apiVersion: batch/v1
@@ -5816,6 +5826,10 @@ the class finishes unless `--skip-teardown` is passed:
         Teardown-only fixture that deletes VMs migrated during the test class.
         Honors --skip-teardown flag. Session teardown handles any leftovers.
 ```
+
+`prepared_plan` is annotated `dict[str, Any]` on purpose: it is the mutated `class_plan_config` dict, and its shape depends on which optional plan flags a test
+set — `warm_migration`, `copyoffload`, `xfs_check`, `copyoffload`, `target_affinity` and the rest appear only in the configs that use them. The keys read below are
+the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is `Any`.
 
 ```1639:1659:conftest.py
     yield
@@ -8831,8 +8845,11 @@ Real configs, from the throttling and dedicated-host suites:
 ## Skipping the clone phase
 
 `skip_clone: True` makes `prepared_plan` use the existing source VMs instead of cloning them, which is how plan-readiness
-and CA-certificate field tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
+tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
 state during teardown, because these are real, shared VMs rather than disposable clones.
+
+The CA-certificate field tests (`tests/cold/test_ca_crt_cold_migration.py`) do **not** use it: their plan config carries no
+`skip_clone`, so they follow the normal cloning path like every other cold test.
 
 > **Warning:** `skip_clone` is incompatible with `disable_drs_for_vms`, `clone_to_same_host`, `preserve_static_ips` on
 > non-Hyper-V providers, `migrate_shared_disks`, and `add_nic` — all of those need the cloning phase. It also raises
@@ -13619,9 +13636,10 @@ enriched XML back over the same file. That is test-report post-processing, not a
 ```
 
 The client half of the contract is four environment variables: `ROOTCOZ_SERVER_URL` (required), `ROOTCOZ_TIMEOUT` (default `600`), and the
-optional `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` overrides. This repository also carries `.rootcoz/settings.json`, which is read by the
-rootcoz server and CLI, not by pytest: it pins the AI provider and model, an AI call timeout, peer AI configs, and the `additional_repos`
-rootcoz may consult for this project.
+optional `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` overrides. This repository also carries `.rootcoz/settings.json`, which the rootcoz **server** reads after
+cloning this repository: it pins the AI provider and model, an AI call timeout, peer AI configs, and the `additional_repos` rootcoz may consult. The rootcoz **CLI**
+does not read that file — it uses its own `~/.config/rootcoz/config.toml` (`rootcoz config show`), so CLI runs need the provider and model set there or on the
+command line.
 
 > **Note:** The payload carries only `raw_xml` and the optional overrides — it sends no repository URL. `.rootcoz/settings.json` in this repo is
 > therefore applied only when the server already knows about this repository (server-side configuration or a configured `additional_repos`

@@ -406,6 +406,9 @@ the class finishes unless <code>--skip-teardown</code> is passed:</p>
 <span class="s2">    Honors --skip-teardown flag. Session teardown handles any leftovers.</span>
 </code></pre></div>
 
+<p><code>prepared_plan</code> is annotated <code>dict[str, Any]</code> on purpose: it is the mutated <code>class_plan_config</code> dict, and its shape depends on which optional plan flags a test
+set — <code>warm_migration</code>, <code>copyoffload</code>, <code>xfs_check</code>, <code>copyoffload</code>, <code>target_affinity</code> and the rest appear only in the configs that use them. The keys read below are
+the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is <code>Any</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="k">yield</span>
 
 <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_teardown"</span><span class="p">):</span>

@@ -349,8 +349,8 @@ Use `ValueError` for configuration errors (e.g., missing config key, invalid cre
 Broad exception handling masks programming bugs (`TypeError`, `AttributeError`, `KeyError`) that should crash loudly.
 
 The `check_no_except_exception` pre-commit hook enforces this, and pre-existing violations are tracked as a ratchet in
-`scripts/hooks/baselines/check_no_except_exception.txt` (79 grandfathered findings from issue #610). That baseline is the sanctioned
-exception: it shrinks only when a finding is fixed, so new code must never add another entry to it.
+`scripts/hooks/baselines/check_no_except_exception.txt`, grandfathered under issue #610. That baseline is the sanctioned exception: it shrinks as findings are
+fixed and is never expanded, so new code must never add an entry to it. Read the file for the current count rather than assuming one.
 
 ```python
 # Wrong — swallows everything including bugs

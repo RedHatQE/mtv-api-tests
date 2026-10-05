@@ -687,9 +687,10 @@ def enrich_junit_xml(session: pytest.Session) -> None:
 ```
 
 The client half of the contract is four environment variables: `ROOTCOZ_SERVER_URL` (required), `ROOTCOZ_TIMEOUT` (default `600`), and the
-optional `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` overrides. This repository also carries `.rootcoz/settings.json`, which is read by the
-rootcoz server and CLI, not by pytest: it pins the AI provider and model, an AI call timeout, peer AI configs, and the `additional_repos`
-rootcoz may consult for this project.
+optional `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` overrides. This repository also carries `.rootcoz/settings.json`, which the rootcoz **server** reads after
+cloning this repository: it pins the AI provider and model, an AI call timeout, peer AI configs, and the `additional_repos` rootcoz may consult. The rootcoz **CLI**
+does not read that file — it uses its own `~/.config/rootcoz/config.toml` (`rootcoz config show`), so CLI runs need the provider and model set there or on the
+command line.
 
 > **Note:** The payload carries only `raw_xml` and the optional overrides — it sends no repository URL. `.rootcoz/settings.json` in this repo is
 > therefore applied only when the server already knows about this repository (server-side configuration or a configured `additional_repos`

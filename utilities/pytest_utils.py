@@ -514,7 +514,7 @@ def enrich_junit_xml(session: pytest.Session) -> None:
         return
 
     enriched_xml = enrichment_response.get("enriched_xml")
-    if not isinstance(enriched_xml, str):
+    if not isinstance(enriched_xml, str) or not enriched_xml.strip():
         LOGGER.info("No enriched XML returned (no failures or analysis failed)")
         return
 

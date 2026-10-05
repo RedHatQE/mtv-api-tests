@@ -118,6 +118,10 @@ def cleanup_migrated_vms(
     Honors --skip-teardown flag. Session teardown handles any leftovers.
 ```
 
+`prepared_plan` is annotated `dict[str, Any]` on purpose: it is the mutated `class_plan_config` dict, and its shape depends on which optional plan flags a test
+set — `warm_migration`, `copyoffload`, `xfs_check`, `copyoffload`, `target_affinity` and the rest appear only in the configs that use them. The keys read below are
+the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is `Any`.
+
 ```1639:1659:conftest.py
 yield
 

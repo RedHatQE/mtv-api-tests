@@ -222,9 +222,11 @@ uv run mtv-api-tests run --mode job
 `generate` writes `mtv-api-tests-manifests.yaml`, a single self-contained file with a `Namespace`, a `Secret`, and a `Job`.
 The namespace name carries a random suffix, so parallel runs do not collide. `run --mode job` applies it with `oc apply -f` and prints the namespace and job name to follow.
 
-The manifest looks roughly like this. The `Secret` supplies the credentials as environment variables, and the `Job` command maps only two of them into `--tc=` flags:
-`CLUSTER_HOST` becomes `--tc=cluster_host` and `CLUSTER_VERIFY_SSL` becomes `--tc=insecure_verify_skip` (`cli/mtv_api_tests/common.py:934-941`). `CLUSTER_USERNAME` and
-`CLUSTER_PASSWORD` are deliberately left as environment variables so the credentials never appear in the process arguments.
+The manifest looks roughly like this. The `Secret` supplies the credentials as environment variables, and the `Job` command maps one of them into a `--tc=` flag:
+`CLUSTER_HOST` becomes `--tc=cluster_host` (`cli/mtv_api_tests/common.py:939`). `CLUSTER_USERNAME` and `CLUSTER_PASSWORD` are deliberately left as environment
+variables so the credentials never appear in the process arguments. `--tc=insecure_verify_skip` is not read from an environment variable — the wizard resolves the
+value when it writes the manifest and `_build_pytest_command()` embeds that literal (`cli/mtv_api_tests/common.py:1063,940`), while `CLUSTER_VERIFY_SSL` is mounted
+only so `get_cluster_client()` can honour it when the container reads its own environment.
 
 ```yaml
 apiVersion: batch/v1
