@@ -4052,7 +4052,7 @@ Those named plans are referenced directly by the tests through `class_plan_confi
     )
 ```
 
-[Test Plan Configuration](test-plan-configuration.md) documents every per-VM key and plan-level flag the code supports, with the real names.
+[Test Plan Configuration](test-plan-configuration.html) documents every per-VM key and plan-level flag the code supports, with the real names.
 
 ## Custom Pytest Options
 
@@ -4075,7 +4075,7 @@ Resolution order when the suite loads provider definitions:
 2. `PROVIDERS_JSON_PATH` environment variable.
 3. `.providers.json` in the current working directory.
 
-A missing path raises `FileNotFoundError`, and an empty or non-mapping file fails fast. See [Provider Config File](provider-config-file.md).
+A missing path raises `FileNotFoundError`, and an empty or non-mapping file fails fast. See [Provider Config File](provider-config-file.html).
 
 ### Data collection
 
@@ -5969,7 +5969,7 @@ domains. Instead, it asks Forklift inventory which storages those VMs actually u
 ```
 
 The destination storage class comes from the `storage_class` parameter, falling back to the session config value. The same helper also has a copy-offload branch that adds
-`offloadPlugin` entries instead of inventory-discovered datastores; that branch is covered on the [Copy-Offload Migrations](copy-offload-migrations.md) page.
+`offloadPlugin` entries instead of inventory-discovered datastores; that branch is covered on the [Copy-Offload Migrations](copy-offload-migrations.html) page.
 
 This is why the cold tests stay fairly small at the test-method level. Storage discovery is delegated to the provider-specific inventory code in `libs/forklift_inventory.py`, so
 the test only has to name the VM and the target storage class.
@@ -6267,8 +6267,9 @@ Warm classes use the same five test methods as cold classes, with one behavioral
 4. `test_migrate_vms`
 5. `test_check_vms`
 
-Warm classes also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through `@pytest.mark.usefixtures`, which patches the live ForkliftController before
-any migration starts.
+Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through
+`@pytest.mark.usefixtures`, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
+(`TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`) request only `cleanup_migrated_vms`, so they run without that patch.
 
 Two warm variants extend the five-step pattern:
 
@@ -12233,6 +12234,13 @@ needed, deploys the resource, and registers it in the fixture store for teardown
     ) -> Any:
 ```
 
+The `Any` types are load-bearing, not placeholders:
+
+- `fixture_store: dict[str, Any]` — the session registry is keyed by resource kind (`Namespace`, `VirtualMachine`, `Migration`, ...) and holds descriptors built at runtime,
+  so one union type per kind would have to be imported by every caller.
+- `**kwargs: Any` and `-> Any` — this helper is deliberately generic over `ocp_resources` classes: the kwargs are whatever `resource(**kwargs)` accepts, and the return value
+  is that constructed resource, whose type is only known at the call site.
+
 This is a `MUST` rule in `AGENTS.md`. If a test deliberately deletes a tracked resource mid-test, remove it from teardown with `unregister_teardown_resource()` from
 `utilities/resources.py` so session cleanup does not chase a missing object.
 
@@ -12465,7 +12473,7 @@ That leads to a practical workflow for new suite extensions:
 - Run `pre-commit run --all-files` before you send changes out. Besides `flake8`, `ruff`, `ruff-format`, `mypy`, `detect-secrets`, `gitleaks`, and `markdownlint-cli2`, the config
 includes eight local `repo: local` hooks in `scripts/hooks/` that enforce the AGENTS.md rules: `check-no-kubernetes-runtime`, `check-no-dynamicclient-construct`,
 `check-no-except-exception`, `check-no-module-load-source-providers`, `check-exceptions-location`, `check-test-file-location`, `check-autouse-fixtures`, and
-`check-no-runtimeerror`. See the [development workflow](development-workflow.md) page for what each one bans.
+`check-no-runtimeerror`. See the [development workflow](development-workflow.html) page for what each one bans.
 - Keep using the existing markers unless you truly need a new one.
 
 > **Warning:** `pytest.ini` enables `--strict-markers`. If you introduce a new marker and do not add it to `pytest.ini`, collection will fail.

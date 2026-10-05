@@ -507,8 +507,16 @@ def enrich_junit_xml(session: pytest.Session) -> None:
         LOGGER.exception(f"Failed to enrich JUnit XML, original preserved. {ex}")
         return
 
-    if enriched_xml := enrichment_response.get("enriched_xml"):
-        xml_path.write_text(enriched_xml)
-        LOGGER.info(f"JUnit XML enriched with AI analysis: {xml_path}")
-    else:
+    if not isinstance(enrichment_response, dict):
+        LOGGER.warning(
+            f"rootcoz returned {type(enrichment_response).__name__}, expected a JSON object. Skipping enrichment"
+        )
+        return
+
+    enriched_xml = enrichment_response.get("enriched_xml")
+    if not isinstance(enriched_xml, str):
         LOGGER.info("No enriched XML returned (no failures or analysis failed)")
+        return
+
+    xml_path.write_text(enriched_xml)
+    LOGGER.info(f"JUnit XML enriched with AI analysis: {xml_path}")

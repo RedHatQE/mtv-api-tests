@@ -556,7 +556,7 @@ domains. Instead, it asks Forklift inventory which storages those VMs actually u
 </code></pre></div>
 
 <p>The destination storage class comes from the <code>storage_class</code> parameter, falling back to the session config value. The same helper also has a copy-offload branch that adds
-<code>offloadPlugin</code> entries instead of inventory-discovered datastores; that branch is covered on the <a href="copy-offload-migrations.md">Copy-Offload Migrations</a> page.</p>
+<code>offloadPlugin</code> entries instead of inventory-discovered datastores; that branch is covered on the <a href="copy-offload-migrations.html">Copy-Offload Migrations</a> page.</p>
 <p>This is why the cold tests stay fairly small at the test-method level. Storage discovery is delegated to the provider-specific inventory code in <code>libs/forklift_inventory.py</code>, so
 the test only has to name the VM and the target storage class.</p>
 <h2 id="3-create-the-networkmap">3. Create The NetworkMap</h2>

@@ -288,6 +288,13 @@ def create_and_store_resource(
 ) -> Any:
 ```
 
+The `Any` types are load-bearing, not placeholders:
+
+- `fixture_store: dict[str, Any]` — the session registry is keyed by resource kind (`Namespace`, `VirtualMachine`, `Migration`, ...) and holds descriptors built at runtime,
+  so one union type per kind would have to be imported by every caller.
+- `**kwargs: Any` and `-> Any` — this helper is deliberately generic over `ocp_resources` classes: the kwargs are whatever `resource(**kwargs)` accepts, and the return value
+  is that constructed resource, whose type is only known at the call site.
+
 This is a `MUST` rule in `AGENTS.md`. If a test deliberately deletes a tracked resource mid-test, remove it from teardown with `unregister_teardown_resource()` from
 `utilities/resources.py` so session cleanup does not chase a missing object.
 
@@ -520,7 +527,7 @@ That leads to a practical workflow for new suite extensions:
 - Run `pre-commit run --all-files` before you send changes out. Besides `flake8`, `ruff`, `ruff-format`, `mypy`, `detect-secrets`, `gitleaks`, and `markdownlint-cli2`, the config
 includes eight local `repo: local` hooks in `scripts/hooks/` that enforce the AGENTS.md rules: `check-no-kubernetes-runtime`, `check-no-dynamicclient-construct`,
 `check-no-except-exception`, `check-no-module-load-source-providers`, `check-exceptions-location`, `check-test-file-location`, `check-autouse-fixtures`, and
-`check-no-runtimeerror`. See the [development workflow](development-workflow.md) page for what each one bans.
+`check-no-runtimeerror`. See the [development workflow](development-workflow.html) page for what each one bans.
 - Keep using the existing markers unless you truly need a new one.
 
 > **Warning:** `pytest.ini` enables `--strict-markers`. If you introduce a new marker and do not add it to `pytest.ini`, collection will fail.

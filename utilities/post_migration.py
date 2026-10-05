@@ -1919,7 +1919,7 @@ def check_vms(
                         source_vm_data=source_vm_data,
                         destination_vm=destination_vm,
                     )
-                except ValueError as exp:
+                except (AssertionError, ValueError) as exp:
                     res[vm_name].append(f"check_nic_name_preservation - {str(exp)}")
         elif vm_ssh_connections is not None:
             LOGGER.info(

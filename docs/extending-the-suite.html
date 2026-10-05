@@ -688,6 +688,17 @@ needed, deploys the resource, and registers it in the fixture store for teardown
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 </code></pre></div>
 
+<p>The <code>Any</code> types are load-bearing, not placeholders:</p>
+<ul>
+<li>
+<p><code>fixture_store: dict[str, Any]</code> — the session registry is keyed by resource kind (<code>Namespace</code>, <code>VirtualMachine</code>, <code>Migration</code>, ...) and holds descriptors built at runtime,
+  so one union type per kind would have to be imported by every caller.</p>
+</li>
+<li>
+<p><code>**kwargs: Any</code> and <code>-&gt; Any</code> — this helper is deliberately generic over <code>ocp_resources</code> classes: the kwargs are whatever <code>resource(**kwargs)</code> accepts, and the return value
+  is that constructed resource, whose type is only known at the call site.</p>
+</li>
+</ul>
 <p>This is a <code>MUST</code> rule in <code>AGENTS.md</code>. If a test deliberately deletes a tracked resource mid-test, remove it from teardown with <code>unregister_teardown_resource()</code> from
 <code>utilities/resources.py</code> so session cleanup does not chase a missing object.</p>
 <h3 id="fixture-rules">Fixture rules</h3>
@@ -907,7 +918,7 @@ hides <code>TypeError</code>, <code>AttributeError</code>, and <code>KeyError</c
 <p>Run <code>pre-commit run --all-files</code> before you send changes out. Besides <code>flake8</code>, <code>ruff</code>, <code>ruff-format</code>, <code>mypy</code>, <code>detect-secrets</code>, <code>gitleaks</code>, and <code>markdownlint-cli2</code>, the config
 includes eight local <code>repo: local</code> hooks in <code>scripts/hooks/</code> that enforce the AGENTS.md rules: <code>check-no-kubernetes-runtime</code>, <code>check-no-dynamicclient-construct</code>,
 <code>check-no-except-exception</code>, <code>check-no-module-load-source-providers</code>, <code>check-exceptions-location</code>, <code>check-test-file-location</code>, <code>check-autouse-fixtures</code>, and
-<code>check-no-runtimeerror</code>. See the <a href="development-workflow.md">development workflow</a> page for what each one bans.</p>
+<code>check-no-runtimeerror</code>. See the <a href="development-workflow.html">development workflow</a> page for what each one bans.</p>
 </li>
 <li>
 <p>Keep using the existing markers unless you truly need a new one.</p>

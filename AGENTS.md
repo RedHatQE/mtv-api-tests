@@ -56,6 +56,8 @@ Rules:
   A page missing from `nav.json` is built under a fallback group and reported by the generator — fix the JSON instead.
 - Reorder by reordering `nav.json` arrays. Never rename files to reorder; that breaks existing links.
 - A `nav.json` slug with no `.md` behind it is a build error.
+- Cross-page links target `.html`, not `.md`. pi-docsite does not rewrite link targets, so `[text](other-page.md)` renders as a dead link in the generated site.
+  The generated HTML is committed, so an `.html` target also resolves when the Markdown is read straight from the repository.
 - Search only works when `docs/` is served over HTTP (`fetch()` of `search-index.json` is blocked over `file://`).
 - Rebuild only after every `docs/*.md` edit is finished. The generator reads the directory as it is, so a build started while a page is half-edited
   produces HTML for a state that never existed, and the next rebuild then shows unrelated churn. Verify with two consecutive builds before committing:

@@ -337,8 +337,9 @@ preparation.</p>
 <li><code>test_migrate_vms</code></li>
 <li><code>test_check_vms</code></li>
 </ol>
-<p>Warm classes also activate the session-scoped <code>precopy_interval_forkliftcontroller</code> fixture through <code>@pytest.mark.usefixtures</code>, which patches the live ForkliftController before
-any migration starts.</p>
+<p>Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped <code>precopy_interval_forkliftcontroller</code> fixture through
+<code>@pytest.mark.usefixtures</code>, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
+(<code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code>) request only <code>cleanup_migrated_vms</code>, so they run without that patch.</p>
 <p>Two warm variants extend the five-step pattern:</p>
 <ul>
 <li>

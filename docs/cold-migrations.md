@@ -271,7 +271,7 @@ return storage_map
 ```
 
 The destination storage class comes from the `storage_class` parameter, falling back to the session config value. The same helper also has a copy-offload branch that adds
-`offloadPlugin` entries instead of inventory-discovered datastores; that branch is covered on the [Copy-Offload Migrations](copy-offload-migrations.md) page.
+`offloadPlugin` entries instead of inventory-discovered datastores; that branch is covered on the [Copy-Offload Migrations](copy-offload-migrations.html) page.
 
 This is why the cold tests stay fairly small at the test-method level. Storage discovery is delegated to the provider-specific inventory code in `libs/forklift_inventory.py`, so
 the test only has to name the VM and the target storage class.

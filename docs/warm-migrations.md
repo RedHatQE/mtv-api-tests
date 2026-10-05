@@ -41,8 +41,9 @@ Warm classes use the same five test methods as cold classes, with one behavioral
 4. `test_migrate_vms`
 5. `test_check_vms`
 
-Warm classes also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through `@pytest.mark.usefixtures`, which patches the live ForkliftController before
-any migration starts.
+Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through
+`@pytest.mark.usefixtures`, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
+(`TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`) request only `cleanup_migrated_vms`, so they run without that patch.
 
 Two warm variants extend the five-step pattern:
 

@@ -154,7 +154,7 @@ Those named plans are referenced directly by the tests through `class_plan_confi
 )
 ```
 
-[Test Plan Configuration](test-plan-configuration.md) documents every per-VM key and plan-level flag the code supports, with the real names.
+[Test Plan Configuration](test-plan-configuration.html) documents every per-VM key and plan-level flag the code supports, with the real names.
 
 ## Custom Pytest Options
 
@@ -177,7 +177,7 @@ Resolution order when the suite loads provider definitions:
 2. `PROVIDERS_JSON_PATH` environment variable.
 3. `.providers.json` in the current working directory.
 
-A missing path raises `FileNotFoundError`, and an empty or non-mapping file fails fast. See [Provider Config File](provider-config-file.md).
+A missing path raises `FileNotFoundError`, and an empty or non-mapping file fails fast. See [Provider Config File](provider-config-file.html).
 
 ### Data collection
 
