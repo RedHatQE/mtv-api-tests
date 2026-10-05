@@ -143,8 +143,8 @@ Teardown is more than a best-effort delete loop. The code explicitly tracks left
 That leftover detection is especially important for migration side effects such as pods, PVCs, and PVs. The session code looks for objects tied to the current run’s session UUID
 and records anything that did not disappear cleanly.
 
-If `session_store["teardown"]` is empty, `session_teardown()` returns without doing anything. The code comments why: under parallel execution (`-n auto`) a worker store can
-legitimately be empty.
+`session_teardown()` still builds a cluster client before it checks the store, so an empty worker does not skip client setup — it only skips the cancel, archive and
+leftover-sweep loops. The code comments why the store can be empty: under parallel execution (`-n auto`) a worker store is legitimately empty.
 
 > **Note:** `session_teardown()` cancels migrations first and archives plans before the generic sweep, because a Plan must be `Archived` before it can be deleted. Both loops are
 keyed off the tracked inventory, so a resource you never registered is never cleaned here.

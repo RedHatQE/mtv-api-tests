@@ -347,7 +347,7 @@ The `check_vms()` logic in `utilities/post_migration.py` shows the kind of user-
                 destination_vm=destination_vm,
                 expected_features=_NESTED_VIRT_DISABLED_FEATURES,
             )
-        except Exception as exp:
+        except AssertionError as exp:
             res[vm_name].append(f"check_cpu_features - {str(exp)}")
 ```
 
@@ -7204,6 +7204,10 @@ paired with the plan-config key it reads.
 | `TestSimultaneousCopyoffloadMigrations` | `test_simultaneous_copyoffload_migrations` | Two copy-offload plans executing simultaneously |
 | `TestConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
 
+`TestConcurrentXcopyVddkMigration` is the one class in this suite that carries `@pytest.mark.copyoffload` without `Copyoffload` in its name: it exercises a mixed
+scenario, so the name says XCOPY and VDDK rather than only XCOPY. Marker selection and the collection-time vSphere gate both key off the marker, not the name, so
+`-m copyoffload` still collects it. Renaming it would change its pytest node id, which any external CI job referencing it would break.
+
 ### Snapshot Scenarios
 
 The four snapshot classes share `CopyoffloadSnapshotBase`, which adds one step before the standard sequence and one after it:
@@ -11777,8 +11781,8 @@ Teardown is more than a best-effort delete loop. The code explicitly tracks left
 That leftover detection is especially important for migration side effects such as pods, PVCs, and PVs. The session code looks for objects tied to the current run’s session UUID
 and records anything that did not disappear cleanly.
 
-If `session_store["teardown"]` is empty, `session_teardown()` returns without doing anything. The code comments why: under parallel execution (`-n auto`) a worker store can
-legitimately be empty.
+`session_teardown()` still builds a cluster client before it checks the store, so an empty worker does not skip client setup — it only skips the cancel, archive and
+leftover-sweep loops. The code comments why the store can be empty: under parallel execution (`-n auto`) a worker store is legitimately empty.
 
 > **Note:** `session_teardown()` cancels migrations first and archives plans before the generic sweep, because a Plan must be `Archived` before it can be deleted. Both loops are
 keyed off the tracked inventory, so a resource you never registered is never cleaned here.

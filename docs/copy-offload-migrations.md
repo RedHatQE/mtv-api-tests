@@ -522,6 +522,10 @@ paired with the plan-config key it reads.
 | `TestSimultaneousCopyoffloadMigrations` | `test_simultaneous_copyoffload_migrations` | Two copy-offload plans executing simultaneously |
 | `TestConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
 
+`TestConcurrentXcopyVddkMigration` is the one class in this suite that carries `@pytest.mark.copyoffload` without `Copyoffload` in its name: it exercises a mixed
+scenario, so the name says XCOPY and VDDK rather than only XCOPY. Marker selection and the collection-time vSphere gate both key off the marker, not the name, so
+`-m copyoffload` still collects it. Renaming it would change its pytest node id, which any external CI job referencing it would break.
+
 ### Snapshot Scenarios
 
 The four snapshot classes share `CopyoffloadSnapshotBase`, which adds one step before the standard sequence and one after it:

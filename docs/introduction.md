@@ -339,7 +339,7 @@ if plan.get("enable_nested_virtualization") is False and source_provider.type !=
             destination_vm=destination_vm,
             expected_features=_NESTED_VIRT_DISABLED_FEATURES,
         )
-    except Exception as exp:
+    except AssertionError as exp:
         res[vm_name].append(f"check_cpu_features - {str(exp)}")
 ```
 
