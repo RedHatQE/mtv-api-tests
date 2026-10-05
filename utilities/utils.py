@@ -553,7 +553,7 @@ def create_source_provider(
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
         if not _source_provider.test:
-            pytest.fail(f"{source_provider.type} provider {provider_args['host']} is not available.")
+            raise ConnectionError(f"{source_provider.type} provider {provider_args['host']} is not available.")
 
         yield _source_provider
 
@@ -824,6 +824,8 @@ def get_cluster_client() -> DynamicClient:
         if insecure_verify_skip is None:
             insecure_verify_skip = True
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+    if client is None:
+        raise ConnectionError(f"Failed to get client for cluster '{host}'.")
     return client
 
 

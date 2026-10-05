@@ -529,7 +529,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.</p>
     <span class="c1"># this is for communication with the provider</span>
     <span class="k">with</span> <span class="n">source_provider</span><span class="p">(</span><span class="n">ocp_resource</span><span class="o">=</span><span class="n">ocp_resource_provider</span><span class="p">,</span> <span class="o">**</span><span class="n">provider_args</span><span class="p">)</span> <span class="k">as</span> <span class="n">_source_provider</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_source_provider</span><span class="o">.</span><span class="n">test</span><span class="p">:</span>
-            <span class="n">pytest</span><span class="o">.</span><span class="n">fail</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> provider </span><span class="si">{</span><span class="n">provider_args</span><span class="p">[</span><span class="s1">'host'</span><span class="p">]</span><span class="si">}</span><span class="s2"> is not available."</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> provider </span><span class="si">{</span><span class="n">provider_args</span><span class="p">[</span><span class="s1">'host'</span><span class="p">]</span><span class="si">}</span><span class="s2"> is not available."</span><span class="p">)</span>
 
         <span class="k">yield</span> <span class="n">_source_provider</span>
 </code></pre></div>
@@ -589,7 +589,7 @@ if requested, adjusts source power state, stores source-side metadata, and creat
 
 <p>Cloning runs in two phases. First every VM is cloned, powered to <code>source_vm_power</code>, described through <code>vm_dict()</code>, and recorded
 in <code>plan["source_vms_data"]</code>. Then a single blocking wait covers all of them. <code>inventory_timeout</code> is one of the optional plan flags — it defaults to <code>300</code> seconds
-when a config omits it, which is why this is the one place <code>.get()</code> is correct here; every other plan key is read with direct indexing:</p>
+when a config omits it. Other optional flags in the same fixture, such as <code>warm_migration</code>, are read the same way; only keys a plan must supply are read with direct indexing:</p>
 <div class="highlight"><pre><span></span><code>            <span class="c1"># Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.</span>
             <span class="c1"># Sequential per-VM wait during cloning causes inventory sync failures on VM2+.</span>
             <span class="n">inventory_timeout</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"inventory_timeout"</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>

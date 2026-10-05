@@ -207,7 +207,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
         if not _source_provider.test:
-            pytest.fail(f"{source_provider.type} provider {provider_args['host']} is not available.")
+            raise ConnectionError(f"{source_provider.type} provider {provider_args['host']} is not available.")
 
         yield _source_provider
 ```
@@ -259,7 +259,7 @@ if requested, adjusts source power state, stores source-side metadata, and creat
 
 Cloning runs in two phases. First every VM is cloned, powered to `source_vm_power`, described through `vm_dict()`, and recorded
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
-when a config omits it, which is why this is the one place `.get()` is correct here; every other plan key is read with direct indexing:
+when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
 ```1367:1375:conftest.py
             # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.

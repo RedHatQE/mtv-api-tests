@@ -51,7 +51,7 @@ The basic cold-migration test configuration is intentionally small:
 is not a `bool`:
 
 ```1148:1162:conftest.py
-has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
 if has_add_nic_config:
     if not isinstance(source_provider, VMWareProvider):
         pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
@@ -125,8 +125,8 @@ if request.config.getoption("skip_teardown"):
     LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
     return
 
-# Use custom namespace if configured, otherwise fall back to target_namespace
-vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
+# prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
+vm_namespace = prepared_plan["_vm_target_namespace"]
 
 for vm in prepared_plan["virtual_machines"]:
     vm_name = resolve_destination_vm_name(vm)

@@ -340,7 +340,8 @@ SSH keys are removed after the fixture yields, and temporary cluster edits made 
     <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Skipping VM cleanup due to --skip-teardown flag"</span><span class="p">)</span>
     <span class="k">return</span>
 
-<span class="n">vm_namespace</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"_vm_target_namespace"</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
+<span class="c1"># prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)</span>
+<span class="n">vm_namespace</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"_vm_target_namespace"</span><span class="p">]</span>
 
 <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]:</span>
     <span class="n">vm_name</span> <span class="o">=</span> <span class="n">resolve_destination_vm_name</span><span class="p">(</span><span class="n">vm</span><span class="p">)</span>

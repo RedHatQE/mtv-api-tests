@@ -343,7 +343,7 @@ list at once, and the run still fails before any fixture executes. It never subs
 
 <p><code>add_nic</code> is a vSphere-only option. The <code>prepared_plan</code> fixture skips the whole class for any other provider type, and it fails fast when <code>add_nic_start_connected</code> is missing or
 is not a <code>bool</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">has_add_nic_config</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">)</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">has_add_nic_config</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">has_add_nic_config</span><span class="p">:</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source_provider</span><span class="p">,</span> <span class="n">VMWareProvider</span><span class="p">):</span>
         <span class="n">pytest</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="sa">f</span><span class="s2">"add_nic is vSphere-only; skipping for provider '</span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">'"</span><span class="p">)</span>
@@ -412,8 +412,8 @@ the class finishes unless <code>--skip-teardown</code> is passed:</p>
     <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Skipping VM cleanup due to --skip-teardown flag"</span><span class="p">)</span>
     <span class="k">return</span>
 
-<span class="c1"># Use custom namespace if configured, otherwise fall back to target_namespace</span>
-<span class="n">vm_namespace</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"_vm_target_namespace"</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
+<span class="c1"># prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)</span>
+<span class="n">vm_namespace</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"_vm_target_namespace"</span><span class="p">]</span>
 
 <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]:</span>
     <span class="n">vm_name</span> <span class="o">=</span> <span class="n">resolve_destination_vm_name</span><span class="p">(</span><span class="n">vm</span><span class="p">)</span>

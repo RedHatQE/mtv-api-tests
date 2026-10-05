@@ -872,7 +872,7 @@ def multus_network_name(
         raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
 
     # Calculate how many multus NADs we need
-    extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic"))
+    extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic", False))
     if class_plan_config.get("per_nic_network_map", False):
         multus_count = max(
             0,
@@ -1145,12 +1145,12 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
-        has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+        has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
         if has_add_nic_config:
             if not isinstance(source_provider, VMWareProvider):
                 pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
             for vm in virtual_machines:
-                if vm.get("add_nic"):
+                if vm.get("add_nic", False):
                     if "add_nic_start_connected" not in vm:
                         raise ValueError(
                             f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
@@ -1321,7 +1321,7 @@ def prepared_plan(
                 # inventory is now stale (missing the new NIC). A forced refresh + NIC-count wait runs
                 # after the loop (see wait_for_added_nics_in_forklift_inventory) to guarantee NetworkMap
                 # creation sees the added NIC — otherwise Forklift drops it during VM creation.
-                if vm.get("add_nic"):
+                if vm.get("add_nic", False):
                     connected: bool = vm["add_nic_start_connected"]
                     nic_count_before = sum(
                         1
@@ -1642,8 +1642,8 @@ def cleanup_migrated_vms(
         LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
         return
 
-    # Use custom namespace if configured, otherwise fall back to target_namespace
-    vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
+    # prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
+    vm_namespace = prepared_plan["_vm_target_namespace"]
 
     for vm in prepared_plan["virtual_machines"]:
         vm_name = resolve_destination_vm_name(vm)

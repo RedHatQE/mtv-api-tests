@@ -1315,7 +1315,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         # this is for communication with the provider
         with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
             if not _source_provider.test:
-                pytest.fail(f"{source_provider.type} provider {provider_args['host']} is not available.")
+                raise ConnectionError(f"{source_provider.type} provider {provider_args['host']} is not available.")
 
             yield _source_provider
 ```
@@ -1367,7 +1367,7 @@ if requested, adjusts source power state, stores source-side metadata, and creat
 
 Cloning runs in two phases. First every VM is cloned, powered to `source_vm_power`, described through `vm_dict()`, and recorded
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
-when a config omits it, which is why this is the one place `.get()` is correct here; every other plan key is read with direct indexing:
+when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
 ```1367:1375:conftest.py
                 # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
@@ -5723,7 +5723,7 @@ The basic cold-migration test configuration is intentionally small:
 is not a `bool`:
 
 ```1148:1162:conftest.py
-    has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+    has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
     if has_add_nic_config:
         if not isinstance(source_provider, VMWareProvider):
             pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
@@ -5797,8 +5797,8 @@ the class finishes unless `--skip-teardown` is passed:
         LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
         return
 
-    # Use custom namespace if configured, otherwise fall back to target_namespace
-    vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
+    # prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
+    vm_namespace = prepared_plan["_vm_target_namespace"]
 
     for vm in prepared_plan["virtual_machines"]:
         vm_name = resolve_destination_vm_name(vm)
@@ -11260,13 +11260,17 @@ file. rootcoz is an external service, not part of this repository; this page onl
         if ai_model := os.environ.get("ROOTCOZ_AI_MODEL"):
             payload["ai_model"] = ai_model
 
-        response = requests.post(
-            f"{server_url.rstrip('/')}/analyze-failures",
-            json=payload,
-            timeout=timeout_value,
-        )
-        response.raise_for_status()
-        enrichment_response = response.json()
+        try:
+            response = requests.post(
+                f"{server_url.rstrip('/')}/analyze-failures",
+                json=payload,
+                timeout=timeout_value,
+            )
+            response.raise_for_status()
+            enrichment_response = response.json()
+        except Exception as ex:
+            LOGGER.exception(f"Failed to enrich JUnit XML, original preserved. {ex}")
+            return
 
         if enriched_xml := enrichment_response.get("enriched_xml"):
             xml_path.write_text(enriched_xml)
@@ -11623,7 +11627,8 @@ That fixture runs after the class completes. From `conftest.py`:
         LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
         return
 
-    vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
+    # prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
+    vm_namespace = prepared_plan["_vm_target_namespace"]
 
     for vm in prepared_plan["virtual_machines"]:
         vm_name = resolve_destination_vm_name(vm)
