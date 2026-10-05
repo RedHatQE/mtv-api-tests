@@ -32,6 +32,9 @@ if not is_dry_run(session.config):
         pytest.exit(reason=f"Some required config is missing {required_config=} - {missing_configs=}", returncode=1)
 ```
 
+This is the sanctioned exception to the direct-access rule for controlled config: `.get()` is used only to gather *every* missing key so the operator sees the whole
+list at once, and the run still fails before any fixture executes. It never substitutes a default for a value the suite then acts on.
+
 The basic cold-migration test configuration is intentionally small:
 
 ```49:55:tests/tests_config/config.py

@@ -733,6 +733,19 @@ features become an MTV <code>Plan</code> custom resource.</p>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Plan</span><span class="p">:</span>
 </code></pre></div>
 
+<p>The two <code>Any</code> types are deliberate, not laziness:</p>
+<ul>
+<li>
+<p><code>fixture_store: dict[str, Any]</code> — the store is a heterogeneous session registry keyed by resource kind (<code>Namespace</code>, <code>VirtualMachine</code>, <code>Migration</code>, ...) whose
+  values are resource descriptors built at runtime by <code>create_and_store_resource()</code>. One union type per kind would have to be imported by every caller for no gain.</p>
+</li>
+<li>
+<p><code>target_affinity: dict[str, Any]</code> — Kubernetes affinity accepts node selector terms, pod affinity/anti-affinity terms, and their weights, so the value is a nested
+  structure whose leaf types differ per provider. Pinning it to one concrete type would reject valid plans.</p>
+</li>
+</ul>
+<p>Everything the suite itself constructs — <code>virtual_machines_list: list[dict[str, Any]]</code>, <code>pvc_name_template</code>, <code>target_labels</code>, <code>target_node_selector</code> — is typed as
+narrowly as its content allows.</p>
 <div class="highlight"><pre><span></span><code>    <span class="n">plan_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"client"</span><span class="p">:</span> <span class="n">ocp_admin_client</span><span class="p">,</span>
         <span class="s2">"fixture_store"</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>

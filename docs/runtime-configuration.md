@@ -55,8 +55,12 @@ For a normal run, the suite expects two runtime values even though they are not 
 
 If either required key is missing, the session aborts with `pytest.exit(...)` and return code `1` before any fixture runs.
 
-Cluster credentials also resolve from the environment, in this order: the `--tc` value first, then the environment variable, then the built-in default. `CLUSTER_VERIFY_SSL` takes
+Cluster credentials resolve from the environment, in this order: the `--tc` value first, then the environment variable. `CLUSTER_VERIFY_SSL` takes
 precedence over `insecure_verify_skip` for OpenShift API SSL verification, and its semantics are inverted: `CLUSTER_VERIFY_SSL=true` means `insecure_verify_skip=False`.
+
+> **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. When neither `--tc` nor the environment supplies a value,
+> `get_cluster_client()` passes `None` through to `get_client()` and the failure surfaces from the OpenShift client library as a connection error. Supply all three
+> explicitly or the run fails before any fixture executes.
 
 The repository's OpenShift Job template in `README.md` uses `--tc=` overrides like this:
 

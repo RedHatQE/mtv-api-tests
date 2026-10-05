@@ -403,6 +403,16 @@ def create_plan_resource(
 ) -> Plan:
 ```
 
+The two `Any` types are deliberate, not laziness:
+
+- `fixture_store: dict[str, Any]` — the store is a heterogeneous session registry keyed by resource kind (`Namespace`, `VirtualMachine`, `Migration`, ...) whose
+  values are resource descriptors built at runtime by `create_and_store_resource()`. One union type per kind would have to be imported by every caller for no gain.
+- `target_affinity: dict[str, Any]` — Kubernetes affinity accepts node selector terms, pod affinity/anti-affinity terms, and their weights, so the value is a nested
+  structure whose leaf types differ per provider. Pinning it to one concrete type would reject valid plans.
+
+Everything the suite itself constructs — `virtual_machines_list: list[dict[str, Any]]`, `pvc_name_template`, `target_labels`, `target_node_selector` — is typed as
+narrowly as its content allows.
+
 ```281:305:utilities/mtv_migration.py
     plan_kwargs: dict[str, Any] = {
         "client": ocp_admin_client,

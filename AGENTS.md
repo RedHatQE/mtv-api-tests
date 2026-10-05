@@ -693,7 +693,9 @@ if not vm_id:
 - Using `False` as default when the key is always present in config
   (exception: `warm_migration`, `copyoffload`, `enable_nested_virtualization`, `xfs_compatibility`,
   `skip_clone`, `per_nic_network_map`, `inventory_timeout`, `clone_to_same_host`, `pin_to_non_dedicated_host`,
-  and `disable_drs_for_vms` are optional flags — `.get()` with a documented default is correct)
+  `preserve_static_ips`, and `disable_drs_for_vms` are optional flags — `.get()` with a documented default is correct.
+  `pytest_sessionstart` collects required keys with `.get()` purely to report every missing key in one `pytest.exit()` instead of dying on the first `KeyError`;
+  that is validation-then-exit, not a silent default.)
 
 ### Provider Config Key Access (MUST)
 

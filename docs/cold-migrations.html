@@ -329,6 +329,8 @@ migrated VM after the move finishes. The MTV version under test is pinned in the
         <span class="n">pytest</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Some required config is missing </span><span class="si">{</span><span class="n">required_config</span><span class="si">=}</span><span class="s2"> - </span><span class="si">{</span><span class="n">missing_configs</span><span class="si">=}</span><span class="s2">"</span><span class="p">,</span> <span class="n">returncode</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
 
+<p>This is the sanctioned exception to the direct-access rule for controlled config: <code>.get()</code> is used only to gather <em>every</em> missing key so the operator sees the whole
+list at once, and the run still fails before any fixture executes. It never substitutes a default for a value the suite then acts on.</p>
 <p>The basic cold-migration test configuration is intentionally small:</p>
 <div class="highlight"><pre><span></span><code><span class="s2">"test_sanity_cold_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
     <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>

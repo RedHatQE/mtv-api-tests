@@ -491,7 +491,9 @@ uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w
 
 <p><code>generate</code> writes <code>mtv-api-tests-manifests.yaml</code>, a single self-contained file with a <code>Namespace</code>, a <code>Secret</code>, and a <code>Job</code>.
 The namespace name carries a random suffix, so parallel runs do not collide. <code>run --mode job</code> applies it with <code>oc apply -f</code> and prints the namespace and job name to follow.</p>
-<p>The manifest looks roughly like this. The <code>Secret</code> supplies the credentials, and the <code>Job</code> command expands them into <code>--tc=</code> flags:</p>
+<p>The manifest looks roughly like this. The <code>Secret</code> supplies the credentials as environment variables, and the <code>Job</code> command maps only two of them into <code>--tc=</code> flags:
+<code>CLUSTER_HOST</code> becomes <code>--tc=cluster_host</code> and <code>CLUSTER_VERIFY_SSL</code> becomes <code>--tc=insecure_verify_skip</code> (<code>cli/mtv_api_tests/common.py:934-941</code>). <code>CLUSTER_USERNAME</code> and
+<code>CLUSTER_PASSWORD</code> are deliberately left as environment variables so the credentials never appear in the process arguments.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch/v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Job</span>
 <span class="nt">metadata</span><span class="p">:</span>
