@@ -193,6 +193,7 @@ That helper is used for the credential-like copy-offload inputs. In the current 
 | `storage_hostname` | `COPYOFFLOAD_STORAGE_HOSTNAME` |
 | `storage_username` | `COPYOFFLOAD_STORAGE_USERNAME` |
 | `storage_password` | `COPYOFFLOAD_STORAGE_PASSWORD` |
+| `storage_skip_ssl_verification` | `COPYOFFLOAD_STORAGE_SKIP_SSL_VERIFICATION` |
 | `ontap_svm` | `COPYOFFLOAD_ONTAP_SVM` |
 | `vantara_storage_id` | `COPYOFFLOAD_VANTARA_STORAGE_ID` |
 | `vantara_storage_port` | `COPYOFFLOAD_VANTARA_STORAGE_PORT` |
