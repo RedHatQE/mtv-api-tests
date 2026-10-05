@@ -476,7 +476,10 @@ def enrich_junit_xml(session: pytest.Session) -> None:
 
     xml_path = Path(xml_path_raw)
     if not xml_path.exists():
-        LOGGER.warning(f"xunit file not found under {xml_path_raw}. Skipping AI analysis enrichment")
+        LOGGER.warning(
+            "xunit file not found under %s. Skipping AI analysis enrichment",
+            xml_path_raw,
+        )
         return
 
     server_url = os.environ["ROOTCOZ_SERVER_URL"]
@@ -502,21 +505,13 @@ def enrich_junit_xml(session: pytest.Session) -> None:
             timeout=timeout_value,
         )
         response.raise_for_status()
-        enrichment_response = response.json()
+        result = response.json()
     except Exception as ex:
         LOGGER.exception(f"Failed to enrich JUnit XML, original preserved. {ex}")
         return
 
-    if not isinstance(enrichment_response, dict):
-        LOGGER.warning(
-            f"rootcoz returned {type(enrichment_response).__name__}, expected a JSON object. Skipping enrichment"
-        )
-        return
-
-    enriched_xml = enrichment_response.get("enriched_xml")
-    if not isinstance(enriched_xml, str) or not enriched_xml.strip():
+    if enriched_xml := result.get("enriched_xml"):
+        xml_path.write_text(enriched_xml)
+        LOGGER.info("JUnit XML enriched with AI analysis: %s", xml_path)
+    else:
         LOGGER.info("No enriched XML returned (no failures or analysis failed)")
-        return
-
-    xml_path.write_text(enriched_xml)
-    LOGGER.info(f"JUnit XML enriched with AI analysis: {xml_path}")

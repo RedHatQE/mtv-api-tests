@@ -520,10 +520,10 @@ paired with the plan-config key it reads.
 | `TestCopyoffloadWarmMigration` | `test_copyoffload_warm_migration` | Live warm migration with a cutover value |
 | `TestCopyoffloadScaleMigration` | `test_copyoffload_scale_migration` | Five thick-lazy VMs in one plan |
 | `TestSimultaneousCopyoffloadMigrations` | `test_simultaneous_copyoffload_migrations` | Two copy-offload plans executing simultaneously |
-| `TestCopyoffloadConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
+| `TestConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
 
-The class name states both halves of its scenario — `Copyoffload` for the feature marker and `XcopyVddk` for the mixed pair it exercises — so it stays discoverable by
-either keyword while satisfying the class-naming convention. Marker selection and the collection-time vSphere gate key off `@pytest.mark.copyoffload` regardless.
+`TestConcurrentXcopyVddkMigration` carries `@pytest.mark.copyoffload` and exercises a mixed XCOPY-and-VDDK scenario, so its name describes the pair rather than the
+feature. Marker selection and the collection-time vSphere gate both key off `@pytest.mark.copyoffload`, so `-m copyoffload` still collects it.
 
 ### Snapshot Scenarios
 

@@ -401,7 +401,6 @@ def create_source_provider(
     Raises:
         ValueError: If the provider type cannot be determined from source_provider_data.
         ValueError: If the provider secret fails to create.
-        ConnectionError: If the provider cannot be reached once the Provider CR is READY.
     """
     # common
     source_provider_secret: Secret | None = None
@@ -554,7 +553,7 @@ def create_source_provider(
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
         if not _source_provider.test:
-            raise ConnectionError(f"{_source_provider.type} provider {provider_args['host']} is not available.")
+            pytest.fail(f"{source_provider.type} provider {provider_args['host']} is not available.")
 
         yield _source_provider
 
@@ -807,7 +806,7 @@ def get_cluster_client() -> DynamicClient:
         DynamicClient: The cluster client.
 
     Raises:
-        ConnectionError: If the client could not be constructed for ``host``.
+        ValueError: If the client cannot be created.
     """
     host = get_value_from_py_config("cluster_host")
     if host is None:
@@ -828,8 +827,8 @@ def get_cluster_client() -> DynamicClient:
         if insecure_verify_skip is None:
             insecure_verify_skip = True
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
-    if client is None:
-        raise ConnectionError(f"Failed to get client for cluster '{host}'.")
+    if not isinstance(client, DynamicClient):
+        raise ValueError("Failed to get client for cluster")
     return client
 
 

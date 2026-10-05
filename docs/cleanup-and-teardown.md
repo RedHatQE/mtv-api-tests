@@ -50,8 +50,8 @@ if request.config.getoption("skip_teardown"):
     LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
     return
 
-# prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
-vm_namespace = prepared_plan["_vm_target_namespace"]
+# Use custom namespace if configured, otherwise fall back to target_namespace
+vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
 for vm in prepared_plan["virtual_machines"]:
     vm_name = resolve_destination_vm_name(vm)

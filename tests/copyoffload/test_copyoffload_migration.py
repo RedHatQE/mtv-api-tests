@@ -5321,7 +5321,7 @@ class TestSimultaneousCopyoffloadMigrations:
 @pytest.mark.usefixtures(
     "vmware_cloud_init_ready_both_plans", "copyoffload_config", "copyoffload_ssh_key", "cleanup_migrated_vms"
 )
-class TestCopyoffloadConcurrentXcopyVddkMigration:
+class TestConcurrentXcopyVddkMigration:
     """Test simultaneous execution of XCOPY and VDDK migration plans.
 
     Plan 1: XCOPY based (copyoffload=True)

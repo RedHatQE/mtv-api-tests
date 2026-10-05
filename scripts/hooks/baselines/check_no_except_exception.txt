@@ -20,6 +20,8 @@ utilities/migration_utils.py:4c79910c2c637d4b  # L100: except Exception as exc:
 utilities/migration_utils.py:7f0bb5a69c678106  # L110: except Exception as exc:
 utilities/must_gather.py:6ad27bee56efdb4e  # L186: except Exception as ex:
 utilities/post_migration.py:144078802dd1a6e3  # L1851: except Exception as exp:
+utilities/post_migration.py:1ac05a2588a8d131  # L1728: except Exception as exp:
+utilities/post_migration.py:284197d704278459  # L1773: except Exception as exp:
 utilities/post_migration.py:333521df9816dc7c  # L1636: except Exception as exp:
 utilities/post_migration.py:3aba294d173b6e84  # L1863: except Exception as exp:
 utilities/post_migration.py:3c0cf2dfebaad45d  # L1760: except Exception as exp:

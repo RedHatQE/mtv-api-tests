@@ -307,7 +307,7 @@ The `check_vms()` logic in `utilities/post_migration.py` shows the kind of user-
                     source_vm_data=source_vm_data,
                     destination_vm=destination_vm,
                 )
-            except (AssertionError, ValueError) as exp:
+            except Exception as exp:
                 res[vm_name].append(f"check_nic_name_preservation - {str(exp)}")
 
     # Check node placement if configured
@@ -347,7 +347,7 @@ The `check_vms()` logic in `utilities/post_migration.py` shows the kind of user-
                 destination_vm=destination_vm,
                 expected_features=_NESTED_VIRT_DISABLED_FEATURES,
             )
-        except (AssertionError, ValueError) as exp:
+        except Exception as exp:
             res[vm_name].append(f"check_cpu_features - {str(exp)}")
 ```
 
@@ -1323,7 +1323,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         # this is for communication with the provider
         with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
             if not _source_provider.test:
-                raise ConnectionError(f"{source_provider.type} provider {provider_args['host']} is not available.")
+                pytest.fail(f"{source_provider.type} provider {provider_args['host']} is not available.")
 
             yield _source_provider
 ```
@@ -5838,8 +5838,8 @@ the ones the fixture guarantees on every run, which is why they can be indexed d
         LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
         return
 
-    # prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
-    vm_namespace = prepared_plan["_vm_target_namespace"]
+    # Use custom namespace if configured, otherwise fall back to target_namespace
+    vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
     for vm in prepared_plan["virtual_machines"]:
         vm_name = resolve_destination_vm_name(vm)
@@ -7202,10 +7202,10 @@ paired with the plan-config key it reads.
 | `TestCopyoffloadWarmMigration` | `test_copyoffload_warm_migration` | Live warm migration with a cutover value |
 | `TestCopyoffloadScaleMigration` | `test_copyoffload_scale_migration` | Five thick-lazy VMs in one plan |
 | `TestSimultaneousCopyoffloadMigrations` | `test_simultaneous_copyoffload_migrations` | Two copy-offload plans executing simultaneously |
-| `TestCopyoffloadConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
+| `TestConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
 
-The class name states both halves of its scenario — `Copyoffload` for the feature marker and `XcopyVddk` for the mixed pair it exercises — so it stays discoverable by
-either keyword while satisfying the class-naming convention. Marker selection and the collection-time vSphere gate key off `@pytest.mark.copyoffload` regardless.
+`TestConcurrentXcopyVddkMigration` carries `@pytest.mark.copyoffload` and exercises a mixed XCOPY-and-VDDK scenario, so its name describes the pair rather than the
+feature. Marker selection and the collection-time vSphere gate both key off `@pytest.mark.copyoffload`, so `-m copyoffload` still collects it.
 
 ### Snapshot Scenarios
 
@@ -11301,7 +11301,10 @@ file. rootcoz is an external service, not part of this repository; this page onl
 
         xml_path = Path(xml_path_raw)
         if not xml_path.exists():
-            LOGGER.warning(f"xunit file not found under {xml_path_raw}. Skipping AI analysis enrichment")
+            LOGGER.warning(
+                "xunit file not found under %s. Skipping AI analysis enrichment",
+                xml_path_raw,
+            )
             return
 
         server_url = os.environ["ROOTCOZ_SERVER_URL"]
@@ -11327,12 +11330,12 @@ file. rootcoz is an external service, not part of this repository; this page onl
                 timeout=timeout_value,
             )
             response.raise_for_status()
-            enrichment_response = response.json()
+            result = response.json()
         except Exception as ex:
             LOGGER.exception(f"Failed to enrich JUnit XML, original preserved. {ex}")
             return
 
-        if enriched_xml := enrichment_response.get("enriched_xml"):
+        if enriched_xml := result.get("enriched_xml"):
             xml_path.write_text(enriched_xml)
             LOGGER.info(f"JUnit XML enriched with AI analysis: {xml_path}")
         else:
@@ -11687,8 +11690,8 @@ That fixture runs after the class completes. From `conftest.py`:
         LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
         return
 
-    # prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
-    vm_namespace = prepared_plan["_vm_target_namespace"]
+    # Use custom namespace if configured, otherwise fall back to target_namespace
+    vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
     for vm in prepared_plan["virtual_machines"]:
         vm_name = resolve_destination_vm_name(vm)

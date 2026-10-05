@@ -872,7 +872,7 @@ def multus_network_name(
         raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
 
     # Calculate how many multus NADs we need
-    extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic", False))
+    extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic"))
     if class_plan_config.get("per_nic_network_map", False):
         multus_count = max(
             0,
@@ -1145,12 +1145,12 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
-        has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
+        has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config:
             if not isinstance(source_provider, VMWareProvider):
                 pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
             for vm in virtual_machines:
-                if vm.get("add_nic", False):
+                if vm.get("add_nic"):
                     if "add_nic_start_connected" not in vm:
                         raise ValueError(
                             f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
@@ -1321,7 +1321,7 @@ def prepared_plan(
                 # inventory is now stale (missing the new NIC). A forced refresh + NIC-count wait runs
                 # after the loop (see wait_for_added_nics_in_forklift_inventory) to guarantee NetworkMap
                 # creation sees the added NIC — otherwise Forklift drops it during VM creation.
-                if vm.get("add_nic", False):
+                if vm.get("add_nic"):
                     connected: bool = vm["add_nic_start_connected"]
                     nic_count_before = sum(
                         1
@@ -1624,15 +1624,10 @@ def cleanup_migrated_vms(
     Teardown-only fixture that deletes VMs migrated during the test class.
     Honors --skip-teardown flag. Session teardown handles any leftovers.
 
-    The namespace is read from ``prepared_plan["_vm_target_namespace"]``, which
-    ``prepared_plan`` always sets - to the plan's ``vm_target_namespace`` when the
-    test overrides it, otherwise to ``target_namespace``.
-
     Args:
         request: Pytest fixture request for accessing config options
         ocp_admin_client: OpenShift client
-        target_namespace: Default namespace for migrated VMs, used by ``prepared_plan``
-            as the fallback when the plan does not set ``vm_target_namespace``
+        target_namespace: Namespace where VMs were migrated
         prepared_plan: Plan containing virtual_machines list
 
     Yields:
@@ -1647,8 +1642,8 @@ def cleanup_migrated_vms(
         LOGGER.info("Skipping VM cleanup due to --skip-teardown flag")
         return
 
-    # prepared_plan always sets _vm_target_namespace (defaults to target_namespace when the plan does not override it)
-    vm_namespace = prepared_plan["_vm_target_namespace"]
+    # Use custom namespace if configured, otherwise fall back to target_namespace
+    vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
     for vm in prepared_plan["virtual_machines"]:
         vm_name = resolve_destination_vm_name(vm)
@@ -1718,16 +1713,6 @@ def forklift_pods_state(ocp_admin_client: DynamicClient) -> None:
 def source_provider_inventory(
     ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
 ) -> ForkliftInventory:
-    """Build the Forklift inventory object for the configured source provider.
-
-    Args:
-        ocp_admin_client: OpenShift client used to read Forklift inventory CRs
-        mtv_namespace: Namespace the MTV operator is installed in
-        source_provider: Connected source provider adapter
-
-    Returns:
-        ForkliftInventory: The inventory implementation matching the provider type.
-    """
     return create_forklift_inventory(client=ocp_admin_client, mtv_namespace=mtv_namespace, provider=source_provider)
 
 

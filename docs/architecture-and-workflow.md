@@ -215,7 +215,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
         if not _source_provider.test:
-            raise ConnectionError(f"{source_provider.type} provider {provider_args['host']} is not available.")
+            pytest.fail(f"{source_provider.type} provider {provider_args['host']} is not available.")
 
         yield _source_provider
 ```

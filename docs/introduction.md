@@ -299,7 +299,7 @@ if vm_ssh_connections is not None and destination_vm.get("power_state") == "on":
                 source_vm_data=source_vm_data,
                 destination_vm=destination_vm,
             )
-        except (AssertionError, ValueError) as exp:
+        except Exception as exp:
             res[vm_name].append(f"check_nic_name_preservation - {str(exp)}")
 
 # Check node placement if configured
@@ -339,7 +339,7 @@ if plan.get("enable_nested_virtualization") is False and source_provider.type !=
             destination_vm=destination_vm,
             expected_features=_NESTED_VIRT_DISABLED_FEATURES,
         )
-    except (AssertionError, ValueError) as exp:
+    except Exception as exp:
         res[vm_name].append(f"check_cpu_features - {str(exp)}")
 ```
 
