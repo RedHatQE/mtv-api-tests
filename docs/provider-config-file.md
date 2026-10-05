@@ -1,49 +1,178 @@
 # Provider Config File
 
-`mtv-api-tests` does not ship a separate JSON Schema document for provider settings. The effective schema comes from `.providers.json.example` and the Python code that loads `./.providers.json`. In practice, that means the file is flexible, but specific fields become required when a provider path or validation step reads them.
+`mtv-api-tests` keeps source provider definitions in `.providers.json`. Two shipped files describe it: `providers_schema.json` is a JSON Schema (draft 2020-12) that your editor
+can validate against, and `.providers.json.example` is an annotated template with one entry per provider type.
 
-> **Warning:** `.providers.json.example` is an annotated template, not a ready-to-use `.providers.json`. The loader parses `.providers.json` with `json.loads(...)`, so your real file must be strict JSON: remove comments, keep valid quoting, and avoid trailing commas.
+At runtime the suite only parses JSON. It reads specific fields per provider type and ignores the rest, so the schema is the reference for what each provider entry may contain.
+
+> **Warning:** `.providers.json.example` is an annotated template, not a ready-to-use `.providers.json`. The loader parses the file with `json.loads(...)`, so your real file
+> must be strict JSON: remove comments, keep valid quoting, and avoid trailing commas.
 
 > **Warning:** `.providers.json` usually contains provider passwords and guest OS passwords. Treat it as a secret file.
 
-> **Note:** The top-level key is the provider name you select with `source_provider`. It does not have to match `type`. For example, the example file has a key named `vsphere-copy-offload`, but its `"type"` is still `"vsphere"`.
+> **Note:** The top-level key is the provider name you select with `source_provider`. It does not have to match `type`. For example, the example file has a key named
+> `vsphere-copy-offload`, but its `"type"` is still `"vsphere"`.
 
-## How the file is used
+## How the file is located
 
-- The test harness looks for `./.providers.json` in the directory where you run the tests.
-- The file can contain multiple provider entries in one JSON object.
-- `source_provider` must match one of the top-level keys in that file.
-- A missing or empty file fails fast.
-- `version` is used mainly in generated test resource names. It is not the field that decides how to connect.
-- There is no strict field whitelist. Extra keys are usually harmless until a specific provider or test path reads them.
+`load_source_providers()` resolves the path in this order:
 
-## Common fields
-
-| Field | Meaning | Notes |
+| Order | Source | Notes |
 | --- | --- | --- |
-| `type` | Provider implementation to use | Supported values from the example file are `vsphere`, `ovirt`, `openstack`, `openshift`, and `ova`. |
-| `version` | Provider version label | Used mainly in generated test resource names. Keep it populated for every entry. |
-| `fqdn` | Provider host name or IP | Important for VMware direct connections and for CA certificate download in secure VMware, RHV, and OpenStack flows. |
-| `api_url` | Provider API endpoint or share URL | Expected format depends on the provider: `/sdk` for vSphere, `/ovirt-engine/api` for RHV, `/v3` for OpenStack, and an NFS share URL for OVA. |
-| `username` / `password` | Provider login credentials | Required for VMware, RHV, and OpenStack. Kept as placeholders in the OpenShift and OVA examples. |
-| `guest_vm_linux_user` / `guest_vm_linux_password` | Linux guest login | Used for SSH-based post-migration validation, not for connecting to the source provider. |
-| `guest_vm_win_user` / `guest_vm_win_password` | Windows guest login | Also used for post-migration validation, not provider login. |
-| `vddk_init_image` | vSphere-specific provider field | Passed through to the MTV `Provider` resource when set. |
-| `endpoint_type` | vSphere-specific provider field | Optional. `"vcenter"` (default) or `"esxi"` for direct ESXi host connections. Maps to `sdkEndpoint` in the MTV `Provider` resource settings. |
-| `clone_provider` | vSphere ESXi-specific field | Name of a vCenter provider entry that handles `CloneVM_Task` on behalf of an ESXi provider. See [ESXi cloning via clone_provider](#esxi-cloning-via-clone_provider). |
-| `copyoffload` | vSphere-only nested settings | Used by copy-offload tests to build storage secrets and storage-map plugin config. |
+| 1 | `--providers-json <path>` | Custom pytest option |
+| 2 | `PROVIDERS_JSON_PATH` environment variable | CI-friendly override |
+| 3 | `.providers.json` | Relative to the current working directory |
 
-## Guest credentials
+Fail-fast behavior:
+
+- A path that does not exist raises `FileNotFoundError`.
+- An empty or whitespace-only file raises `ProviderEmptyContentError`.
+- A file whose top level is not a JSON object raises `ValueError`.
+- `source_provider` must match one of the top-level keys, or provider lookups fail later.
+
+## Top-Level Shape
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/RedHatQE/mtv-api-tests/main/providers_schema.json",
+  "vsphere": { "type": "vsphere", "...": "..." }
+}
+```
+
+- The root is an object. Every key except `$schema` is a provider definition.
+- `$schema` is optional and is used only for editor validation.
+- Each provider definition is validated against a `oneOf` block, one per provider type. Exactly one type block must match.
+
+> **Warning:** The OpenShift provider block sets `additionalProperties: false`. Unknown keys in an `openshift` entry fail schema validation, even though the runtime loader
+> ignores extra keys on other provider types.
+
+## Fields By Provider Type
+
+`type` selects the block. These tables match `providers_schema.json` exactly.
+
+### `type: "vsphere"`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `type` | Yes | Constant `vsphere`. |
+| `version` | Yes | Platform version label, for example `8.0.3`. Used in generated resource names. |
+| `fqdn` | Yes | vCenter or ESXi host name or IP. |
+| `api_url` | Yes | Provider API URL. vSphere expects a `/sdk` suffix. |
+| `username` | Yes | vSphere login. |
+| `password` | Yes | vSphere password. |
+| `endpoint_type` | No | `vcenter` or `esxi`. Defaults to vCenter behavior when omitted. |
+| `vddk_init_image` | No | VDDK init container image reference passed to the MTV `Provider`. |
+| `clone_provider` | No | Name of a vCenter entry used for ESXi cloning. |
+| `luks_passphrase` | No | Provider-level LUKS passphrase, used when a VM has no per-VM override. |
+| `copyoffload` | No | Nested copy-offload block. See [vSphere copy-offload](#vsphere-copy-offload). |
+| `guest_vm_linux_user` / `guest_vm_linux_password` | No | Linux guest SSH credentials. |
+| `guest_vm_win_user` / `guest_vm_win_password` | No | Windows guest WinRM credentials. |
+
+### `type: "ovirt"`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `type` | Yes | Constant `ovirt`. Use this even for an RHV source. |
+| `version` | Yes | Platform version label. |
+| `fqdn` | Yes | Engine host name or IP. Also used for the CA certificate download. |
+| `api_url` | Yes | Engine API URL. Expect an `/ovirt-engine/api` suffix. |
+| `username` | Yes | RHV login. |
+| `password` | Yes | RHV password. |
+| `guest_vm_linux_user` / `guest_vm_linux_password` | No | Linux guest SSH credentials. |
+| `guest_vm_win_user` / `guest_vm_win_password` | No | Windows guest WinRM credentials. |
+
+### `type: "openstack"`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `type` | Yes | Constant `openstack`. |
+| `version` | Yes | Platform version label. |
+| `fqdn` | Yes | Host name or IP. Also used for the CA certificate download. |
+| `api_url` | Yes | Keystone v3 endpoint, for example `host:5000/v3`. |
+| `username` | Yes | OpenStack login. |
+| `password` | Yes | OpenStack password. |
+| `user_domain_name` | Yes | Keystone user domain name. |
+| `region_name` | Yes | Region name. |
+| `project_name` | Yes | Project or tenant name. |
+| `user_domain_id` | Yes | Keystone user domain UUID. |
+| `project_domain_id` | Yes | Keystone project domain UUID. |
+| `guest_vm_linux_user` / `guest_vm_linux_password` | No | Linux guest SSH credentials. |
+| `guest_vm_win_user` / `guest_vm_win_password` | No | Windows guest WinRM credentials. |
+
+### `type: "openshift"`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `type` | Yes | Constant `openshift`. |
+| `version` | Yes | Platform version label. |
+| `host` | Yes | Cluster API host name or URL. Required by the schema. |
+| `api_url` | Yes | Cluster API URL. Required by the schema. |
+| `username` | Yes | Required by the schema. |
+| `password` | Yes | Required by the schema. |
+| `storage_class` | Yes | Default storage class for target PVCs. Required by the schema. |
+| `verify_ssl` | No | `true` or `false`. |
+| `ca_bundle` | No | Path to a CA bundle file for SSL verification. |
+
+This block is the strict one: `additionalProperties` is `false`, so no other keys are allowed.
+
+> **Note:** The runtime path for an `openshift` entry does not authenticate with these values. The loader rewrites `api_url` to the current cluster host and reuses the
+> session's own token secret, which is always created with `insecureSkipVerify: "true"`. See [OpenShift](#openshift).
+
+### `type: "ova"`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `type` | Yes | Constant `ova`. |
+| `version` | Yes | Platform version label. Any placeholder value works; it is used for naming only. |
+| `fqdn` | Yes | Not used for OVA connections. |
+| `api_url` | Yes | NFS share URL. This is the field the OVA provider actually consumes. |
+| `username` | Yes | Not used for OVA connections. |
+| `password` | Yes | Not used for OVA connections. |
+| `guest_vm_linux_user` / `guest_vm_linux_password` | No | Linux guest SSH credentials. |
+| `guest_vm_win_user` / `guest_vm_win_password` | No | Windows guest WinRM credentials. |
+
+### `type: "hyperv"`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `type` | Yes | Constant `hyperv`. |
+| `version` | Yes | Platform version label. |
+| `fqdn` | Yes | Hyper-V host address. |
+| `api_url` | Yes | Hyper-V host address. |
+| `username` | Yes | Hyper-V host login. |
+| `password` | Yes | Hyper-V host password. |
+| `smb_url` | Yes | SMB share URL used for VM disk transfer. |
+| `smb_user` | No | SMB user, when it differs from the provider credentials. |
+| `smb_password` | No | SMB password, when it differs from the provider credentials. |
+| `guest_vm_linux_user` / `guest_vm_linux_password` | No | Linux guest SSH credentials. |
+| `guest_vm_win_user` / `guest_vm_win_password` | No | Windows guest WinRM credentials. |
+
+> **Note:** Hyper-V is the only provider that fetches its CA certificate from port `5986` instead of `443`.
+
+## Fields The Runtime Always Reads
+
+Before dispatching on `type`, the loader builds the provider secret and connection arguments from three fields. They must be present for every provider entry, including
+`openshift` and `ova`:
+
+| Field | Use |
+| --- | --- |
+| `api_url` | Becomes the `url` key of the provider Secret. |
+| `username` | Becomes the provider connection username. |
+| `password` | Becomes the provider connection password. |
+
+## Guest Credentials
 
 Guest credentials are separate from provider credentials.
 
-The provider `username` and `password` fields log in to the source platform itself. The `guest_vm_*` fields are read later by post-migration SSH checks when the destination VM is powered on. If those checks run and the matching guest credentials are missing, validation fails.
+The provider `username` and `password` fields log in to the source platform itself. The `guest_vm_*` fields are read later by post-migration SSH or WinRM checks when the
+destination VM is powered on. If those checks run and the matching guest credentials are missing, validation fails.
 
-This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so it is fine to add `guest_vm_linux_*` and `guest_vm_win_*` to any provider entry when your selected tests need them.
+This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so it is fine to add `guest_vm_linux_*` and `guest_vm_win_*`
+to any provider entry when your selected tests need them.
 
 > **Tip:** Think of `guest_vm_linux_*` and `guest_vm_win_*` as per-guest test credentials, not part of the provider login.
 
-## SSL behavior
+## SSL Behavior
 
 Source-provider SSL behavior is controlled in `tests/tests_config/config.py`, not inside `.providers.json`:
 
@@ -54,15 +183,16 @@ source_provider_insecure_skip_verify: str = "false"  # SSL verification for sour
 
 Key points:
 
-- `source_provider_insecure_skip_verify` controls the source provider secret created for VMware, RHV, OpenStack, and OVA.
-- `insecure_verify_skip` is for OpenShift API connections and does not control VMware/RHV/OpenStack provider validation.
+- `source_provider_insecure_skip_verify` controls the source provider Secret created for vSphere, RHV, OpenStack, and Hyper-V.
+- `insecure_verify_skip` is for OpenShift API connections and does not control source provider validation.
 - These settings are stored as strings, so use `"true"` or `"false"`.
-- When `source_provider_insecure_skip_verify` is `"false"`, the harness fetches a CA certificate from `fqdn:443` and stores it in the provider secret for VMware and OpenStack.
-- RHV is special: the code always fetches the CA certificate, even when verification is skipped, because the ImageIO path still needs it.
-- OpenShift is also special: the source provider reuses the current cluster token secret, which is created with `insecureSkipVerify: "true"`.
+  When `source_provider_insecure_skip_verify` is `"false"`, the harness fetches a CA certificate from `fqdn` and stores it in the provider Secret for vSphere, OpenStack, and
+  Hyper-V.
+- RHV is special: the code always fetches the CA certificate, even when verification is skipped, because the ImageIO path still needs it. It is stored under `cacert` by default.
+- OpenShift is also special: the source provider reuses the current cluster token Secret, which is created with `insecureSkipVerify: "true"`.
 - OVA has no CA download step.
 
-> **Note:** Secure mode only works if `fqdn` points to a host that serves the provider certificate on port `443`. If the certificate fetch fails, provider creation fails.
+> **Note:** Secure mode only works if `fqdn` points to a host that serves the provider certificate on the expected port. If the certificate fetch fails, provider creation fails.
 
 ## vSphere
 
@@ -80,130 +210,130 @@ Key points:
   "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
   "guest_vm_win_user": "WINDOWS VMS USERNAME",
   "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+  "luks_passphrase": "LUKS DISK ENCRYPTION PASSPHRASE",  # pragma: allowlist secret
   "vddk_init_image": "<PATH TO VDDK INIT IMAGE>",
-  "endpoint_type": "vcenter"
+  "endpoint_type": "vcenter",
 }
 ```
 
 What matters for vSphere:
 
-- `type` must be `vsphere`.
 - `fqdn` is used for the direct vSphere connection.
-- `api_url` becomes the MTV provider URL and should end with `/sdk`.
-- `username` and `password` are the vSphere credentials used by the harness.
-- The Linux and Windows guest credentials are used only for guest-level validation after migration.
+- In secure mode the API URL is normalized for TLS before the certificate is downloaded.
 - `vddk_init_image` is passed to the MTV `Provider` resource when present.
-- `endpoint_type` is optional. Valid values are `"vcenter"` (default) or `"esxi"`. Set it to `"esxi"` for direct ESXi host connections. When set, the value maps to `sdkEndpoint` in the MTV `Provider` resource settings.
+- `endpoint_type` maps to `sdkEndpoint` in the MTV `Provider` resource settings. Use `"esxi"` for direct ESXi host connections.
+- `luks_passphrase` here is the provider-level fallback. A per-VM `luks_passphrase` in the test plan config takes precedence.
 
 ### ESXi cloning via clone_provider
 
-ESXi hosts do not support the `CloneVM_Task` API -- that is a vCenter-only operation. To enable VM cloning for test isolation when the source provider is an ESXi host, configure a `clone_provider` field that references a vCenter provider entry capable of performing the clone on behalf of the ESXi provider.
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `clone_provider` | Only for ESXi entries that need cloning | Name of another provider entry (must be `type: "vsphere"` / vCenter) that handles `CloneVM_Task` for this ESXi host. |
+ESXi hosts do not support the `CloneVM_Task` API. That is a vCenter-only operation. To enable VM cloning for test isolation when the source provider is an ESXi host, configure
+`clone_provider` so the harness can reach a vCenter entry that performs the clone.
 
 How it works:
 
-- The `clone_provider` value must match a top-level key in `.providers.json` whose `type` is `"vsphere"` and that points to a vCenter instance.
-- The vCenter must manage the same ESXi host that the ESXi entry connects to.
-- When `clone_provider` is set, the test harness creates a separate `VMWareProvider` connection to the referenced vCenter and uses it exclusively for cloning operations.
-- If `clone_provider` is not set, the harness uses the source provider for cloning (which works for vCenter entries but will fail for ESXi).
+- The `clone_provider` value must match a top-level key in `.providers.json`.
+- A missing key fails with a `ValueError` that lists the available provider names.
+- The referenced entry must be a vSphere provider.
+- When `clone_provider` is set, the harness creates a separate `VMWareProvider` connection to that vCenter and uses it for cloning operations.
+- If `clone_provider` is not set, the harness uses the source provider for cloning. That works for vCenter entries but will fail for ESXi.
 
 *ESXi provider example:*
 
 ```json
 "vsphere-esxi": {
   "type": "vsphere",
-  "version": "8.0",
-  "fqdn": "esxi-host.example.com",
-  "api_url": "esxi-host.example.com/sdk",
-  "username": "root",
+  "version": "<SERVER VERSION>",
+  "fqdn": "ESXI HOST FQDN/IP",
+  "api_url": "<ESXI HOST FQDN/IP>/sdk",
+  "username": "USERNAME",
   "password": "PASSWORD",
   "endpoint_type": "esxi",
-  "vddk_init_image": "quay.io/example/vddk:latest",
+  "vddk_init_image": "<PATH TO VDDK INIT IMAGE>",
   "clone_provider": "vsphere"
 }
 ```
 
-In this example, `"clone_provider": "vsphere"` references the `"vsphere"` entry shown earlier, which must be a vCenter that manages `esxi-host.example.com`.
+Here `"clone_provider": "vsphere"` references the `"vsphere"` entry shown earlier, which must be a vCenter that manages `ESXI HOST FQDN/IP`.
 
-> **Tip:** Keep a separate vSphere entry for copy-offload, like the example’s `vsphere-copy-offload`. That makes it easy to switch between regular and copy-offload test runs by changing only `source_provider`.
+> **Tip:** Keep a separate vSphere entry for copy-offload, like the example's `vsphere-copy-offload`. That makes it easy to switch between regular and copy-offload runs by
+> changing only `source_provider`.
 
-## vSphere copy-offload
+### vSphere copy-offload
 
-The `copyoffload` section is only meaningful for vSphere entries. The code validates it before copy-offload tests run, uses it to build the storage secret, and then passes that secret into the `vsphereXcopyConfig` storage-map plugin configuration.
+The `copyoffload` block is only meaningful for vSphere entries. The code validates it before copy-offload tests run, uses it to build the storage Secret, and passes that Secret
+into the `vsphereXcopyConfig` storage-map plugin configuration.
 
-*Core copy-offload fields from `.providers.json.example`:*
+#### Required fields
 
-```jsonc
-"copyoffload": {
-  # Supported storage_vendor_product values:
-  # - "ontap"           (NetApp ONTAP)
-  # - "vantara"         (Hitachi Vantara)
-  # - "primera3par"     (HPE Primera/3PAR)
-  # - "pureFlashArray"  (Pure Storage FlashArray)
-  # - "powerflex"       (Dell PowerFlex)
-  # - "powermax"        (Dell PowerMax)
-  # - "powerstore"      (Dell PowerStore)
-  # - "infinibox"       (Infinidat InfiniBox)
-  # - "flashsystem"     (IBM FlashSystem)
-  "storage_vendor_product": "ontap",
+The schema requires exactly two fields, and the copy-offload fixture re-validates both at runtime:
 
-  # Primary datastore for copy-offload operations (required)
-  # This is the vSphere datastore ID (e.g., "datastore-12345") where VMs reside
-  # Get via vSphere: Datacenter → Storage → Datastore → Summary → More Objects ID
-  "datastore_id": "datastore-12345",
-
-  # Optional: Secondary datastore for multi-datastore copy-offload tests
-  # Only needed when testing VMs with disks spanning multiple datastores
-  # When specified, tests can validate copy-offload with disks on different datastores
-  "secondary_datastore_id": "datastore-67890",
-
-  # Optional: Non-XCOPY datastore for mixed datastore tests
-  # This should be a datastore that does NOT support XCOPY/VAAI primitives
-  # Used for testing VMs with disks on both XCOPY and non-XCOPY datastores
-  "non_xcopy_datastore_id": "datastore-99999",
-
-  "default_vm_name": "rhel9-template",
-  "storage_hostname": "storage.example.com",
-  "storage_username": "admin",
-  "storage_password": "your-password-here",  # pragma: allowlist secret
-```
-
-Copy-offload field reference:
-
-| Field | Required when | Meaning |
-| --- | --- | --- |
-| `storage_vendor_product` | Always | Storage backend name. Must be one of the supported values listed above. |
-| `datastore_id` | Always | Primary vSphere datastore MoRef ID, such as `datastore-12345`. |
-| `storage_hostname` | Always, unless provided by environment variable | Storage system host used to build the copy-offload secret. |
-| `storage_username` | Always, unless provided by environment variable | Storage login name. |
-| `storage_password` | Always, unless provided by environment variable | Storage password. |
-| `secondary_datastore_id` | Only for multi-datastore tests | Second XCOPY-capable datastore. |
-| `non_xcopy_datastore_id` | Only for mixed/fallback tests | Datastore that does not support XCOPY/VAAI. |
-| `default_vm_name` | Optional | Overrides the source VM/template name for cloned copy-offload tests. |
-| `esxi_clone_method` | Optional | `vib` is the default. Set it to `ssh` to make the provider use SSH-based ESXi cloning. |
-| `esxi_host` / `esxi_user` / `esxi_password` | Required when `esxi_clone_method` is `ssh` | ESXi SSH connection settings. |
-| `rdm_lun_uuid` | Only for RDM tests | Required when running RDM disk tests. |
-
-Vendor-specific fields:
-
-| `storage_vendor_product` value | Additional fields |
+| Field | Notes |
 | --- | --- |
-| `ontap` | `ontap_svm` |
-| `vantara` | `vantara_storage_id`, `vantara_storage_port`, `vantara_hostgroup_id_list` |
-| `primera3par` | none |
-| `pureFlashArray` | `pure_cluster_prefix` |
-| `powerflex` | `powerflex_system_id` |
-| `powermax` | `powermax_symmetrix_id` |
-| `powerstore` | none |
-| `infinibox` | none |
-| `flashsystem` | none |
+| `storage_vendor_product` | One of the supported vendor values listed below. |
+| `datastore_id` | Primary vSphere datastore MoRef ID, such as `datastore-12345`. |
 
-> **Tip:** Every copy-offload credential can come from an environment variable instead of the file, and environment variables win. The code builds names as `COPYOFFLOAD_<FIELD_IN_UPPERCASE>`, so examples include `COPYOFFLOAD_STORAGE_HOSTNAME`, `COPYOFFLOAD_STORAGE_USERNAME`, `COPYOFFLOAD_STORAGE_PASSWORD`, `COPYOFFLOAD_ONTAP_SVM`, `COPYOFFLOAD_ESXI_HOST`, `COPYOFFLOAD_ESXI_USER`, and `COPYOFFLOAD_ESXI_PASSWORD`.
+Supported `storage_vendor_product` values:
 
-> **Warning:** The supported `storage_vendor_product` values are fixed in code. Use the exact spellings shown in the example and table above.
+| Value | Storage array |
+| --- | --- |
+| `ontap` | NetApp ONTAP |
+| `primera3par` | HPE Primera/3PAR |
+| `pureFlashArray` | Pure Storage FlashArray |
+| `powerflex` | Dell PowerFlex |
+| `powermax` | Dell PowerMax |
+| `powerstore` | Dell PowerStore |
+| `vantara` | Hitachi Vantara |
+| `infinibox` | Infinidat InfiniBox |
+| `flashsystem` | IBM FlashSystem |
+
+> **Warning:** These values are fixed in code. Use the exact spellings above.
+
+#### Vendor-specific required fields
+
+The schema requires extra fields for some vendors, and the copy-offload fixture raises when a required vendor field is missing:
+
+| `storage_vendor_product` | Additional required fields | Secret keys added |
+| --- | --- | --- |
+| `ontap` | `ontap_svm` | `ONTAP_SVM` |
+| `vantara` | `vantara_storage_id`, `vantara_storage_port`, `vantara_hostgroup_id_list` | `STORAGE_ID`, `STORAGE_PORT`, `HOSTGROUP_ID_LIST` |
+| `primera3par` | none | none |
+| `pureFlashArray` | `pure_cluster_prefix` | `PURE_CLUSTER_PREFIX` |
+| `powerflex` | `powerflex_system_id` | `POWERFLEX_SYSTEM_ID` |
+| `powermax` | `powermax_symmetrix_id` | `POWERMAX_SYMMETRIX_ID` |
+| `powerstore` | none | none |
+| `infinibox` | none | none |
+| `flashsystem` | none | none |
+
+#### Optional fields
+
+| Field | Notes |
+| --- | --- |
+| `default_vm_name` | Overrides the source VM name for cloned copy-offload tests. Applied only to VMs with `clone: true`. |
+| `storage_hostname` | Storage array management host. Required at runtime unless `COPYOFFLOAD_STORAGE_HOSTNAME` is set. |
+| `storage_username` | Storage array user. Required at runtime unless `COPYOFFLOAD_STORAGE_USERNAME` is set. |
+| `storage_password` | Storage array password. Required at runtime unless `COPYOFFLOAD_STORAGE_PASSWORD` is set. |
+| `secondary_datastore_id` | Second XCOPY-capable datastore, for multi-datastore tests. |
+| `non_xcopy_datastore_id` | Datastore without XCOPY support, for fallback and negative tests. |
+| `storage_secret_extra` | Object of extra Kubernetes Secret `stringData` keys for vendor configuration. |
+| `dedicated_migration_hosts` | Array of ESXi host MoRef IDs used for XCOPY extraction. Required for dedicated-host tests. |
+| `resource_pool` | vSphere resource pool for clone placement. See the priority order below. |
+| `esxi_clone_method` | `vib` or `ssh`. `vib` is the default. |
+| `esxi_host` / `esxi_user` / `esxi_password` | Required by the schema and at runtime when `esxi_clone_method` is `ssh`. |
+| `rdm_lun_uuid` | NAA-format LUN identifier for RDM tests. Must match the `^naa\.` pattern. |
+
+`resource_pool` selection priority order:
+
+1. The configured `resource_pool` value.
+2. The target ESXi host's pool, when `target_esxi_host` is set on the clone options.
+3. The source VM's or template's pool.
+4. A cluster-wide search with a datastore compatibility check.
+
+`dedicated_migration_hosts` must be a non-empty list of non-empty strings. When more than one host is listed, Forklift selects one at random per disk. Dedicated-host tests raise
+a `ValueError` when this field is missing.
+
+> **Tip:** Every copy-offload credential can come from an environment variable instead of the file, and environment variables win. Names are built as
+> `COPYOFFLOAD_<FIELD_IN_UPPERCASE>`, so examples include `COPYOFFLOAD_STORAGE_HOSTNAME`, `COPYOFFLOAD_STORAGE_USERNAME`, `COPYOFFLOAD_STORAGE_PASSWORD`, `COPYOFFLOAD_ONTAP_SVM`,
+> `COPYOFFLOAD_ESXI_HOST`, `COPYOFFLOAD_ESXI_USER`, and `COPYOFFLOAD_ESXI_PASSWORD`. `storage_secret_extra` has its own JSON-object override, `COPYOFFLOAD_STORAGE_SECRET_EXTRA`.
 
 ## RHV / oVirt
 
@@ -225,14 +355,11 @@ The RHV source path uses `type: "ovirt"`.
 What matters for RHV:
 
 - Use `type: "ovirt"` even if you think of the source as RHV.
-- `api_url` should point to the engine API and end with `/ovirt-engine/api`.
-- `fqdn` should point to the engine host, because the CA certificate is fetched from `fqdn:443`.
-- `username` and `password` are required for the provider connection.
-- If your selected tests perform SSH-based guest validation, add `guest_vm_linux_*` and `guest_vm_win_*` to this entry even though the example does not show them.
+- `fqdn` should point to the engine host, because the CA certificate is fetched from it.
+- The RHV provider also expects a data center named `MTV-CNV` to exist with status `up`. That is not configurable in `.providers.json`, but it is enforced during connection.
 
-> **Note:** RHV is the one provider where the harness always downloads the CA certificate. In secure mode it is used for SDK validation; in insecure mode it is still carried because the ImageIO flow needs it.
-
-> **Note:** The RHV provider code also expects a data center named `MTV-CNV` to exist and be `up`. That is not configured in `.providers.json`, but it is enforced during connection.
+> **Note:** RHV is the one provider where the harness always downloads the CA certificate. In secure mode it is used for SDK validation; in insecure mode it is still carried
+> because the ImageIO flow needs it.
 
 ## OpenStack
 
@@ -258,11 +385,8 @@ What matters for RHV:
 
 What matters for OpenStack:
 
-- `api_url` should be the Keystone v3 endpoint.
-- `project_name`, `user_domain_name`, `region_name`, `user_domain_id`, and `project_domain_id` are all read by the OpenStack provider code. Keep all of them populated.
-- `fqdn` still matters in secure mode because the harness fetches a CA certificate from `fqdn:443`.
-- The example includes Linux guest credentials because post-migration validation may SSH into powered-on Linux guests.
-- If your test selection includes powered-on Windows guests with guest-level validation, add `guest_vm_win_user` and `guest_vm_win_password` as well.
+- `project_name`, `user_domain_name`, `region_name`, `user_domain_id`, and `project_domain_id` are all passed to the provider. All five are required by the schema.
+- `fqdn` still matters in secure mode because the harness fetches a CA certificate from it.
 
 ## OpenShift
 
@@ -272,22 +396,23 @@ What matters for OpenStack:
 "openshift": {
   "type": "openshift",
   "version": "<SERVER VERSION>",
-  "fqdn": "",
-  "api_url": "",
-  "username": "",
-  "password": ""  # pragma: allowlist secret
+  "host": "<CLUSTER API URL>",
+  "api_url": "<CLUSTER API URL>",
+  "username": "<USERNAME>",
+  "password": "<PASSWORD>",  # pragma: allowlist secret
+  "storage_class": "<STORAGE CLASS NAME>"
 }
 ```
 
 What matters for OpenShift:
 
-- Keep the placeholder shape from the example.
-- In this repo, the OpenShift source provider does not use `fqdn`, `api_url`, `username`, or `password` from `.providers.json` to log in.
-- Instead, the code rewrites the URL to the current cluster and reuses the current cluster token secret.
-- The blank values in the example are intentional.
-- If you run OpenShift-source scenarios that perform guest SSH validation, you can still add `guest_vm_linux_*` and `guest_vm_win_*` to this entry even though the example omits them.
+- Keep the placeholder shape from the example; `openshift` entries allow no extra keys.
+- The OpenShift source provider does not use these values to log in. The code rewrites `api_url` to the current cluster host and reuses the current cluster token Secret.
+- Because this provider block sets `additionalProperties: false`, do not add guest credential keys here. Use a separate source provider entry if your tests need them.
+- The schema requires `host` and `storage_class`, but the loader never reads them. Target storage comes from the runtime `storage_class` value passed with `--tc`.
 
-> **Note:** The reused OpenShift secret is created with `insecureSkipVerify: "true"`, so `source_provider_insecure_skip_verify` does not affect OpenShift the same way it affects VMware, RHV, or OpenStack.
+> **Note:** The reused OpenShift Secret is created with `insecureSkipVerify: "true"`, so `source_provider_insecure_skip_verify` does not affect OpenShift the same way it
+> affects vSphere, RHV, OpenStack, or Hyper-V.
 
 ## OVA
 
@@ -306,17 +431,47 @@ What matters for OpenShift:
 
 What matters for OVA:
 
-- `api_url` is the NFS share URL.
-- The example already notes that `version` can be a placeholder. The code mainly uses it for naming, not for protocol negotiation.
-- The current OVA provider implementation only consumes `api_url`.
-- `username` and `password` stay in the example mostly to keep the provider entry shape consistent.
-- The OVA test path uses a fixed source VM name, `1nisim-rhel9-efi`, rather than selecting a source VM name from `.providers.json`.
+- `api_url` is the NFS share URL and the only field the OVA provider consumes for its connection.
+- `version` is used for naming, not protocol negotiation.
+- `fqdn`, `username`, and `password` must still be present because the loader reads them for every provider type.
+- OVA source VMs are never cloned. The test flow requires each plan VM name to match an existing OVA file.
 - There is no CA download step for OVA.
 
-## Practical checklist
+## Hyper-V
+
+*Example from `.providers.json.example`:*
+
+```jsonc
+"hyperv": {
+  "type": "hyperv",
+  "version": "2025",
+  "fqdn": "hyperv-host.example.com",
+  "api_url": "hyperv-host.example.com",
+  "username": "Administrator",
+  "password": "PASSWORD",  # pragma: allowlist secret
+  "smb_url": "//hyperv-host.example.com/VMShare",
+  "smb_user": "",  # Optional: SMB username if different from provider credentials
+  "smb_password": "",  # pragma: allowlist secret  # Optional: SMB password if different from provider credentials
+  "guest_vm_linux_user": "root",
+  "guest_vm_linux_password": "PASSWORD",  # pragma: allowlist secret
+  "guest_vm_win_user": "Administrator",
+  "guest_vm_win_password": "PASSWORD"  # pragma: allowlist secret
+}
+```
+
+What matters for Hyper-V:
+
+- `smb_url` is required by the schema and is what the provider uses to transfer VM disks.
+- `smb_user` and `smb_password` are optional. When present and non-empty they become the `smbUser` and `smbPassword` Secret keys.
+- In secure mode the CA certificate is fetched from `fqdn` on port `5986`.
+- Hyper-V guest OS detection can be overridden per VM with the `win_os` key in the test plan config.
+
+## Practical Checklist
 
 - Start from `.providers.json.example`, then remove all comments before saving the real `.providers.json`.
+- Validate your editor against the `providers_schema.json` URL in the `$schema` key.
 - Make sure your `source_provider` setting matches a top-level key in the file.
-- Keep `fqdn` accurate for VMware, RHV, and OpenStack, especially if SSL verification is enabled.
-- Add guest credentials for any provider entry whose powered-on guests will be validated over SSH.
+- Keep `fqdn` accurate for vSphere, RHV, OpenStack, and Hyper-V, especially if SSL verification is enabled.
+- Add guest credentials for any provider entry whose powered-on guests will be validated over SSH or WinRM.
 - For vSphere copy-offload, populate both the common storage credentials and the vendor-specific fields required by your chosen `storage_vendor_product`.
+- Remember that OpenShift is the only provider type that rejects unknown keys.

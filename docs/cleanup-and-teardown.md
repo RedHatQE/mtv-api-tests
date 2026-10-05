@@ -1,6 +1,7 @@
 # Cleanup And Teardown
 
-`mtv-api-tests` cleans up automatically in normal runs. The project uses two cleanup layers: class-level cleanup for migrated VMs, and session-level cleanup for the rest of the resources the run created. If you need to stop that behavior for debugging, `--skip-teardown` preserves the environment so you can inspect it manually.
+`mtv-api-tests` cleans up automatically in normal runs. The project uses two cleanup layers: class-level cleanup for migrated VMs, and session-level cleanup for the rest of the
+resources the run created. If you need to stop that behavior for debugging, `--skip-teardown` preserves the environment so you can inspect it manually.
 
 ## Default Behavior
 
@@ -25,13 +26,14 @@ fixture_store["teardown"].setdefault(_resource.kind, []).append(_resource_dict)
 
 Anything created through `create_and_store_resource()` is registered automatically, which is why teardown can later find it again without guessing names or namespaces.
 
-Not all cleanup waits until session end. Some fixture-scoped helpers clean up immediately after use. For example, SSH test connections are closed with `cleanup_all()`, copy-offload SSH keys are removed after the fixture yields, and temporary cluster edits made with `ResourceEditor` are reverted automatically when their context exits.
+Not all cleanup waits until session end. Some fixture-scoped helpers clean up immediately after use. For example, SSH test connections are closed with `cleanup_all()`, copy-offload
+SSH keys are removed after the fixture yields, and temporary cluster edits made with `ResourceEditor` are reverted automatically when their context exits.
 
 ## Automatic Cleanup Flow
 
 ### Per-class VM cleanup
 
-The standard class-based tests opt into VM cleanup explicitly. From `tests/test_mtv_cold_migration.py`:
+The standard class-based tests opt into VM cleanup explicitly. From `tests/cold/test_mtv_cold_migration.py`:
 
 ```python
 @pytest.mark.usefixtures("cleanup_migrated_vms")
@@ -51,7 +53,7 @@ if request.config.getoption("skip_teardown"):
 vm_namespace = prepared_plan.get("_vm_target_namespace", target_namespace)
 
 for vm in prepared_plan["virtual_machines"]:
-    vm_name = vm["name"]
+    vm_name = resolve_destination_vm_name(vm)
     vm_obj = VirtualMachine(
         client=ocp_admin_client,
         name=vm_name,
@@ -60,6 +62,8 @@ for vm in prepared_plan["virtual_machines"]:
     if vm_obj.exists:
         LOGGER.info(f"Cleaning up migrated VM: {vm_name} from namespace: {vm_namespace}")
         vm_obj.clean_up()
+    else:
+        LOGGER.info(f"VM {vm_name} already deleted from namespace: {vm_namespace}, skipping cleanup")
 ```
 
 A few practical details come from that logic:
@@ -67,6 +71,9 @@ A few practical details come from that logic:
 - `cleanup_migrated_vms` is teardown-only. It does not set anything up; it just removes migrated VMs after the class.
 - The same `--skip-teardown` flag disables this VM cleanup too.
 - If the plan migrated into a custom `vm_target_namespace`, that namespace is used automatically.
+- The destination name comes from `resolve_destination_vm_name(vm)`, not from the raw config `vm["name"]`. When MTV renames a migrated VM, the raw config value is the wrong key to
+search on.
+- An already-missing VM is logged and skipped, so a test that already deleted its own VM does not fail the class teardown.
 
 ### Session teardown
 
@@ -113,10 +120,10 @@ From there, `teardown_resources()` works through the rest of the inventory. In p
 
 - `Migration` and `Plan` resources.
 - `Provider`, `Secret`, and `Host` resources.
-- `NetworkAttachmentDefinition`, `StorageMap`, and `NetworkMap` resources.
+- `NetworkAttachmentDefinition`, `StorageMap`, `NetworkMap`, and `Conversion` resources.
 - Tracked `VirtualMachine` and `Pod` resources.
 - Namespaces created during the run.
-- Source-side cloned VMs for VMware, OpenStack, and RHV.
+- Source-side cloned VMs for VMware, OpenStack, RHV, and Hyper-V.
 - OpenStack volume snapshots that were recorded during clone preparation.
 
 It also performs extra cleanup and verification in the target namespace by:
@@ -125,17 +132,26 @@ It also performs extra cleanup and verification in the target namespace by:
 - Waiting for matching pods to disappear.
 - Waiting for matching `DataVolume`, `PersistentVolumeClaim`, and `PersistentVolume` objects to be deleted.
 
-> **Note:** `.data-collector/resources.json` is written before session teardown runs. That means the file is available both when you use `--skip-teardown` and when teardown later reports a problem.
+> **Note:** `.data-collector/resources.json` is written before session teardown runs. That means the file is available both when you use `--skip-teardown` and when teardown later
+reports a problem.
 
 ### Leftover detection
 
 Teardown is more than a best-effort delete loop. The code explicitly tracks leftovers and raises `SessionTeardownError` if resources are still present after cleanup attempts.
 
-That leftover detection is especially important for migration side effects such as pods, PVCs, and PVs. The session code looks for objects tied to the current run’s session UUID and records anything that did not disappear cleanly.
+That leftover detection is especially important for migration side effects such as pods, PVCs, and PVs. The session code looks for objects tied to the current run’s session UUID
+and records anything that did not disappear cleanly.
+
+If `session_store["teardown"]` is empty, `session_teardown()` returns without doing anything. The code comments why: under parallel execution (`-n auto`) a worker store can
+legitimately be empty.
+
+> **Note:** `session_teardown()` cancels migrations first and archives plans before the generic sweep, because a Plan must be `Archived` before it can be deleted. Both loops are
+keyed off the tracked inventory, so a resource you never registered is never cleaned here.
 
 If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` to capture diagnostics in the same collector path.
 
-> **Warning:** Leftover teardown problems are currently surfaced through session-finish logging. `pytest_sessionfinish()` logs the teardown exception and can trigger `must-gather`, but it does not re-raise that exception after logging it. Always check the end-of-run output, not just the individual test results.
+> **Warning:** Leftover teardown problems are currently surfaced through session-finish logging. `pytest_sessionfinish()` logs the teardown exception and can trigger `must-gather`,
+but it does not re-raise that exception after logging it. Always check the end-of-run output, not just the individual test results.
 
 ## Debugging With `--skip-teardown`
 
@@ -153,7 +169,7 @@ data_collector_group.addoption(
 )
 ```
 
-A repository example from `docs/copyoffload/how-to-run-copyoffload-tests.md` shows the intended usage inside a job command:
+A repository example from `guides/copyoffload/how-to-run-copyoffload-tests.md` shows the intended usage inside a job command:
 
 ```yaml
 # In the Job command section, add --skip-teardown:
@@ -168,9 +184,11 @@ Use `--skip-teardown` when you want to inspect the environment after a run, for 
 - The `Plan`, `Migration`, `StorageMap`, and `NetworkMap` objects.
 - The pods, PVCs, DataVolumes, and provider-side clones that would normally be removed automatically.
 
-> **Warning:** `--skip-teardown` disables both cleanup layers. The class-level `cleanup_migrated_vms` fixture returns early, and the end-of-session `session_teardown()` call is skipped entirely.
+> **Warning:** `--skip-teardown` disables both cleanup layers. The class-level `cleanup_migrated_vms` fixture returns early, and the end-of-session `session_teardown()` call is
+skipped entirely.
 
-> **Tip:** If you keep resources for debugging, do not also use `--skip-data-collector` unless you truly want no tracking artifacts. Leaving the data collector enabled gives you `.data-collector/resources.json`, which is the easiest input for follow-up cleanup.
+> **Tip:** If you keep resources for debugging, do not also use `--skip-data-collector` unless you truly want no tracking artifacts. Leaving the data collector enabled gives you
+`.data-collector/resources.json`, which is the easiest input for follow-up cleanup.
 
 ## Manual Cleanup Helpers
 
@@ -215,11 +233,55 @@ if __name__ == "__main__":
     clean_cluster_by_resources_file(resources_file=sys.argv[1])
 ```
 
-With the default collector path, the input file is `.data-collector/resources.json`. If you used `--data-collector-path`, point the script at that directory’s `resources.json` instead. If you ran with `--skip-data-collector`, the helper has no inventory file to consume, and teardown failures will not trigger `must-gather`.
+The script lives at `tools/clean_cluster.py`, so a full manual cleanup after a debug run is:
 
-> **Note:** `resources.json` is a record of what the session created, not a leftovers-only report. In a successful run, some or all of those resources may already be gone by the time you inspect the file.
+```bash
+python tools/clean_cluster.py .data-collector/resources.json
+```
 
-> **Warning:** `tools/clean_cluster.py` is best suited to OpenShift-side resources recorded through `create_and_store_resource()`, because it recreates objects from the stored `module` and resource kind. Provider-side clone cleanup for VMware/OpenStack/RHV and OpenStack volume snapshots is handled by the full session teardown logic in `utilities/pytest_utils.py`, not by this standalone helper.
+With the default collector path, the input file is `.data-collector/resources.json`. If you used `--data-collector-path`, point the script at that directory's `resources.json`
+instead. If you ran with `--skip-data-collector`, the helper has no inventory file to consume, and teardown failures will not trigger `must-gather`.
+
+> **Note:** `resources.json` is a record of what the session created, not a leftovers-only report. In a successful run, some or all of those resources may already be gone by the
+time you inspect the file.
+
+> **Warning:** `tools/clean_cluster.py` is best suited to OpenShift-side resources recorded through `create_and_store_resource()`, because it recreates objects from the stored
+`module` and resource kind. Provider-side clone cleanup for VMware/OpenStack/RHV and OpenStack volume snapshots is handled by the full session teardown logic in
+`utilities/pytest_utils.py`, not by this standalone helper.
+
+#### Unregister Resources You Deleted Yourself
+
+Session teardown deletes everything in `fixture_store["teardown"]` at the end of the run. When a test intentionally deletes a tracked resource mid-test, leaving it registered means
+teardown will later operate on an object that no longer exists.
+
+`unregister_teardown_resource()` in `utilities/resources.py` removes those entries:
+
+```python
+from utilities.resources import unregister_teardown_resource
+
+def unregister_teardown_resource(
+    fixture_store: dict[str, Any],
+    resource: Resource,
+) -> None:
+```
+
+It matches on kind, name, and namespace, removes every match, and warns instead of raising when the entry is already gone. The plan-archive cleanup test is the real consumer of
+this:
+
+```python
+plan = self.__class__.plan_resource
+migration = get_migration_for_plan(plan)
+archive_plan(plan=plan)
+assert plan.clean_up(wait=True), f"Failed to delete plan '{plan.name}' after archiving"
+
+# Plan is gone, but keep the Migration tracked until cascade deletion completes.
+unregister_teardown_resource(fixture_store=fixture_store, resource=plan)
+assert migration.wait_deleted(timeout=120)
+unregister_teardown_resource(fixture_store=fixture_store, resource=migration)
+```
+
+> **Tip:** Unregister only after the object is really gone, and keep it registered until cascade deletion finishes. Unregistering early is what produces confusing "resource not
+found" noise at session end.
 
 ### Use the session name to find leftovers
 
@@ -241,7 +303,7 @@ unique_namespace_name = f"{session_uuid}{_target_namespace}"[:63]
 fixture_store["target_namespace"] = unique_namespace_name
 ```
 
-Source-provider clones are named the same way. From `libs/base_provider.py`:
+Source-provider clones are named the same way. From `libs/base_provider.py`, in `_generate_clone_vm_name()`:
 
 ```python
 clone_vm_name = generate_name_with_uuid(f"{session_uuid}-{base_name}")
@@ -253,6 +315,9 @@ That means a single session prefix, typically something like `auto-ab12`, often 
 - Auto-generated OpenShift resource names.
 - Source-provider clone names.
 
-> **Tip:** If you skipped teardown, start by finding the session prefix from the run logs or from `.data-collector/resources.json`, then search OpenShift and the source provider for that same prefix.
+> **Tip:** If you skipped teardown, start by finding the session prefix from the run logs or from `.data-collector/resources.json`, then search OpenShift and the source provider
+for that same prefix.
 
-> **Note:** Some tests use a custom `vm_target_namespace`. In those cases, manual cleanup needs to check that namespace too, because migrated VMs and their storage objects may live there instead of the default session target namespace. OpenShift-source runs can also create a `source_vms_namespace` named `<session_uuid>-source-vms`, so check that namespace as well when cleaning manually.
+> **Note:** Some tests use a custom `vm_target_namespace`. In those cases, manual cleanup needs to check that namespace too, because migrated VMs and their storage objects may live
+there instead of the default session target namespace. OpenShift-source runs can also create a `source_vms_namespace` named `<session_uuid>-source-vms`, so check that namespace
+as well when cleaning manually.

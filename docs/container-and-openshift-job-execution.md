@@ -1,14 +1,31 @@
 # Container And OpenShift Job Execution
 
-Running `mtv-api-tests` from a container or an OpenShift `Job` gives you a repeatable environment for long migration runs, shared execution in CI-style workflows, and predictable artifact collection. The key is understanding what the image expects at runtime:
+Running `mtv-api-tests` from a container or an OpenShift `Job` gives you a repeatable environment for long migration runs, shared execution in CI-style workflows, and predictable
+artifact collection. The key is understanding what the image expects at runtime:
 
 - a `.providers.json` file in the container working directory
 - pytest testconfig values for the OpenShift cluster and test selection
 - an overridden container command, because the image defaults to collection only
 
+## Build And Run Locally
+
+A pre-built image is published at `ghcr.io/redhatqe/mtv-api-tests:latest`, so you can use it directly. To build your own instead:
+
+```bash
+podman build -t quay.io/<your-registry>/mtv-tests:latest .
+podman push quay.io/<your-registry>/mtv-tests:latest
+```
+
+Docker works the same way. On RHEL and Fedora with SELinux enforcing, add `,z` to volume mounts.
+
 ## How The Image Starts
 
-The checked-in image is built to run from `/app`, and its default command only collects tests:
+The `Dockerfile` is a two-stage build.
+A builder stage installs the toolchain and runs `uv sync --locked`, and a runtime stage on `ubi-minimal` copies the finished `/app`, sets `JUNITFILE`, and runs as UID `1001`.
+
+Because the container runs as a non-root user, read-only mounts (`:ro`) are unaffected, but any writable bind mount must already be accessible to UID `1001`.
+
+The image is built to run from `/app`, and its default command only collects tests:
 
 ```dockerfile
 ARG APP_DIR=/app
@@ -30,27 +47,29 @@ addopts =
   --junit-xml=junit-report.xml
   --show-progress
   --strict-markers
-  --jira
   --dist=loadscope
 ```
 
 > **Note:** A plain `podman run ... ghcr.io/redhatqe/mtv-api-tests:latest` will not execute migrations. Override the command with `uv run pytest ...`.
 
-The suite reads provider definitions from `.providers.json` and builds the OpenShift client from pytest config values:
+The suite reads provider definitions from `.providers.json` and builds the OpenShift client from pytest config values, falling back to `CLUSTER_HOST`, `CLUSTER_USERNAME`, and
+`CLUSTER_PASSWORD` environment variables:
 
 ```python
-def load_source_providers() -> dict[str, dict[str, Any]]:
-    providers_file = Path(".providers.json")
-    if not providers_file.exists():
-        return {}
-
-
 def get_cluster_client() -> DynamicClient:
     host = get_value_from_py_config("cluster_host")
+    if host is None:
+        host = os.environ.get("CLUSTER_HOST")
+
     username = get_value_from_py_config("cluster_username")
+    if username is None:
+        username = os.environ.get("CLUSTER_USERNAME")
+
     password = get_value_from_py_config("cluster_password")
-    insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
-    _client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+    if password is None:
+        password = os.environ.get("CLUSTER_PASSWORD")
+    ...
+    client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
 
 In practice, every real run needs these values:
@@ -62,7 +81,11 @@ In practice, every real run needs these values:
 - `cluster_username`
 - `cluster_password`
 
-> **Warning:** The suite does not currently create its OpenShift client from the pod service account. Even inside an OpenShift `Job`, you still need to provide `cluster_host`, `cluster_username`, and `cluster_password`.
+`cluster_username` and `cluster_password` can come from the environment instead of the command line.
+That is why the generated `Job` manifest wires `CLUSTER_HOST`, `CLUSTER_USERNAME`, `CLUSTER_PASSWORD`, and `CLUSTER_VERIFY_SSL` in from a `Secret`.
+
+> **Warning:** The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
+> `Job`, you still need to provide `cluster_host`, `cluster_username`, and `cluster_password`.
 
 ## Provider And Test Config
 
@@ -85,12 +108,17 @@ A real example from `.providers.json.example`:
     "guest_vm_linux_password": "LINUX VMS PASSWORD",
     "guest_vm_win_user": "WINDOWS VMS USERNAME",
     "guest_vm_win_password": "WINDOWS VMS PASSWORD",
-    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>"
+    "luks_passphrase": "LUKS DISK ENCRYPTION PASSPHRASE",
+    "vddk_init_image": "<PATH TO VDDK INIT IMAGE>",
+    "endpoint_type": "vcenter"
   }
 }
 ```
 
 The top-level key is the provider name you pass through pytest. If your file uses `"vsphere"`, then your run must include `--tc=source_provider:vsphere`.
+
+> **Note:** Inside the container you can also pass `--providers-json /some/other/path.json`, or set
+> `PROVIDERS_JSON_PATH`. The mount path below is a convention, not a hard requirement.
 
 > **Tip:** The top-level key can be descriptive, versioned, or site-specific. What matters is that `source_provider` matches it exactly.
 
@@ -115,6 +143,7 @@ tests_params: dict = {
             },
         ],
         "warm_migration": True,
+        "preserve_static_ips": True,
     },
 ```
 
@@ -129,6 +158,8 @@ Examples below use `podman`, but the same pattern works with Docker.
 A practical local run mounts `.providers.json`, exports cluster credentials into the container, and overrides the image command:
 
 ```bash
+mkdir -p results
+
 export CLUSTER_HOST="https://api.example.com:6443"
 export CLUSTER_USERNAME="kubeadmin"
 export CLUSTER_PASSWORD="<password>"
@@ -142,9 +173,6 @@ podman run --rm \
   ghcr.io/redhatqe/mtv-api-tests:latest \
   /bin/bash -c 'uv run pytest -m tier0 \
     -v \
-    ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \
-    ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \
-    ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \
     --tc=source_provider:vsphere \
     --tc=storage_class:my-block-storageclass \
     --junit-xml=/app/results/junit-report.xml \
@@ -152,14 +180,26 @@ podman run --rm \
     --data-collector-path=/app/results/data'
 ```
 
+No `--tc=cluster_*` flags are needed here.
+`get_cluster_client()` falls back to `CLUSTER_HOST`, `CLUSTER_USERNAME`, and `CLUSTER_PASSWORD` from the environment, which keeps the credentials out of the process arguments.
+
+> **Warning:** The container runs as UID `1001`. A `results` directory created by your own user is usually not
+> writable by that UID, so either `chmod 777 results` or add `,z` on SELinux-enforcing hosts, or mount a directory
+> that UID `1001` can already write to.
+
 Useful marker selections come directly from `pytest.ini` and the test modules:
 
 - `-m tier0` for smoke-style coverage
+- `-m tier1` for the extended LUKS, XFS, and CA-cert scenarios
 - `-m warm` for warm migration coverage
-- `-m copyoffload` for copy-offload coverage
+- `-m copyoffload` for the full copy-offload coverage
+- `-m copyoffload_sanity` for the core copy-offload scenarios when you want a quicker pass
+- `-m copyoffload_snapshots` for the vSphere copy-offload snapshot scenarios
+- `-m upgrade` for the MTV operator upgrade scenario, which needs its own config keys
 - `-m remote` for remote-cluster scenarios when `remote_ocp_cluster` is configured
 
-> **Note:** `warm` is not universally supported for every provider type. If you select `-m warm` against a provider that the warm test module skips, pytest will report skips rather than failures.
+> **Note:** `warm` is not universally supported for every provider type. If you select `-m warm` against a provider
+> that the warm test module skips, pytest will report skips rather than failures.
 
 If you prefer a mounted config file instead of many `--tc=` flags, mount your own Python config and point pytest at it:
 
@@ -171,9 +211,99 @@ That is only safe when `/app/config.py` is based on the repo’s existing `tests
 
 ## Running Inside An OpenShift Job
 
-The repo already contains a checked-in `Job` pattern under `docs/copyoffload/`. It is written for copy-offload, but the wiring is the same for any suite: mount `.providers.json`, provide cluster credentials from a `Secret`, and expand them into `--tc=` arguments in the container command.
+The supported way to get a `Job` manifest is to let the CLI generate one. Do not hand-write it:
 
-### 1. Create A Secret
+```bash
+uv run mtv-api-tests generate
+uv run mtv-api-tests run --mode job
+```
+
+`generate` writes `mtv-api-tests-manifests.yaml`, a single self-contained file with a `Namespace`, a `Secret`, and a `Job`.
+The namespace name carries a random suffix, so parallel runs do not collide. `run --mode job` applies it with `oc apply -f` and prints the namespace and job name to follow.
+
+The manifest looks roughly like this. The `Secret` supplies the credentials, and the `Job` command expands them into `--tc=` flags:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mtv-tests
+  namespace: mtv-tests-a1b2c3
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: tests
+        image: ghcr.io/redhatqe/mtv-api-tests:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        env:
+        - name: CLUSTER_HOST
+          valueFrom:
+            secretKeyRef:
+              name: mtv-tests-a1b2c3-config
+              key: cluster_host
+        - name: CLUSTER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mtv-tests-a1b2c3-config
+              key: cluster_username
+        - name: CLUSTER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mtv-tests-a1b2c3-config
+              key: cluster_password
+        - name: CLUSTER_VERIFY_SSL
+          valueFrom:
+            secretKeyRef:
+              name: mtv-tests-a1b2c3-config
+              key: cluster_verify_ssl
+        command:
+          - /bin/sh
+          - -c
+          - |
+            uv run pytest \
+                      -v \
+                      --tc=source_provider:vsphere-8.0.3.00400 \
+                      --tc=storage_class:my-block-storageclass \
+                      --tc=cluster_host:"$CLUSTER_HOST" \
+                      --tc=insecure_verify_skip:false
+        volumeMounts:
+        - name: config
+          mountPath: /app/.providers.json
+          subPath: providers.json
+      volumes:
+      - name: config
+        secret:
+          secretName: mtv-tests-a1b2c3-config
+```
+
+To reuse this pattern for other suites:
+
+- change the category passed to `generate` from `copyoffload` to `tier0` or `warm`
+- replace the provider key `vsphere-8.0.3.00400` with your actual `.providers.json` key
+- replace `my-block-storageclass` with the storage class used by your target cluster
+- pass `--image` if you built and pushed your own copy
+
+> **Warning:** `CLUSTER_HOST`, `CLUSTER_USERNAME`, `CLUSTER_PASSWORD`, and `CLUSTER_VERIFY_SSL` are not read by
+> the pytest fixtures directly. They exist so the shell can expand them, and so `get_cluster_client()` can pick them
+> up from the environment.
+
+> **Warning:** A completed `Job` will not re-run. `run --mode job` detects the "unchanged" response from `oc apply`
+> and tells you to delete it first with `oc delete -f mtv-api-tests-manifests.yaml`.
+
+### Building The Secret By Hand
+
+If you would rather assemble the `Secret` yourself, this is the same minimum set the generator produces:
 
 ```bash
 oc create namespace mtv-tests
@@ -188,72 +318,8 @@ oc create secret generic mtv-test-config \
 unset CLUSTER_PASSWORD
 ```
 
-### 2. Create The Job
-
-This example is copied from the checked-in documentation:
-
-```yaml
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: mtv-copyoffload-tests
-  namespace: mtv-tests
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: tests
-        image: ghcr.io/redhatqe/mtv-api-tests:latest
-        env:
-        - name: CLUSTER_HOST
-          valueFrom:
-            secretKeyRef:
-              name: mtv-test-config
-              key: cluster_host
-              optional: true
-        - name: CLUSTER_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: mtv-test-config
-              key: cluster_username
-              optional: true
-        - name: CLUSTER_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: mtv-test-config
-              key: cluster_password
-              optional: true
-        command:
-          - /bin/bash
-          - -c
-          - |
-            uv run pytest -m copyoffload \
-              -v \
-              ${CLUSTER_HOST:+--tc=cluster_host:${CLUSTER_HOST}} \
-              ${CLUSTER_USERNAME:+--tc=cluster_username:${CLUSTER_USERNAME}} \
-              ${CLUSTER_PASSWORD:+--tc=cluster_password:${CLUSTER_PASSWORD}} \
-              --tc=source_provider:vsphere-8.0.3.00400 \
-              --tc=storage_class:my-block-storageclass
-        volumeMounts:
-        - name: config
-          mountPath: /app/.providers.json
-          subPath: providers.json
-      volumes:
-      - name: config
-        secret:
-          secretName: mtv-test-config
-```
-
-To reuse this pattern for other suites:
-
-- change `-m copyoffload` to `-m tier0` for smoke tests
-- change `-m copyoffload` to `-m warm` for warm migration runs
-- replace `vsphere-8.0.3.00400` with your actual `.providers.json` key
-- replace `my-block-storageclass` with the storage class used by your target cluster
-- replace the image if you built and pushed your own copy
-
-> **Warning:** `CLUSTER_HOST`, `CLUSTER_USERNAME`, and `CLUSTER_PASSWORD` are not read directly by the test code. In this pattern they exist only so the shell can expand them into `--tc=` options.
+> **Note:** `generate` also stores a `cluster_ca_bundle` key, but the test runner does not consume it yet. CA bundle
+> injection into the container is still unimplemented.
 
 ## Copy-Offload Credentials
 
@@ -275,10 +341,12 @@ Common environment variable names come straight from the fixtures:
 - `COPYOFFLOAD_STORAGE_HOSTNAME`
 - `COPYOFFLOAD_STORAGE_USERNAME`
 - `COPYOFFLOAD_STORAGE_PASSWORD`
-- vendor-specific names such as `COPYOFFLOAD_ONTAP_SVM`
+- vendor-specific names such as `COPYOFFLOAD_ONTAP_SVM` or `COPYOFFLOAD_VANTARA_HOSTGROUP_ID_LIST`
 - ESXi SSH values such as `COPYOFFLOAD_ESXI_HOST`, `COPYOFFLOAD_ESXI_USER`, and `COPYOFFLOAD_ESXI_PASSWORD`
+- `COPYOFFLOAD_STORAGE_SECRET_EXTRA`, a JSON object of extra Secret `stringData` keys that override `storage_secret_extra` from the file
 
-> **Note:** This environment-variable fallback applies to copy-offload storage credentials. It does not replace the normal `cluster_host`, `cluster_username`, `cluster_password`, or `source_provider` inputs.
+> **Note:** This environment-variable fallback applies to copy-offload storage credentials. It does not replace the
+> normal `cluster_host`, `cluster_username`, `cluster_password`, or `source_provider` inputs.
 
 ## Collecting Results
 
@@ -296,20 +364,20 @@ The data collector path is configurable, and the suite uses it for resource trac
 
 When data collection is enabled, the suite writes `resources.json` there and can also collect must-gather data on failures.
 
-For a finished OpenShift `Job`, the checked-in docs already show how to stream logs and copy the JUnit file out of the pod:
+For a finished OpenShift `Job`, stream the logs and copy the JUnit file out of the pod:
 
 ```bash
-oc logs -n mtv-tests job/mtv-copyoffload-tests -f
+oc logs -f -n mtv-tests-a1b2c3 job/mtv-tests
 
-POD_NAME=$(oc get pods -n mtv-tests -l job-name=mtv-copyoffload-tests -o jsonpath='{.items[0].metadata.name}')
-oc cp mtv-tests/$POD_NAME:/app/junit-report.xml ./junit-report.xml
+POD_NAME=$(oc get pods -n mtv-tests-a1b2c3 -l job-name=mtv-tests -o jsonpath='{.items[0].metadata.name}')
+oc cp mtv-tests-a1b2c3/$POD_NAME:/app/junit-report.xml ./junit-report.xml
 ```
 
 You can collect the other artifacts the same way:
 
 ```bash
-oc cp mtv-tests/$POD_NAME:/app/pytest-tests.log ./pytest-tests.log
-oc cp mtv-tests/$POD_NAME:/app/.data-collector ./data-collector
+oc cp mtv-tests-a1b2c3/$POD_NAME:/app/pytest-tests.log ./pytest-tests.log
+oc cp mtv-tests-a1b2c3/$POD_NAME:/app/.data-collector ./data-collector
 ```
 
 For container runs, the easiest pattern is to mount a results directory and redirect outputs into it with:
@@ -330,13 +398,11 @@ If you want to keep resources around for investigation, add:
 --skip-teardown
 ```
 
-If you skip teardown, keep the data collector output. The repo includes a cleanup helper that can use the saved `resources.json` file:
+If you skip teardown, keep the data collector output. `tools/clean_cluster.py` reads that saved `resources.json` and calls `clean_up()` on each recorded resource:
 
 ```bash
 uv run tools/clean_cluster.py .data-collector/resources.json
 ```
-
-`resources.json` is only created when data collection is enabled.
 
 > **Warning:** If you pass `--skip-data-collector`, the suite will not write `.data-collector/resources.json`, and failed runs will not gather the extra collector output.
 

@@ -1,443 +1,293 @@
 # Python Module Reference
 
-The modules in `utilities/` are the shared plumbing behind the MTV API test suite. They create and track MTV/OpenShift resources, prepare providers, manage `virtctl`, open SSH sessions to migrated VMs, collect diagnostics, and run the post-migration checks that most tests depend on.
+The suite is deliberately thin at the test-method level: a test class creates resources and asserts on results, while everything reusable lives in `utilities/`, `libs/`,
+`exceptions/`, `cli/`, and `scripts/hooks/`. This page is the map of those modules and their public entry points.
 
-Most users do not call every helper directly. In practice, you reach them through fixtures in `conftest.py`, especially `target_namespace`, `source_provider`, `prepared_plan`, `virtctl_binary`, `vm_ssh_connections`, and `cleanup_migrated_vms`.
+Most test authors never import these modules directly. They consume them through fixtures in `conftest.py` — `source_provider`, `prepared_plan`, `source_provider_inventory`,
+`target_namespace`, `virtctl_binary`, `fixture_store`, `cleanup_migrated_vms` — and through the plan/verification helpers in the test class itself.
 
-> **Note:** These modules are designed for live OpenShift and MTV environments. Repository automation only validates collection and setup: `tox.toml` runs `uv run pytest --setup-plan` and `uv run pytest --collect-only`, and the container image defaults to `uv run pytest --collect-only`.
+> **Note:** These modules drive live OpenShift and MTV environments. Repository automation only validates collection and setup: `tox.toml` runs `uv run pytest --setup-plan` and
+> `uv run pytest --collect-only`, and the container image defaults to `uv run pytest --collect-only`.
 
 ## At a Glance
 
 | Module | What it handles | Main entry points |
 | --- | --- | --- |
-| `utilities.utils` | cluster client setup, provider loading, provider CR creation | `get_cluster_client()`, `load_source_providers()`, `create_source_provider()` |
-| `utilities.resources` | tracked creation of OpenShift and MTV resources | `create_and_store_resource()`, `get_or_create_namespace()` |
-| `utilities.mtv_migration` | storage maps, network maps, plans, migrations | `get_storage_migration_map()`, `get_network_migration_map()`, `create_plan_resource()`, `execute_migration()` |
-| `utilities.virtctl` | getting the right `virtctl` binary onto the test host | `download_virtctl_from_cluster()`, `add_to_path()` |
-| `utilities.ssh_utils` | SSH access to migrated VMs over `virtctl port-forward` | `VMSSHConnection`, `SSHConnectionManager` |
-| `utilities.post_migration` | end-to-end validation of migrated VMs | `check_vms()` and the focused `check_*` helpers |
-| `utilities.hooks` | hook creation and hook-failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
-| `utilities.must_gather` | targeted MTV must-gather collection | `run_must_gather()` |
-| `utilities.pytest_utils` | failure-time data collection and session cleanup | `collect_created_resources()`, `session_teardown()` |
-| `utilities.migration_utils` | cancel/archive flows and storage cleanup | `cancel_migration()`, `archive_plan()`, `check_dv_pvc_pv_deleted()` |
+| `utilities/utils.py` | cluster client, provider loading, provider CRs, config coercion | `get_cluster_client()`, `load_source_providers()`, `create_source_provider()`, `get_value_from_py_config()` |
+| `utilities/resources.py` | tracked creation of every OpenShift/MTV resource | `create_and_store_resource()`, `unregister_teardown_resource()`, `get_or_create_namespace()` |
+| `utilities/mtv_migration.py` | storage maps, network maps, plans, migrations | `get_storage_migration_map()`, `get_network_migration_map()`, `create_plan_resource()`, `execute_migration()`, `wait_for_migration_complate()` |
+| `utilities/post_migration.py` | end-to-end and focused VM validation | `check_vms()` plus the `check_*` / `verify_*` helpers |
+| `utilities/copyoffload_migration.py` | copy-offload orchestration and XCOPY verification | `execute_copyoffload_migration()`, `verify_xcopy_used()`, `verify_populator_throttling()`, `verify_dedicated_migration_host()` |
+| `utilities/deep_inspection.py` | Deep Inspection `Conversion` CR lifecycle | `create_conversion_resource()`, `wait_for_conversion_complete()`, `verify_di_results()` |
+| `utilities/shared_disk.py` | shared-disk verification on migrated VMs | `verify_shared_disk_data()`, `label_shared_disk_on_source_windows()`, `verify_shared_disk_data_windows()` |
+| `utilities/aap.py` | AWX/AAP deployment for hook tests | `deploy_awx_via_helm()`, `create_awx_job_template()`, `teardown_awx()` |
+| `utilities/hooks.py` | Forklift `Hook` CR creation and failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
+| `utilities/provider_inventory.py` | Forklift inventory refresh and clone waits | `wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()` |
+| `utilities/pytest_utils.py` | failure data collection, session teardown, JUnit enrichment | `collect_created_resources()`, `session_teardown()`, `enrich_junit_xml()` |
+| `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
+| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()` |
+| `libs/providers/` | one adapter per source provider type | `VMWareProvider`, `OvirtProvider`, `OpenStackProvider`, `OCPProvider`, `OVAProvider`, `HyperVProvider` |
+| `exceptions/exceptions.py` | every custom exception the suite raises | 24 exception classes, all in one module |
 
 ## Core Setup
 
-### `utilities.utils`
+### `utilities/utils.py`
 
-`utilities.utils` is where the suite turns configuration into live connections. `load_source_providers()` reads `.providers.json`, `get_cluster_client()` builds the OpenShift `DynamicClient`, and `get_value_from_py_config()` converts string booleans such as `"true"` and `"false"` into real Python booleans so the rest of the code can treat settings consistently.
+The module that turns configuration into live connections. `load_source_providers()` reads `.providers.json`, `get_cluster_client()` builds the OpenShift `DynamicClient`, and
+`get_value_from_py_config()` coerces string booleans such as `"true"` into real booleans so the rest of the suite treats settings consistently.
 
-This is also the module that creates source-side provider resources. `create_source_provider()` handles the provider-specific differences for VMware, RHV, OpenStack, OVA, and OpenShift, including creating the right `Secret` and `Provider` CRs, fetching CA certificates when SSL verification is enabled, and passing copy-offload settings through when present.
+It also owns provider resource creation: `create_source_provider()` handles the per-provider differences (Secret keys, CA certificate fetching, copy-offload settings) for every
+supported source type, and `create_source_cnv_vms()` builds the target VMs from plan data.
 
-If you are writing tests rather than extending framework code, you usually consume this module indirectly through the `ocp_admin_client`, `source_provider_data`, and `source_provider` fixtures instead of importing it directly.
+Other public helpers: `resolve_providers_json_path()`, `generate_class_hash_prefix()`, `gen_network_map_list()`, `get_per_nic_networks()`, `populate_vm_ids()`,
+`extract_vm_from_plan()`, `get_cluster_version()`, `get_cluster_version_str()`, `get_mtv_version()`, `has_mtv_minimum_version()`, `delete_all_vms()`, `generate_ca_cert_file()`,
+`background()`.
 
-### `utilities.resources`
+Provider shortcuts used by fixtures: `vmware_provider()`, `rhv_provider()`, `openstack_provider()`, `ova_provider()`, `ocp_provider()`, `hyperv_provider()`.
 
-`utilities.resources` is the resource lifecycle foundation of the repository. Its core helper, `create_and_store_resource()`, does more than create a resource:
+Constants: `DEFAULT_PROVIDERS_JSON_PATH`.
 
-- It fills in the client automatically.
-- It chooses a name from `name`, `kind_dict`, `yaml_file`, or generates one from the session base name.
-- It appends `-warm` or `-cold` to `Plan` and `Migration` names.
-- It truncates names to Kubernetes-safe length.
-- It deploys and waits.
-- It records the resource in `fixture_store["teardown"]` so later cleanup and diagnostics know it exists.
+The module also defines `VirtualMachineFromInstanceType`, a `VirtualMachine` subclass that builds a full VM spec from instancetype/preference plus a few parameters.
 
-```19:68:utilities/resources.py
-def create_and_store_resource(
-    client: "DynamicClient",
-    fixture_store: dict[str, Any],
-    resource: type[Resource],
-    test_name: str | None = None,
-    **kwargs: Any,
-) -> Any:
-    kwargs["client"] = client
+### `utilities/resources.py`
 
-    _resource_name = kwargs.get("name")
-    _resource_dict = kwargs.get("kind_dict", {})
-    _resource_yaml = kwargs.get("yaml_file")
+Resource lifecycle foundation. `create_and_store_resource()` fills in the client, derives a name from `name`/`kind_dict`/`yaml_file` or generates one from the session base name,
+appends `-warm`/`-cold` to `Plan` and `Migration` names, truncates to 63 characters, deploys and waits, and records the resource in `fixture_store["teardown"]` so teardown,
+`resources.json`, and leftover detection know about it.
 
-    if not _resource_name:
-        if _resource_yaml:
-            with open(_resource_yaml) as fd:
-                _resource_dict = yaml.safe_load(fd)
+`get_or_create_namespace()` builds on it and applies the suite's standard namespace labels. `unregister_teardown_resource()` removes a resource you deleted yourself from teardown
+tracking — required when a test archives and deletes a Plan mid-run.
 
-        _resource_name = _resource_dict.get("metadata", {}).get("name")
+> **Tip:** Use `create_and_store_resource()` for anything that creates a cluster object during a test. That is what makes later teardown and leftover detection work.
 
-    if not _resource_name:
-        _resource_name = generate_name_with_uuid(name=fixture_store["base_resource_name"])
+### `utilities/logger.py`
 
-        if resource.kind in (Migration.kind, Plan.kind):
-            _resource_name = f"{_resource_name}-{'warm' if kwargs.get('warm_migration') else 'cold'}"
+`setup_logging()` configures the suite logger; `separator()` prints a visual break between long-running phases.
 
-    if len(_resource_name) > 63:
-        LOGGER.warning(f"'{_resource_name=}' is too long ({len(_resource_name)} > 63). Truncating.")
-        _resource_name = _resource_name[-63:]
+### `utilities/naming.py`
 
-    kwargs["name"] = _resource_name
-    _resource = resource(**kwargs)
-
-    try:
-        _resource.deploy(wait=True)
-    except ConflictError:
-        LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
-        _resource.wait()
-
-    LOGGER.info(f"Storing {_resource.kind} {_resource.name} in fixture store")
-    _resource_dict = {"name": _resource.name, "namespace": _resource.namespace, "module": _resource.__module__}
-
-    if test_name:
-        _resource_dict["test_name"] = test_name
-
-    fixture_store["teardown"].setdefault(_resource.kind, []).append(_resource_dict)
-    return _resource
-```
-
-`get_or_create_namespace()` builds on that helper. It reuses an existing namespace when possible, but when it creates one itself it applies the standard labels used across this suite, including `pod-security.kubernetes.io/enforce=restricted`.
-
-> **Tip:** Use `create_and_store_resource()` for anything that creates a cluster object during a test. That is what makes later teardown, `resources.json`, and leftover detection work.
+Name generation and sanitisation: `generate_name_with_uuid()`, `sanitize_kubernetes_name()`, `resolve_destination_vm_name()`, `sanitize_test_name_for_path()`.
+`resolve_destination_vm_name()` matters during teardown because MTV can rename a migrated VM.
 
 ## Migration Orchestration
 
-### `utilities.mtv_migration`
-
-`utilities.mtv_migration` is the module most test authors reuse first. It owns the standard flow for creating `StorageMap`, `NetworkMap`, `Plan`, and `Migration` resources and waiting for them to reach the right state.
-
-Most tests follow the same pattern:
-
-```96:147:tests/test_mtv_cold_migration.py
-populate_vm_ids(prepared_plan, source_provider_inventory)
-
-self.__class__.plan_resource = create_plan_resource(
-    ocp_admin_client=ocp_admin_client,
-    fixture_store=fixture_store,
-    source_provider=source_provider,
-    destination_provider=destination_provider,
-    storage_map=self.storage_map,
-    network_map=self.network_map,
-    virtual_machines_list=prepared_plan["virtual_machines"],
-    target_namespace=target_namespace,
-    warm_migration=prepared_plan.get("warm_migration", False),
-)
-assert self.plan_resource, "Plan creation failed"
-
-execute_migration(
-    ocp_admin_client=ocp_admin_client,
-    fixture_store=fixture_store,
-    plan=self.plan_resource,
-    target_namespace=target_namespace,
-)
-
-check_vms(
-    plan=prepared_plan,
-    source_provider=source_provider,
-    destination_provider=destination_provider,
-    network_map_resource=self.network_map,
-    storage_map_resource=self.storage_map,
-    source_provider_data=source_provider_data,
-    source_vms_namespace=source_vms_namespace,
-    source_provider_inventory=source_provider_inventory,
-    vm_ssh_connections=vm_ssh_connections,
-)
-```
-
-The most important entry points are:
-
-- `get_storage_migration_map()`: Creates a `StorageMap`. In the normal case it derives mappings from provider inventory and uses `py_config["storage_class"]` unless you override it.
-- `get_network_migration_map()`: Creates a `NetworkMap`. The first source network maps to the pod network, and additional networks map to generated Multus NADs.
-- `create_plan_resource()`: Creates the `Plan` CR and waits for `Plan.Condition.READY=True`.
-- `execute_migration()`: Creates the `Migration` CR and waits for the plan to finish.
-- `wait_for_migration_complate()`: Polls the plan until it reaches `Succeeded` or `Failed`.
-- `verify_vm_disk_count()` and `wait_for_concurrent_migration_execution()`: Specialized helpers used by copy-offload and multi-plan scenarios.
-
-`conftest.py` does a lot of prep work before these helpers run. In particular, `prepared_plan` deep-copies the class config, clones or discovers source VMs, stores source-side facts in `source_vms_data`, creates configured hooks, and resolves `_vm_target_namespace` so later validation looks in the right namespace.
-
-The plan config can drive much more than just warm versus cold migration. This warm migration example from `tests/tests_config/config.py` enables custom VM namespace placement, static IP preservation, PVC naming, labels, and affinity:
-
-```434:466:tests/tests_config/config.py
-"test_warm_migration_comprehensive": {
-    "virtual_machines": [
-        {
-            "name": "mtv-win2022-ip-3disks",
-            "source_vm_power": "on",
-            "guest_agent": True,
-        },
-    ],
-    "warm_migration": True,
-    "target_power_state": "on",
-    "preserve_static_ips": True,
-    "vm_target_namespace": "custom-vm-namespace",
-    "multus_namespace": "default",
-    "pvc_name_template": '{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}',
-    "pvc_name_template_use_generate_name": True,
-    "target_labels": {
-        "mtv-comprehensive-test": None,
-        "static-label": "static-value",
-    },
-    "target_affinity": {
-        "podAffinity": {
-            "preferredDuringSchedulingIgnoredDuringExecution": [
-                {
-                    "podAffinityTerm": {
-                        "labelSelector": {"matchLabels": {"app": "comprehensive-test"}},
-                        "topologyKey": "kubernetes.io/hostname",
-                    },
-                    "weight": 75,
-                }
-            ]
-        }
-    },
-},
-```
-
-In this repository, `None` under keys like `target_labels` or `target_node_selector` is a placeholder for “fill this with the current `session_uuid`,” which keeps parallel test runs from colliding.
-
-The same module also supports copy-offload storage maps. When `datastore_id` and `offload_plugin_config` are passed, `get_storage_migration_map()` switches from inventory-derived mappings to explicit XCOPY-capable datastore mappings:
-
-```84:112:tests/test_copyoffload_migration.py
-copyoffload_config_data = source_provider_data["copyoffload"]
-storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
-datastore_id = copyoffload_config_data["datastore_id"]
-storage_class = py_config["storage_class"]
-
-vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
-
-offload_plugin_config = {
-    "vsphereXcopyConfig": {
-        "secretRef": copyoffload_storage_secret.name,
-        "storageVendorProduct": storage_vendor_product,
-    }
-}
-
-self.__class__.storage_map = get_storage_migration_map(
-    fixture_store=fixture_store,
-    target_namespace=target_namespace,
-    source_provider=source_provider,
-    destination_provider=destination_provider,
-    ocp_admin_client=ocp_admin_client,
-    source_provider_inventory=source_provider_inventory,
-    vms=vms_names,
-    storage_class=storage_class,
-    datastore_id=datastore_id,
-    offload_plugin_config=offload_plugin_config,
-    access_mode="ReadWriteOnce",
-    volume_mode="Block",
-)
-```
+### `utilities/mtv_migration.py`
 
-For warm migrations, `execute_migration()` is often paired with `get_cutover_value()` from `utilities.migration_utils`, which computes the cutover time from `mins_before_cutover`.
+The module most test authors reuse first. It owns `StorageMap`, `NetworkMap`, `Plan`, and `Migration` creation plus the waits for their states.
 
-### `utilities.hooks`
+| Function | Purpose |
+| --- | --- |
+| `get_storage_migration_map()` | build and deploy the `StorageMap` |
+| `get_network_migration_map()` | build and deploy the `NetworkMap` |
+| `create_plan_resource()` | build and deploy the `Plan`, including plan flags |
+| `execute_migration()` | create the `Migration` and poll it to completion |
+| `get_migration_for_plan()` | locate the `Migration` CR belonging to a `Plan` |
+| `wait_for_migration_complate()` | poll a migration, with an optional per-poll status callback |
+| `wait_for_dual_migration_completion()` | wait for two plans migrating concurrently |
+| `wait_for_concurrent_migration_execution()` | start several migrations and wait for all of them |
+| `get_plan_migration_status()` / `get_vm_suffix()` | status parsing helpers |
+| `resolve_pvc_name_template()` | resolve the per-provider PVC name template |
+| `verify_vm_disk_count()` | assert the migrated disk count matches the source |
 
-`utilities.hooks` lets plan configuration create pre- and post-migration Hook CRs without hand-writing YAML in every test. It supports two modes:
+### `utilities/migration_utils.py`
 
-- `expected_result`: Use one of the built-in playbooks for a hook that should succeed or fail.
-- `playbook_base64`: Supply your own base64-encoded Ansible playbook.
+Cancel, archive, and cleanup flows: `cancel_migration()`, `archive_plan()`, `get_orphan_resource_names()`, `check_dv_pvc_pv_deleted()`, `append_leftovers()`, `get_cutover_value()`.
 
-The module validates that you set exactly one of those options, and it rejects invalid base64, invalid UTF-8, invalid YAML, or playbooks that are not valid Ansible play lists.
+### `utilities/copyoffload_migration.py`
 
-A test scenario that intentionally keeps the migrated VM after a failing post hook is configured like this:
+The largest feature module (2470 lines). It owns credential resolution, cloud-init readiness, XCOPY verification, concurrency tracking, and dedicated-host behaviour.
 
-```503:515:tests/tests_config/config.py
-"test_post_hook_retain_failed_vm": {
-    "virtual_machines": [
-        {
-            "name": "mtv-tests-rhel8",
-            "source_vm_power": "on",
-            "guest_agent": True,
-        },
-    ],
-    "warm_migration": False,
-    "target_power_state": "off",
-    "pre_hook": {"expected_result": "succeed"},
-    "post_hook": {"expected_result": "fail"},
-    "expected_migration_result": "fail",
-},
-```
+| Area | Functions |
+| --- | --- |
+| Credentials | `get_copyoffload_credential()`, `parse_storage_secret_extra_env()`, `get_storage_secret_extra()`, `merge_storage_secret_extra()` (env overrides config; extras override vendor keys) |
+| Execution | `execute_copyoffload_migration()`, `execute_migration_monitoring_populator_inflight()`, `execute_migration_monitoring_vm_and_populator_inflight()`, `apply_copyoffload_vm_name_override()`, `get_migration_uid()` |
+| Log capture | `capture_populate_pod_logs()`, `create_log_capture_callback()` |
+| Cloud-init | `wait_for_vmware_cloud_init_all_vms()`, `wait_for_cloud_init()` |
+| Verification | `verify_xcopy_used()`, `verify_xcopy_used_per_datastore()`, `verify_populator_throttling()`, `verify_populator_inflight_observed()`, `verify_vm_inflight_throttling()`, `verify_dedicated_migration_host()`, `resolve_invalid_dedicated_host_id()`, `verify_populate_pod_failure_reason()` |
+| Host selection | `get_configured_dedicated_hosts()`, `resolve_non_dedicated_esxi_host()` |
 
-`create_hook_if_configured()` stores the generated hook name and namespace back into the prepared plan as `_pre_hook_name`, `_pre_hook_namespace`, `_post_hook_name`, and `_post_hook_namespace`, so `create_plan_resource()` can pass them into the `Plan` CR.
+Internal trackers `_PopulatorConcurrencyTracker` and `_VmConcurrencyTracker` record peak per-host concurrency while the migration is polled.
 
-`validate_hook_failure_and_check_vms()` is the helper that makes expected failures practical:
+Constants include `STORAGE_SECRET_EXTRA_ENV` (the environment variable that injects extra Secret keys) and `PVC_NAME_LABEL`.
 
-- If the migration failed in `PreHook`, it returns `False`, because the VM was never migrated.
-- If the migration failed in `PostHook`, it returns `True`, because the VM may already exist and should still be validated.
+### `utilities/copyoffload_plan_secret.py`
 
-> **Tip:** Use `expected_result` when you only need to exercise hook success or failure behavior. Switch to `playbook_base64` when the hook needs custom logic.
+`plan_uses_copyoffload()`, `wait_for_plan_secret()`, `wait_for_copyoffload_plan_secret()` — poll for the populator secret Forklift creates when a copy-offload migration starts.
+Constants: `PLAN_SECRET_WAIT_TIMEOUT`, `PLAN_NAME_LABEL`, `POPULATOR_LABEL`, `COPY_OFFLOAD_PVC_NAME_TEMPLATE`.
 
-## Access and Validation
+### `utilities/copyoffload_constants.py`
 
-### `utilities.virtctl` and `utilities.ssh_utils`
+`SUPPORTED_VENDORS`, `POPULATOR_INFLIGHT_LIMIT`, `VM_INFLIGHT_LIMIT`, `VM_POPULATOR_INFLIGHT_LIMIT`, `SOURCE_HOST_LABEL`, `POPULATOR_THROTTLED_EVENT_REASON`,
+`FORKLIFT_CONTROLLER_NAME`.
 
-This repository does not rely on node IP access for guest validation. Instead, it uses `virtctl port-forward` to reach a KubeVirt VM locally, then hands that tunnel to `python-rrmngmnt` for SSH operations.
+### `utilities/copyoffload_datastore.py`
 
-`utilities.virtctl` makes that possible by locating or downloading a matching `virtctl` binary. It first checks whether `virtctl` is already in `PATH`, then checks for a previously downloaded copy, and only then falls back to downloading from the cluster’s `ConsoleCLIDownload` resource. The downloader knows how to match Linux and macOS builds and `x86_64` or `arm64` architectures.
+`resolve_datastore_moid_from_disk_config()` and `format_custom_datastore_not_found_message()` resolve a disk's datastore, with explicit errors for the symbolic secondary and
+non-XCOPY datastore placeholders (`ERR_SECONDARY_DS_NOT_CONFIGURED`, `ERR_NON_XCOPY_DS_NOT_CONFIGURED`, `ERR_EMPTY_DISK_DATASTORE_ID`).
 
-`conftest.py` exposes this through the `virtctl_binary` fixture, which caches the binary in a cluster-versioned shared temp directory and uses a file lock so parallel `pytest-xdist` workers do not all download it at once.
+### `utilities/forklift_controller_populator.py`
 
-The actual SSH tunnel command is built in `VMSSHConnection.setup_port_forward()`:
+Reads and sets the in-flight limits on the `forklift-volume-populator-controller` Deployment: `get_populator_inflight_from_deployment()`, `populator_inflight_limit()`,
+`wait_for_populator_inflight_deployment()`, `get_vm_inflight_from_deployment()`, `vm_inflight_limit()`, `wait_for_vm_inflight_deployment()`, plus the cross-worker file-lock
+helpers `ensure_secure_shared_lock_dir()`, `get_forkliftcontroller_populator_inflight_lock_path()`, `get_forkliftcontroller_vm_populator_inflight_lock_path()`.
 
-```98:141:utilities/ssh_utils.py
-virtctl_path = shutil.which("virtctl")
-if not virtctl_path:
-    raise RuntimeError(
-        "virtctl command not found in PATH. "
-        "Please install virtctl before running the test suite. "
-        "See README.md for installation instructions."
-    )
+### `utilities/hooks.py`
 
-if local_port is None:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        local_port = s.getsockname()[1]
+`validate_hook_config()`, `validate_custom_playbook()`, `create_hook_for_plan()`, `validate_all_vms_same_step()`, `validate_expected_hook_failure()`,
+`validate_hook_failure_and_check_vms()`, `create_hook_if_configured()`.
 
-cmd = [
-    virtctl_path,
-    "port-forward",
-    f"vm/{self.vm.name}",
-    f"{local_port}:22",
-    "--namespace",
-    self.vm.namespace,
-    "--address",
-    "127.0.0.1",
-]
+### `utilities/deep_inspection.py`
 
-if self.ocp_api_server:
-    cmd.extend(["--server", self.ocp_api_server])
+Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven DI: `create_di_connection_secret()`, `create_conversion_resource()`, `wait_for_conversion_phase()`,
+`wait_for_conversion_complete()`, `cancel_conversion()`, `wait_for_conversion_pods()`, `wait_for_conversion_pods_cleanup()`, `wait_for_di_snapshot()`,
+`wait_for_di_snapshot_cleanup()`, `verify_di_results()`, `verify_captured_di_results()`, `verify_di_concerns_block_migration()`, `get_plan_conversion_crs()`,
+`wait_for_critical_conditions()`, `create_di_capture_callback()`.
 
-if self.ocp_token:
-    cmd.extend(["--token", self.ocp_token])
+### `utilities/upgrade.py`
 
-if self.ocp_insecure:
-    cmd.append("--insecure-skip-tls-verify")
+`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run.
 
-cmd.extend(["-v", "3"])
+## Validation
 
-cmd_str = " ".join(cmd)
-if self.ocp_token:
-    cmd_str = cmd_str.replace(self.ocp_token, "[REDACTED]")
-LOGGER.info(f"Full virtctl command: {cmd_str}")
-```
+### `utilities/post_migration.py`
 
-`SSHConnectionManager` is the higher-level wrapper most tests use. It creates VM connections through the destination provider, extracts the OpenShift API token on demand, and keeps track of all open connections so fixture teardown can close them cleanly.
+Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used by `test_check_vms`; everything else is a focused check it composes.
 
-> **Note:** This port-forward approach means SSH validation works even when worker nodes do not have public IPs.
+| Area | Functions |
+| --- | --- |
+| Connectivity | `get_ssh_credentials_from_provider_config()`, `check_ssh_connectivity()`, `check_vm_command_output()` |
+| Compute | `check_cpu()`, `check_cpu_features()`, `check_memory()`, `check_vbs_status()` |
+| Boot/BIOS | `check_boot_configuration()`, `check_serial_preservation()` |
+| State | `check_vms_power_state()`, `check_false_vm_power_off()`, `check_guest_agent()`, `check_snapshots()`, `check_disconnected_nic_state()` |
+| Network | `check_network()`, `get_nic_by_mac()`, `get_all_destinations()`, `check_nic_name_preservation()`, `check_static_ip_preservation()` |
+| Storage | `check_storage()`, `check_pvc_names()`, `verify_data_integrity()`, `verify_luks_encryption()`, `verify_rdm_disk_bus_types()` |
+| Placement | `check_vm_node_placement()`, `check_vm_labels()`, `check_vm_affinity()`, `check_ssl_configuration()` |
 
-The actual guest credentials come from `.providers.json`:
+Static-IP preservation applies to vSphere and Hyper-V sources and supports both Windows (`ipconfig /all`) and Linux (`nmcli device show`) guests.
 
-- `guest_vm_linux_user` and `guest_vm_linux_password` for Linux guests
-- `guest_vm_win_user` and `guest_vm_win_password` for Windows guests
+### `utilities/shared_disk.py`
 
-> **Warning:** `check_vms()` only tries SSH when the destination VM is powered on.
+`verify_shared_disk_data()` mounts, writes, and reads a shared disk from both migrated VMs (Linux, 6-step pattern). `label_shared_disk_on_source_windows()` labels the shared NTFS
+volume on the source through the VMware Guest Operations API before migration, and `verify_shared_disk_data_windows()` verifies it afterwards (Windows, 7-step pattern).
 
-### `utilities.post_migration`
+### `utilities/ssh_utils.py`
 
-`utilities.post_migration` is the high-level “did the migration really work?” module. Its main entry point, `check_vms()`, looks up the source and destination VM objects, runs a broad set of focused validators, aggregates failures per VM, and only fails at the end. That gives you a much fuller error picture than stopping at the first failed assertion.
+SSH into migrated VMs through `virtctl` port-forward plus `python-rrmngmnt`, so it works when cluster nodes have no external IPs. `VMSSHConnection` wraps a connection,
+`SSHConnectionManager` manages one connection per VM for fixtures, `create_vm_ssh_connection()` builds a single connection, and `run_cmd_in_vm()` runs a command in the guest.
 
-Depending on provider type and plan options, `check_vms()` can verify:
+### `utilities/virtctl.py`
 
-- Power state, CPU, and memory
-- Network and storage mappings
-- PVC names from `pvcNameTemplate`
-- Snapshot preservation for vSphere
-- BIOS serial preservation for vSphere, including the OCP 4.20+ format change
-- Guest agent availability
-- SSH connectivity
-- Static IP preservation
-- Node placement
-- VM labels
-- Affinity
-- Provider secret SSL settings versus `source_provider_insecure_skip_verify`
+`download_virtctl_from_cluster()` fetches the matching `virtctl` binary and `add_to_path()` puts it on `PATH` for the session.
 
-A few behaviors matter in practice:
+### `utilities/vmware_guest_operations.py`
 
-- `check_vms()` uses `plan["_vm_target_namespace"]`, so custom `vm_target_namespace` settings work automatically.
-- `check_pvc_names()` understands Go-template-style `pvcNameTemplate` values, including `{{.VmName}}`, `{{.DiskIndex}}`, `{{.FileName}}`, and Sprig functions. If `pvc_name_template_use_generate_name` is `True`, it switches from exact matching to prefix matching.
-- `check_ssl_configuration()` does a useful safety check: it compares the global source-provider SSL setting with the actual `insecureSkipVerify` value stored in the Provider secret.
+Commands executed inside vSphere guests via the Guest Operations API: `run_command_in_vmware_guest()`, `detect_vmware_ip_origins_via_guest_ops()`, `detect_guest_nic_names()`,
+`create_data_integrity_marker()`.
 
-> **Warning:** `check_static_ip_preservation()` is currently implemented only for Windows guests migrated from vSphere.
+### `utilities/worker_node_selection.py`
 
-> **Tip:** Use `check_vms()` when you want the repository’s full standard validation bundle. If a test only cares about one behavior, calling a focused helper such as `check_vm_labels()` or `check_serial_preservation()` is often cleaner.
+Target worker node selection for placement tests: `get_worker_nodes()`, `parse_prometheus_value()`, `parse_prometheus_memory_metrics()`, `select_node_by_available_memory()`.
 
-## Diagnostics and Teardown
+### `utilities/esxi.py`
 
-### `utilities.must_gather`
+Direct-ESXi host access for the `endpoint_type: esxi` source path: `install_ssh_key_on_esxi()`, `remove_ssh_key_from_esxi()`, raising `ESXiError` on failure.
 
-`utilities.must_gather` is the repository’s failure-time diagnostic collector. It does not hardcode a must-gather image. Instead, it looks up the installed MTV `ClusterServiceVersion`, resolves the matching image digest mirror set, and builds the final image reference from the installed SHA. That keeps must-gather aligned with the cluster’s actual operator version.
+### `utilities/provider_inventory.py`
 
-When a plan is known, it runs targeted collection:
+Inventory-side waits that keep plan data consistent with Forklift's view: `force_inventory_refresh()`, `wait_for_added_nics_in_forklift_inventory()`,
+`wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()`.
 
-```166:181:utilities/must_gather.py
-must_gather_image = _resolve_must_gather_image(
-    ocp_admin_client=ocp_admin_client,
-    mtv_subs=mtv_subs,
-    mtv_csv=mtv_csv,
-)
+## Teardown and Diagnostics
 
-_must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
+### `utilities/pytest_utils.py`
 
-if plan:
-    plan_name = plan["name"]
-    plan_namespace = plan["namespace"]
-    run_command(
-        shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted")
-    )
-else:
-    run_command(shlex.split(f"{_must_gather_base_cmd} -- -- NS={mtv_namespace}"))
-```
+`is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`),
+`collect_created_resources()` (must-gather on failure), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
 
-That targeted mode is especially useful when a single migration plan failed and you want operator-side data for that specific plan instead of a much broader dump.
+### `utilities/must_gather.py`
 
-Errors in `run_must_gather()` are logged, but the helper does not crash the whole test run just because diagnostics collection failed.
+`run_must_gather()` collects targeted MTV must-gather bundles when a test fails.
 
-### `utilities.pytest_utils` and `utilities.migration_utils`
+### `utilities/aap.py`
 
-These two modules are the cleanup and safety-net layer.
+AWX/AAP deployment and REST API helpers for hook integration tests: `is_awx_installed()`, `deploy_awx_via_helm()`, `create_awx_instance()`, `wait_for_awx_ready()`,
+`wait_for_awx_api_ready()`, `get_awx_admin_password()`, `get_awx_route_url()`, `create_awx_auth_token()`, `create_awx_project()`, `wait_for_awx_project_sync()`,
+`create_awx_inventory()`, `create_awx_job_template()`, `create_aap_token_secret()`, `teardown_awx()`.
 
-`utilities.pytest_utils.session_teardown()` is the top-level cleanup entry point. It cancels running migrations, archives plans, then hands off to the deeper resource deletion logic:
+## Provider Abstraction (`libs/`)
 
-```107:128:utilities/pytest_utils.py
-def session_teardown(session_store: dict[str, Any]) -> None:
-    LOGGER.info("Running teardown to delete all created resources")
+### `libs/base_provider.py`
 
-    ocp_client = get_cluster_client()
+`BaseProvider` is the abstract base every source adapter implements: `connect()` and `disconnect()` are context-manager managed (`__enter__`/`__exit__`), and the abstract surface
+is `connect()`, `disconnect()`, `test`, `vm_dict`, `clone_vm()`, `delete_vm()`, `get_vm_or_template_networks()`. Shared behaviour includes `_generate_clone_vm_name()` and
+`supports_skip_clone()`.
 
-    # When running in parallel (-n auto) `session_store` can be empty.
-    if session_teardown_resources := session_store.get("teardown"):
-        for migration_name in session_teardown_resources.get(Migration.kind, []):
-            migration = Migration(name=migration_name["name"], namespace=migration_name["namespace"], client=ocp_client)
-            cancel_migration(migration=migration)
+### `libs/providers/`
 
-        for plan_name in session_teardown_resources.get(Plan.kind, []):
-            plan = Plan(name=plan_name["name"], namespace=plan_name["namespace"], client=ocp_client)
-            archive_plan(plan=plan)
+| Module | Class | Backing technology |
+| --- | --- | --- |
+| `vmware.py` | `VMWareProvider` | `pyvmomi` / vSphere Automation SDK |
+| `rhv.py` | `OvirtProvider` | `ovirt-python-sdk` |
+| `openstack.py` | `OpenStackProvider` | `openstacksdk` |
+| `openshift.py` | `OCPProvider` | `openshift-python-wrapper` against a source cluster |
+| `ova.py` | `OVAProvider` | OVA import over NFS |
+| `hyperv.py` | `HyperVProvider` | PowerShell Remoting (PSRP) |
 
-        leftovers = teardown_resources(
-            session_store=session_store,
-            ocp_client=ocp_client,
-            target_namespace=session_store.get("target_namespace"),
-        )
-        if leftovers:
-            raise SessionTeardownError(f"Failed to clean up the following resources: {leftovers}")
-```
+`vmware.py` also exposes `format_insufficient_capacity_message()` and `format_capacity_validation_log()`; module constant `VSPHERE_NIC_DEVICE_KEY_OFFSET` documents the vSphere
+device-key space used when adding NICs.
 
-From there, the cleanup path does a few important things:
+### `libs/forklift_inventory.py`
 
-- `collect_created_resources()` writes the tracked resource list to `resources.json` under the data collector path.
-- `teardown_resources()` deletes tracked `Migration`, `Plan`, `Provider`, `Secret`, `StorageMap`, `NetworkMap`, `Namespace`, and other resources.
-- `cancel_migration()` cancels only migrations that are still running.
-- `archive_plan()` marks plans as archived and waits for plan-owned pods to disappear.
-- `check_dv_pvc_pv_deleted()` waits for `DataVolume`, `PersistentVolumeClaim`, and `PersistentVolume` cleanup in parallel.
-- `pytest_exception_interact` and session-finish hooks call `run_must_gather()` when data collection is enabled and failures or leftovers justify it.
+`create_forklift_inventory(client, mtv_namespace, provider)` returns the inventory implementation matching the provider type: `VsphereForkliftInventory`, `OvirtForkliftInventory`,
+`OpenstackForliftinventory`, `OpenshiftForkliftInventory`, `OvaForkliftInventory`, `HypervForkliftInventory` — all subclasses of `ForkliftInventory`.
 
-There is also a nearer, class-scoped cleanup path in `conftest.py`: `cleanup_migrated_vms` deletes migrated VMs after each test class finishes, including cases where VMs were intentionally migrated into a custom namespace. Session teardown is the backstop if anything survives beyond that.
+`ForkliftInventory` exposes `get_data()`, `vms`, `get_vm()`, `wait_for_vm()`, `vms_names`, `networks`, `storages`, `vms_storages_mappings`, `vms_networks_mappings`, and
+provider-specific sync checks (OpenStack volumes and networks).
 
-> **Warning:** `--skip-teardown` is a debugging tool, not a normal operating mode. It leaves migrated VMs and tracked resources behind on purpose.
+## Exceptions (`exceptions/exceptions.py`)
 
-## Configuration Notes
+Every custom exception lives in this one module, enforced by the `check-exceptions-location` pre-commit hook.
 
-A few configuration points affect these modules over and over:
+| Area | Exceptions |
+| --- | --- |
+| Provider and cluster | `MissingProvidersFileError`, `ProviderEmptyContentError`, `MtvOperatorNotInstalledError`, `ForkliftPodsNotRunningError`, `RemoteClusterAndLocalCluterNamesError` |
+| VM lifecycle | `VmNotFoundError`, `VmCloneError`, `VmMissingVmxError`, `VmBadDatastoreError`, `VmPipelineError`, `VmMigrationStepMismatchError`, `InvalidVMNameError` |
+| Migration | `MigrationNotFoundError`, `MigrationStatusError`, `MigrationPlanExecError` |
+| Guest access | `GuestCommandError`, `SSHConnectionSetupError`, `PowerShellCommandError`, `ConversionError` |
+| Suite lifecycle | `SessionTeardownError`, `ResourceNameNotStartedWithSessionUUIDError`, `OvirtMTVDatacenterNotFoundError`, `OvirtMTVDatacenterStatusError`, `MtvUpgradeError` |
 
-- Global session settings in `tests/tests_config/config.py` include `insecure_verify_skip`, `source_provider_insecure_skip_verify`, `snapshots_interval`, `mins_before_cutover`, and `plan_wait_timeout`.
-- Per-test entries in `tests/tests_config/config.py` control feature behavior with keys such as `warm_migration`, `target_power_state`, `preserve_static_ips`, `vm_target_namespace`, `pvc_name_template`, `pvc_name_template_use_generate_name`, `target_labels`, `target_affinity`, `target_node_selector`, `pre_hook`, and `post_hook`.
-- Provider-specific connection details, guest OS credentials, and copy-offload settings come from `.providers.json`.
+## CLI (`cli/mtv_api_tests/`)
 
-> **Tip:** If you are adding a new migration scenario, start by reusing `get_storage_migration_map()`, `get_network_migration_map()`, `create_plan_resource()`, `execute_migration()`, and `check_vms()`. That path matches the rest of the repository and gives you automatic teardown, SSH validation, and diagnostics with very little extra code.
+A Typer app installed as the `mtv-api-tests` console script.
+
+| Module | Role |
+| --- | --- |
+| `__init__.py` | `main()`, `generate()`, `run()`, and the `RunMode` enum (`local` / `job`) |
+| `generate.py` | interactive wizard that writes `.providers.json` and the Job YAML |
+| `run.py` | run tests locally (`uv run pytest`) or as an OpenShift Job |
+| `common.py` | shared prompts and discovery: provider/vendors/VMs/ESXi hosts/storage classes, cluster connection and MTV validation, `build_providers_json()`, `write_providers_json()`, `mask_passwords()`, `generate_job_yaml()` |
+
+`run` accepts `--mode`, `--category`, `--source-provider`, `--destination-provider`, `--storage-class`, `-k/--test-filter`, and `--job-yaml`.
+
+## Repository Tooling
+
+### `scripts/hooks/`
+
+Eight local pre-commit hooks enforce the rules in `AGENTS.md` as AST checks, with a baseline ratchet (`baseline.py` + `scripts/hooks/baselines/*.txt`) so legacy violations do not
+block unrelated work:
+
+| Hook | Rule |
+| --- | --- |
+| `check_no_kubernetes_runtime.py` | no runtime `kubernetes` imports (except `kubernetes.dynamic.exceptions`) |
+| `check_no_dynamicclient_construct.py` | no direct `DynamicClient(...)` construction |
+| `check_no_except_exception.py` | no `except Exception` outside pytest hooks |
+| `check_no_runtimeerror.py` | no `raise RuntimeError` outside pytest hooks |
+| `check_exceptions_location.py` | exception subclasses belong in `exceptions/exceptions.py` |
+| `check_test_file_location.py` | no `test_*.py` directly under `tests/` |
+| `check_autouse_fixtures.py` | only `autouse_fixtures` may use `autouse=True` |
+| `check_no_module_load_source_providers.py` | no module-level `load_source_providers()` in `tests/` |
+
+### `tools/`
+
+`tools/clean_cluster.py` (`clean_cluster_by_resources_file()`) removes leftovers listed in a `resources.json`; `tools/bm-dns-setup.sh` and `tools/update-branches.sh` are operator
+helpers.
