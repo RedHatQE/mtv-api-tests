@@ -157,7 +157,13 @@ def enrich_junit_xml(session: pytest.Session) -> None:
     if ai_model := os.environ.get("ROOTCOZ_AI_MODEL"):
         payload["ai_model"] = ai_model
 
-    # ... requests.post(f"{server_url.rstrip('/')}/analyze-failures", ...) omitted ...
+    response = requests.post(
+        f"{server_url.rstrip('/')}/analyze-failures",
+        json=payload,
+        timeout=timeout_value,
+    )
+    response.raise_for_status()
+    result = response.json()
 
     if enriched_xml := result.get("enriched_xml"):
         xml_path.write_text(enriched_xml)

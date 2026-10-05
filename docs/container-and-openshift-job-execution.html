@@ -573,16 +573,21 @@ and tells you to delete it first with <code>oc delete -f mtv-api-tests-manifests
 <div class="highlight"><pre><span></span><code>oc<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>mtv-tests
 
 <span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">"Enter cluster password: "</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
-oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>mtv-test-config<span class="w"> </span><span class="se">\</span>
+oc<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>mtv-tests-config<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--from-file<span class="o">=</span>providers.json<span class="o">=</span>.providers.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_host</span><span class="o">=</span>https://api.your-cluster.com:6443<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_username</span><span class="o">=</span>kubeadmin<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_password</span><span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">cluster_verify_ssl</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-n<span class="w"> </span>mtv-tests
 <span class="nb">unset</span><span class="w"> </span>CLUSTER_PASSWORD
 </code></pre></div>
 
 <blockquote>
+<p><strong>Warning:</strong> The generated <code>Job</code> mounts its config through a non-optional <code>secretKeyRef</code>, so all four <code>cluster_*</code> keys must exist or the
+container never starts. The Secret name is <code>&lt;namespace&gt;-config</code> — <code>mtv-tests-config</code> for the namespace above — because the generator derives it
+from the namespace, not from the <code>Secret</code> you create by hand. Omitting <code>cluster_verify_ssl</code> or naming the Secret anything other than
+<code>&lt;namespace&gt;-config</code> produces a <code>Job</code> stuck in <code>CreateContainerConfigError</code>.</p>
 <p><strong>Note:</strong> <code>generate</code> also stores a <code>cluster_ca_bundle</code> key, but the test runner does not consume it yet. CA bundle
 injection into the container is still unimplemented.</p>
 </blockquote>

@@ -333,8 +333,10 @@ place. In this project you declare them under <code>tests_params</code> in <code
 </tbody>
 </table></div>
 <blockquote>
-<p><strong>Note:</strong> Every plan-level key is read with <code>plan.get(...)</code> in the preparation fixtures and with an explicit keyword
-argument in <code>create_plan_resource()</code>, so an option only reaches the MTV Plan CR when the test class actually passes it.</p>
+<p><strong>Note:</strong> Plan-level keys are read with <code>plan.get(...)</code> in the preparation fixtures, but only a subset of them is forwarded as an explicit
+keyword argument to <code>create_plan_resource()</code>. Preparation-only options such as <code>inventory_timeout</code>, <code>clone_to_same_host</code>,
+<code>pin_to_non_dedicated_host</code> and <code>disable_drs_for_vms</code> are consumed while building the plan and never reach the MTV <code>Plan</code> CR, so passing them to
+<code>create_plan_resource()</code> raises <code>TypeError</code>. An option only affects the Plan when the test class passes it explicitly.</p>
 </blockquote>
 <h2 id="plan-level-options">Plan-level options</h2>
 <div class="table-wrap"><table>
@@ -848,9 +850,9 @@ where migrated VMs land, and <code>multus_namespace</code> to choose where the t
 <p>These options control where the migrated VM runs and what metadata MTV applies to it.</p>
 <p>A cold-migration example from <code>tests/cold/test_cold_migration_comprehensive.py</code> shows the scheduling-related arguments
 passed into the Plan helper:</p>
-<div class="highlight"><pre><span></span><code><span class="n">target_node_selector</span> <span class="o">=</span> <span class="p">({</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_key"</span><span class="p">]:</span> <span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_value"</span><span class="p">]},)</span>
-<span class="n">target_labels</span> <span class="o">=</span> <span class="p">(</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">"vm_labels"</span><span class="p">],)</span>
-<span class="n">target_affinity</span> <span class="o">=</span> <span class="p">(</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_affinity"</span><span class="p">],)</span>
+<div class="highlight"><pre><span></span><code><span class="n">target_node_selector</span> <span class="o">=</span> <span class="p">{</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_key"</span><span class="p">]:</span> <span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_value"</span><span class="p">]}</span>
+<span class="n">target_labels</span> <span class="o">=</span> <span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">"vm_labels"</span><span class="p">]</span>
+<span class="n">target_affinity</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_affinity"</span><span class="p">]</span>
 </code></pre></div>
 
 <h3 id="node-selectors">Node selectors</h3>

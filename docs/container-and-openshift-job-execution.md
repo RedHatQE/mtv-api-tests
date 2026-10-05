@@ -309,14 +309,20 @@ If you would rather assemble the `Secret` yourself, this is the same minimum set
 oc create namespace mtv-tests
 
 read -sp "Enter cluster password: " CLUSTER_PASSWORD && echo
-oc create secret generic mtv-test-config \
+oc create secret generic mtv-tests-config \
   --from-file=providers.json=.providers.json \
   --from-literal=cluster_host=https://api.your-cluster.com:6443 \
   --from-literal=cluster_username=kubeadmin \
   --from-literal=cluster_password="${CLUSTER_PASSWORD}" \
+  --from-literal=cluster_verify_ssl=true \
   -n mtv-tests
 unset CLUSTER_PASSWORD
 ```
+
+> **Warning:** The generated `Job` mounts its config through a non-optional `secretKeyRef`, so all four `cluster_*` keys must exist or the
+> container never starts. The Secret name is `<namespace>-config` — `mtv-tests-config` for the namespace above — because the generator derives it
+> from the namespace, not from the `Secret` you create by hand. Omitting `cluster_verify_ssl` or naming the Secret anything other than
+> `<namespace>-config` produces a `Job` stuck in `CreateContainerConfigError`.
 
 > **Note:** `generate` also stores a `cluster_ca_bundle` key, but the test runner does not consume it yet. CA bundle
 > injection into the container is still unimplemented.

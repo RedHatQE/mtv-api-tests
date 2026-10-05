@@ -712,8 +712,9 @@ provide <code>release-it</code>, <code>@release-it/bumper</code>, and <code>GITH
 <li>closed PRs are not automatically recreated</li>
 <li>matched dependencies are grouped under <code>python-deps</code></li>
 </ul>
-<p><code>baseBranches</code> is the part that ties Renovate to the release flow: update PRs target <code>main</code> and any <code>v&lt;major&gt;.&lt;minor&gt;</code> maintenance branch, which is
-exactly the branch shape <code>release-it</code> produces when <code>requireBranch</code> is <code>false</code>.</p>
+<p><code>baseBranches</code> is the part that ties Renovate to the release flow: update PRs target <code>main</code> and any <code>v&lt;major&gt;.&lt;minor&gt;</code> maintenance branch. Those
+maintenance branches are <strong>not</strong> created by <code>release-it</code> — <code>.release-it.json</code> only commits, tags, and pushes the branch you run it on, so a maintainer
+must create and push <code>v&lt;major&gt;.&lt;minor&gt;</code> by hand when a release line needs one.</p>
 <p>Because this project uses <code>uv</code> and checks in <code>uv.lock</code>, Renovate is not just bumping top-level requirements. It is also part of keeping the lock file fresh.</p>
 <blockquote>
 <p><strong>Tip:</strong> Grouping everything under <code>python-deps</code> reduces PR noise, but it also means update PRs can be broader than a one-package-at-a-time workflow.</p>
@@ -949,6 +950,14 @@ instead of only generic style advice.</p>
 <p>There is a separate, opt-in AI feature inside the pytest plugin, and it is unrelated to the PR review bots above. <code>conftest.py</code> adds
 <code>--analyze-with-ai</code>, and <code>utilities/pytest_utils.py</code> POSTs the JUnit XML to a rootcoz server's <code>/analyze-failures</code> endpoint and writes the
 enriched XML back over the same file. That is test-report post-processing, not a pull-request review bot.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>/analyze-failures</code> is the contract this repository's client expects, and it is not the rootcoz CLI's Jenkins <code>analyze</code> job API. The
+request is <code>POST {ROOTCOZ_SERVER_URL}/analyze-failures</code> with a JSON body of <code>{"raw_xml": "&lt;junit xml&gt;"}</code> (plus optional <code>ai_provider</code> and
+<code>ai_model</code>), and the response must be JSON containing <code>enriched_xml</code>. The call is synchronous — it blocks for up to <code>ROOTCOZ_TIMEOUT</code> seconds
+and returns the enriched report in the same response, with no job id to poll. A server that only exposes <code>POST /analyze</code> (which returns a job id
+for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
+untouched.</p>
+</blockquote>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">enrich_junit_xml</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Read JUnit XML, send to server for analysis, write enriched XML back.</span>
 <span class="sd">    ...</span>
@@ -975,11 +984,18 @@ enriched XML back over the same file. That is test-report post-processing, not a
 optional <code>ROOTCOZ_AI_PROVIDER</code> / <code>ROOTCOZ_AI_MODEL</code> overrides. This repository also carries <code>.rootcoz/settings.json</code>, which is read by the
 rootcoz server and CLI, not by pytest: it pins the AI provider and model, an AI call timeout, peer AI configs, and the <code>additional_repos</code>
 rootcoz may consult for this project.</p>
+<blockquote>
+<p><strong>Note:</strong> The payload carries only <code>raw_xml</code> and the optional overrides — it sends no repository URL. <code>.rootcoz/settings.json</code> in this repo is
+therefore applied only when the server already knows about this repository (server-side configuration or a configured <code>additional_repos</code>
+entry). Without that, rootcoz has no repository path from which to load the settings and falls back to its own defaults, which is also why
+<code>ROOTCOZ_AI_PROVIDER</code> and <code>ROOTCOZ_AI_MODEL</code> exist: set them explicitly when you need a specific provider or model.</p>
+</blockquote>
 <p>Enrichment is skipped when the session exit code is <code>0</code>, and it is force-disabled under <code>--collect-only</code> and <code>--setup-plan</code>. The original JUnit
 file is preserved if the call fails.</p>
 <blockquote>
-<p><strong>Note:</strong> If you operate rootcoz yourself, <code>ROOTCOZ_SERVER_URL</code> plus the <code>.rootcoz/settings.json</code> in this repo are the whole setup. If you do
-not, the feature is simply off and nothing changes about your test run.</p>
+<p><strong>Note:</strong> If you operate rootcoz yourself, <code>ROOTCOZ_SERVER_URL</code> is the only required setting, plus a server that exposes <code>/analyze-failures</code>.
+Register this repository with the server if you want <code>.rootcoz/settings.json</code> applied, or set <code>ROOTCOZ_AI_PROVIDER</code> / <code>ROOTCOZ_AI_MODEL</code>
+explicitly. If you do not, the feature is simply off and nothing changes about your test run.</p>
 </blockquote>
 <h2 id="documentation-site-rebuild">Documentation Site Rebuild</h2>
 <p>The <code>docs/</code> tree is a <a href="https://pypi.org/project/pi-docsite/">pi-docsite</a> project. Only the Markdown sources and <code>docs/nav.json</code> are hand-edited;

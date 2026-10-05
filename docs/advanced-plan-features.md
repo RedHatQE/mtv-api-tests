@@ -12,8 +12,10 @@ This page covers three layers:
 | Plan-level options | top level of a `tests_params` entry | `preserve_static_ips`, `xfs_compatibility`, `per_nic_network_map` |
 | Test-verification options | top level, consumed by the post-migration step | `xfs_check` |
 
-> **Note:** Every plan-level key is read with `plan.get(...)` in the preparation fixtures and with an explicit keyword
-> argument in `create_plan_resource()`, so an option only reaches the MTV Plan CR when the test class actually passes it.
+> **Note:** Plan-level keys are read with `plan.get(...)` in the preparation fixtures, but only a subset of them is forwarded as an explicit
+> keyword argument to `create_plan_resource()`. Preparation-only options such as `inventory_timeout`, `clone_to_same_host`,
+> `pin_to_non_dedicated_host` and `disable_drs_for_vms` are consumed while building the plan and never reach the MTV `Plan` CR, so passing them to
+> `create_plan_resource()` raises `TypeError`. An option only affects the Plan when the test class passes it explicitly.
 
 ## Plan-level options
 
@@ -300,9 +302,9 @@ A cold-migration example from `tests/cold/test_cold_migration_comprehensive.py` 
 passed into the Plan helper:
 
 ```python
-target_node_selector = ({labeled_worker_node["label_key"]: labeled_worker_node["label_value"]},)
-target_labels = (target_vm_labels["vm_labels"],)
-target_affinity = (prepared_plan["target_affinity"],)
+target_node_selector = {labeled_worker_node["label_key"]: labeled_worker_node["label_value"]}
+target_labels = target_vm_labels["vm_labels"]
+target_affinity = prepared_plan["target_affinity"]
 ```
 
 ### Node selectors

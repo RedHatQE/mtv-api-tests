@@ -3744,14 +3744,20 @@ If you would rather assemble the `Secret` yourself, this is the same minimum set
     oc create namespace mtv-tests
 
     read -sp "Enter cluster password: " CLUSTER_PASSWORD && echo
-    oc create secret generic mtv-test-config \
+    oc create secret generic mtv-tests-config \
       --from-file=providers.json=.providers.json \
       --from-literal=cluster_host=https://api.your-cluster.com:6443 \
       --from-literal=cluster_username=kubeadmin \
       --from-literal=cluster_password="${CLUSTER_PASSWORD}" \
+      --from-literal=cluster_verify_ssl=true \
       -n mtv-tests
     unset CLUSTER_PASSWORD
 ```
+
+> **Warning:** The generated `Job` mounts its config through a non-optional `secretKeyRef`, so all four `cluster_*` keys must exist or the
+> container never starts. The Secret name is `<namespace>-config` — `mtv-tests-config` for the namespace above — because the generator derives it
+> from the namespace, not from the `Secret` you create by hand. Omitting `cluster_verify_ssl` or naming the Secret anything other than
+> `<namespace>-config` produces a `Job` stuck in `CreateContainerConfigError`.
 
 > **Note:** `generate` also stores a `cluster_ca_bundle` key, but the test runner does not consume it yet. CA bundle
 > injection into the container is still unimplemented.
@@ -5945,7 +5951,7 @@ The key rule is simple: the first network goes to the pod network, and every add
                 "namespace": multus_namespace,
                 "type": "multus",
             }
-            multus_counter += 1  # Increment for next NAD
+            multus_counter += 1
 
         network_map_list.append({
             "destination": _destination,
@@ -8121,8 +8127,10 @@ This page covers three layers:
 | Plan-level options | top level of a `tests_params` entry | `preserve_static_ips`, `xfs_compatibility`, `per_nic_network_map` |
 | Test-verification options | top level, consumed by the post-migration step | `xfs_check` |
 
-> **Note:** Every plan-level key is read with `plan.get(...)` in the preparation fixtures and with an explicit keyword
-> argument in `create_plan_resource()`, so an option only reaches the MTV Plan CR when the test class actually passes it.
+> **Note:** Plan-level keys are read with `plan.get(...)` in the preparation fixtures, but only a subset of them is forwarded as an explicit
+> keyword argument to `create_plan_resource()`. Preparation-only options such as `inventory_timeout`, `clone_to_same_host`,
+> `pin_to_non_dedicated_host` and `disable_drs_for_vms` are consumed while building the plan and never reach the MTV `Plan` CR, so passing them to
+> `create_plan_resource()` raises `TypeError`. An option only affects the Plan when the test class passes it explicitly.
 
 ## Plan-level options
 
@@ -8409,9 +8417,9 @@ A cold-migration example from `tests/cold/test_cold_migration_comprehensive.py` 
 passed into the Plan helper:
 
 ```python
-    target_node_selector = ({labeled_worker_node["label_key"]: labeled_worker_node["label_value"]},)
-    target_labels = (target_vm_labels["vm_labels"],)
-    target_affinity = (prepared_plan["target_affinity"],)
+    target_node_selector = {labeled_worker_node["label_key"]: labeled_worker_node["label_value"]}
+    target_labels = target_vm_labels["vm_labels"]
+    target_affinity = prepared_plan["target_affinity"]
 ```
 
 ### Node selectors
@@ -11229,7 +11237,13 @@ file. rootcoz is an external service, not part of this repository; this page onl
         if ai_model := os.environ.get("ROOTCOZ_AI_MODEL"):
             payload["ai_model"] = ai_model
 
-        # ... requests.post(f"{server_url.rstrip('/')}/analyze-failures", ...) omitted ...
+        response = requests.post(
+            f"{server_url.rstrip('/')}/analyze-failures",
+            json=payload,
+            timeout=timeout_value,
+        )
+        response.raise_for_status()
+        result = response.json()
 
         if enriched_xml := result.get("enriched_xml"):
             xml_path.write_text(enriched_xml)
@@ -13234,8 +13248,9 @@ This gives the repo a clear dependency-update strategy:
 - closed PRs are not automatically recreated
 - matched dependencies are grouped under `python-deps`
 
-`baseBranches` is the part that ties Renovate to the release flow: update PRs target `main` and any `v<major>.<minor>` maintenance branch, which is
-exactly the branch shape `release-it` produces when `requireBranch` is `false`.
+`baseBranches` is the part that ties Renovate to the release flow: update PRs target `main` and any `v<major>.<minor>` maintenance branch. Those
+maintenance branches are **not** created by `release-it` — `.release-it.json` only commits, tags, and pushes the branch you run it on, so a maintainer
+must create and push `v<major>.<minor>` by hand when a release line needs one.
 
 Because this project uses `uv` and checks in `uv.lock`, Renovate is not just bumping top-level requirements. It is also part of keeping the lock file fresh.
 
@@ -13487,6 +13502,13 @@ There is a separate, opt-in AI feature inside the pytest plugin, and it is unrel
 `--analyze-with-ai`, and `utilities/pytest_utils.py` POSTs the JUnit XML to a rootcoz server's `/analyze-failures` endpoint and writes the
 enriched XML back over the same file. That is test-report post-processing, not a pull-request review bot.
 
+> **Warning:** `/analyze-failures` is the contract this repository's client expects, and it is not the rootcoz CLI's Jenkins `analyze` job API. The
+> request is `POST {ROOTCOZ_SERVER_URL}/analyze-failures` with a JSON body of `{"raw_xml": "<junit xml>"}` (plus optional `ai_provider` and
+> `ai_model`), and the response must be JSON containing `enriched_xml`. The call is synchronous — it blocks for up to `ROOTCOZ_TIMEOUT` seconds
+> and returns the enriched report in the same response, with no job id to poll. A server that only exposes `POST /analyze` (which returns a job id
+> for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
+> untouched.
+
 ```462:498:utilities/pytest_utils.py
     def enrich_junit_xml(session: pytest.Session) -> None:
         """Read JUnit XML, send to server for analysis, write enriched XML back.
@@ -13515,11 +13537,17 @@ optional `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` overrides. This repository a
 rootcoz server and CLI, not by pytest: it pins the AI provider and model, an AI call timeout, peer AI configs, and the `additional_repos`
 rootcoz may consult for this project.
 
+> **Note:** The payload carries only `raw_xml` and the optional overrides — it sends no repository URL. `.rootcoz/settings.json` in this repo is
+> therefore applied only when the server already knows about this repository (server-side configuration or a configured `additional_repos`
+> entry). Without that, rootcoz has no repository path from which to load the settings and falls back to its own defaults, which is also why
+> `ROOTCOZ_AI_PROVIDER` and `ROOTCOZ_AI_MODEL` exist: set them explicitly when you need a specific provider or model.
+
 Enrichment is skipped when the session exit code is `0`, and it is force-disabled under `--collect-only` and `--setup-plan`. The original JUnit
 file is preserved if the call fails.
 
-> **Note:** If you operate rootcoz yourself, `ROOTCOZ_SERVER_URL` plus the `.rootcoz/settings.json` in this repo are the whole setup. If you do
-> not, the feature is simply off and nothing changes about your test run.
+> **Note:** If you operate rootcoz yourself, `ROOTCOZ_SERVER_URL` is the only required setting, plus a server that exposes `/analyze-failures`.
+> Register this repository with the server if you want `.rootcoz/settings.json` applied, or set `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL`
+> explicitly. If you do not, the feature is simply off and nothing changes about your test run.
 
 ## Documentation Site Rebuild
 

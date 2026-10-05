@@ -402,8 +402,9 @@ This gives the repo a clear dependency-update strategy:
 - closed PRs are not automatically recreated
 - matched dependencies are grouped under `python-deps`
 
-`baseBranches` is the part that ties Renovate to the release flow: update PRs target `main` and any `v<major>.<minor>` maintenance branch, which is
-exactly the branch shape `release-it` produces when `requireBranch` is `false`.
+`baseBranches` is the part that ties Renovate to the release flow: update PRs target `main` and any `v<major>.<minor>` maintenance branch. Those
+maintenance branches are **not** created by `release-it` — `.release-it.json` only commits, tags, and pushes the branch you run it on, so a maintainer
+must create and push `v<major>.<minor>` by hand when a release line needs one.
 
 Because this project uses `uv` and checks in `uv.lock`, Renovate is not just bumping top-level requirements. It is also part of keeping the lock file fresh.
 
@@ -655,6 +656,13 @@ There is a separate, opt-in AI feature inside the pytest plugin, and it is unrel
 `--analyze-with-ai`, and `utilities/pytest_utils.py` POSTs the JUnit XML to a rootcoz server's `/analyze-failures` endpoint and writes the
 enriched XML back over the same file. That is test-report post-processing, not a pull-request review bot.
 
+> **Warning:** `/analyze-failures` is the contract this repository's client expects, and it is not the rootcoz CLI's Jenkins `analyze` job API. The
+> request is `POST {ROOTCOZ_SERVER_URL}/analyze-failures` with a JSON body of `{"raw_xml": "<junit xml>"}` (plus optional `ai_provider` and
+> `ai_model`), and the response must be JSON containing `enriched_xml`. The call is synchronous — it blocks for up to `ROOTCOZ_TIMEOUT` seconds
+> and returns the enriched report in the same response, with no job id to poll. A server that only exposes `POST /analyze` (which returns a job id
+> for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
+> untouched.
+
 ```462:498:utilities/pytest_utils.py
 def enrich_junit_xml(session: pytest.Session) -> None:
     """Read JUnit XML, send to server for analysis, write enriched XML back.
@@ -683,11 +691,17 @@ optional `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL` overrides. This repository a
 rootcoz server and CLI, not by pytest: it pins the AI provider and model, an AI call timeout, peer AI configs, and the `additional_repos`
 rootcoz may consult for this project.
 
+> **Note:** The payload carries only `raw_xml` and the optional overrides — it sends no repository URL. `.rootcoz/settings.json` in this repo is
+> therefore applied only when the server already knows about this repository (server-side configuration or a configured `additional_repos`
+> entry). Without that, rootcoz has no repository path from which to load the settings and falls back to its own defaults, which is also why
+> `ROOTCOZ_AI_PROVIDER` and `ROOTCOZ_AI_MODEL` exist: set them explicitly when you need a specific provider or model.
+
 Enrichment is skipped when the session exit code is `0`, and it is force-disabled under `--collect-only` and `--setup-plan`. The original JUnit
 file is preserved if the call fails.
 
-> **Note:** If you operate rootcoz yourself, `ROOTCOZ_SERVER_URL` plus the `.rootcoz/settings.json` in this repo are the whole setup. If you do
-> not, the feature is simply off and nothing changes about your test run.
+> **Note:** If you operate rootcoz yourself, `ROOTCOZ_SERVER_URL` is the only required setting, plus a server that exposes `/analyze-failures`.
+> Register this repository with the server if you want `.rootcoz/settings.json` applied, or set `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL`
+> explicitly. If you do not, the feature is simply off and nothing changes about your test run.
 
 ## Documentation Site Rebuild
 

@@ -300,7 +300,7 @@ for index, network in enumerate(networks):
             "namespace": multus_namespace,
             "type": "multus",
         }
-        multus_counter += 1  # Increment for next NAD
+        multus_counter += 1
 
     network_map_list.append({
         "destination": _destination,
