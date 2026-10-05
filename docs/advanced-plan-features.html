@@ -848,9 +848,9 @@ where migrated VMs land, and <code>multus_namespace</code> to choose where the t
 <p>These options control where the migrated VM runs and what metadata MTV applies to it.</p>
 <p>A cold-migration example from <code>tests/cold/test_cold_migration_comprehensive.py</code> shows the scheduling-related arguments
 passed into the Plan helper:</p>
-<div class="highlight"><pre><span></span><code><span class="n">target_node_selector</span><span class="o">=</span><span class="p">{</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_key"</span><span class="p">]:</span> <span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_value"</span><span class="p">]},</span>
-<span class="n">target_labels</span><span class="o">=</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">"vm_labels"</span><span class="p">],</span>
-<span class="n">target_affinity</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_affinity"</span><span class="p">],</span>
+<div class="highlight"><pre><span></span><code><span class="n">target_node_selector</span> <span class="o">=</span> <span class="p">({</span><span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_key"</span><span class="p">]:</span> <span class="n">labeled_worker_node</span><span class="p">[</span><span class="s2">"label_value"</span><span class="p">]},)</span>
+<span class="n">target_labels</span> <span class="o">=</span> <span class="p">(</span><span class="n">target_vm_labels</span><span class="p">[</span><span class="s2">"vm_labels"</span><span class="p">],)</span>
+<span class="n">target_affinity</span> <span class="o">=</span> <span class="p">(</span><span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"target_affinity"</span><span class="p">],)</span>
 </code></pre></div>
 
 <h3 id="node-selectors">Node selectors</h3>

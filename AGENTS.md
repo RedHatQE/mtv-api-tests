@@ -57,9 +57,11 @@ Rules:
 - Reorder by reordering `nav.json` arrays. Never rename files to reorder; that breaks existing links.
 - A `nav.json` slug with no `.md` behind it is a build error.
 - Search only works when `docs/` is served over HTTP (`fetch()` of `search-index.json` is blocked over `file://`).
-- Output is byte-for-byte reproducible **for a given dependency resolution**. The generator is not version-pinned, so a rebuild after an upstream `pi-docsite`,
-  `markdown`, `jinja2` or `pygments` release can produce cosmetic diffs (typically line wrapping inside highlighted code blocks) even when no `.md` changed.
-  That is dependency drift, not a stale build: rebuild, then commit the regenerated output together with whatever `.md` change caused it. Never hand-merge generated HTML.
+- Rebuild only after every `docs/*.md` edit is finished. The generator reads the directory as it is, so a build started while a page is half-edited
+  produces HTML for a state that never existed, and the next rebuild then shows unrelated churn. Verify with two consecutive builds before committing:
+  if the second build changes nothing, the committed output matches the committed Markdown.
+- The generator runs through `uvx` and is deliberately not a repository dependency, so `pyproject.toml` and `uv.lock` never change. Never hand-merge generated
+  HTML, and never edit it to silence a diff — fix the Markdown and rebuild.
 
 ## Code Standards
 
