@@ -1,7 +1,4 @@
 # Generated documentation pages: the flagged lines are code examples
 # (e.g. `get_client(host=..., password=password)`), not real credentials.
 # Regenerate these fingerprints after rebuilding the site with pi-docsite.
-docs/container-and-openshift-job-execution.md:generic-api-key:72
-docs/llms-full.txt:generic-api-key:7600
-docs/remote-openshift-migrations.md:generic-api-key:222
 docs/search-index.json:generic-api-key:1

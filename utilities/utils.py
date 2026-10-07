@@ -44,6 +44,7 @@ from utilities.resources import create_and_store_resource
 LOGGER = get_logger(__name__)
 
 DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
+CLUSTER_CREDENTIAL_KEYS: tuple[str, ...] = ("cluster_host", "cluster_username", "cluster_password")
 
 
 def resolve_providers_json_path(cli_path: str | None = None) -> str:
@@ -786,9 +787,6 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             self.res["spec"] = spec
 
 
-CLUSTER_CREDENTIAL_KEYS: tuple[str, ...] = ("cluster_host", "cluster_username", "cluster_password")
-
-
 def _resolve_cluster_credential(config_key: str) -> str | None:
     """Resolve a single cluster credential from pytest config, then the environment.
 
@@ -800,27 +798,30 @@ def _resolve_cluster_credential(config_key: str) -> str | None:
     Returns:
         str | None: The resolved credential, or None when neither source sets it.
     """
-    value = get_value_from_py_config(config_key)
-    if value is None:
-        value = os.environ.get(config_key.upper())
-    return None if value is None else str(value)
+    configured = get_value_from_py_config(config_key)
+    if configured is None:
+        configured = os.environ.get(config_key.upper())
+    return None if configured is None else str(configured)
 
 
 def _validate_cluster_credentials() -> None:
     """Fail fast when cluster credentials are configured incompletely.
 
     The CLI passes all three credentials from an OCP provider entry, or none of
-    them when it authenticates with an existing ``oc`` token. A partial set is a
-    configuration error: the run would otherwise fail deep inside the client
-    library without naming what was missing.
+    them when it authenticates with an existing ``oc`` token. Anything in between
+    is a configuration error: the run would otherwise fail deep inside the client
+    library without naming what was missing, or would hand a blank credential to
+    the client.
 
     Raises:
-        ValueError: If some, but not all, of the cluster credentials are set.
+        ValueError: If at least one credential is set and any of them is absent,
+            empty or whitespace-only.
     """
-    configured = {key: _resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
-    missing = [key for key, value in configured.items() if not value or not value.strip()]
-    if missing and len(missing) != len(CLUSTER_CREDENTIAL_KEYS):
-        names = ", ".join(f"'{key}' in pytest config or {key.upper()}" for key in missing)
+    resolved_credentials = {key: _resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
+    unusable = [key for key, credential in resolved_credentials.items() if not credential or not credential.strip()]
+    is_token_path = all(credential is None for credential in resolved_credentials.values())
+    if unusable and not is_token_path:
+        names = ", ".join(f"'{key}' in pytest config or {key.upper()}" for key in unusable)
         raise ValueError(f"Missing cluster credentials: set {names}")
 
 
