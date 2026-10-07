@@ -238,7 +238,7 @@ MD033:
 | --- | --- |
 | `docs/*.md` | Sources, the only files humans edit |
 | `docs/nav.json` | Sidebar layout, groups and page order |
-| `docs/*.html`, `docs/assets/`, `docs/llms.txt`, `docs/llms-full.txt` | Generated, never hand-edited |
+| `docs/*.html`, `docs/assets/`, `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` | Generated, never hand-edited |
 
 Rebuild after any change to a `docs/*.md` file or to `docs/nav.json`:
 

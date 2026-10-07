@@ -24,7 +24,7 @@ Most test authors never import these modules directly. They consume them through
 | `utilities/hooks.py` | Forklift `Hook` CR creation and failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
 | `utilities/provider_inventory.py` | Forklift inventory refresh and clone waits | `wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()` |
 | `utilities/pytest_utils.py` | failure data collection, session teardown, JUnit enrichment | `collect_created_resources()`, `session_teardown()`, `enrich_junit_xml()` |
-| `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
+| `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward plus `python-rrmngmnt` | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
 | `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()` |
 | `libs/providers/` | one adapter per source provider type | `VMWareProvider`, `OvirtProvider`, `OpenStackProvider`, `OCPProvider`, `OVAProvider`, `HyperVProvider` |
 | `exceptions/exceptions.py` | every custom exception the suite raises | 24 exception classes, all in one module |

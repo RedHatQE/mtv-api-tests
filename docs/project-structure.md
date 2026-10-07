@@ -418,7 +418,7 @@ The major modules are:
 - `utilities/hooks.py` creates MTV hook resources and validates expected hook-related failure behavior.
 - `utilities/migration_utils.py` handles cutover timing, plan archiving, migration cancelation, and cleanup checks for DVs,
   PVCs, and PVs.
-- `utilities/ssh_utils.py` provides post-migration SSH access to VMs through the `python-rrmngmnt` library.
+- `utilities/ssh_utils.py` provides post-migration SSH access to VMs through `virtctl` port-forward plus the `python-rrmngmnt` library.
 - `utilities/virtctl.py` downloads the correct `virtctl` binary from the cluster for the current OS and architecture.
 - `utilities/vmware_guest_operations.py` runs guest commands over the VMware Guest Operations API, used to detect guest NIC
   names and IP origins.
@@ -507,7 +507,7 @@ A few utility modules are especially helpful to know by name:
 
 - `utilities/post_migration.py` is where the deep VM checks happen. If a migrated VM has the wrong CPU, memory, disks, networks,
   PVC names, serial number, labels, or affinity, the logic is usually here.
-- `utilities/ssh_utils.py` reaches migrated VMs through the `python-rrmngmnt` library, so validation does not depend on cluster
+- `utilities/ssh_utils.py` reaches migrated VMs through `virtctl` port-forward plus the `python-rrmngmnt` library, so validation does not depend on cluster
   nodes exposing guest SSH directly.
 - `utilities/hooks.py` supports both predefined success/failure hook playbooks and custom base64-encoded playbooks.
 - `utilities/must_gather.py` is what the suite uses when it needs richer failure diagnostics.

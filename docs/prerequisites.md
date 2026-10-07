@@ -247,7 +247,7 @@ Supported copy-offload storage vendors are:
 - `infinibox`
 - `flashsystem`
 
-`ontap`, `vantara`, `pureFlashArray`, `powerflex`, and `powermax` each need one extra field. The other four need only the common fields:
+`ontap`, `vantara`, `pureFlashArray`, `powerflex`, and `powermax` each need extra fields — one for all of them except `vantara`, which needs three. The other four need only the common fields:
 
 | Vendor | Extra field |
 | --- | --- |

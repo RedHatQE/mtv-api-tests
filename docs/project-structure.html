@@ -734,7 +734,7 @@ contains most of the code for <em>how</em> to set up, execute, verify, and clean
   PVCs, and PVs.</p>
 </li>
 <li>
-<p><code>utilities/ssh_utils.py</code> provides post-migration SSH access to VMs through the <code>python-rrmngmnt</code> library.</p>
+<p><code>utilities/ssh_utils.py</code> provides post-migration SSH access to VMs through <code>virtctl</code> port-forward plus the <code>python-rrmngmnt</code> library.</p>
 </li>
 <li><code>utilities/virtctl.py</code> downloads the correct <code>virtctl</code> binary from the cluster for the current OS and architecture.</li>
 <li>
@@ -834,7 +834,7 @@ provider before the <code>Plan</code> is built.</p>
   PVC names, serial number, labels, or affinity, the logic is usually here.</p>
 </li>
 <li>
-<p><code>utilities/ssh_utils.py</code> reaches migrated VMs through the <code>python-rrmngmnt</code> library, so validation does not depend on cluster
+<p><code>utilities/ssh_utils.py</code> reaches migrated VMs through <code>virtctl</code> port-forward plus the <code>python-rrmngmnt</code> library, so validation does not depend on cluster
   nodes exposing guest SSH directly.</p>
 </li>
 <li>

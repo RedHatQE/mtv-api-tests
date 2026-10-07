@@ -294,7 +294,7 @@ spec:
 
 To reuse this pattern for other suites:
 
-- change the category passed to `generate` from `copyoffload` to `tier0` or `warm`
+- pass a category to `generate`, for example `uv run mtv-api-tests generate --category tier0` or `--category warm` (`all`, `copyoffload`, `tier0`, `tier1`, `warm`, `remote`); without it the wizard asks interactively
 - replace the provider key `vsphere-8.0.3.00400` with your actual `.providers.json` key
 - replace `my-block-storageclass` with the storage class used by your target cluster
 - pass `--image` if you built and pushed your own copy

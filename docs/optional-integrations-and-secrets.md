@@ -306,7 +306,7 @@ code treats `vib` as the default and does not patch anything.
 Two repository files exist specifically to keep secret scanning useful:
 
 - `.providers.json.example` annotates placeholder credentials with `# pragma: allowlist secret`, which tells gitleaks those values are intentional placeholders.
-  `.gitleaksignore` suppresses `generic-api-key` findings in generated documentation artifacts such as `docs/llms-full.txt` and `docs/search-index.json`, plus a few documentation
+- `.gitleaksignore` suppresses `generic-api-key` findings in generated documentation artifacts such as `docs/llms-full.txt` and `docs/search-index.json`, plus a few documentation
   pages whose command examples resemble keys.
 
 > **Note:** The allowlist annotations live in the template, not in `.providers.json`. When you write your own provider file, drop the comments entirely.

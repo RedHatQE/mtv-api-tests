@@ -1164,7 +1164,8 @@ fixtures derive them.</p>
 <li>Use <code>None</code> intentionally in <code>target_labels</code> or <code>target_node_selector</code> when you want a unique value per run.</li>
 <li>Expect VM names in <code>prepared_plan["virtual_machines"]</code> to differ from the raw <code>name</code> once preparation is complete.</li>
 <li>For copy-offload scenarios, think in two layers: test plan config in <code>tests_params</code>, and provider/storage config in <code>.providers.json</code>.</li>
-<li>Copy the key names exactly. The fixtures read them with direct key access, so a typo is a <code>KeyError</code>, not a silent default.</li>
+<li>Copy the key names exactly. Required keys are read directly, so a typo there is a <code>KeyError</code>; optional flags are read with
+  <code>.get()</code>, so a misspelled flag such as <code>skip_clone</code> or <code>clone_to_same_host</code> silently takes its default and changes the scenario instead of failing.</li>
 </ul>
                 </div>
             </article>

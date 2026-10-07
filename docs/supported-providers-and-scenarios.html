@@ -433,7 +433,20 @@ warm migrations.</p>
 
 <p>Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere-only, and <code>ca_crt</code> tests are skipped for
 <code>openshift</code> and <code>ova</code> sources, because those providers do not carry a CA certificate in their provider secret.
-The same hook enforces that:</p>
+A separate branch of the same hook enforces that:</p>
+<div class="highlight"><pre><span></span><code>            <span class="n">ca_cert_unsupported</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">,</span>
+                <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">source_provider_type</span> <span class="ow">in</span> <span class="n">ca_cert_unsupported</span><span class="p">:</span>
+                <span class="n">ca_cert_skip</span> <span class="o">=</span> <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span>
+                    <span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">source_provider_type</span><span class="si">}</span><span class="s2"> does not use CA certificates in provider secrets"</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="s2">"ca_crt"</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
+                        <span class="n">item</span><span class="o">.</span><span class="n">add_marker</span><span class="p">(</span><span class="n">ca_cert_skip</span><span class="p">)</span>
+</code></pre></div>
+
 <div class="highlight"><pre><span></span><code>            <span class="k">if</span> <span class="n">source_provider_type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span>
                 <span class="n">vsphere_only_skip</span> <span class="o">=</span> <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"Test is only applicable to vSphere source providers"</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>

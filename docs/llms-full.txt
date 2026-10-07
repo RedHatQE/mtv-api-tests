@@ -831,7 +831,7 @@ The major modules are:
 - `utilities/hooks.py` creates MTV hook resources and validates expected hook-related failure behavior.
 - `utilities/migration_utils.py` handles cutover timing, plan archiving, migration cancelation, and cleanup checks for DVs,
   PVCs, and PVs.
-- `utilities/ssh_utils.py` provides post-migration SSH access to VMs through the `python-rrmngmnt` library.
+- `utilities/ssh_utils.py` provides post-migration SSH access to VMs through `virtctl` port-forward plus the `python-rrmngmnt` library.
 - `utilities/virtctl.py` downloads the correct `virtctl` binary from the cluster for the current OS and architecture.
 - `utilities/vmware_guest_operations.py` runs guest commands over the VMware Guest Operations API, used to detect guest NIC
   names and IP origins.
@@ -920,7 +920,7 @@ A few utility modules are especially helpful to know by name:
 
 - `utilities/post_migration.py` is where the deep VM checks happen. If a migrated VM has the wrong CPU, memory, disks, networks,
   PVC names, serial number, labels, or affinity, the logic is usually here.
-- `utilities/ssh_utils.py` reaches migrated VMs through the `python-rrmngmnt` library, so validation does not depend on cluster
+- `utilities/ssh_utils.py` reaches migrated VMs through `virtctl` port-forward plus the `python-rrmngmnt` library, so validation does not depend on cluster
   nodes exposing guest SSH directly.
 - `utilities/hooks.py` supports both predefined success/failure hook playbooks and custom base64-encoded playbooks.
 - `utilities/must_gather.py` is what the suite uses when it needs richer failure diagnostics.
@@ -1920,7 +1920,21 @@ The `type` values come from the Forklift provider-type constants: `vsphere`, `op
 
 Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere-only, and `ca_crt` tests are skipped for
 `openshift` and `ova` sources, because those providers do not carry a CA certificate in their provider secret.
-The same hook enforces that:
+A separate branch of the same hook enforces that:
+
+```336:346:conftest.py
+                ca_cert_unsupported = (
+                    Provider.ProviderType.OPENSHIFT,
+                    Provider.ProviderType.OVA,
+                )
+                if source_provider_type in ca_cert_unsupported:
+                    ca_cert_skip = pytest.mark.skip(
+                        reason=f"{source_provider_type} does not use CA certificates in provider secrets"
+                    )
+                    for item in items:
+                        if "ca_crt" in item.keywords:
+                            item.add_marker(ca_cert_skip)
+```
 
 ```327:333:conftest.py
                 if source_provider_type != Provider.ProviderType.VSPHERE:
@@ -2513,7 +2527,7 @@ Supported copy-offload storage vendors are:
 - `infinibox`
 - `flashsystem`
 
-`ontap`, `vantara`, `pureFlashArray`, `powerflex`, and `powermax` each need one extra field. The other four need only the common fields:
+`ontap`, `vantara`, `pureFlashArray`, `powerflex`, and `powermax` each need extra fields — one for all of them except `vantara`, which needs three. The other four need only the common fields:
 
 | Vendor | Extra field |
 | --- | --- |
@@ -2801,7 +2815,6 @@ Source: installation-and-local-setup.md
 
 # Installation And Local Setup
 
-`mtv-api-tests` is a live `pytest` suite for Migration Toolkit for Virtualization (MTV). A real local setup needs more than a virtual environment:
 `mtv-api-tests` is a live `pytest` suite for Migration Toolkit for Virtualization (MTV). A real local setup needs more than a virtual environment: you also need access to an
 OpenShift cluster, MTV and OpenShift Virtualization installed on that cluster, and at least one source provider defined in a local `.providers.json` file.
 
@@ -3777,7 +3790,7 @@ only so `get_cluster_client()` can honour it when the container reads its own en
 
 To reuse this pattern for other suites:
 
-- change the category passed to `generate` from `copyoffload` to `tier0` or `warm`
+- pass a category to `generate`, for example `uv run mtv-api-tests generate --category tier0` or `--category warm` (`all`, `copyoffload`, `tier0`, `tier1`, `warm`, `remote`); without it the wizard asks interactively
 - replace the provider key `vsphere-8.0.3.00400` with your actual `.providers.json` key
 - replace `my-block-storageclass` with the storage class used by your target cluster
 - pass `--image` if you built and pushed your own copy
@@ -5338,7 +5351,8 @@ A few raw config fields are resolved by companion fixtures instead of `prepared_
 - Use `None` intentionally in `target_labels` or `target_node_selector` when you want a unique value per run.
 - Expect VM names in `prepared_plan["virtual_machines"]` to differ from the raw `name` once preparation is complete.
 - For copy-offload scenarios, think in two layers: test plan config in `tests_params`, and provider/storage config in `.providers.json`.
-- Copy the key names exactly. The fixtures read them with direct key access, so a typo is a `KeyError`, not a silent default.
+- Copy the key names exactly. Required keys are read directly, so a typo there is a `KeyError`; optional flags are read with
+  `.get()`, so a misspelled flag such as `skip_clone` or `clone_to_same_host` silently takes its default and changes the scenario instead of failing.
 
 
 ---
@@ -5653,7 +5667,7 @@ code treats `vib` as the default and does not patch anything.
 Two repository files exist specifically to keep secret scanning useful:
 
 - `.providers.json.example` annotates placeholder credentials with `# pragma: allowlist secret`, which tells gitleaks those values are intentional placeholders.
-  `.gitleaksignore` suppresses `generic-api-key` findings in generated documentation artifacts such as `docs/llms-full.txt` and `docs/search-index.json`, plus a few documentation
+- `.gitleaksignore` suppresses `generic-api-key` findings in generated documentation artifacts such as `docs/llms-full.txt` and `docs/search-index.json`, plus a few documentation
   pages whose command examples resemble keys.
 
 > **Note:** The allowlist annotations live in the template, not in `.providers.json`. When you write your own provider file, drop the comments entirely.
@@ -7161,7 +7175,7 @@ Because VMs migrate sequentially, the expected throttled count is computed per V
 > and VM-throttling classes against the same cluster at the same time. The file lock also serializes a
 > run against itself: expect a `TimeoutError` if another worker holds it.
 
-Both throttling fixtures also delete DRS for the cloned VMs (`disable_drs_for_vms`) and, for the
+Both throttling fixtures also disable DRS for the cloned VMs (`disable_drs_for_vms`) and, for the
 VM-throttling case, pin every clone to the first VM's host (`clone_to_same_host`). Without both, DRS
 could move a VM to a different ESXi host mid-run and the per-host counters would stop meaning
 anything.
@@ -7972,7 +7986,8 @@ else at runtime:
   SCM sync, creates an inventory, then creates the `mtv-pre-hook` and `mtv-post-hook` job templates
   and returns their IDs.
 - `aap_mtv_settings` creates a session-unique token `Secret` in the MTV namespace and patches the
-  `ForkliftController` with three fields:
+  `ForkliftController` with three fields — `spec.aap_url`, `spec.aap_token_secret_name`, and
+  `spec.aap_insecure_skip_verify`:
 - `aap_hook_refs` creates one `Hook` per type with `spec.aap.jobTemplateId` pointing at the matching
   template ID, then writes `_pre_hook_name`, `_pre_hook_namespace`, `_post_hook_name`, and
   `_post_hook_namespace` into `prepared_plan` — the same four keys the predefined mode writes.
@@ -9232,8 +9247,8 @@ This suite supports the standard pytest selection tools, and they map cleanly to
 
 ### Marker selection with `-m`
 
-Use project markers to slice the suite by scenario type. Because `--strict-markers` is enabled, unknown names in `-m` are ignored silently by pytest, so double-check the spelling
-against the table above.
+Use project markers to slice the suite by scenario type. `--strict-markers` only validates marks applied to tests, not `-m` expressions; an unknown name in `-m` silently
+selects no tests, so double-check the spelling against the table above.
 
 ```bash
     uv run pytest -m copyoffload \
@@ -10892,7 +10907,7 @@ Most test authors never import these modules directly. They consume them through
 | `utilities/hooks.py` | Forklift `Hook` CR creation and failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
 | `utilities/provider_inventory.py` | Forklift inventory refresh and clone waits | `wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()` |
 | `utilities/pytest_utils.py` | failure data collection, session teardown, JUnit enrichment | `collect_created_resources()`, `session_teardown()`, `enrich_junit_xml()` |
-| `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
+| `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward plus `python-rrmngmnt` | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
 | `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()` |
 | `libs/providers/` | one adapter per source provider type | `VMWareProvider`, `OvirtProvider`, `OpenStackProvider`, `OCPProvider`, `OVAProvider`, `HyperVProvider` |
 | `exceptions/exceptions.py` | every custom exception the suite raises | 24 exception classes, all in one module |
@@ -12756,7 +12771,7 @@ repo-level config, in `.markdownlint.yaml`, allows fairly wide lines and a few i
 | --- | --- |
 | `docs/*.md` | Sources, the only files humans edit |
 | `docs/nav.json` | Sidebar layout, groups and page order |
-| `docs/*.html`, `docs/assets/`, `docs/llms.txt`, `docs/llms-full.txt` | Generated, never hand-edited |
+| `docs/*.html`, `docs/assets/`, `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` | Generated, never hand-edited |
 
 Rebuild after any change to a `docs/*.md` file or to `docs/nav.json`:
 
@@ -13660,10 +13675,10 @@ file is preserved if the call fails.
 > Register this repository with the server if you want `.rootcoz/settings.json` applied, or set `ROOTCOZ_AI_PROVIDER` / `ROOTCOZ_AI_MODEL`
 > explicitly. If you do not, the feature is simply off and nothing changes about your test run.
 
-> **Warning:** `enrich_junit_xml()` sends no credentials — no token, no `Authorization` header, no cookie — because the request is a bare
-> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:501-506`). A rootcoz deployment that requires an authenticated operator or admin will reject
-> these calls, and enrichment then fails with the exception logged while the original JUnit file is preserved. Use a server that permits this client anonymously, or
-> put an authenticating proxy in front of `ROOTCOZ_SERVER_URL`.
+> **Warning:** `enrich_junit_xml()` sets no `auth=` value and no `Authorization` header, because the request is a bare
+> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:501-506`). Requests may still send HTTP Basic Auth from a matching `.netrc` entry for
+> `ROOTCOZ_SERVER_URL`. When the rootcoz deployment requires authentication and neither a matching `.netrc` entry nor an authenticating proxy in front of
+> `ROOTCOZ_SERVER_URL` supplies it, the call fails and enrichment logs the exception while preserving the original JUnit file.
 
 ## Documentation Site Rebuild
 

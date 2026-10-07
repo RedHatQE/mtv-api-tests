@@ -695,8 +695,8 @@ instead of deselecting them.</p>
 <h2 id="selection-and-dry-run-modes">Selection and dry-run modes</h2>
 <p>This suite supports the standard pytest selection tools, and they map cleanly to how the tests are organized.</p>
 <h3 id="marker-selection-with-m">Marker selection with <code>-m</code></h3>
-<p>Use project markers to slice the suite by scenario type. Because <code>--strict-markers</code> is enabled, unknown names in <code>-m</code> are ignored silently by pytest, so double-check the spelling
-against the table above.</p>
+<p>Use project markers to slice the suite by scenario type. <code>--strict-markers</code> only validates marks applied to tests, not <code>-m</code> expressions; an unknown name in <code>-m</code> silently
+selects no tests, so double-check the spelling against the table above.</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="p">:+--tc=cluster_host:</span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>

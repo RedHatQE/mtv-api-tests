@@ -272,8 +272,8 @@ This suite supports the standard pytest selection tools, and they map cleanly to
 
 ### Marker selection with `-m`
 
-Use project markers to slice the suite by scenario type. Because `--strict-markers` is enabled, unknown names in `-m` are ignored silently by pytest, so double-check the spelling
-against the table above.
+Use project markers to slice the suite by scenario type. `--strict-markers` only validates marks applied to tests, not `-m` expressions; an unknown name in `-m` silently
+selects no tests, so double-check the spelling against the table above.
 
 ```bash
 uv run pytest -m copyoffload \

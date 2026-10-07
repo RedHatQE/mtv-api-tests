@@ -1,6 +1,5 @@
 # Installation And Local Setup
 
-`mtv-api-tests` is a live `pytest` suite for Migration Toolkit for Virtualization (MTV). A real local setup needs more than a virtual environment:
 `mtv-api-tests` is a live `pytest` suite for Migration Toolkit for Virtualization (MTV). A real local setup needs more than a virtual environment: you also need access to an
 OpenShift cluster, MTV and OpenShift Virtualization installed on that cluster, and at least one source provider defined in a local `.providers.json` file.
 

@@ -608,4 +608,5 @@ A few raw config fields are resolved by companion fixtures instead of `prepared_
 - Use `None` intentionally in `target_labels` or `target_node_selector` when you want a unique value per run.
 - Expect VM names in `prepared_plan["virtual_machines"]` to differ from the raw `name` once preparation is complete.
 - For copy-offload scenarios, think in two layers: test plan config in `tests_params`, and provider/storage config in `.providers.json`.
-- Copy the key names exactly. The fixtures read them with direct key access, so a typo is a `KeyError`, not a silent default.
+- Copy the key names exactly. Required keys are read directly, so a typo there is a `KeyError`; optional flags are read with
+  `.get()`, so a misspelled flag such as `skip_clone` or `clone_to_same_host` silently takes its default and changes the scenario instead of failing.

@@ -478,7 +478,7 @@ Because VMs migrate sequentially, the expected throttled count is computed per V
 > and VM-throttling classes against the same cluster at the same time. The file lock also serializes a
 > run against itself: expect a `TimeoutError` if another worker holds it.
 
-Both throttling fixtures also delete DRS for the cloned VMs (`disable_drs_for_vms`) and, for the
+Both throttling fixtures also disable DRS for the cloned VMs (`disable_drs_for_vms`) and, for the
 VM-throttling case, pin every clone to the first VM's host (`clone_to_same_host`). Without both, DRS
 could move a VM to a different ESXi host mid-run and the per-host counters would stop meaning
 anything.

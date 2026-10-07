@@ -784,7 +784,7 @@ pytest-xdist workers cannot patch the same <code>ForkliftController</code>. Do n
 and VM-throttling classes against the same cluster at the same time. The file lock also serializes a
 run against itself: expect a <code>TimeoutError</code> if another worker holds it.</p>
 </blockquote>
-<p>Both throttling fixtures also delete DRS for the cloned VMs (<code>disable_drs_for_vms</code>) and, for the
+<p>Both throttling fixtures also disable DRS for the cloned VMs (<code>disable_drs_for_vms</code>) and, for the
 VM-throttling case, pin every clone to the first VM's host (<code>clone_to_same_host</code>). Without both, DRS
 could move a VM to a different ESXi host mid-run and the per-host counters would stop meaning
 anything.</p>

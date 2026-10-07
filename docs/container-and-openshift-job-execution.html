@@ -561,7 +561,7 @@ only so <code>get_cluster_client()</code> can honour it when the container reads
 
 <p>To reuse this pattern for other suites:</p>
 <ul>
-<li>change the category passed to <code>generate</code> from <code>copyoffload</code> to <code>tier0</code> or <code>warm</code></li>
+<li>pass a category to <code>generate</code>, for example <code>uv run mtv-api-tests generate --category tier0</code> or <code>--category warm</code> (<code>all</code>, <code>copyoffload</code>, <code>tier0</code>, <code>tier1</code>, <code>warm</code>, <code>remote</code>); without it the wizard asks interactively</li>
 <li>replace the provider key <code>vsphere-8.0.3.00400</code> with your actual <code>.providers.json</code> key</li>
 <li>replace <code>my-block-storageclass</code> with the storage class used by your target cluster</li>
 <li>pass <code>--image</code> if you built and pushed your own copy</li>

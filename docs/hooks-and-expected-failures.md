@@ -260,7 +260,8 @@ else at runtime:
   SCM sync, creates an inventory, then creates the `mtv-pre-hook` and `mtv-post-hook` job templates
   and returns their IDs.
 - `aap_mtv_settings` creates a session-unique token `Secret` in the MTV namespace and patches the
-  `ForkliftController` with three fields:
+  `ForkliftController` with three fields — `spec.aap_url`, `spec.aap_token_secret_name`, and
+  `spec.aap_insecure_skip_verify`:
 - `aap_hook_refs` creates one `Hook` per type with `spec.aap.jobTemplateId` pointing at the matching
   template ID, then writes `_pre_hook_name`, `_pre_hook_namespace`, `_post_hook_name`, and
   `_post_hook_namespace` into `prepared_plan` — the same four keys the predefined mode writes.

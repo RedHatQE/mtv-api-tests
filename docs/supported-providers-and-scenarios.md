@@ -80,7 +80,21 @@ The `type` values come from the Forklift provider-type constants: `vsphere`, `op
 
 Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere-only, and `ca_crt` tests are skipped for
 `openshift` and `ova` sources, because those providers do not carry a CA certificate in their provider secret.
-The same hook enforces that:
+A separate branch of the same hook enforces that:
+
+```336:346:conftest.py
+            ca_cert_unsupported = (
+                Provider.ProviderType.OPENSHIFT,
+                Provider.ProviderType.OVA,
+            )
+            if source_provider_type in ca_cert_unsupported:
+                ca_cert_skip = pytest.mark.skip(
+                    reason=f"{source_provider_type} does not use CA certificates in provider secrets"
+                )
+                for item in items:
+                    if "ca_crt" in item.keywords:
+                        item.add_marker(ca_cert_skip)
+```
 
 ```327:333:conftest.py
             if source_provider_type != Provider.ProviderType.VSPHERE:

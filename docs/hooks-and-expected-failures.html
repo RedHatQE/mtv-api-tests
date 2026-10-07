@@ -573,7 +573,8 @@ else at runtime:</p>
 </li>
 <li>
 <p><code>aap_mtv_settings</code> creates a session-unique token <code>Secret</code> in the MTV namespace and patches the
-  <code>ForkliftController</code> with three fields:</p>
+  <code>ForkliftController</code> with three fields — <code>spec.aap_url</code>, <code>spec.aap_token_secret_name</code>, and
+  <code>spec.aap_insecure_skip_verify</code>:</p>
 </li>
 <li>
 <p><code>aap_hook_refs</code> creates one <code>Hook</code> per type with <code>spec.aap.jobTemplateId</code> pointing at the matching
