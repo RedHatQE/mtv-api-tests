@@ -279,14 +279,22 @@ If you need to create an extra OpenShift resource for a new scenario, use `creat
 needed, deploys the resource, and registers it in the fixture store for teardown.
 
 ```python
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
+
+
 def create_and_store_resource(
-    client: DynamicClient,
+    client: "DynamicClient",
     fixture_store: dict[str, Any],
     resource: type[Resource],
     test_name: str | None = None,
     **kwargs: Any,
 ) -> Any:
 ```
+
+`DynamicClient` is a type-only import: `openshift-python-wrapper` must not be imported at runtime, so the annotation is a string and the import sits in a `TYPE_CHECKING` block.
 
 The `Any` types are load-bearing, not placeholders:
 
@@ -488,11 +496,16 @@ This keeps the test classes simple. The class still ends with `check_vms()`, and
 For a new domain error, add the class to `exceptions/exceptions.py` and import it:
 
 ```python
-from exceptions.exceptions import MigrationTimeoutError, ProviderConnectionError
+from utilities.mtv_migration import wait_for_migration_complate
 
-if not migration.wait_for_completion(timeout=3600):
-    raise MigrationTimeoutError(f"Migration '{migration.name}' timed out after 1 hour")
+try:
+    wait_for_migration_complate(plan)
+except MigrationPlanExecError as err:
+    raise MigrationTimeoutError(f"Migration for plan '{plan.name}' failed: {err}") from err
 ```
+
+`wait_for_migration_complate()` polls the `Plan` until it reaches `SUCCEEDED` and raises `MigrationPlanExecError` when it fails or runs out of
+`plan_wait_timeout`, so a timeout surfaces as an exception rather than a falsy return value.
 
 For ordinary cases use built-ins: `ValueError` for bad input or config, `TypeError` for type problems, `KeyError` for missing keys (let it propagate), `ConnectionError` for
 connection failures.

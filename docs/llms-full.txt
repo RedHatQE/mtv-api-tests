@@ -474,12 +474,21 @@ adapters, validation helpers, and repository automation/configuration files.
 Test files do **not** live directly under `tests/`. Every scenario sits in a feature subdirectory (`tests/<feature>/`), and the
 `check-test-file-location` pre-commit hook enforces that placement:
 
-```24:27:scripts/hooks/check_test_file_location.py
+```13:26:scripts/hooks/check_test_file_location.py
     def _is_tests_root_test_file(path: Path) -> bool:
         """Return True if ``path`` is repo-root ``tests/test_*.py`` (no subdirectory).
 
         Only ``tests/`` at the repository root is considered. Nested trees such as
-        `plugins/.../tests/test_*.py` are not flagged.
+        ``plugins/.../tests/test_*.py`` are not flagged.
+
+        Args:
+            path (Path): Candidate file path.
+
+        Returns:
+            bool: Whether the file is a disallowed root-level test module.
+        """
+        rel = Path(repo_relative_posix(path))
+        return rel.parent == Path("tests") and rel.name.startswith("test_") and rel.suffix == ".py"
 ```
 
 `AGENTS.md` states the same rule as a MUST: put all test files under `tests/<feature>/`, and never add `unit_tests/` or
@@ -6302,9 +6311,10 @@ Warm classes use the same five test methods as cold classes, with one behavioral
 4. `test_migrate_vms`
 5. `test_check_vms`
 
-The two ClusterRole warm classes are the exception: `TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`
-(`tests/warm/test_mtv_warm_clusterrole_migration.py`) stop after `test_migrate_vms` and have no `test_check_vms`, because their subject is the ClusterRole and SCC binding rather
-than post-migration VM validation.
+The ClusterRole warm classes are the exception to the five-step shape. `TestClusterroleWarmMtvMigration`
+(`tests/warm/test_mtv_warm_clusterrole_migration.py`) stops after `test_migrate_vms` and has no `test_check_vms`, because its subject is the
+ClusterRole binding rather than post-migration VM validation. `TestClusterroleWarmWithSccMigration` keeps the full five steps and does run
+`check_vms()`.
 
 Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through
 `@pytest.mark.usefixtures`, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
@@ -7560,7 +7570,8 @@ The shared config file already contains the remote toggle and the runtime knobs 
 
 > **Note:** `remote_ocp_cluster` is empty by default. If you do not override it, the remote classes are skipped.
 
-The two remote warm plan configs additionally disable preflight Deep Inspection:
+The three remote warm plan configs additionally disable preflight Deep Inspection — `test_warm_remote_ocp`,
+`test_mtv_clusterrole_warm_migration`, and `test_mtv_clusterrole_warm_migration_with_scc`:
 
 ```38:48:tests/tests_config/config.py
     "test_warm_remote_ocp": {
@@ -9980,7 +9991,7 @@ Validation rules are strict:
 For AAP hooks the suite also patches the operator, so Forklift can reach AWX. The patch is applied to `ForkliftController` in `mtv_namespace` and reverted afterwards:
 
 ```python
-    ResourceEditor(
+    editor = ResourceEditor(
         patches={
             forklift_controller: {
                 "spec": {
@@ -9991,7 +10002,11 @@ For AAP hooks the suite also patches the operator, so Forklift can reach AWX. Th
             }
         }
     )
+    editor.update(backup_resources=True)
 ```
+
+`openshift-python-wrapper` applies a patch when the editor is entered as a context manager or when `update()` is called, so constructing the editor alone changes nothing. The fixture calls
+`update(backup_resources=True)` and then `editor.restore()` in its teardown.
 
 > **Note:** Hook failure steps are read from the `Plan` CR status, not from the `Migration`: `status.migration.vms[].pipeline[]`. A failing `PostHook` still leads to VM validation,
 > while a failing `PreHook` skips VM checks because the migration never reached the VM validation stage.
@@ -12291,14 +12306,22 @@ If you need to create an extra OpenShift resource for a new scenario, use `creat
 needed, deploys the resource, and registers it in the fixture store for teardown.
 
 ```python
+    from typing import TYPE_CHECKING
+
+    if TYPE_CHECKING:
+        from kubernetes.dynamic import DynamicClient
+
+
     def create_and_store_resource(
-        client: DynamicClient,
+        client: "DynamicClient",
         fixture_store: dict[str, Any],
         resource: type[Resource],
         test_name: str | None = None,
         **kwargs: Any,
     ) -> Any:
 ```
+
+`DynamicClient` is a type-only import: `openshift-python-wrapper` must not be imported at runtime, so the annotation is a string and the import sits in a `TYPE_CHECKING` block.
 
 The `Any` types are load-bearing, not placeholders:
 
@@ -12500,11 +12523,16 @@ This keeps the test classes simple. The class still ends with `check_vms()`, and
 For a new domain error, add the class to `exceptions/exceptions.py` and import it:
 
 ```python
-    from exceptions.exceptions import MigrationTimeoutError, ProviderConnectionError
+    from utilities.mtv_migration import wait_for_migration_complate
 
-    if not migration.wait_for_completion(timeout=3600):
-        raise MigrationTimeoutError(f"Migration '{migration.name}' timed out after 1 hour")
+    try:
+        wait_for_migration_complate(plan)
+    except MigrationPlanExecError as err:
+        raise MigrationTimeoutError(f"Migration for plan '{plan.name}' failed: {err}") from err
 ```
+
+`wait_for_migration_complate()` polls the `Plan` until it reaches `SUCCEEDED` and raises `MigrationPlanExecError` when it fails or runs out of
+`plan_wait_timeout`, so a timeout surfaces as an exception rather than a falsy return value.
 
 For ordinary cases use built-ins: `ValueError` for bad input or config, `TypeError` for type problems, `KeyError` for missing keys (let it propagate), `ConnectionError` for
 connection failures.
@@ -13661,7 +13689,7 @@ enriched XML back over the same file. That is test-report post-processing, not a
 > for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
 > untouched.
 
-```462:498:utilities/pytest_utils.py
+```462:501:utilities/pytest_utils.py
     def enrich_junit_xml(session: pytest.Session) -> None:
         """Read JUnit XML, send to server for analysis, write enriched XML back.
         ...

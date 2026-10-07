@@ -493,7 +493,8 @@ token as the Provider secret:</p>
 <blockquote>
 <p><strong>Note:</strong> <code>remote_ocp_cluster</code> is empty by default. If you do not override it, the remote classes are skipped.</p>
 </blockquote>
-<p>The two remote warm plan configs additionally disable preflight Deep Inspection:</p>
+<p>The three remote warm plan configs additionally disable preflight Deep Inspection — <code>test_warm_remote_ocp</code>,
+<code>test_mtv_clusterrole_warm_migration</code>, and <code>test_mtv_clusterrole_warm_migration_with_scc</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="s2">"test_warm_remote_ocp"</span><span class="p">:</span> <span class="p">{</span>
     <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>

@@ -191,7 +191,8 @@ plan_wait_timeout: int = 3600
 
 > **Note:** `remote_ocp_cluster` is empty by default. If you do not override it, the remote classes are skipped.
 
-The two remote warm plan configs additionally disable preflight Deep Inspection:
+The three remote warm plan configs additionally disable preflight Deep Inspection — `test_warm_remote_ocp`,
+`test_mtv_clusterrole_warm_migration`, and `test_mtv_clusterrole_warm_migration_with_scc`:
 
 ```38:48:tests/tests_config/config.py
 "test_warm_remote_ocp": {

@@ -427,7 +427,7 @@ Validation rules are strict:
 For AAP hooks the suite also patches the operator, so Forklift can reach AWX. The patch is applied to `ForkliftController` in `mtv_namespace` and reverted afterwards:
 
 ```python
-ResourceEditor(
+editor = ResourceEditor(
     patches={
         forklift_controller: {
             "spec": {
@@ -438,7 +438,11 @@ ResourceEditor(
         }
     }
 )
+editor.update(backup_resources=True)
 ```
+
+`openshift-python-wrapper` applies a patch when the editor is entered as a context manager or when `update()` is called, so constructing the editor alone changes nothing. The fixture calls
+`update(backup_resources=True)` and then `editor.restore()` in its teardown.
 
 > **Note:** Hook failure steps are read from the `Plan` CR status, not from the `Migration`: `status.migration.vms[].pipeline[]`. A failing `PostHook` still leads to VM validation,
 > while a failing `PreHook` skips VM checks because the migration never reached the VM validation stage.

@@ -361,10 +361,19 @@ adapters, validation helpers, and repository automation/configuration files.</p>
 <p>Test files do <strong>not</strong> live directly under <code>tests/</code>. Every scenario sits in a feature subdirectory (<code>tests/&lt;feature&gt;/</code>), and the
 <code>check-test-file-location</code> pre-commit hook enforces that placement:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_is_tests_root_test_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="s2">"""Return True if ``path`` is repo-root ``tests/test_*.py`` (no subdirectory).</span>
+<span class="w">    </span><span class="sd">"""Return True if ``path`` is repo-root ``tests/test_*.py`` (no subdirectory).</span>
 
-<span class="s2">    Only ``tests/`` at the repository root is considered. Nested trees such as</span>
-<span class="s2">    `plugins/.../tests/test_*.py` are not flagged.</span>
+<span class="sd">    Only ``tests/`` at the repository root is considered. Nested trees such as</span>
+<span class="sd">    ``plugins/.../tests/test_*.py`` are not flagged.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path (Path): Candidate file path.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: Whether the file is a disallowed root-level test module.</span>
+<span class="sd">    """</span>
+    <span class="n">rel</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">repo_relative_posix</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">rel</span><span class="o">.</span><span class="n">parent</span> <span class="o">==</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"tests"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">rel</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"test_"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">rel</span><span class="o">.</span><span class="n">suffix</span> <span class="o">==</span> <span class="s2">".py"</span>
 </code></pre></div>
 
 <p><code>AGENTS.md</code> states the same rule as a MUST: put all test files under <code>tests/&lt;feature&gt;/</code>, and never add <code>unit_tests/</code> or

@@ -922,7 +922,7 @@ vendor-specific keys are validated before the secret is created.</p>
 <li>Custom playbooks must be valid base64, valid UTF-8, valid YAML, and a non-empty Ansible play list.</li>
 </ul>
 <p>For AAP hooks the suite also patches the operator, so Forklift can reach AWX. The patch is applied to <code>ForkliftController</code> in <code>mtv_namespace</code> and reverted afterwards:</p>
-<div class="highlight"><pre><span></span><code><span class="n">ResourceEditor</span><span class="p">(</span>
+<div class="highlight"><pre><span></span><code><span class="n">editor</span> <span class="o">=</span> <span class="n">ResourceEditor</span><span class="p">(</span>
     <span class="n">patches</span><span class="o">=</span><span class="p">{</span>
         <span class="n">forklift_controller</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">"spec"</span><span class="p">:</span> <span class="p">{</span>
@@ -933,8 +933,11 @@ vendor-specific keys are validated before the secret is created.</p>
         <span class="p">}</span>
     <span class="p">}</span>
 <span class="p">)</span>
+<span class="n">editor</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">backup_resources</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
 
+<p><code>openshift-python-wrapper</code> applies a patch when the editor is entered as a context manager or when <code>update()</code> is called, so constructing the editor alone changes nothing. The fixture calls
+<code>update(backup_resources=True)</code> and then <code>editor.restore()</code> in its teardown.</p>
 <blockquote>
 <p><strong>Note:</strong> Hook failure steps are read from the <code>Plan</code> CR status, not from the <code>Migration</code>: <code>status.migration.vms[].pipeline[]</code>. A failing <code>PostHook</code> still leads to VM validation,
 while a failing <code>PreHook</code> skips VM checks because the migration never reached the VM validation stage.</p>

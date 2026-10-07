@@ -679,8 +679,14 @@ the XCOPY tests. Feature-specific fixtures belong in the feature's own <code>con
 </ul>
 <p>If you need to create an extra OpenShift resource for a new scenario, use <code>create_and_store_resource()</code> instead of deploying it directly. That helper generates a safe name when
 needed, deploys the resource, and registers it in the fixture store for teardown.</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">create_and_store_resource</span><span class="p">(</span>
-    <span class="n">client</span><span class="p">:</span> <span class="n">DynamicClient</span><span class="p">,</span>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">kubernetes.dynamic</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicClient</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">create_and_store_resource</span><span class="p">(</span>
+    <span class="n">client</span><span class="p">:</span> <span class="s2">"DynamicClient"</span><span class="p">,</span>
     <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">resource</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">Resource</span><span class="p">],</span>
     <span class="n">test_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -688,6 +694,7 @@ needed, deploys the resource, and registers it in the fixture store for teardown
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 </code></pre></div>
 
+<p><code>DynamicClient</code> is a type-only import: <code>openshift-python-wrapper</code> must not be imported at runtime, so the annotation is a string and the import sits in a <code>TYPE_CHECKING</code> block.</p>
 <p>The <code>Any</code> types are load-bearing, not placeholders:</p>
 <ul>
 <li>
@@ -883,12 +890,16 @@ provider implementation when the suite genuinely needs a new backend, not just a
 <li><code>check-no-runtimeerror</code> fails <code>raise RuntimeError</code> outside pytest hooks in <code>conftest.py</code>.</li>
 </ul>
 <p>For a new domain error, add the class to <code>exceptions/exceptions.py</code> and import it:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">exceptions.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">MigrationTimeoutError</span><span class="p">,</span> <span class="n">ProviderConnectionError</span>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">utilities.mtv_migration</span><span class="w"> </span><span class="kn">import</span> <span class="n">wait_for_migration_complate</span>
 
-<span class="k">if</span> <span class="ow">not</span> <span class="n">migration</span><span class="o">.</span><span class="n">wait_for_completion</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">3600</span><span class="p">):</span>
-    <span class="k">raise</span> <span class="n">MigrationTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Migration '</span><span class="si">{</span><span class="n">migration</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' timed out after 1 hour"</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">wait_for_migration_complate</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">MigrationPlanExecError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="n">MigrationTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Migration for plan '</span><span class="si">{</span><span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' failed: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
 </code></pre></div>
 
+<p><code>wait_for_migration_complate()</code> polls the <code>Plan</code> until it reaches <code>SUCCEEDED</code> and raises <code>MigrationPlanExecError</code> when it fails or runs out of
+<code>plan_wait_timeout</code>, so a timeout surfaces as an exception rather than a falsy return value.</p>
 <p>For ordinary cases use built-ins: <code>ValueError</code> for bad input or config, <code>TypeError</code> for type problems, <code>KeyError</code> for missing keys (let it propagate), <code>ConnectionError</code> for
 connection failures.</p>
 <blockquote>

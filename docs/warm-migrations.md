@@ -41,9 +41,10 @@ Warm classes use the same five test methods as cold classes, with one behavioral
 4. `test_migrate_vms`
 5. `test_check_vms`
 
-The two ClusterRole warm classes are the exception: `TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`
-(`tests/warm/test_mtv_warm_clusterrole_migration.py`) stop after `test_migrate_vms` and have no `test_check_vms`, because their subject is the ClusterRole and SCC binding rather
-than post-migration VM validation.
+The ClusterRole warm classes are the exception to the five-step shape. `TestClusterroleWarmMtvMigration`
+(`tests/warm/test_mtv_warm_clusterrole_migration.py`) stops after `test_migrate_vms` and has no `test_check_vms`, because its subject is the
+ClusterRole binding rather than post-migration VM validation. `TestClusterroleWarmWithSccMigration` keeps the full five steps and does run
+`check_vms()`.
 
 Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through
 `@pytest.mark.usefixtures`, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes

@@ -61,12 +61,21 @@ mtv-api-tests/
 Test files do **not** live directly under `tests/`. Every scenario sits in a feature subdirectory (`tests/<feature>/`), and the
 `check-test-file-location` pre-commit hook enforces that placement:
 
-```24:27:scripts/hooks/check_test_file_location.py
+```13:26:scripts/hooks/check_test_file_location.py
 def _is_tests_root_test_file(path: Path) -> bool:
     """Return True if ``path`` is repo-root ``tests/test_*.py`` (no subdirectory).
 
     Only ``tests/`` at the repository root is considered. Nested trees such as
-    `plugins/.../tests/test_*.py` are not flagged.
+    ``plugins/.../tests/test_*.py`` are not flagged.
+
+    Args:
+        path (Path): Candidate file path.
+
+    Returns:
+        bool: Whether the file is a disallowed root-level test module.
+    """
+    rel = Path(repo_relative_posix(path))
+    return rel.parent == Path("tests") and rel.name.startswith("test_") and rel.suffix == ".py"
 ```
 
 `AGENTS.md` states the same rule as a MUST: put all test files under `tests/<feature>/`, and never add `unit_tests/` or

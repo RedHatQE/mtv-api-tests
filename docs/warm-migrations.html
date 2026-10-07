@@ -337,9 +337,10 @@ preparation.</p>
 <li><code>test_migrate_vms</code></li>
 <li><code>test_check_vms</code></li>
 </ol>
-<p>The two ClusterRole warm classes are the exception: <code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code>
-(<code>tests/warm/test_mtv_warm_clusterrole_migration.py</code>) stop after <code>test_migrate_vms</code> and have no <code>test_check_vms</code>, because their subject is the ClusterRole and SCC binding rather
-than post-migration VM validation.</p>
+<p>The ClusterRole warm classes are the exception to the five-step shape. <code>TestClusterroleWarmMtvMigration</code>
+(<code>tests/warm/test_mtv_warm_clusterrole_migration.py</code>) stops after <code>test_migrate_vms</code> and has no <code>test_check_vms</code>, because its subject is the
+ClusterRole binding rather than post-migration VM validation. <code>TestClusterroleWarmWithSccMigration</code> keeps the full five steps and does run
+<code>check_vms()</code>.</p>
 <p>Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped <code>precopy_interval_forkliftcontroller</code> fixture through
 <code>@pytest.mark.usefixtures</code>, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
 (<code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code>) request only <code>cleanup_migrated_vms</code>, so they run without that patch.</p>
