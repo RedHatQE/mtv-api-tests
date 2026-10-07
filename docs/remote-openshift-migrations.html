@@ -511,22 +511,28 @@ token as the Provider secret:</p>
 <p>Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>, each
 falling back to the matching <code>CLUSTER_*</code> environment variable:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
+    <span class="n">_validate_cluster_credentials</span><span class="p">()</span>
     <span class="n">host</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
     <span class="n">username</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
     <span class="n">password</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
     <span class="n">verify_ssl_env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_VERIFY_SSL"</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">verify_ssl_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">verify_ssl_env</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"true"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">,</span> <span class="s2">"yes"</span><span class="p">)</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"insecure_verify_skip"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">insecure_verify_skip</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">verify_ssl_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">verify_ssl_env</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"true"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">,</span> <span class="s2">"yes"</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"insecure_verify_skip"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">insecure_verify_skip</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">DynamicClient</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Failed to get client for cluster"</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">client</span>
 </code></pre></div>
 
-<p>Each credential goes through <code>_resolve_cluster_credential()</code>, which reads the <code>--tc</code> value first, falls back to the matching <code>CLUSTER_*</code> environment variable, and rejects a
-missing, empty, or whitespace-only value with <code>ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")</code> naming the variable.</p>
+<p>Each credential resolves through <code>_resolve_cluster_credential()</code>, which reads the <code>--tc</code> value first and falls back to the matching <code>CLUSTER_*</code> environment variable.
+<code>_validate_cluster_credentials()</code> then rejects an incomplete set: if some but not all of <code>cluster_host</code>, <code>cluster_username</code> and <code>cluster_password</code> are configured, it raises
+<code>ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")</code> naming each one that is absent, empty or whitespace-only. Passing none of
+the three is legitimate — the CLI takes that path when it authenticates with an existing <code>oc</code> token, and the client library then authenticates from the ambient kubeconfig — so
+that case reaches client creation untouched.</p>
 <p>Treat the inputs like this:</p>
 <ul>
 <li><code>cluster_host</code>, <code>cluster_username</code>, <code>cluster_password</code>: identify and authenticate to the OpenShift cluster used by the test session.</li>

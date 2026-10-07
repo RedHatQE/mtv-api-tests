@@ -3567,6 +3567,7 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 
 ```python
     def get_cluster_client() -> DynamicClient:
+        _validate_cluster_credentials()
         host = _resolve_cluster_credential("cluster_host")
         username = _resolve_cluster_credential("cluster_username")
         password = _resolve_cluster_credential("cluster_password")
@@ -3574,9 +3575,10 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
         client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
 
-Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. A missing, empty, or
-whitespace-only value fails fast with `ValueError` naming the variable, for example `Missing cluster credential: set 'cluster_username' in pytest config or
-CLUSTER_USERNAME`.
+Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. `_validate_cluster_credentials()`
+then rejects an incomplete set — if some but not all three are configured, it fails fast with a `ValueError` naming each absent, empty, or whitespace-only value, for example
+`Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME`. Passing none of the three is legitimate: `mtv-api-tests run` takes that path when it
+authenticates with an existing `oc` token, and the client library then uses the ambient kubeconfig.
 
 In practice, every real run needs these values:
 
@@ -3991,9 +3993,10 @@ Cluster credentials resolve from the environment, in this order: the `--tc` valu
 precedence over `insecure_verify_skip` for OpenShift API SSL verification, and its semantics are inverted: `CLUSTER_VERIFY_SSL=true` means `insecure_verify_skip=False`.
 
 > **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. When neither `--tc` nor the environment supplies a value,
-> `get_cluster_client()` fails fast while resolving the credentials: each value is checked after resolution and a missing, empty, or whitespace-only credential raises
-> `ValueError` naming it, for example `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")`. The run stops as the
-> `ocp_admin_client` fixture requests the client, before any migration work, and the message says which variable to set.
+> `get_cluster_client()` authenticates from the ambient kubeconfig — that is the path `mtv-api-tests run` takes when an existing `oc` token is available. Supplying only some
+> of the three is a configuration error: the run then fails fast while resolving them, with a `ValueError` naming each absent, empty, or whitespace-only value, for example
+> `ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")`. That happens as the `ocp_admin_client` fixture requests the
+> client, before any migration work, and the message says which variable to set.
 
 The repository's OpenShift Job template in `README.md` uses `--tc=` overrides like this:
 
@@ -7586,24 +7589,30 @@ The three remote warm plan configs additionally disable preflight Deep Inspectio
 Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from `cluster_host`, `cluster_username`, and `cluster_password`, each
 falling back to the matching `CLUSTER_*` environment variable:
 
-```813:849:utilities/utils.py
+```846:863:utilities/utils.py
     def get_cluster_client() -> DynamicClient:
+        _validate_cluster_credentials()
         host = _resolve_cluster_credential("cluster_host")
         username = _resolve_cluster_credential("cluster_username")
         password = _resolve_cluster_credential("cluster_password")
         verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
-    if verify_ssl_env is not None:
-        insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
-    else:
-        insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
-        if insecure_verify_skip is None:
-            insecure_verify_skip = True
-    client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+        if verify_ssl_env is not None:
+            insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
+        else:
+            insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
+            if insecure_verify_skip is None:
+                insecure_verify_skip = True
+        client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+        if not isinstance(client, DynamicClient):
+            raise ValueError("Failed to get client for cluster")
         return client
 ```
 
-Each credential goes through `_resolve_cluster_credential()`, which reads the `--tc` value first, falls back to the matching `CLUSTER_*` environment variable, and rejects a
-missing, empty, or whitespace-only value with `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming the variable.
+Each credential resolves through `_resolve_cluster_credential()`, which reads the `--tc` value first and falls back to the matching `CLUSTER_*` environment variable.
+`_validate_cluster_credentials()` then rejects an incomplete set: if some but not all of `cluster_host`, `cluster_username` and `cluster_password` are configured, it raises
+`ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming each one that is absent, empty or whitespace-only. Passing none of
+the three is legitimate — the CLI takes that path when it authenticates with an existing `oc` token, and the client library then authenticates from the ambient kubeconfig — so
+that case reaches client creation untouched.
 
 Treat the inputs like this:
 

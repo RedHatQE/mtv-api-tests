@@ -786,7 +786,10 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             self.res["spec"] = spec
 
 
-def _resolve_cluster_credential(config_key: str) -> str:
+CLUSTER_CREDENTIAL_KEYS: tuple[str, ...] = ("cluster_host", "cluster_username", "cluster_password")
+
+
+def _resolve_cluster_credential(config_key: str) -> str | None:
     """Resolve a single cluster credential from pytest config, then the environment.
 
     Args:
@@ -795,19 +798,30 @@ def _resolve_cluster_credential(config_key: str) -> str:
             ``CLUSTER_USERNAME``.
 
     Returns:
-        str: The resolved credential value.
-
-    Raises:
-        ValueError: If the credential is missing, empty or whitespace-only.
+        str | None: The resolved credential, or None when neither source sets it.
     """
-    env_key = config_key.upper()
     value = get_value_from_py_config(config_key)
     if value is None:
-        value = os.environ.get(env_key)
-    credential = "" if value is None else str(value)
-    if not credential.strip():
-        raise ValueError(f"Missing cluster credential: set '{config_key}' in pytest config or {env_key}")
-    return credential
+        value = os.environ.get(config_key.upper())
+    return None if value is None else str(value)
+
+
+def _validate_cluster_credentials() -> None:
+    """Fail fast when cluster credentials are configured incompletely.
+
+    The CLI passes all three credentials from an OCP provider entry, or none of
+    them when it authenticates with an existing ``oc`` token. A partial set is a
+    configuration error: the run would otherwise fail deep inside the client
+    library without naming what was missing.
+
+    Raises:
+        ValueError: If some, but not all, of the cluster credentials are set.
+    """
+    configured = {key: _resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
+    missing = [key for key, value in configured.items() if not value or not value.strip()]
+    if missing and len(missing) != len(CLUSTER_CREDENTIAL_KEYS):
+        names = ", ".join(f"'{key}' in pytest config or {key.upper()}" for key in missing)
+        raise ValueError(f"Missing cluster credentials: set {names}")
 
 
 def get_cluster_client() -> DynamicClient:
@@ -830,9 +844,10 @@ def get_cluster_client() -> DynamicClient:
         DynamicClient: The cluster client.
 
     Raises:
-        ValueError: If any of the three credentials is missing, empty or
-            whitespace-only, or if the client cannot be created.
+        ValueError: If the cluster credentials are configured incompletely, or
+            if the client cannot be created.
     """
+    _validate_cluster_credentials()
     host = _resolve_cluster_credential("cluster_host")
     username = _resolve_cluster_credential("cluster_username")
     password = _resolve_cluster_credential("cluster_password")
