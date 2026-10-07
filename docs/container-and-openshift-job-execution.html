@@ -347,21 +347,16 @@ A builder stage installs the toolchain and runs <code>uv sync --locked</code>, a
 <p>The suite reads provider definitions from <code>.providers.json</code> and builds the OpenShift client from pytest config values, falling back to <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and
 <code>CLUSTER_PASSWORD</code> environment variables:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">host</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">host</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_HOST"</span><span class="p">)</span>
-
-    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">username</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_USERNAME"</span><span class="p">)</span>
-
-    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">password</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">password</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_PASSWORD"</span><span class="p">)</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
     <span class="o">...</span>
     <span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
 </code></pre></div>
 
+<p>Each credential is resolved by <code>_resolve_cluster_credential()</code>: the <code>--tc</code> value first, then the matching <code>CLUSTER_*</code> environment variable. A missing, empty, or
+whitespace-only value fails fast with <code>ValueError</code> naming the variable, for example <code>Missing cluster credential: set 'cluster_username' in pytest config or
+CLUSTER_USERNAME</code>.</p>
 <p>In practice, every real run needs these values:</p>
 <ul>
 <li><code>.providers.json</code></li>

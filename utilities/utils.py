@@ -786,6 +786,30 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             self.res["spec"] = spec
 
 
+def _resolve_cluster_credential(config_key: str) -> str:
+    """Resolve a single cluster credential from pytest config, then the environment.
+
+    Args:
+        config_key (str): The pytest config key, e.g. ``cluster_username``.
+            The environment fallback is the same key uppercased, e.g.
+            ``CLUSTER_USERNAME``.
+
+    Returns:
+        str: The resolved credential value.
+
+    Raises:
+        ValueError: If the credential is missing, empty or whitespace-only.
+    """
+    env_key = config_key.upper()
+    value = get_value_from_py_config(config_key)
+    if value is None:
+        value = os.environ.get(env_key)
+    credential = "" if value is None else str(value)
+    if not credential.strip():
+        raise ValueError(f"Missing cluster credential: set '{config_key}' in pytest config or {env_key}")
+    return credential
+
+
 def get_cluster_client() -> DynamicClient:
     """Get a DynamicClient for the cluster.
 
@@ -806,19 +830,12 @@ def get_cluster_client() -> DynamicClient:
         DynamicClient: The cluster client.
 
     Raises:
-        ValueError: If the client cannot be created.
+        ValueError: If any of the three credentials is missing, empty or
+            whitespace-only, or if the client cannot be created.
     """
-    host = get_value_from_py_config("cluster_host")
-    if host is None:
-        host = os.environ.get("CLUSTER_HOST")
-
-    username = get_value_from_py_config("cluster_username")
-    if username is None:
-        username = os.environ.get("CLUSTER_USERNAME")
-
-    password = get_value_from_py_config("cluster_password")
-    if password is None:
-        password = os.environ.get("CLUSTER_PASSWORD")
+    host = _resolve_cluster_credential("cluster_host")
+    username = _resolve_cluster_credential("cluster_username")
+    password = _resolve_cluster_credential("cluster_password")
     verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
     if verify_ssl_env is not None:
         insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")

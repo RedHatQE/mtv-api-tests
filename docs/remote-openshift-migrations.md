@@ -211,19 +211,12 @@ The three remote warm plan configs additionally disable preflight Deep Inspectio
 Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from `cluster_host`, `cluster_username`, and `cluster_password`, each
 falling back to the matching `CLUSTER_*` environment variable:
 
-```811:832:utilities/utils.py
-host = get_value_from_py_config("cluster_host")
-if host is None:
-    host = os.environ.get("CLUSTER_HOST")
-
-username = get_value_from_py_config("cluster_username")
-if username is None:
-    username = os.environ.get("CLUSTER_USERNAME")
-
-password = get_value_from_py_config("cluster_password")
-if password is None:
-    password = os.environ.get("CLUSTER_PASSWORD")
-verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
+```813:849:utilities/utils.py
+def get_cluster_client() -> DynamicClient:
+    host = _resolve_cluster_credential("cluster_host")
+    username = _resolve_cluster_credential("cluster_username")
+    password = _resolve_cluster_credential("cluster_password")
+    verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
 if verify_ssl_env is not None:
     insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
 else:
@@ -231,8 +224,11 @@ else:
     if insecure_verify_skip is None:
         insecure_verify_skip = True
 client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
-return client
+    return client
 ```
+
+Each credential goes through `_resolve_cluster_credential()`, which reads the `--tc` value first, falls back to the matching `CLUSTER_*` environment variable, and rejects a
+missing, empty, or whitespace-only value with `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming the variable.
 
 Treat the inputs like this:
 

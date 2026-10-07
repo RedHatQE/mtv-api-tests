@@ -20,7 +20,7 @@ problem is about `NetworkMap`, `StorageMap`, or a VM ID inside a `Plan`, start w
 6. After **every** clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (`conftest.py:1367`).
 7. `get_network_migration_map()` and `get_storage_migration_map()` turn inventory data into `NetworkMap` and `StorageMap` CR payloads (`utilities/mtv_migration.py:687`,
    `utilities/mtv_migration.py:548`).
-8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:894`).
+8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:911`).
 
 The synchronization step is explicitly two-phase in `conftest.py`, because waiting per-VM inside the clone loop caused inventory sync failures on the second and later VMs:
 
