@@ -786,25 +786,6 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             self.res["spec"] = spec
 
 
-def _require_cluster_credential(value: str | None, config_key: str, env_var: str) -> str:
-    """Return a cluster credential, failing fast when it is absent.
-
-    Args:
-        value (str | None): Credential resolved from pytest config or the environment.
-        config_key (str): pytest-config key the credential is read from.
-        env_var (str): Environment variable the credential falls back to.
-
-    Returns:
-        str: The validated credential.
-
-    Raises:
-        ValueError: If the credential is missing or empty.
-    """
-    if not value:
-        raise ValueError(f"Missing cluster credential: set '{config_key}' in pytest config or {env_var}")
-    return value
-
-
 def get_cluster_client() -> DynamicClient:
     """Get a DynamicClient for the cluster.
 
@@ -825,23 +806,19 @@ def get_cluster_client() -> DynamicClient:
         DynamicClient: The cluster client.
 
     Raises:
-        ValueError: If a cluster credential is missing, or if the client cannot be created.
+        ValueError: If the client cannot be created.
     """
-    host = _require_cluster_credential(
-        get_value_from_py_config("cluster_host") or os.environ.get("CLUSTER_HOST"),
-        "cluster_host",
-        "CLUSTER_HOST",
-    )
-    username = _require_cluster_credential(
-        get_value_from_py_config("cluster_username") or os.environ.get("CLUSTER_USERNAME"),
-        "cluster_username",
-        "CLUSTER_USERNAME",
-    )
-    password = _require_cluster_credential(
-        get_value_from_py_config("cluster_password") or os.environ.get("CLUSTER_PASSWORD"),
-        "cluster_password",
-        "CLUSTER_PASSWORD",
-    )
+    host = get_value_from_py_config("cluster_host")
+    if host is None:
+        host = os.environ.get("CLUSTER_HOST")
+
+    username = get_value_from_py_config("cluster_username")
+    if username is None:
+        username = os.environ.get("CLUSTER_USERNAME")
+
+    password = get_value_from_py_config("cluster_password")
+    if password is None:
+        password = os.environ.get("CLUSTER_PASSWORD")
     verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
     if verify_ssl_env is not None:
         insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")

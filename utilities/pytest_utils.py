@@ -60,7 +60,7 @@ def prepare_base_path(base_path: Path) -> None:
     base_path.mkdir(parents=True, exist_ok=True)
 
 
-def _setup_ai_analysis(session: pytest.Session) -> None:
+def setup_ai_analysis(session: pytest.Session) -> None:
     """Configure AI analysis for test failure reporting.
 
     Loads environment variables and validates prerequisites. Disables AI analysis

@@ -210,9 +210,7 @@ class TestCopyoffloadThinMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -419,9 +417,7 @@ class CopyoffloadSnapshotBase:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -729,9 +725,7 @@ class TestCopyoffloadThickLazyMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -903,9 +897,7 @@ class TestCopyoffloadThickEagerMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1076,9 +1068,7 @@ class TestCopyoffloadMultiDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1253,9 +1243,7 @@ class TestCopyoffloadDualDiskMixedThinThickMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1430,9 +1418,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1610,9 +1596,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1795,9 +1779,7 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -1988,9 +1970,7 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -2172,9 +2152,7 @@ class TestCopyoffloadMultiDatastoreMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -2360,9 +2338,7 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -2559,9 +2535,7 @@ class TestCopyoffloadMixedDatastoreMigration:
             target_namespace (str): Namespace where populate pods exist.
             source_provider (VMWareProvider): Source VMware provider for datastore name lookup.
             source_provider_data (dict[str, Any]): Source provider configuration.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         copyoffload_config_data: dict[str, Any] = source_provider_data["copyoffload"]
         xcopy_datastore_id: str = copyoffload_config_data["datastore_id"]
@@ -2835,9 +2809,7 @@ class TestCopyoffloadFallbackLargeMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3029,9 +3001,7 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3206,9 +3176,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3384,9 +3352,7 @@ class TestCopyoffload10MixedDisksMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3561,9 +3527,7 @@ class TestCopyoffloadLargeVmMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3757,9 +3721,7 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods and PVCs exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_populator_throttling(
             ocp_admin_client=ocp_admin_client,
@@ -3781,9 +3743,7 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -3994,9 +3954,7 @@ class TestCopyoffloadDedicatedMigrationHost:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods and PVCs exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
             configured_dedicated_hosts (list[str]): Configured dedicatedMigrationHosts.
         """
         verify_dedicated_migration_host(
@@ -4020,9 +3978,7 @@ class TestCopyoffloadDedicatedMigrationHost:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -4384,9 +4340,7 @@ class TestCopyoffloadNonconformingNameMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -4605,9 +4559,7 @@ class TestCopyoffloadWarmMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -4783,9 +4735,7 @@ class TestCopyoffloadScaleMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -5242,9 +5192,7 @@ class TestSimultaneousCopyoffloadMigrations:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -5306,9 +5254,7 @@ class TestSimultaneousCopyoffloadMigrations:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -5735,9 +5681,7 @@ class TestConcurrentXcopyVddkMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -6051,9 +5995,7 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods and PVCs exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
             prepared_plan (dict[str, Any]): Prepared plan configuration (for VM/disk counts).
         """
         virtual_machines = prepared_plan["virtual_machines"]
@@ -6081,9 +6023,7 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
