@@ -112,7 +112,7 @@ Each item in `virtual_machines` describes one source VM or template.
 | `name` | Yes | Source VM or template name. During preparation this may be rewritten to the actual cloned runtime name. |
 | `source_vm_power` | No | `"on"` starts the VM, `"off"` stops it. Omitting it leaves the current state unchanged. |
 | `guest_agent` | No | `True` when the guest agent is expected to run after migration. |
-| `clone` | No | `True` when the VM is cloned during preparation. For copy-offload plans, VMs with `clone: true` also get their name replaced by `copyoffload.default_vm_name`. |
+| `clone` | No | `True` marks the VM as a placeholder to migrate: on copy-offload plans the name is replaced by `copyoffload.default_vm_name`. It does **not** switch the cloning phase off — `prepared_plan` clones every VM unless the plan sets `skip_clone: True`. |
 | `clone_name` | No | Overrides the default clone base name. |
 | `preserve_name_format` | No | `True` keeps uppercase letters and underscores in `clone_name` instead of sanitizing them. |
 | `disk_type` | No | `thin`, `thick-lazy`, or `thick-eager`. |

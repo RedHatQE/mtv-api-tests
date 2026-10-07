@@ -424,7 +424,7 @@ definitions.</p>
 <tr>
 <td><code>clone</code></td>
 <td>No</td>
-<td><code>True</code> when the VM is cloned during preparation. For copy-offload plans, VMs with <code>clone: true</code> also get their name replaced by <code>copyoffload.default_vm_name</code>.</td>
+<td><code>True</code> marks the VM as a placeholder to migrate: on copy-offload plans the name is replaced by <code>copyoffload.default_vm_name</code>. It does <strong>not</strong> switch the cloning phase off — <code>prepared_plan</code> clones every VM unless the plan sets <code>skip_clone: True</code>.</td>
 </tr>
 <tr>
 <td><code>clone_name</code></td>

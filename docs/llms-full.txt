@@ -3968,8 +3968,9 @@ Cluster credentials resolve from the environment, in this order: the `--tc` valu
 precedence over `insecure_verify_skip` for OpenShift API SSL verification, and its semantics are inverted: `CLUSTER_VERIFY_SSL=true` means `insecure_verify_skip=False`.
 
 > **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. When neither `--tc` nor the environment supplies a value,
-> `get_cluster_client()` passes `None` through to `get_client()` and the failure surfaces from the OpenShift client library as a connection error. Supply all three
-> explicitly or the run fails before any fixture executes.
+> `get_cluster_client()` resolves it to `None` and `get_client()` cannot build a client, so the function raises
+> `ValueError("Failed to get client for cluster")`. The run stops as the `ocp_admin_client` fixture requests the client, before any migration work. Supply all three
+> explicitly. Adding presence checks that name the missing variable is tracked in RedHatQE/mtv-api-tests#712.
 
 The repository's OpenShift Job template in `README.md` uses `--tc=` overrides like this:
 
@@ -4841,7 +4842,7 @@ Each item in `virtual_machines` describes one source VM or template.
 | `name` | Yes | Source VM or template name. During preparation this may be rewritten to the actual cloned runtime name. |
 | `source_vm_power` | No | `"on"` starts the VM, `"off"` stops it. Omitting it leaves the current state unchanged. |
 | `guest_agent` | No | `True` when the guest agent is expected to run after migration. |
-| `clone` | No | `True` when the VM is cloned during preparation. For copy-offload plans, VMs with `clone: true` also get their name replaced by `copyoffload.default_vm_name`. |
+| `clone` | No | `True` marks the VM as a placeholder to migrate: on copy-offload plans the name is replaced by `copyoffload.default_vm_name`. It does **not** switch the cloning phase off — `prepared_plan` clones every VM unless the plan sets `skip_clone: True`. |
 | `clone_name` | No | Overrides the default clone base name. |
 | `preserve_name_format` | No | `True` keeps uppercase letters and underscores in `clone_name` instead of sanitizing them. |
 | `disk_type` | No | `thin`, `thick-lazy`, or `thick-eager`. |
@@ -8851,7 +8852,7 @@ Real configs, from the throttling and dedicated-host suites:
 tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
 state during teardown, because these are real, shared VMs rather than disposable clones.
 
-The CA-certificate field tests (`tests/cold/test_ca_crt_cold_migration.py`) do **not** use it: their plan config carries no
+The CA-certificate field tests (`tests/cold/test_ca_crt_migration.py`) do **not** use it: their plan config carries no
 `skip_clone`, so they follow the normal cloning path like every other cold test.
 
 > **Warning:** `skip_clone` is incompatible with `disable_drs_for_vms`, `clone_to_same_host`, `preserve_static_ips` on
