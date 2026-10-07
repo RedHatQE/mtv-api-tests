@@ -511,6 +511,7 @@ token as the Provider secret:</p>
 <p>Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>, each
 falling back to the matching <code>CLUSTER_*</code> environment variable:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
+    <span class="o">...</span>
     <span class="n">_validate_cluster_credentials</span><span class="p">()</span>
     <span class="n">host</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
     <span class="n">username</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>

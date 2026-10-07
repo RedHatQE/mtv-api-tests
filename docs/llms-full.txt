@@ -7589,8 +7589,9 @@ The three remote warm plan configs additionally disable preflight Deep Inspectio
 Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from `cluster_host`, `cluster_username`, and `cluster_password`, each
 falling back to the matching `CLUSTER_*` environment variable:
 
-```846:863:utilities/utils.py
+```828:865:utilities/utils.py
     def get_cluster_client() -> DynamicClient:
+        ...
         _validate_cluster_credentials()
         host = _resolve_cluster_credential("cluster_host")
         username = _resolve_cluster_credential("cluster_username")
