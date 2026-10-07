@@ -457,7 +457,7 @@ From `tests/tests_config/config.py`:
     "virtual_machines": [
         {
             "name": "mtv-win2019-3disks",
-            "source_vm_power": "off",  # VM must be on for guest tools to report static IP info
+            "source_vm_power": "on",  # VM must be on for guest tools to report static IP info
             "guest_agent": True,
         },
     ],

@@ -337,6 +337,9 @@ preparation.</p>
 <li><code>test_migrate_vms</code></li>
 <li><code>test_check_vms</code></li>
 </ol>
+<p>The two ClusterRole warm classes are the exception: <code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code>
+(<code>tests/warm/test_mtv_warm_clusterrole_migration.py</code>) stop after <code>test_migrate_vms</code> and have no <code>test_check_vms</code>, because their subject is the ClusterRole and SCC binding rather
+than post-migration VM validation.</p>
 <p>Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped <code>precopy_interval_forkliftcontroller</code> fixture through
 <code>@pytest.mark.usefixtures</code>, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
 (<code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code>) request only <code>cleanup_migrated_vms</code>, so they run without that patch.</p>
@@ -394,6 +397,8 @@ namespace:</p>
 <span class="p">)</span>
 </code></pre></div>
 
+<p>The fixture intentionally does not restore the previous interval. Its docstring (<code>conftest.py:627</code>) records why: with <code>ResourceEditor</code> restoring at teardown, one parallel worker
+ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.</p>
 <p>What these values do:</p>
 <ul>
 <li><code>snapshots_interval</code> controls how often Forklift schedules warm precopy snapshots.</li>

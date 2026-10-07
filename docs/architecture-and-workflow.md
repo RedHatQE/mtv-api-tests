@@ -98,10 +98,12 @@ class TestSanityColdMtvMigration:
     plan_resource: Plan
 
     def test_create_storagemap(self, prepared_plan: dict[str, Any], fixture_store: dict[str, Any], ...) -> None:
+        """Create StorageMap resource for migration."""
         self.__class__.storage_map = get_storage_migration_map(...)
         assert self.storage_map, "StorageMap creation failed"
 
     def test_create_networkmap(self, prepared_plan: dict[str, Any], multus_network_name: str, ...) -> None:
+        """Create NetworkMap resource for migration."""
         self.__class__.network_map = get_network_migration_map(...)
         assert self.network_map, "NetworkMap creation failed"
 
@@ -111,14 +113,17 @@ class TestSanityColdMtvMigration:
         source_provider_inventory: ForkliftInventory,
         ...,
     ) -> None:
+        """Create MTV Plan CR resource."""
         populate_vm_ids(prepared_plan, source_provider_inventory)
         self.__class__.plan_resource = create_plan_resource(...)
         assert self.plan_resource, "Plan creation failed"
 
     def test_migrate_vms(self, ocp_admin_client: DynamicClient, target_namespace: str, ...) -> None:
+        """Execute migration."""
         execute_migration(...)
 
     def test_check_vms(self, prepared_plan: dict[str, Any], vm_ssh_connections: SSHConnectionManager) -> None:
+        """Validate migrated VMs."""
         check_vms(...)
 ```
 

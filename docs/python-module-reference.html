@@ -615,7 +615,8 @@ volume on the source through the VMware Guest Operations API before migration, a
 <code>create_awx_inventory()</code>, <code>create_awx_job_template()</code>, <code>create_aap_token_secret()</code>, <code>teardown_awx()</code>.</p>
 <h2 id="provider-abstraction-libs">Provider Abstraction (<code>libs/</code>)</h2>
 <h3 id="libsbase_providerpy"><code>libs/base_provider.py</code></h3>
-<p><code>BaseProvider</code> is the abstract base every source adapter implements: <code>connect()</code> and <code>disconnect()</code> are context-manager managed (<code>__enter__</code>/<code>__exit__</code>), and the abstract surface
+<p><code>BaseProvider</code> is the abstract base every source adapter implements: <code>connect()</code> is context-manager managed — <code>__enter__()</code> calls it and <code>__exit__()</code> is a no-op that does <strong>not</strong> call
+<code>disconnect()</code>, so an adapter that opens a session must close it explicitly — and the abstract surface
 is <code>connect()</code>, <code>disconnect()</code>, <code>test</code>, <code>vm_dict</code>, <code>clone_vm()</code>, <code>delete_vm()</code>, <code>get_vm_or_template_networks()</code>. Shared behaviour includes <code>_generate_clone_vm_name()</code> and
 <code>supports_skip_clone()</code>.</p>
 <h3 id="libsproviders"><code>libs/providers/</code></h3>

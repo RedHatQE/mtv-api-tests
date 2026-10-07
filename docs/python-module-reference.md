@@ -218,7 +218,8 @@ AWX/AAP deployment and REST API helpers for hook integration tests: `is_awx_inst
 
 ### `libs/base_provider.py`
 
-`BaseProvider` is the abstract base every source adapter implements: `connect()` and `disconnect()` are context-manager managed (`__enter__`/`__exit__`), and the abstract surface
+`BaseProvider` is the abstract base every source adapter implements: `connect()` is context-manager managed — `__enter__()` calls it and `__exit__()` is a no-op that does **not** call
+`disconnect()`, so an adapter that opens a session must close it explicitly — and the abstract surface
 is `connect()`, `disconnect()`, `test`, `vm_dict`, `clone_vm()`, `delete_vm()`, `get_vm_or_template_networks()`. Shared behaviour includes `_generate_clone_vm_name()` and
 `supports_skip_clone()`.
 

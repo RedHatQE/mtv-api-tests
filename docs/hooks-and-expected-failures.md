@@ -103,7 +103,13 @@ creates the MTV `Plan`, it passes those hook references into the Plan helper. Pr
 `pre_hook_name` and `pre_hook_namespace`. Post-hooks are passed through the helper as
 `after_hook_name` and `after_hook_namespace`.
 
-```281:303:utilities/mtv_migration.py
+```275:305:utilities/mtv_migration.py
+    for vm in vms_for_plan:
+        if "migrate_shared_disks" in vm:
+            vm["migrateSharedDisks"] = vm.pop("migrate_shared_disks")
+        for key in _VM_DICT_TEST_ONLY_KEYS:
+            vm.pop(key, None)
+
     plan_kwargs: dict[str, Any] = {
         "client": ocp_admin_client,
         "fixture_store": fixture_store,
@@ -117,7 +123,7 @@ creates the MTV `Plan`, it passes those hook references into the Plan helper. Pr
         "storage_map_namespace": storage_map.namespace,
         "network_map_name": network_map.name,
         "network_map_namespace": network_map.namespace,
-        "virtual_machines_list": virtual_machines_list,
+        "virtual_machines_list": vms_for_plan,
         "target_namespace": vm_target_namespace or target_namespace,
         "warm_migration": warm_migration,
         "pre_hook_name": pre_hook_name,
@@ -281,8 +287,9 @@ editor = ResourceEditor(
 editor.update(backup_resources=True)
 ```
 
-The patch is restored in the fixture teardown, so MTV goes back to its pre-test AAP configuration
-when the class finishes.
+The patch is restored during pytest session teardown, not when the test class finishes: `aap_mtv_settings` is session-scoped
+(`tests/hooks/conftest.py:163`) and calls `editor.restore()` in its fixture teardown, so MTV keeps its AAP configuration for the
+rest of the run.
 
 The migration step of `TestAapHookMigration` asserts success, not failure. Because the hooks run in
 pipeline order, a passing migration is what proves Forklift launched the AWX jobs and waited for
@@ -344,7 +351,7 @@ The suite then looks past the high-level migration outcome. It reads each VM's p
 source on purpose: the forklift controller writes it before the `Migration` CR syncs, so a migration
 that just failed cannot race into a "no error found" result.
 
-```79:104:utilities/mtv_migration.py
+```81:103:utilities/mtv_migration.py
     vms_status = plan.instance.status.migration.vms
 
     for vm_status in vms_status:

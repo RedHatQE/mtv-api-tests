@@ -1206,10 +1206,12 @@ validate VMs. Condensed from `tests/cold/test_mtv_cold_migration.py:19-147`:
         plan_resource: Plan
 
         def test_create_storagemap(self, prepared_plan: dict[str, Any], fixture_store: dict[str, Any], ...) -> None:
+            """Create StorageMap resource for migration."""
             self.__class__.storage_map = get_storage_migration_map(...)
             assert self.storage_map, "StorageMap creation failed"
 
         def test_create_networkmap(self, prepared_plan: dict[str, Any], multus_network_name: str, ...) -> None:
+            """Create NetworkMap resource for migration."""
             self.__class__.network_map = get_network_migration_map(...)
             assert self.network_map, "NetworkMap creation failed"
 
@@ -1219,14 +1221,17 @@ validate VMs. Condensed from `tests/cold/test_mtv_cold_migration.py:19-147`:
             source_provider_inventory: ForkliftInventory,
             ...,
         ) -> None:
+            """Create MTV Plan CR resource."""
             populate_vm_ids(prepared_plan, source_provider_inventory)
             self.__class__.plan_resource = create_plan_resource(...)
             assert self.plan_resource, "Plan creation failed"
 
         def test_migrate_vms(self, ocp_admin_client: DynamicClient, target_namespace: str, ...) -> None:
+            """Execute migration."""
             execute_migration(...)
 
         def test_check_vms(self, prepared_plan: dict[str, Any], vm_ssh_connections: SSHConnectionManager) -> None:
+            """Validate migrated VMs."""
             check_vms(...)
 ```
 
@@ -6297,6 +6302,10 @@ Warm classes use the same five test methods as cold classes, with one behavioral
 4. `test_migrate_vms`
 5. `test_check_vms`
 
+The two ClusterRole warm classes are the exception: `TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`
+(`tests/warm/test_mtv_warm_clusterrole_migration.py`) stop after `test_migrate_vms` and have no `test_check_vms`, because their subject is the ClusterRole and SCC binding rather
+than post-migration VM validation.
+
 Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through
 `@pytest.mark.usefixtures`, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
 (`TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`) request only `cleanup_migrated_vms`, so they run without that patch.
@@ -6358,6 +6367,9 @@ namespace:
         backup_resources=False
     )
 ```
+
+The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:627`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
+ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.
 
 What these values do:
 
@@ -7829,7 +7841,13 @@ creates the MTV `Plan`, it passes those hook references into the Plan helper. Pr
 `pre_hook_name` and `pre_hook_namespace`. Post-hooks are passed through the helper as
 `after_hook_name` and `after_hook_namespace`.
 
-```281:303:utilities/mtv_migration.py
+```275:305:utilities/mtv_migration.py
+        for vm in vms_for_plan:
+            if "migrate_shared_disks" in vm:
+                vm["migrateSharedDisks"] = vm.pop("migrate_shared_disks")
+            for key in _VM_DICT_TEST_ONLY_KEYS:
+                vm.pop(key, None)
+
         plan_kwargs: dict[str, Any] = {
             "client": ocp_admin_client,
             "fixture_store": fixture_store,
@@ -7843,7 +7861,7 @@ creates the MTV `Plan`, it passes those hook references into the Plan helper. Pr
             "storage_map_namespace": storage_map.namespace,
             "network_map_name": network_map.name,
             "network_map_namespace": network_map.namespace,
-            "virtual_machines_list": virtual_machines_list,
+            "virtual_machines_list": vms_for_plan,
             "target_namespace": vm_target_namespace or target_namespace,
             "warm_migration": warm_migration,
             "pre_hook_name": pre_hook_name,
@@ -8007,8 +8025,9 @@ else at runtime:
     editor.update(backup_resources=True)
 ```
 
-The patch is restored in the fixture teardown, so MTV goes back to its pre-test AAP configuration
-when the class finishes.
+The patch is restored during pytest session teardown, not when the test class finishes: `aap_mtv_settings` is session-scoped
+(`tests/hooks/conftest.py:163`) and calls `editor.restore()` in its fixture teardown, so MTV keeps its AAP configuration for the
+rest of the run.
 
 The migration step of `TestAapHookMigration` asserts success, not failure. Because the hooks run in
 pipeline order, a passing migration is what proves Forklift launched the AWX jobs and waited for
@@ -8070,7 +8089,7 @@ The suite then looks past the high-level migration outcome. It reads each VM's p
 source on purpose: the forklift controller writes it before the `Migration` CR syncs, so a migration
 that just failed cannot race into a "no error found" result.
 
-```79:104:utilities/mtv_migration.py
+```81:103:utilities/mtv_migration.py
         vms_status = plan.instance.status.migration.vms
 
         for vm_status in vms_status:
@@ -8824,8 +8843,9 @@ drive-letter discovery and a targeted `Update-HostStorageCache` refresh.
 > **Warning:** The shared disk must already carry a filesystem and be unmounted on the source VMs. virt-v2v cannot update
 > `fstab` for shared disks, so `verify_shared_disk_data()` mounts the partition manually.
 
-> **Note:** Shared-disk migration is vSphere-only. The fixture raises `ValueError` for any other provider type before
-> cloning starts, and only one shared VMDK per plan is supported.
+> **Note:** Shared-disk migration is vSphere-only. For any non-OVA source provider, the fixture raises `ValueError` before cloning starts if shared-disk settings are present, and only
+> one shared VMDK per plan is supported. An OVA source takes the fixture's separate OVA branch, which performs neither that validation nor shared-disk relinking, so shared-disk
+> scenarios are not meaningful there.
 
 ## ESXi host pinning and DRS
 
@@ -9055,6 +9075,11 @@ What that means in day-to-day use:
 
 ```python
     def pytest_configure(config: pytest.Config) -> None:
+        """Set a unique basetemp directory per session to prevent cross-session conflicts.
+
+        Args:
+            config (pytest.Config): Pytest configuration object used to set basetemp.
+        """
         if config.option.basetemp is None:
             config.option.basetemp = str(Path(tempfile.gettempdir()) / f"pytest-{uuid.uuid4().hex[:8]}")
 ```
@@ -9985,7 +10010,7 @@ From `tests/tests_config/config.py`:
         "virtual_machines": [
             {
                 "name": "mtv-win2019-3disks",
-                "source_vm_power": "off",  # VM must be on for guest tools to report static IP info
+                "source_vm_power": "on",  # VM must be on for guest tools to report static IP info
                 "guest_agent": True,
             },
         ],
@@ -11101,7 +11126,8 @@ AWX/AAP deployment and REST API helpers for hook integration tests: `is_awx_inst
 
 ### `libs/base_provider.py`
 
-`BaseProvider` is the abstract base every source adapter implements: `connect()` and `disconnect()` are context-manager managed (`__enter__`/`__exit__`), and the abstract surface
+`BaseProvider` is the abstract base every source adapter implements: `connect()` is context-manager managed — `__enter__()` calls it and `__exit__()` is a no-op that does **not** call
+`disconnect()`, so an adapter that opens a session must close it explicitly — and the abstract surface
 is `connect()`, `disconnect()`, `test`, `vm_dict`, `clone_vm()`, `delete_vm()`, `get_vm_or_template_networks()`. Shared behaviour includes `_generate_clone_vm_name()` and
 `supports_skip_clone()`.
 

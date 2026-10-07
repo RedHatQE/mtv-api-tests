@@ -80,6 +80,11 @@ What that means in day-to-day use:
 
 ```python
 def pytest_configure(config: pytest.Config) -> None:
+    """Set a unique basetemp directory per session to prevent cross-session conflicts.
+
+    Args:
+        config (pytest.Config): Pytest configuration object used to set basetemp.
+    """
     if config.option.basetemp is None:
         config.option.basetemp = str(Path(tempfile.gettempdir()) / f"pytest-{uuid.uuid4().hex[:8]}")
 ```

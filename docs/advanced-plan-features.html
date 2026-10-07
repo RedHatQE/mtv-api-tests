@@ -1174,8 +1174,9 @@ drive-letter discovery and a targeted <code>Update-HostStorageCache</code> refre
 <blockquote>
 <p><strong>Warning:</strong> The shared disk must already carry a filesystem and be unmounted on the source VMs. virt-v2v cannot update
 <code>fstab</code> for shared disks, so <code>verify_shared_disk_data()</code> mounts the partition manually.</p>
-<p><strong>Note:</strong> Shared-disk migration is vSphere-only. The fixture raises <code>ValueError</code> for any other provider type before
-cloning starts, and only one shared VMDK per plan is supported.</p>
+<p><strong>Note:</strong> Shared-disk migration is vSphere-only. For any non-OVA source provider, the fixture raises <code>ValueError</code> before cloning starts if shared-disk settings are present, and only
+one shared VMDK per plan is supported. An OVA source takes the fixture's separate OVA branch, which performs neither that validation nor shared-disk relinking, so shared-disk
+scenarios are not meaningful there.</p>
 </blockquote>
 <h2 id="esxi-host-pinning-and-drs">ESXi host pinning and DRS</h2>
 <p>Three plan flags control where the <strong>source clone</strong> lives, which matters because copy-offload and throttling verification

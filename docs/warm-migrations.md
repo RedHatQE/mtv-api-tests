@@ -41,6 +41,10 @@ Warm classes use the same five test methods as cold classes, with one behavioral
 4. `test_migrate_vms`
 5. `test_check_vms`
 
+The two ClusterRole warm classes are the exception: `TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`
+(`tests/warm/test_mtv_warm_clusterrole_migration.py`) stop after `test_migrate_vms` and have no `test_check_vms`, because their subject is the ClusterRole and SCC binding rather
+than post-migration VM validation.
+
 Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped `precopy_interval_forkliftcontroller` fixture through
 `@pytest.mark.usefixtures`, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
 (`TestClusterroleWarmMtvMigration` and `TestClusterroleWarmWithSccMigration`) request only `cleanup_migrated_vms`, so they run without that patch.
@@ -102,6 +106,9 @@ ResourceEditor(patches={forklift_controller: {"spec": {"controller_precopy_inter
     backup_resources=False
 )
 ```
+
+The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:627`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
+ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.
 
 What these values do:
 

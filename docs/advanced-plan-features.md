@@ -626,8 +626,9 @@ drive-letter discovery and a targeted `Update-HostStorageCache` refresh.
 > **Warning:** The shared disk must already carry a filesystem and be unmounted on the source VMs. virt-v2v cannot update
 > `fstab` for shared disks, so `verify_shared_disk_data()` mounts the partition manually.
 
-> **Note:** Shared-disk migration is vSphere-only. The fixture raises `ValueError` for any other provider type before
-> cloning starts, and only one shared VMDK per plan is supported.
+> **Note:** Shared-disk migration is vSphere-only. For any non-OVA source provider, the fixture raises `ValueError` before cloning starts if shared-disk settings are present, and only
+> one shared VMDK per plan is supported. An OVA source takes the fixture's separate OVA branch, which performs neither that validation nor shared-disk relinking, so shared-disk
+> scenarios are not meaningful there.
 
 ## ESXi host pinning and DRS
 
