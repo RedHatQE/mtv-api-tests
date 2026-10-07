@@ -211,24 +211,30 @@ The three remote warm plan configs additionally disable preflight Deep Inspectio
 Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from `cluster_host`, `cluster_username`, and `cluster_password`, each
 falling back to the matching `CLUSTER_*` environment variable:
 
-```813:849:utilities/utils.py
+```846:863:utilities/utils.py
 def get_cluster_client() -> DynamicClient:
+    _validate_cluster_credentials()
     host = _resolve_cluster_credential("cluster_host")
     username = _resolve_cluster_credential("cluster_username")
     password = _resolve_cluster_credential("cluster_password")
     verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
-if verify_ssl_env is not None:
-    insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
-else:
-    insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
-    if insecure_verify_skip is None:
-        insecure_verify_skip = True
-client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+    if verify_ssl_env is not None:
+        insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
+    else:
+        insecure_verify_skip = get_value_from_py_config("insecure_verify_skip")
+        if insecure_verify_skip is None:
+            insecure_verify_skip = True
+    client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
+    if not isinstance(client, DynamicClient):
+        raise ValueError("Failed to get client for cluster")
     return client
 ```
 
-Each credential goes through `_resolve_cluster_credential()`, which reads the `--tc` value first, falls back to the matching `CLUSTER_*` environment variable, and rejects a
-missing, empty, or whitespace-only value with `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming the variable.
+Each credential resolves through `_resolve_cluster_credential()`, which reads the `--tc` value first and falls back to the matching `CLUSTER_*` environment variable.
+`_validate_cluster_credentials()` then rejects an incomplete set: if some but not all of `cluster_host`, `cluster_username` and `cluster_password` are configured, it raises
+`ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming each one that is absent, empty or whitespace-only. Passing none of
+the three is legitimate — the CLI takes that path when it authenticates with an existing `oc` token, and the client library then authenticates from the ambient kubeconfig — so
+that case reaches client creation untouched.
 
 Treat the inputs like this:
 
