@@ -112,7 +112,7 @@ Base pattern: `test_create_storagemap` → `test_create_networkmap` → `test_cr
 | LUKS (6-step) | storagemap → networkmap → plan → migrate → `test_verify_luks_encryption` → check_vms | `TestLuksColdMigration` |
 | XFS (6-step) | storagemap → networkmap → plan → migrate → `test_verify_xfs_version` → check_vms | `TestColdMigrationXfs`, `TestWarmMigrationXfs` |
 | Shared disk, Linux (6-step) | storagemap → networkmap → plan → migrate → `test_verify_shared_disk_data` → check_vms | `TestSharedDiskRhelMigration` |
-| Shared disk, Windows (7-step) | `test_label_shared_disk` → base 5 steps → `test_verify_shared_disk_data` → check_vms | `TestSharedDiskWindowsMigration` |
+| Shared disk, Windows (7-step) | `test_label_shared_disk` → storagemap → networkmap → plan → migrate → `test_verify_shared_disk_data` → check_vms | `TestSharedDiskWindowsMigration` |
 | Plan archive (6-step) | storagemap → networkmap → plan → migrate (expected failure) → `test_archive_and_delete_plan` → `test_verify_pvc_cleanup` | `TestPlanArchivePvcCleanup` |
 | Plan readiness (3-step) | storagemap → networkmap → plan, no migration | `TestColdDualNicSameNetworkPlanValidation` |
 

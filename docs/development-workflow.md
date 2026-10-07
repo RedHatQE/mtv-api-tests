@@ -107,8 +107,9 @@ repos:
 
 The full hook set also includes `check-executables-have-shebangs`, `debug-statements`, `check-builtin-literals`, `detect-secrets`, and `gitleaks`.
 
-> **Warning:** `markdownlint-cli2`, `detect-secrets`, and `gitleaks` all carry `exclude: ^docs/`. Changes under `docs/` are not covered by the pre-commit quality gate at all. If
-> you edit a Markdown page, lint it yourself or run the site generator, which reports structural problems.
+> **Warning:** `markdownlint-cli2`, `detect-secrets`, and `gitleaks` all carry `exclude: ^docs/`, so changes under `docs/` skip Markdown linting and secret
+> scanning. The generic file hooks still run on them — `trailing-whitespace`, `end-of-file-fixer`, `mixed-line-ending`, `check-merge-conflict` and
+> `check-added-large-files` — and can rewrite or block a docs change. If you edit a Markdown page, run the site generator, which reports structural problems.
 
 Use the full suite when you want the closest thing to a local CI gate:
 

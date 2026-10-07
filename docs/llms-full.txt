@@ -1658,7 +1658,7 @@ Validation depends on the plan and provider, and includes:
 - VMware snapshot and serial preservation checks.
 - Guest agent verification.
 - SSH connectivity to the migrated guest through `python-rrmngmnt`.
-- Static IP preservation for VMs migrated from vSphere with guest tools running.
+- Static IP preservation for VMs migrated from vSphere or Hyper-V with guest tools running.
 - Target node placement, labels, and affinity when the plan asks for them.
 - LUKS encryption verification (`verify_luks_encryption()`) for encrypted guests.
 - XFS v4 compatibility (`check_vm_command_output()` driven by the plan's `xfs_check` config).
@@ -8310,7 +8310,7 @@ Base pattern: `test_create_storagemap` → `test_create_networkmap` → `test_cr
 | LUKS (6-step) | storagemap → networkmap → plan → migrate → `test_verify_luks_encryption` → check_vms | `TestLuksColdMigration` |
 | XFS (6-step) | storagemap → networkmap → plan → migrate → `test_verify_xfs_version` → check_vms | `TestColdMigrationXfs`, `TestWarmMigrationXfs` |
 | Shared disk, Linux (6-step) | storagemap → networkmap → plan → migrate → `test_verify_shared_disk_data` → check_vms | `TestSharedDiskRhelMigration` |
-| Shared disk, Windows (7-step) | `test_label_shared_disk` → base 5 steps → `test_verify_shared_disk_data` → check_vms | `TestSharedDiskWindowsMigration` |
+| Shared disk, Windows (7-step) | `test_label_shared_disk` → storagemap → networkmap → plan → migrate → `test_verify_shared_disk_data` → check_vms | `TestSharedDiskWindowsMigration` |
 | Plan archive (6-step) | storagemap → networkmap → plan → migrate (expected failure) → `test_archive_and_delete_plan` → `test_verify_pvc_cleanup` | `TestPlanArchivePvcCleanup` |
 | Plan readiness (3-step) | storagemap → networkmap → plan, no migration | `TestColdDualNicSameNetworkPlanValidation` |
 
@@ -12640,8 +12640,9 @@ Key hooks from `.pre-commit-config.yaml`:
 
 The full hook set also includes `check-executables-have-shebangs`, `debug-statements`, `check-builtin-literals`, `detect-secrets`, and `gitleaks`.
 
-> **Warning:** `markdownlint-cli2`, `detect-secrets`, and `gitleaks` all carry `exclude: ^docs/`. Changes under `docs/` are not covered by the pre-commit quality gate at all. If
-> you edit a Markdown page, lint it yourself or run the site generator, which reports structural problems.
+> **Warning:** `markdownlint-cli2`, `detect-secrets`, and `gitleaks` all carry `exclude: ^docs/`, so changes under `docs/` skip Markdown linting and secret
+> scanning. The generic file hooks still run on them — `trailing-whitespace`, `end-of-file-fixer`, `mixed-line-ending`, `check-merge-conflict` and
+> `check-added-large-files` — and can rewrite or block a docs change. If you edit a Markdown page, run the site generator, which reports structural problems.
 
 Use the full suite when you want the closest thing to a local CI gate:
 

@@ -670,7 +670,7 @@ eager scrubbing:</p>
 </tr>
 <tr>
 <td>Shared disk, Windows (7-step)</td>
-<td><code>test_label_shared_disk</code> → base 5 steps → <code>test_verify_shared_disk_data</code> → check_vms</td>
+<td><code>test_label_shared_disk</code> → storagemap → networkmap → plan → migrate → <code>test_verify_shared_disk_data</code> → check_vms</td>
 <td><code>TestSharedDiskWindowsMigration</code></td>
 </tr>
 <tr>

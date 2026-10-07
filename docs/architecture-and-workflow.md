@@ -550,7 +550,7 @@ Validation depends on the plan and provider, and includes:
 - VMware snapshot and serial preservation checks.
 - Guest agent verification.
 - SSH connectivity to the migrated guest through `python-rrmngmnt`.
-- Static IP preservation for VMs migrated from vSphere with guest tools running.
+- Static IP preservation for VMs migrated from vSphere or Hyper-V with guest tools running.
 - Target node placement, labels, and affinity when the plan asks for them.
 - LUKS encryption verification (`verify_luks_encryption()`) for encrypted guests.
 - XFS v4 compatibility (`check_vm_command_output()` driven by the plan's `xfs_check` config).
