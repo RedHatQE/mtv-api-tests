@@ -657,9 +657,7 @@ prove the accelerated transfer path was used, and <code>test_check_vms</code> th
 <span class="sd">    Args:</span>
 <span class="sd">        ocp_admin_client (DynamicClient): OpenShift admin client.</span>
 <span class="sd">        target_namespace (str): Namespace where populate pods exist.</span>
-<span class="sd">        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its</span>
-<span class="sd">            values are the heterogeneous OCP resources recorded by</span>
-<span class="sd">            `create_and_store_resource()`, so `Any` is the only accurate annotation.</span>
+<span class="sd">        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.</span>
 <span class="sd">    """</span>
     <span class="n">verify_xcopy_used</span><span class="p">(</span>
         <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>

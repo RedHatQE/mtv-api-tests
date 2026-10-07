@@ -779,7 +779,7 @@ logic needs the Forklift inventory service. This file wraps the `forklift-invent
 
 The fixture and the factory behind it select the right inventory client at runtime:
 
-```1726:1730:conftest.py
+```1712:1717:conftest.py
     @pytest.fixture(scope="session")
     def source_provider_inventory(
         ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
@@ -1356,7 +1356,7 @@ The class-scoped `prepared_plan` fixture is where the user-facing plan config be
 the config, validates and clones source VMs, resolves the PVC name template against the provider type, creates custom namespaces
 if requested, adjusts source power state, stores source-side metadata, and creates hooks.
 
-```1078:1091:conftest.py
+```1062:1075:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -1377,7 +1377,7 @@ Cloning runs in two phases. First every VM is cloned, powered to `source_vm_powe
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
 when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
-```1381:1389:conftest.py
+```1367:1375:conftest.py
                 # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
                 # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
                 inventory_timeout = plan.get("inventory_timeout", 300)
@@ -1389,7 +1389,7 @@ when a config omits it. Other optional flags in the same fixture, such as `warm_
                 )
 ```
 
-```1418:1420:conftest.py
+```1404:1406:conftest.py
         # Create Hooks if configured
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
@@ -1459,7 +1459,7 @@ That behavior comes from `utilities/utils.py:gen_network_map_list()` and the `mu
 
 `multus_network_name` sizes the NAD set from the same data, so the count of created NADs matches the count of map entries:
 
-```890:902:conftest.py
+```876:888:conftest.py
         if class_plan_config.get("per_nic_network_map", False):
             multus_count = max(
                 0,
@@ -3539,30 +3539,18 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 `CLUSTER_PASSWORD` environment variables:
 
 ```python
-    def _require_cluster_credential(value: str | None, config_key: str, env_var: str) -> str:
-        if not value:
-            raise ValueError(f"Missing cluster credential: set '{config_key}' in pytest config or {env_var}")
-        return value
-
-
     def get_cluster_client() -> DynamicClient:
-        host = _require_cluster_credential(
-            get_value_from_py_config("cluster_host") or os.environ.get("CLUSTER_HOST"),
-            "cluster_host",
-            "CLUSTER_HOST",
-        )
+        host = get_value_from_py_config("cluster_host")
+        if host is None:
+            host = os.environ.get("CLUSTER_HOST")
 
-        username = _require_cluster_credential(
-            get_value_from_py_config("cluster_username") or os.environ.get("CLUSTER_USERNAME"),
-            "cluster_username",
-            "CLUSTER_USERNAME",
-        )
+        username = get_value_from_py_config("cluster_username")
+        if username is None:
+            username = os.environ.get("CLUSTER_USERNAME")
 
-        password = _require_cluster_credential(
-            get_value_from_py_config("cluster_password") or os.environ.get("CLUSTER_PASSWORD"),
-            "cluster_password",
-            "CLUSTER_PASSWORD",
-        )
+        password = get_value_from_py_config("cluster_password")
+        if password is None:
+            password = os.environ.get("CLUSTER_PASSWORD")
         ...
         client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
@@ -3578,12 +3566,6 @@ In practice, every real run needs these values:
 
 `cluster_username` and `cluster_password` can come from the environment instead of the command line.
 That is why the generated `Job` manifest wires `CLUSTER_HOST`, `CLUSTER_USERNAME`, `CLUSTER_PASSWORD`, and `CLUSTER_VERIFY_SSL` in from a `Secret`.
-
-If any of the three values is missing — from neither `py_config` nor the environment, or set to an empty string — the run stops
-before any client is built, with `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or
-CLUSTER_USERNAME")` naming the value to supply. That fail-fast check is `_require_cluster_credential()`; a later
-`ValueError("Failed to get client for cluster")` means the credentials were present but the transport itself could not build a
-client.
 
 > **Warning:** The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
 > `Job`, you still need to provide `cluster_host`, `cluster_username`, and `cluster_password`.
@@ -4949,7 +4931,7 @@ For special naming tests, the config can override the clone name entirely:
 `snapshots` affects **test preparation**, not just MTV plan creation. Snapshot tests create the snapshots first, then store the pre-migration snapshot list back into the prepared
 plan for later validation:
 
-```273:294:tests/copyoffload/test_copyoffload_migration.py
+```271:292:tests/copyoffload/test_copyoffload_migration.py
             vm_cfg = prepared_plan["virtual_machines"][0]
             provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
 
@@ -5192,7 +5174,7 @@ The raw entry from `tests_params` is not used directly. The repository converts 
 
 The fixture copies the selected config, resolves a mapping-form `pvc_name_template`, and sets up runtime-only storage:
 
-```1078:1104:conftest.py
+```1064:1090:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -5226,7 +5208,7 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1200:1219:conftest.py
+```1186:1206:conftest.py
             skip_clone = plan.get("skip_clone", False)
 
             if skip_clone:
@@ -5254,7 +5236,7 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
 In the clone phase, the fixture resolves each VM through the clone provider, applies the placement flags, sets the source power state, and rewrites the VM name to the actual
 runtime name:
 
-```1253:1278:conftest.py
+```1239:1264:conftest.py
             if not skip_clone:
                 for vm in virtual_machines:
                     clone_options = {**vm, "enable_ctk": warm_migration}
@@ -5287,7 +5269,7 @@ runtime name:
 
 After the VM loop, configured hooks become real `Hook` custom resources:
 
-```1419:1420:conftest.py
+```1405:1406:conftest.py
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 ```
@@ -5413,7 +5395,7 @@ in `.rootcoz/settings.json`.
 From `utilities/pytest_utils.py`:
 
 ```63:84:utilities/pytest_utils.py
-    def _setup_ai_analysis(session: pytest.Session) -> None:
+    def setup_ai_analysis(session: pytest.Session) -> None:
         """Configure AI analysis for test failure reporting.
 
         Loads environment variables and validates prerequisites. Disables AI analysis
@@ -5831,7 +5813,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1629:1639:conftest.py
+```1615:1625:conftest.py
     @pytest.fixture(scope="class")
     def cleanup_migrated_vms(
         request: pytest.FixtureRequest,
@@ -6608,7 +6590,7 @@ configured command on the migrated VM and asserts on the output:
 The warm copy-offload scenario adds one more validation step after the migration. In `tests/copyoffload/test_copyoffload_migration.py`, `test_check_xcopy_used` runs first to
 prove the accelerated transfer path was used, and `test_check_vms` then runs the standard verification followed by an explicit disk-count check:
 
-```4600:4618:tests/copyoffload/test_copyoffload_migration.py
+```4554:4570:tests/copyoffload/test_copyoffload_migration.py
     def test_check_xcopy_used(
         self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
     ) -> None:
@@ -6617,9 +6599,7 @@ prove the accelerated transfer path was used, and `test_check_vms` then runs the
         Args:
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where populate pods exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
-                values are the heterogeneous OCP resources recorded by
-                `create_and_store_resource()`, so `Any` is the only accurate annotation.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
@@ -7440,7 +7420,7 @@ There are three destination provider fixtures in this repository. Two of them ar
 The default destination fixture in `conftest.py` creates an OpenShift `Provider` with an empty `url` and an empty `secret` block. That is the local, in-cluster destination path
 used by the non-remote tests.
 
-```688:704:conftest.py
+```674:691:conftest.py
     @pytest.fixture(scope="session")
     def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixture_store):
         kind_dict = {
@@ -7464,7 +7444,7 @@ used by the non-remote tests.
 
 The remote path creates a secret from the active OpenShift API token and then creates an explicit OpenShift `Provider` with a real API URL.
 
-```963:993:conftest.py
+```949:979:conftest.py
     @pytest.fixture(scope="session")
     def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
         api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
@@ -8871,7 +8851,7 @@ Real configs, from the throttling and dedicated-host suites:
 tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
 state during teardown, because these are real, shared VMs rather than disposable clones.
 
-The CA-certificate field tests (`tests/cold/test_ca_crt_migration.py`) do **not** use it: their plan config carries no
+The CA-certificate field tests (`tests/cold/test_ca_crt_cold_migration.py`) do **not** use it: their plan config carries no
 `skip_clone`, so they follow the normal cloning path like every other cold test.
 
 > **Warning:** `skip_clone` is incompatible with `disable_drs_for_vms`, `clone_to_same_host`, `preserve_static_ips` on
@@ -9407,20 +9387,13 @@ What is preconfigured is the distribution strategy:
         worker_id: str,
         session_items: list[Any],
         fixture_store: dict[str, Any],
-    ) -> bool:
+    ) -> None:
         """Persist this xdist worker's harvested results so the controller can merge them.
 
         Args:
-            worker_id (str): Identifier of the xdist worker.
-            session_items (list[Any]): Harvested test items collected on this worker. Items are
-                pytest-harvest's own node objects, shaped by the library, so `Any` is the only
-                accurate annotation.
-            fixture_store (dict[str, Any]): Fixture store captured on this worker. Its values are the
-                heterogeneous OCP resources recorded by `create_and_store_resource()`, so `Any` is
-                the only accurate annotation.
-
-        Returns:
-            bool: True to signal that the worker dump succeeded.
+            worker_id: Identifier of the xdist worker
+            session_items: Harvested test items collected on this worker
+            fixture_store: Fixture store captured on this worker
         """
         # persist session_items and fixture_store in the file system
         with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:
@@ -11095,7 +11068,7 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 
 ### `utilities/pytest_utils.py`
 
-`is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `_setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`; internal, called only from `conftest.py`),
+`is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`),
 `collect_created_resources()` (must-gather on failure), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
 
 ### `utilities/must_gather.py`

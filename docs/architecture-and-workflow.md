@@ -248,7 +248,7 @@ The class-scoped `prepared_plan` fixture is where the user-facing plan config be
 the config, validates and clones source VMs, resolves the PVC name template against the provider type, creates custom namespaces
 if requested, adjusts source power state, stores source-side metadata, and creates hooks.
 
-```1078:1091:conftest.py
+```1062:1075:conftest.py
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -269,7 +269,7 @@ Cloning runs in two phases. First every VM is cloned, powered to `source_vm_powe
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
 when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
-```1381:1389:conftest.py
+```1367:1375:conftest.py
             # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
             # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
             inventory_timeout = plan.get("inventory_timeout", 300)
@@ -281,7 +281,7 @@ when a config omits it. Other optional flags in the same fixture, such as `warm_
             )
 ```
 
-```1418:1420:conftest.py
+```1404:1406:conftest.py
     # Create Hooks if configured
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
     create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
@@ -351,7 +351,7 @@ That behavior comes from `utilities/utils.py:gen_network_map_list()` and the `mu
 
 `multus_network_name` sizes the NAD set from the same data, so the count of created NADs matches the count of map entries:
 
-```890:902:conftest.py
+```876:888:conftest.py
     if class_plan_config.get("per_nic_network_map", False):
         multus_count = max(
             0,

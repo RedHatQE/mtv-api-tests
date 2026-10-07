@@ -605,7 +605,7 @@ volume on the source through the VMware Guest Operations API before migration, a
 <code>wait_for_cloned_vms_in_forklift_inventory()</code>, <code>validate_source_vms_exist()</code>.</p>
 <h2 id="teardown-and-diagnostics">Teardown and Diagnostics</h2>
 <h3 id="utilitiespytest_utilspy"><code>utilities/pytest_utils.py</code></h3>
-<p><code>is_dry_run()</code> (<code>--collect-only</code> / <code>--setup-plan</code>), <code>prepare_base_path()</code>, <code>_setup_ai_analysis()</code> (rootcoz-backed failure analysis; disabled without <code>ROOTCOZ_SERVER_URL</code>; internal, called only from <code>conftest.py</code>),
+<p><code>is_dry_run()</code> (<code>--collect-only</code> / <code>--setup-plan</code>), <code>prepare_base_path()</code>, <code>setup_ai_analysis()</code> (rootcoz-backed failure analysis; disabled without <code>ROOTCOZ_SERVER_URL</code>),
 <code>collect_created_resources()</code> (must-gather on failure), <code>teardown_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code>.</p>
 <h3 id="utilitiesmust_gatherpy"><code>utilities/must_gather.py</code></h3>
 <p><code>run_must_gather()</code> collects targeted MTV must-gather bundles when a test fails.</p>

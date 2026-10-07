@@ -669,7 +669,7 @@ Real configs, from the throttling and dedicated-host suites:
 tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
 state during teardown, because these are real, shared VMs rather than disposable clones.
 
-The CA-certificate field tests (`tests/cold/test_ca_crt_migration.py`) do **not** use it: their plan config carries no
+The CA-certificate field tests (`tests/cold/test_ca_crt_cold_migration.py`) do **not** use it: their plan config carries no
 `skip_clone`, so they follow the normal cloning path like every other cold test.
 
 > **Warning:** `skip_clone` is incompatible with `disable_drs_for_vms`, `clone_to_same_host`, `preserve_static_ips` on

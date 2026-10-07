@@ -366,7 +366,7 @@ logic needs the Forklift inventory service. This file wraps the `forklift-invent
 
 The fixture and the factory behind it select the right inventory client at runtime:
 
-```1726:1730:conftest.py
+```1712:1717:conftest.py
 @pytest.fixture(scope="session")
 def source_provider_inventory(
     ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider

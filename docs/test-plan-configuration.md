@@ -202,7 +202,7 @@ For special naming tests, the config can override the clone name entirely:
 `snapshots` affects **test preparation**, not just MTV plan creation. Snapshot tests create the snapshots first, then store the pre-migration snapshot list back into the prepared
 plan for later validation:
 
-```273:294:tests/copyoffload/test_copyoffload_migration.py
+```271:292:tests/copyoffload/test_copyoffload_migration.py
         vm_cfg = prepared_plan["virtual_machines"][0]
         provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
 
@@ -445,7 +445,7 @@ The raw entry from `tests_params` is not used directly. The repository converts 
 
 The fixture copies the selected config, resolves a mapping-form `pvc_name_template`, and sets up runtime-only storage:
 
-```1078:1104:conftest.py
+```1064:1090:conftest.py
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -479,7 +479,7 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1200:1219:conftest.py
+```1186:1206:conftest.py
         skip_clone = plan.get("skip_clone", False)
 
         if skip_clone:
@@ -507,7 +507,7 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
 In the clone phase, the fixture resolves each VM through the clone provider, applies the placement flags, sets the source power state, and rewrites the VM name to the actual
 runtime name:
 
-```1253:1278:conftest.py
+```1239:1264:conftest.py
         if not skip_clone:
             for vm in virtual_machines:
                 clone_options = {**vm, "enable_ctk": warm_migration}
@@ -540,7 +540,7 @@ runtime name:
 
 After the VM loop, configured hooks become real `Hook` custom resources:
 
-```1419:1420:conftest.py
+```1405:1406:conftest.py
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
     create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 ```

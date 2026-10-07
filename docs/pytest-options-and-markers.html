@@ -855,20 +855,13 @@ failure does.</p>
     <span class="n">worker_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">session_items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
     <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Persist this xdist worker's harvested results so the controller can merge them.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        worker_id (str): Identifier of the xdist worker.</span>
-<span class="sd">        session_items (list[Any]): Harvested test items collected on this worker. Items are</span>
-<span class="sd">            pytest-harvest's own node objects, shaped by the library, so `Any` is the only</span>
-<span class="sd">            accurate annotation.</span>
-<span class="sd">        fixture_store (dict[str, Any]): Fixture store captured on this worker. Its values are the</span>
-<span class="sd">            heterogeneous OCP resources recorded by `create_and_store_resource()`, so `Any` is</span>
-<span class="sd">            the only accurate annotation.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        bool: True to signal that the worker dump succeeded.</span>
+<span class="sd">        worker_id: Identifier of the xdist worker</span>
+<span class="sd">        session_items: Harvested test items collected on this worker</span>
+<span class="sd">        fixture_store: Fixture store captured on this worker</span>
 <span class="sd">    """</span>
     <span class="c1"># persist session_items and fixture_store in the file system</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">RESULTS_PATH</span> <span class="o">/</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">.pkl"</span><span class="p">),</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>

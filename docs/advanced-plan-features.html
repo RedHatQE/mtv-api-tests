@@ -1227,7 +1227,7 @@ before migration. It raises <code>ValueError</code> for OVA providers and for an
 <p><code>skip_clone: True</code> makes <code>prepared_plan</code> use the existing source VMs instead of cloning them, which is how plan-readiness
 tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
 state during teardown, because these are real, shared VMs rather than disposable clones.</p>
-<p>The CA-certificate field tests (<code>tests/cold/test_ca_crt_migration.py</code>) do <strong>not</strong> use it: their plan config carries no
+<p>The CA-certificate field tests (<code>tests/cold/test_ca_crt_cold_migration.py</code>) do <strong>not</strong> use it: their plan config carries no
 <code>skip_clone</code>, so they follow the normal cloning path like every other cold test.</p>
 <blockquote>
 <p><strong>Warning:</strong> <code>skip_clone</code> is incompatible with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>, <code>preserve_static_ips</code> on

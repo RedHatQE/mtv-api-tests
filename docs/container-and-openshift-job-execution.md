@@ -56,30 +56,18 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 `CLUSTER_PASSWORD` environment variables:
 
 ```python
-def _require_cluster_credential(value: str | None, config_key: str, env_var: str) -> str:
-    if not value:
-        raise ValueError(f"Missing cluster credential: set '{config_key}' in pytest config or {env_var}")
-    return value
-
-
 def get_cluster_client() -> DynamicClient:
-    host = _require_cluster_credential(
-        get_value_from_py_config("cluster_host") or os.environ.get("CLUSTER_HOST"),
-        "cluster_host",
-        "CLUSTER_HOST",
-    )
+    host = get_value_from_py_config("cluster_host")
+    if host is None:
+        host = os.environ.get("CLUSTER_HOST")
 
-    username = _require_cluster_credential(
-        get_value_from_py_config("cluster_username") or os.environ.get("CLUSTER_USERNAME"),
-        "cluster_username",
-        "CLUSTER_USERNAME",
-    )
+    username = get_value_from_py_config("cluster_username")
+    if username is None:
+        username = os.environ.get("CLUSTER_USERNAME")
 
-    password = _require_cluster_credential(
-        get_value_from_py_config("cluster_password") or os.environ.get("CLUSTER_PASSWORD"),
-        "cluster_password",
-        "CLUSTER_PASSWORD",
-    )
+    password = get_value_from_py_config("cluster_password")
+    if password is None:
+        password = os.environ.get("CLUSTER_PASSWORD")
     ...
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
@@ -95,12 +83,6 @@ In practice, every real run needs these values:
 
 `cluster_username` and `cluster_password` can come from the environment instead of the command line.
 That is why the generated `Job` manifest wires `CLUSTER_HOST`, `CLUSTER_USERNAME`, `CLUSTER_PASSWORD`, and `CLUSTER_VERIFY_SSL` in from a `Secret`.
-
-If any of the three values is missing — from neither `py_config` nor the environment, or set to an empty string — the run stops
-before any client is built, with `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or
-CLUSTER_USERNAME")` naming the value to supply. That fail-fast check is `_require_cluster_credential()`; a later
-`ValueError("Failed to get client for cluster")` means the credentials were present but the transport itself could not build a
-client.
 
 > **Warning:** The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
 > `Job`, you still need to provide `cluster_host`, `cluster_username`, and `cluster_password`.

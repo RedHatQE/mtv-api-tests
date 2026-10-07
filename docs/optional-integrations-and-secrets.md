@@ -49,7 +49,7 @@ in `.rootcoz/settings.json`.
 From `utilities/pytest_utils.py`:
 
 ```63:84:utilities/pytest_utils.py
-def _setup_ai_analysis(session: pytest.Session) -> None:
+def setup_ai_analysis(session: pytest.Session) -> None:
     """Configure AI analysis for test failure reporting.
 
     Loads environment variables and validates prerequisites. Disables AI analysis
