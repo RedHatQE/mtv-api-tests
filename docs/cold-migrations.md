@@ -104,7 +104,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1615:1625:conftest.py
+```1629:1639:conftest.py
 @pytest.fixture(scope="class")
 def cleanup_migrated_vms(
     request: pytest.FixtureRequest,

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced Plan Features - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
@@ -1227,7 +1227,7 @@ before migration. It raises <code>ValueError</code> for OVA providers and for an
 <p><code>skip_clone: True</code> makes <code>prepared_plan</code> use the existing source VMs instead of cloning them, which is how plan-readiness
 tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
 state during teardown, because these are real, shared VMs rather than disposable clones.</p>
-<p>The CA-certificate field tests (<code>tests/cold/test_ca_crt_cold_migration.py</code>) do <strong>not</strong> use it: their plan config carries no
+<p>The CA-certificate field tests (<code>tests/cold/test_ca_crt_migration.py</code>) do <strong>not</strong> use it: their plan config carries no
 <code>skip_clone</code>, so they follow the normal cloning path like every other cold test.</p>
 <blockquote>
 <p><strong>Warning:</strong> <code>skip_clone</code> is incompatible with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>, <code>preserve_static_ips</code> on
@@ -1432,14 +1432,14 @@ because a prime PVC may already be gone by the time a PostHook failure is raised
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js?v=5a6efa51d2"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
 
-    <script src="assets/search.js?v=5a6efa51d2"></script>
-    <script src="assets/copy.js?v=5a6efa51d2"></script>
-    <script src="assets/callouts.js?v=5a6efa51d2"></script>
-    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
-    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
-    <script src="assets/github.js?v=5a6efa51d2"></script>
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');

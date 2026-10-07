@@ -349,7 +349,7 @@ configured command on the migrated VM and asserts on the output:
 The warm copy-offload scenario adds one more validation step after the migration. In `tests/copyoffload/test_copyoffload_migration.py`, `test_check_xcopy_used` runs first to
 prove the accelerated transfer path was used, and `test_check_vms` then runs the standard verification followed by an explicit disk-count check:
 
-```4554:4570:tests/copyoffload/test_copyoffload_migration.py
+```4600:4618:tests/copyoffload/test_copyoffload_migration.py
 def test_check_xcopy_used(
     self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
 ) -> None:
@@ -358,7 +358,9 @@ def test_check_xcopy_used(
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         target_namespace (str): Namespace where populate pods exist.
-        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs. Its
+            values are the heterogeneous OCP resources recorded by
+            `create_and_store_resource()`, so `Any` is the only accurate annotation.
     """
     verify_xcopy_used(
         ocp_admin_client=ocp_admin_client,

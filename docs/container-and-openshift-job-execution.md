@@ -84,6 +84,10 @@ In practice, every real run needs these values:
 `cluster_username` and `cluster_password` can come from the environment instead of the command line.
 That is why the generated `Job` manifest wires `CLUSTER_HOST`, `CLUSTER_USERNAME`, `CLUSTER_PASSWORD`, and `CLUSTER_VERIFY_SSL` in from a `Secret`.
 
+If any of the three values is missing — from neither `py_config` nor the environment — `None` reaches `get_client()`, which fails to build a
+client and raises `ValueError("Failed to get client for cluster")`. Treat that message as a configuration error: it names no credential, so check
+`cluster_host`, `cluster_username`, and `cluster_password` in your `pytest_config` arguments and the three environment variables before retrying.
+
 > **Warning:** The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
 > `Job`, you still need to provide `cluster_host`, `cluster_username`, and `cluster_password`.
 

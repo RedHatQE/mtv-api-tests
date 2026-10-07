@@ -201,7 +201,7 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 
 ### `utilities/pytest_utils.py`
 
-`is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`),
+`is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `_setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`; internal, called only from `conftest.py`),
 `collect_created_resources()` (must-gather on failure), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
 
 ### `utilities/must_gather.py`

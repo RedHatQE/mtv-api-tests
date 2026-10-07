@@ -66,12 +66,12 @@ from utilities.naming import (
     sanitize_test_name_for_path,
 )
 from utilities.pytest_utils import (
+    _setup_ai_analysis,
     collect_created_resources,
     enrich_junit_xml,
     is_dry_run,
     prepare_base_path,
     session_teardown,
-    setup_ai_analysis,
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
 from utilities.ssh_utils import SSHConnectionManager
@@ -193,7 +193,7 @@ def pytest_sessionstart(session):
     )
 
     if session.config.getoption("analyze_with_ai"):
-        setup_ai_analysis(session)
+        _setup_ai_analysis(session)
 
 
 def pytest_fixture_setup(fixturedef, request):
@@ -401,7 +401,21 @@ def pytest_harvest_xdist_init():
     return True
 
 
-def pytest_harvest_xdist_worker_dump(worker_id, session_items, fixture_store):
+def pytest_harvest_xdist_worker_dump(worker_id: str, session_items: list[Any], fixture_store: dict[str, Any]) -> bool:
+    """Persist this xdist worker's harvested results so the controller can merge them.
+
+    Args:
+        worker_id (str): Identifier of the xdist worker.
+        session_items (list[Any]): Harvested test items collected on this worker. Items are
+            pytest-harvest's own node objects, shaped by the library, so `Any` is the only
+            accurate annotation.
+        fixture_store (dict[str, Any]): Fixture store captured on this worker. Its values are the
+            heterogeneous OCP resources recorded by `create_and_store_resource()`, so `Any` is
+            the only accurate annotation.
+
+    Returns:
+        bool: True to signal that the worker dump succeeded.
+    """
     # persist session_items and fixture_store in the file system
     with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:
         try:

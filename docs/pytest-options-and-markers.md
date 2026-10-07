@@ -428,13 +428,20 @@ def pytest_harvest_xdist_worker_dump(
     worker_id: str,
     session_items: list[Any],
     fixture_store: dict[str, Any],
-) -> None:
+) -> bool:
     """Persist this xdist worker's harvested results so the controller can merge them.
 
     Args:
-        worker_id: Identifier of the xdist worker
-        session_items: Harvested test items collected on this worker
-        fixture_store: Fixture store captured on this worker
+        worker_id (str): Identifier of the xdist worker.
+        session_items (list[Any]): Harvested test items collected on this worker. Items are
+            pytest-harvest's own node objects, shaped by the library, so `Any` is the only
+            accurate annotation.
+        fixture_store (dict[str, Any]): Fixture store captured on this worker. Its values are the
+            heterogeneous OCP resources recorded by `create_and_store_resource()`, so `Any` is
+            the only accurate annotation.
+
+    Returns:
+        bool: True to signal that the worker dump succeeded.
     """
     # persist session_items and fixture_store in the file system
     with open(RESULTS_PATH / (f"{worker_id}.pkl"), "wb") as f:

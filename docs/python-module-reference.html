@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Python Module Reference - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
@@ -605,7 +605,7 @@ volume on the source through the VMware Guest Operations API before migration, a
 <code>wait_for_cloned_vms_in_forklift_inventory()</code>, <code>validate_source_vms_exist()</code>.</p>
 <h2 id="teardown-and-diagnostics">Teardown and Diagnostics</h2>
 <h3 id="utilitiespytest_utilspy"><code>utilities/pytest_utils.py</code></h3>
-<p><code>is_dry_run()</code> (<code>--collect-only</code> / <code>--setup-plan</code>), <code>prepare_base_path()</code>, <code>setup_ai_analysis()</code> (rootcoz-backed failure analysis; disabled without <code>ROOTCOZ_SERVER_URL</code>),
+<p><code>is_dry_run()</code> (<code>--collect-only</code> / <code>--setup-plan</code>), <code>prepare_base_path()</code>, <code>_setup_ai_analysis()</code> (rootcoz-backed failure analysis; disabled without <code>ROOTCOZ_SERVER_URL</code>; internal, called only from <code>conftest.py</code>),
 <code>collect_created_resources()</code> (must-gather on failure), <code>teardown_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code>.</p>
 <h3 id="utilitiesmust_gatherpy"><code>utilities/must_gather.py</code></h3>
 <p><code>run_must_gather()</code> collects targeted MTV must-gather bundles when a test fails.</p>
@@ -869,14 +869,14 @@ helpers.</p>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js?v=5a6efa51d2"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
 
-    <script src="assets/search.js?v=5a6efa51d2"></script>
-    <script src="assets/copy.js?v=5a6efa51d2"></script>
-    <script src="assets/callouts.js?v=5a6efa51d2"></script>
-    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
-    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
-    <script src="assets/github.js?v=5a6efa51d2"></script>
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');

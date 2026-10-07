@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Container And OpenShift Job Execution - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css?v=5a6efa51d2">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
@@ -373,6 +373,9 @@ A builder stage installs the toolchain and runs <code>uv sync --locked</code>, a
 </ul>
 <p><code>cluster_username</code> and <code>cluster_password</code> can come from the environment instead of the command line.
 That is why the generated <code>Job</code> manifest wires <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, <code>CLUSTER_PASSWORD</code>, and <code>CLUSTER_VERIFY_SSL</code> in from a <code>Secret</code>.</p>
+<p>If any of the three values is missing — from neither <code>py_config</code> nor the environment — <code>None</code> reaches <code>get_client()</code>, which fails to build a
+client and raises <code>ValueError("Failed to get client for cluster")</code>. Treat that message as a configuration error: it names no credential, so check
+<code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code> in your <code>pytest_config</code> arguments and the three environment variables before retrying.</p>
 <blockquote>
 <p><strong>Warning:</strong> The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
 <code>Job</code>, you still need to provide <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>.</p>
@@ -725,14 +728,14 @@ oc<span class="w"> </span>cp<span class="w"> </span>mtv-tests-a1b2c3/<span class
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js?v=5a6efa51d2"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
 
-    <script src="assets/search.js?v=5a6efa51d2"></script>
-    <script src="assets/copy.js?v=5a6efa51d2"></script>
-    <script src="assets/callouts.js?v=5a6efa51d2"></script>
-    <script src="assets/scrollspy.js?v=5a6efa51d2"></script>
-    <script src="assets/codelabels.js?v=5a6efa51d2"></script>
-    <script src="assets/github.js?v=5a6efa51d2"></script>
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
