@@ -57,20 +57,16 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 
 ```python
 def get_cluster_client() -> DynamicClient:
-    host = get_value_from_py_config("cluster_host")
-    if host is None:
-        host = os.environ.get("CLUSTER_HOST")
-
-    username = get_value_from_py_config("cluster_username")
-    if username is None:
-        username = os.environ.get("CLUSTER_USERNAME")
-
-    password = get_value_from_py_config("cluster_password")
-    if password is None:
-        password = os.environ.get("CLUSTER_PASSWORD")
+    host = _resolve_cluster_credential("cluster_host")
+    username = _resolve_cluster_credential("cluster_username")
+    password = _resolve_cluster_credential("cluster_password")
     ...
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
+
+Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. A missing, empty, or
+whitespace-only value fails fast with `ValueError` naming the variable, for example `Missing cluster credential: set 'cluster_username' in pytest config or
+CLUSTER_USERNAME`.
 
 In practice, every real run needs these values:
 

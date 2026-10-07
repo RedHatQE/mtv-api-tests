@@ -3567,20 +3567,16 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 
 ```python
     def get_cluster_client() -> DynamicClient:
-        host = get_value_from_py_config("cluster_host")
-        if host is None:
-            host = os.environ.get("CLUSTER_HOST")
-
-        username = get_value_from_py_config("cluster_username")
-        if username is None:
-            username = os.environ.get("CLUSTER_USERNAME")
-
-        password = get_value_from_py_config("cluster_password")
-        if password is None:
-            password = os.environ.get("CLUSTER_PASSWORD")
+        host = _resolve_cluster_credential("cluster_host")
+        username = _resolve_cluster_credential("cluster_username")
+        password = _resolve_cluster_credential("cluster_password")
         ...
         client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
+
+Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. A missing, empty, or
+whitespace-only value fails fast with `ValueError` naming the variable, for example `Missing cluster credential: set 'cluster_username' in pytest config or
+CLUSTER_USERNAME`.
 
 In practice, every real run needs these values:
 
@@ -3995,9 +3991,9 @@ Cluster credentials resolve from the environment, in this order: the `--tc` valu
 precedence over `insecure_verify_skip` for OpenShift API SSL verification, and its semantics are inverted: `CLUSTER_VERIFY_SSL=true` means `insecure_verify_skip=False`.
 
 > **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. When neither `--tc` nor the environment supplies a value,
-> `get_cluster_client()` resolves it to `None` and `get_client()` cannot build a client, so the function raises
-> `ValueError("Failed to get client for cluster")`. The run stops as the `ocp_admin_client` fixture requests the client, before any migration work. Supply all three
-> explicitly. Adding presence checks that name the missing variable is tracked in RedHatQE/mtv-api-tests#712.
+> `get_cluster_client()` fails fast while resolving the credentials: each value is checked after resolution and a missing, empty, or whitespace-only credential raises
+> `ValueError` naming it, for example `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")`. The run stops as the
+> `ocp_admin_client` fixture requests the client, before any migration work, and the message says which variable to set.
 
 The repository's OpenShift Job template in `README.md` uses `--tc=` overrides like this:
 
@@ -7590,19 +7586,12 @@ The three remote warm plan configs additionally disable preflight Deep Inspectio
 Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from `cluster_host`, `cluster_username`, and `cluster_password`, each
 falling back to the matching `CLUSTER_*` environment variable:
 
-```811:832:utilities/utils.py
-    host = get_value_from_py_config("cluster_host")
-    if host is None:
-        host = os.environ.get("CLUSTER_HOST")
-
-    username = get_value_from_py_config("cluster_username")
-    if username is None:
-        username = os.environ.get("CLUSTER_USERNAME")
-
-    password = get_value_from_py_config("cluster_password")
-    if password is None:
-        password = os.environ.get("CLUSTER_PASSWORD")
-    verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
+```813:849:utilities/utils.py
+    def get_cluster_client() -> DynamicClient:
+        host = _resolve_cluster_credential("cluster_host")
+        username = _resolve_cluster_credential("cluster_username")
+        password = _resolve_cluster_credential("cluster_password")
+        verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
     if verify_ssl_env is not None:
         insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
     else:
@@ -7610,8 +7599,11 @@ falling back to the matching `CLUSTER_*` environment variable:
         if insecure_verify_skip is None:
             insecure_verify_skip = True
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
-    return client
+        return client
 ```
+
+Each credential goes through `_resolve_cluster_credential()`, which reads the `--tc` value first, falls back to the matching `CLUSTER_*` environment variable, and rejects a
+missing, empty, or whitespace-only value with `ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming the variable.
 
 Treat the inputs like this:
 
@@ -10326,7 +10318,7 @@ problem is about `NetworkMap`, `StorageMap`, or a VM ID inside a `Plan`, start w
 6. After **every** clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (`conftest.py:1367`).
 7. `get_network_migration_map()` and `get_storage_migration_map()` turn inventory data into `NetworkMap` and `StorageMap` CR payloads (`utilities/mtv_migration.py:687`,
    `utilities/mtv_migration.py:548`).
-8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:894`).
+8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:911`).
 
 The synchronization step is explicitly two-phase in `conftest.py`, because waiting per-VM inside the clone loop caused inventory sync failures on the second and later VMs:
 

@@ -387,9 +387,9 @@ keep provider definitions in <code>.providers.json</code>, and pass environment-
 precedence over <code>insecure_verify_skip</code> for OpenShift API SSL verification, and its semantics are inverted: <code>CLUSTER_VERIFY_SSL=true</code> means <code>insecure_verify_skip=False</code>.</p>
 <blockquote>
 <p><strong>Note:</strong> <code>cluster_host</code>, <code>cluster_username</code> and <code>cluster_password</code> have <strong>no built-in default</strong>. When neither <code>--tc</code> nor the environment supplies a value,
-<code>get_cluster_client()</code> resolves it to <code>None</code> and <code>get_client()</code> cannot build a client, so the function raises
-<code>ValueError("Failed to get client for cluster")</code>. The run stops as the <code>ocp_admin_client</code> fixture requests the client, before any migration work. Supply all three
-explicitly. Adding presence checks that name the missing variable is tracked in RedHatQE/mtv-api-tests#712.</p>
+<code>get_cluster_client()</code> fails fast while resolving the credentials: each value is checked after resolution and a missing, empty, or whitespace-only credential raises
+<code>ValueError</code> naming it, for example <code>ValueError("Missing cluster credential: set 'cluster_username' in pytest config or CLUSTER_USERNAME")</code>. The run stops as the
+<code>ocp_admin_client</code> fixture requests the client, before any migration work, and the message says which variable to set.</p>
 </blockquote>
 <p>The repository's OpenShift Job template in <code>README.md</code> uses <code>--tc=</code> overrides like this:</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">"[TEST_MARKERS]"</span><span class="w"> </span><span class="se">\</span>
