@@ -346,18 +346,30 @@ A builder stage installs the toolchain and runs <code>uv sync --locked</code>, a
 </blockquote>
 <p>The suite reads provider definitions from <code>.providers.json</code> and builds the OpenShift client from pytest config values, falling back to <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and
 <code>CLUSTER_PASSWORD</code> environment variables:</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">host</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">host</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_HOST"</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_require_cluster_credential</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">config_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">env_var</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Missing cluster credential: set '</span><span class="si">{</span><span class="n">config_key</span><span class="si">}</span><span class="s2">' in pytest config or </span><span class="si">{</span><span class="n">env_var</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span>
 
-    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">username</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_USERNAME"</span><span class="p">)</span>
 
-    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">password</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">password</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_PASSWORD"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">_require_cluster_credential</span><span class="p">(</span>
+        <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_HOST"</span><span class="p">),</span>
+        <span class="s2">"cluster_host"</span><span class="p">,</span>
+        <span class="s2">"CLUSTER_HOST"</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">username</span> <span class="o">=</span> <span class="n">_require_cluster_credential</span><span class="p">(</span>
+        <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_USERNAME"</span><span class="p">),</span>
+        <span class="s2">"cluster_username"</span><span class="p">,</span>
+        <span class="s2">"CLUSTER_USERNAME"</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">password</span> <span class="o">=</span> <span class="n">_require_cluster_credential</span><span class="p">(</span>
+        <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_PASSWORD"</span><span class="p">),</span>
+        <span class="s2">"cluster_password"</span><span class="p">,</span>
+        <span class="s2">"CLUSTER_PASSWORD"</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="o">...</span>
     <span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
 </code></pre></div>
@@ -373,9 +385,11 @@ A builder stage installs the toolchain and runs <code>uv sync --locked</code>, a
 </ul>
 <p><code>cluster_username</code> and <code>cluster_password</code> can come from the environment instead of the command line.
 That is why the generated <code>Job</code> manifest wires <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, <code>CLUSTER_PASSWORD</code>, and <code>CLUSTER_VERIFY_SSL</code> in from a <code>Secret</code>.</p>
-<p>If any of the three values is missing — from neither <code>py_config</code> nor the environment — <code>None</code> reaches <code>get_client()</code>, which fails to build a
-client and raises <code>ValueError("Failed to get client for cluster")</code>. Treat that message as a configuration error: it names no credential, so check
-<code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code> in your <code>pytest_config</code> arguments and the three environment variables before retrying.</p>
+<p>If any of the three values is missing — from neither <code>py_config</code> nor the environment, or set to an empty string — the run stops
+before any client is built, with <code>ValueError("Missing cluster credential: set 'cluster_username' in pytest config or
+CLUSTER_USERNAME")</code> naming the value to supply. That fail-fast check is <code>_require_cluster_credential()</code>; a later
+<code>ValueError("Failed to get client for cluster")</code> means the credentials were present but the transport itself could not build a
+client.</p>
 <blockquote>
 <p><strong>Warning:</strong> The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
 <code>Job</code>, you still need to provide <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>.</p>
