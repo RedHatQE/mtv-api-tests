@@ -589,7 +589,7 @@ plan names are templates) and when combined with <code>disable_drs_for_vms</code
 </tbody>
 </table></div>
 <blockquote>
-<p><strong>Note:</strong> <code>add_nic</code> skips the whole class on non-vSphere providers and raises <code>ValueError</code> when <code>add_nic_start_connected</code>
+<p><strong>Note:</strong> <code>add_nic</code> is skipped at collection time on non-vSphere providers (see <a href="cold-migrations.md">cold-migrations.md</a>) and raises <code>ValueError</code> when <code>add_nic_start_connected</code>
 is missing or is not a bool. The MAC of the added NIC is written back into the VM dict as <code>connected_nic_mac</code> or
 <code>disconnected_nic_mac</code> and is checked after migration.</p>
 </blockquote>
@@ -1323,7 +1323,7 @@ because a prime PVC may already be gone by the time a PostHook failure is raised
 </tr>
 <tr>
 <td><code>add_nic: True</code> on a non-vSphere provider</td>
-<td><code>pytest.skip</code></td>
+<td>collection-time skip (see <a href="cold-migrations.md">cold-migrations.md</a>)</td>
 </tr>
 <tr>
 <td>Shared-disk config on a provider without <code>relink_shared_disks()</code></td>

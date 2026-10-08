@@ -456,6 +456,20 @@ A separate branch of the same hook enforces that:</p>
                         <span class="n">item</span><span class="o">.</span><span class="n">add_marker</span><span class="p">(</span><span class="n">vsphere_only_skip</span><span class="p">)</span>
 </code></pre></div>
 
+<p>A third capability gate of the same hook covers <code>add_nic</code>, which is a plan config flag rather than a marker, so it resolves
+each item's parametrized plan config:</p>
+<div class="highlight"><pre><span></span><code>            <span class="c1"># Skip tests whose plan config requests `add_nic` on a non-vSphere provider.</span>
+            <span class="c1"># `add_nic` is a plan config flag, not a marker, so resolve each item's config.</span>
+            <span class="k">if</span> <span class="n">source_provider_type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span>
+                <span class="n">add_nic_skip</span> <span class="o">=</span> <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span>
+                    <span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"add_nic is vSphere-only; skipping for provider '</span><span class="si">{</span><span class="n">source_provider_type</span><span class="si">}</span><span class="s2">'"</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+                    <span class="n">test_config</span> <span class="o">=</span> <span class="n">_resolve_item_plan_config</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">)</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">test_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"virtual_machines"</span><span class="p">,</span> <span class="p">[])):</span>
+                        <span class="n">item</span><span class="o">.</span><span class="n">add_marker</span><span class="p">(</span><span class="n">add_nic_skip</span><span class="p">)</span>
+</code></pre></div>
+
 <h2 id="migration-modes">Migration Modes</h2>
 <p>This suite exercises three practical migration modes:</p>
 <ul>

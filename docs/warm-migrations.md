@@ -108,7 +108,7 @@ ResourceEditor(patches={forklift_controller: {"spec": {"controller_precopy_inter
 )
 ```
 
-The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:627`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
+The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:663`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
 ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.
 
 What these values do:

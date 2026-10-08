@@ -172,8 +172,8 @@ field name (`tests/cold/conftest.py:18`, `tests/cold/test_ca_crt_migration.py:76
 
 | Case | How it is created |
 | --- | --- |
-| Local destination | `kind_dict` `Provider` `${session_uuid}-local-ocp-provider`, `spec.type: openshift`, empty `spec.secret` and `spec.url` (`conftest.py:675`) |
-| Remote destination | `Secret` with `token` and `insecureSkipVerify`, then `Provider` `${session_uuid}-destination-ocp-provider` of type `openshift` (`conftest.py:950`) |
+| Local destination | `kind_dict` `Provider` `${session_uuid}-local-ocp-provider`, `spec.type: openshift`, empty `spec.secret` and `spec.url` (`conftest.py:711`) |
+| Remote destination | `Secret` with `token` and `insecureSkipVerify`, then `Provider` `${session_uuid}-destination-ocp-provider` of type `openshift` (`conftest.py:986`) |
 
 ### Provider readiness rules
 
