@@ -905,6 +905,16 @@ tests_params: dict = {
         "virtual_machines": [{"name": "mtv-test-di-concern-bypath-fstab", "source_vm_power": "on"}],
         "warm_migration": True,
     },
+    "test_resume_conversion_warm": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+    },
 }
 
 for _dir in dir():

@@ -913,6 +913,16 @@ class TestNameHere:
   `xfs_info` on the migrated VM to verify XFS v4 filesystem compatibility (validates `crc=0` in output).
   Uses `check_vm_command_output()` from `utilities/post_migration.py`.
   Requires `xfs_compatibility: True` in plan config and `xfs_check` config dict.
+- **7-step resume conversion pattern**: storagemap -> networkmap -> plan -> migrate (expect failure) ->
+  verify_pvcs_preserved -> resume_migration -> check_vms
+  `test_migrate_vms` calls `start_migration_and_kill_conversion()` from `utilities/resume_conversion.py`,
+  which waits for the `DiskTransfer` pipeline step to complete, records PVC UIDs, then waits for the
+  `forklift.app=virt-v2v` conversion pod and kills it. The test verifies `MigrationPlanExecError` with
+  `match="ImageConversion"`. `test_verify_pvcs_preserved` compares current PVC UIDs against the
+  pre-failure baseline. `test_resume_migration` creates a Migration CR with `resumeConversion: true`
+  via `execute_resume_migration()` (Forklift handles failed pod cleanup), verifies PVC UIDs are
+  unchanged, and calls `verify_resume_skipped_disk_copy()` to confirm no DiskTransfer re-execution.
+  Requires `warm_migration: True` in plan config. vSphere only (warm conversion is a separate phase only in vSphere).
 
 **Test method naming:** Base tests: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`,
 `test_migrate_vms`, `test_check_vms`. Shared-disk Linux tests: same through `test_migrate_vms`, then
@@ -925,9 +935,10 @@ throttling tests: same through `test_migrate_vms`, then `test_verify_vm_inflight
 through `test_migrate_vms`, then `test_verify_dedicated_migration_host`, `test_check_xcopy_used`, `test_check_vms`.
 LUKS tests: same through `test_migrate_vms`, then
 `test_verify_luks_encryption`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
-`test_verify_xfs_version`, `test_check_vms`. Plan-archive PVC cleanup tests: same through
-`test_migrate_vms` (expects `MigrationPlanExecError`), then `test_archive_and_delete_plan`,
-`test_verify_pvc_cleanup`.
+`test_verify_xfs_version`, `test_check_vms`. Resume conversion tests: `test_migrate_vms` (expects
+ImageConversion failure), then `test_verify_pvcs_preserved`, `test_resume_migration`, `test_check_vms`.
+Plan-archive PVC cleanup tests: same through `test_migrate_vms` (expects `MigrationPlanExecError`),
+then `test_archive_and_delete_plan`, `test_verify_pvc_cleanup`.
 
 **Fixture parameters:** Each test method requests only the fixtures it needs. The example shows typical patterns.
 
@@ -948,8 +959,8 @@ tests_params: dict = {
 2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
 3. Add pytest markers at class level (tier0, tier1, warm, remote, copyoffload)
 4. Implement the 5 base test methods. Some features need extra validation steps: see **Key Patterns** for the
-   6-step shared-disk (Linux), 7-step shared-disk (Windows), copy-offload, and LUKS patterns, or the 7-step
-   copy-offload throttling and copy-offload dedicated-host patterns
+   6-step shared-disk (Linux), 7-step shared-disk (Windows), copy-offload, LUKS, and resume conversion
+   patterns, or the 7-step copy-offload throttling and copy-offload dedicated-host patterns
 
 **VM Configuration Options:**
 
