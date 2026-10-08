@@ -289,6 +289,19 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | `hyperv` | Hyper-V provider-specific tests | Tests specific to Hyper-V provider |
 | `upgrade` | Migration across MTV operator upgrades | Validating upgrade compatibility |
 
+### Warm Migration Sanity
+
+The existing `TestSanityWarmMtvMigration` also verifies qcow2 overlay lifecycle logs for vSphere
+sources (MTV-5644) after migration completes, using the same VM, Plan, and conversion pods.
+It checks in-place conversion, matching created/committed overlay filenames, and no discarded
+overlays before the usual migrated-VM checks. Conversion logs are captured during migration,
+alongside Deep Inspection capture, and retained by migration, Plan VM ID, and conversion pod UID
+for verification after success. A complete capture requires logs read after the conversion container terminates;
+after Plan success, the test waits up to 60 seconds for Kubernetes to report termination and
+capture those logs. Missing or incomplete captures and missing lifecycle messages fail the sanity
+test. The capture must include one completed conversion pod for each configured Plan VM ID. Pods
+that disappear before complete capture can still prevent verification. RHV runs do not perform this check.
+
 ### Copy-Offload Sanity Tests
 
 The `copyoffload_sanity` marker selects a curated subset of copy-offload tests that cover the core

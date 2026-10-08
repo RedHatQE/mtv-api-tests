@@ -913,6 +913,18 @@ class TestNameHere:
   `xfs_info` on the migrated VM to verify XFS v4 filesystem compatibility (validates `crc=0` in output).
   Uses `check_vm_command_output()` from `utilities/post_migration.py`.
   Requires `xfs_compatibility: True` in plan config and `xfs_check` config dict.
+- **Warm sanity overlay verification (MTV-5644)**: `TestSanityWarmMtvMigration` keeps the 5-step
+  pattern. After `execute_migration()` completes, its `test_migrate_vms` calls
+  `verify_overlay_lifecycle()` from `utilities/overlay.py` only for vSphere sources, reusing the
+  same Plan and conversion pods. Capture conversion logs during migration with `on_status_poll`,
+  preserving the DI callback, and scope cached evidence by migration, Plan VM ID, and conversion pod UID. Read logs after
+  conversion container termination before marking a capture complete. After Plan success, wait up
+  to 60 seconds for Kubernetes to report termination and capture complete logs; missing or incomplete
+  evidence, including a missing configured Plan VM ID, must fail verification even if the migration
+  succeeds. The helper checks in-place mode,
+  nonempty matching sets of created and committed overlay filenames, and no discarded overlays in logs. It does not compare
+  overlay counts against disk inventory or inspect files on disk. No separate overlay test,
+  VM configuration, or marker is needed.
 
 **Test method naming:** Base tests: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`,
 `test_migrate_vms`, `test_check_vms`. Shared-disk Linux tests: same through `test_migrate_vms`, then
