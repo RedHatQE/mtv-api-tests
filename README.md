@@ -1031,7 +1031,10 @@ Known operational class-plan collection failures remain pending for the session-
 Standalone tests attempt collection on each failing phase until one succeeds, but failed attempts are not queued for session-finish retry.
 Unexpected standalone setup/call collector errors are retained on the item until pytest fixture finalization.
 Session-flush errors wait for pytest session hooks, resource inventory writing and configured cleanup attempts.
-Cleanup failures can stop later cleanup steps and propagate with earlier errors chained. See
+Invalid image metadata and other configuration/programming errors propagate instead of returning `False`. A pending class-plan gather
+remains queued and may raise again when retried at a later boundary or session finish.
+Inventory, configured teardown, temporary-directory removal, summary and enabled AI enrichment are attempted independently;
+cleanup errors propagate with earlier errors chained. See
 [diagnostic collection](docs/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
 
 ```bash

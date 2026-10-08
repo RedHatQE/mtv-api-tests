@@ -229,6 +229,7 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
             client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
         )
 
+        # Invalid image metadata is configuration, not a retryable resource failure.
         must_gather_image = _resolve_must_gather_image(
             ocp_admin_client=ocp_admin_client,
             mtv_subs=mtv_subs,
@@ -262,7 +263,6 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         CalledProcessError,
         TimeoutExpired,
         OSError,
-        MustGatherImageError,
         ClientWithBasicAuthError,
         DynamicApiError,
         ResourceNotFoundError,

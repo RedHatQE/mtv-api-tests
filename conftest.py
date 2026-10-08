@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 import filelock
 import pytest
-from pluggy import Result
 from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
 
 if TYPE_CHECKING:
@@ -237,8 +236,8 @@ def pytest_runtest_call(item):
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='CALL')}")
 
 
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> Generator[None, Result[object], None]:
+@pytest.hookimpl(tryfirst=True, wrapper=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> Generator[None, object, object]:
     """Gather at a class-plan boundary, always allowing pytest's fixture finalization.
 
     Args:
@@ -253,8 +252,8 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
             collect_class_must_gather(item, nextitem)
     finally:
-        outcome = yield
-        outcome.get_result()
+        result = yield
+    return result
 
 
 def pytest_report_teststatus(report, config):
@@ -276,8 +275,8 @@ def pytest_report_teststatus(report, config):
             BASIC_LOGGER.info(f"\nTEST: {test_name} STATUS: \033[0;31mFAILED\033[0m")
 
 
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[None, Result[object], None]:
+@pytest.hookimpl(tryfirst=True, wrapper=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[None, object, object]:
     """Flush diagnostics and finish cleanup without suppressing collector programming errors.
 
     Args:
@@ -285,8 +284,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
         exitstatus (int): Pytest exit status before session cleanup.
     """
     if is_dry_run(session.config):
-        yield
-        return
+        return (yield)
 
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION FINISH')}")
 
@@ -294,50 +292,46 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
 
     _data_collector_path = Path(session.config.getoption("data_collector_path"))
 
-    collector_error: Exception | None = None
     try:
         if not session.config.getoption("skip_data_collector"):
             flush_pending_class_must_gathers(session)
-    except Exception as exp:
-        collector_error = exp
-
-    outcome = yield
-    try:
-        if collector_error is not None:
-            raise collector_error.with_traceback(collector_error.__traceback__)
     finally:
         try:
-            outcome.get_result()
+            result = yield
         finally:
-            # Keep cleanup inside finally so neither collector nor session-hook errors bypass it.
-            if not session.config.getoption("skip_data_collector"):
-                collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
-
-            if session.config.getoption("skip_teardown"):
-                LOGGER.warning("User requested to skip teardown of resources")
-
-            else:
+            # Each independent action runs even if an earlier action raises; errors stay chained.
+            try:
+                if not session.config.getoption("skip_data_collector"):
+                    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
+            finally:
                 try:
-                    session_teardown(session_store=_session_store)
-                except Exception:
-                    LOGGER.exception("Resources remain after session teardown")
-                    if not session.config.getoption("skip_data_collector"):
-                        run_must_gather(data_collector_path=_data_collector_path)
-                    raise
-
-            shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
-            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-            reporter.summary_stats()
-
-            if session.config.getoption("analyze_with_ai"):
-                if exitstatus == 0:
-                    LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
-
-                else:
+                    if session.config.getoption("skip_teardown"):
+                        LOGGER.warning("User requested to skip teardown of resources")
+                    else:
+                        try:
+                            session_teardown(session_store=_session_store)
+                        except Exception:
+                            LOGGER.exception("Resources remain after session teardown")
+                            if not session.config.getoption("skip_data_collector"):
+                                run_must_gather(data_collector_path=_data_collector_path)
+                            raise
+                finally:
                     try:
-                        enrich_junit_xml(session)
-                    except Exception:
-                        LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+                        shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
+                    finally:
+                        try:
+                            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+                            reporter.summary_stats()
+                        finally:
+                            if session.config.getoption("analyze_with_ai"):
+                                if exitstatus == 0:
+                                    LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
+                                else:
+                                    try:
+                                        enrich_junit_xml(session)
+                                    except Exception:
+                                        LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+    return result
 
 
 @pytest.hookimpl(tryfirst=True)

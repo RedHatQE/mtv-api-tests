@@ -388,7 +388,7 @@ search on.</p>
         <span class="k">raise</span>
 </code></pre></div>
 
-<p>The session-finish wrapper retains unexpected pending-gather flush errors until pytest's session hooks finish. It then attempts the inventory write and configured teardown inside nested <code>finally</code> blocks before propagating the collector error. Session-hook and cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup: an escaping inventory or cleanup error can stop later steps. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.</p>
+<p>The modern <code>wrapper=True</code> session-finish hook yields to pytest's session hooks in <code>finally</code>, even when a pending-gather flush raises. Independent <code>finally</code> blocks then attempt the inventory write, configured teardown, temporary-directory removal, summary and enabled AI enrichment before errors propagate. Later session-hook or cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.</p>
 <p>The session teardown in <code>utilities/pytest_utils.py</code> starts by cancelling active migrations and archiving plans:</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">session_teardown_resources</span> <span class="o">:=</span> <span class="n">session_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"teardown"</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">migration_name</span> <span class="ow">in</span> <span class="n">session_teardown_resources</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Migration</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[]):</span>
@@ -439,7 +439,7 @@ keyed off the tracked inventory, so a resource you never registered is never cle
 </blockquote>
 <p>If the data collector is enabled and teardown hits a problem, the session then runs MTV <code>must-gather</code> to capture diagnostics in the same collector path.</p>
 <blockquote>
-<p><strong>Warning:</strong> <code>pytest_sessionfinish()</code> logs teardown failures, attempts a full <code>must-gather</code> when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. A teardown failure can prevent later temporary-directory removal, the extra summary and AI enrichment. Check session errors as well as individual test results.</p>
+<p><strong>Warning:</strong> <code>pytest_sessionfinish()</code> logs teardown failures, attempts a full <code>must-gather</code> when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. Independent <code>finally</code> blocks still attempt temporary-directory removal, the extra summary and enabled AI enrichment before the error propagates. Check session errors as well as individual test results.</p>
 </blockquote>
 <h2 id="debugging-with-skip-teardown">Debugging With <code>--skip-teardown</code></h2>
 <p>The user-facing flag lives in <code>conftest.py</code>:</p>

@@ -610,10 +610,10 @@ volume on the source through the VMware Guest Operations API before migration, a
 <code>tests_params</code> entry), <code>teardown_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code>.</p>
 <h3 id="utilitiesmust_gatherpy"><code>utilities/must_gather.py</code></h3>
 <p><code>run_must_gather()</code> runs the full diagnostic collection and <code>run_plan_must_gather()</code> the plan-targeted one; both report whether they succeeded and
-share image resolution. Missing image metadata and the wrapper's specific resource API discovery failure return <code>False</code>; unrelated programming errors propagate.
+share image resolution. Missing resources and the wrapper's specific resource API discovery failure return <code>False</code>; missing or invalid image metadata and other configuration/programming errors propagate.
 Standalone setup/call collector errors stay in the failing item's typed stash until the teardown wrapper yields to fixture finalizers.
 Session-flush errors are retained until pytest session hooks finish, then resource inventory writing and configured cleanup are attempted in nested <code>finally</code> blocks.
-Cleanup errors propagate with earlier errors chained; a cleanup failure can stop later cleanup steps. Inventory write failures are logged by the existing inventory helper.
+Independent <code>finally</code> blocks also attempt temporary-directory removal, the summary and enabled AI enrichment despite inventory or teardown errors. Cleanup errors propagate with earlier errors chained. Both teardown and session-finish use modern <code>wrapper=True</code> hooks so ordinary fixture exceptions do not emit old-style pluggy teardown warnings. Inventory write failures are logged by the existing inventory helper.
 <code>collect_must_gather_for_item()</code>, <code>collect_class_must_gather()</code>, <code>collect_class_teardown_must_gather()</code>, <code>flush_pending_class_must_gathers()</code> and the
 <code>mark_class_pending_must_gather()</code> / <code>class_must_gather_collected()</code> / <code>mark_class_must_gather_collected()</code> documented state API attempt at most one successful gather per failing
 class-plan instance per worker. Operational failures stay pending for retry; artifacts are not guaranteed if retries fail. <code>class_plan_identity()</code> uses the Class collector node ID, class-scoped callspec indices and worker ID, shared across ordinary
