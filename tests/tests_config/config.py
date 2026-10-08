@@ -13,6 +13,7 @@ remote_ocp_cluster: str = ""
 snapshots_interval: int = 2
 mins_before_cutover: int = 5
 plan_wait_timeout: int = 3600
+smb_max_channels: int = 4  # Hyper-V Provider spec.settings.smbMaxChannels when pre_copy_source_disks is enabled
 tests_params: dict = {
     "test_sanity_warm_mtv_migration": {
         "virtual_machines": [
@@ -711,6 +712,7 @@ tests_params: dict = {
             },
         ],
         "warm_migration": False,
+        # "pre_copy_source_disks": True,
         "target_power_state": "on",
         "preserve_static_ips": True,
         "enable_nested_virtualization": False,

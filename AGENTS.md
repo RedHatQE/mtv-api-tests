@@ -669,6 +669,7 @@ copyoffload = plan.get("copyoffload", False)
 xfs_compatibility = plan.get("xfs_compatibility", False)
 skip_clone = plan.get("skip_clone", False)
 per_nic_network_map = plan.get("per_nic_network_map", False)
+pre_copy_source_disks = plan.get("pre_copy_source_disks", False)
 
 # Correct — .get() with validation for external data
 vm_id = provider_data.get("vm_id")
@@ -683,7 +684,7 @@ if not vm_id:
 - Using `False` as default when the key is always present in config
   (exception: `warm_migration`, `copyoffload`, `enable_nested_virtualization`, `xfs_compatibility`,
   `skip_clone`, `per_nic_network_map`, `inventory_timeout`, `clone_to_same_host`, `pin_to_non_dedicated_host`,
-  `preserve_static_ips`, and `disable_drs_for_vms` are optional flags — `.get()` with a documented default is correct.
+  `preserve_static_ips`, `pre_copy_source_disks` and `disable_drs_for_vms` are optional flags — `.get()` with a documented default is correct.
   `pytest_sessionstart` collects required keys with `.get()` purely to report every missing key in one `pytest.exit()` instead of dying on the first `KeyError`;
   that is validation-then-exit, not a silent default.)
 
@@ -983,6 +984,7 @@ tests_params: dict = {
 | `per_nic_network_map`       | No       | True to create per-NIC network mappings (allows duplicate source network entries in NetworkMap)                             |
 | `skip_clone`                | No       | True to skip VM cloning in prepared_plan fixture (for plan-readiness tests that use existing VMs)                           |
 | `rdm_as_lun`                | No       | True to map RDM disks as LUN devices with SCSI bus instead of default virtio                                                |
+| `pre_copy_source_disks`     | No       | True to enable Hyper-V two-phase VHDX→raw transfer; applied only when the source provider is Hyper-V                        |
 
 **Test Verification Configuration:**
 

@@ -213,6 +213,7 @@ def create_plan_resource(
     xfs_compatibility: bool = False,
     run_preflight_inspection: bool | None = None,
     rdm_as_lun: bool | None = None,
+    pre_copy_source_disks: bool = False,
 ) -> Plan:
     """Create MTV Plan CR resource.
 
@@ -253,6 +254,8 @@ def create_plan_resource(
             Defaults to None (forklift default: True).
         rdm_as_lun (bool | None): Whether to map RDM disks as LUN devices with SCSI bus
             on the target VM. Only applies to vSphere source providers. Defaults to None.
+        pre_copy_source_disks (bool): Enable two-phase Hyper-V disk transfer (VHDX to raw via
+            qemu-img, then in-place virt-v2v). Only applies to Hyper-V migrations. Defaults to False.
 
     Returns:
         Plan: The created Plan CR resource.
@@ -324,6 +327,9 @@ def create_plan_resource(
 
     if rdm_as_lun is not None:
         plan_kwargs["rdm_as_lun"] = rdm_as_lun
+
+    if pre_copy_source_disks:
+        plan_kwargs["pre_copy_source_disks"] = pre_copy_source_disks
 
     # Add copy-offload specific parameters if enabled
     if copyoffload:

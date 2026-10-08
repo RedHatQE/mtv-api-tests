@@ -208,6 +208,12 @@ See `.providers.json.example` for complete templates of all supported providers.
 The value is passed through to `spec.settings.managementType` on the MTV Provider CR. If the key is omitted,
 the suite does not set the field and MTV uses standalone.
 
+**Hyper-V two-phase transfer:** `TestColdMigrationComprehensive` passes Plan `pre_copy_source_disks` (spec
+`preCopySourceDisks`) when the source provider is Hyper-V. The Hyper-V Provider CR is created with
+`smb_max_channels` from `tests/tests_config/config.py` (default `4`, spec `settings.smbMaxChannels`) when any
+plan config sets `pre_copy_source_disks: True`. Other Hyper-V tests keep MTV defaults (`preCopySourceDisks`
+unset; `smbMaxChannels` omitted unless that plan flag is present).
+
 **Hyper-V `preserve_static_ips`:** Before creating the Plan, the suite waits until Forklift inventory has
 `guestNetworks` with both IPv4 `ip` and `gateway` (host KVP is not sufficient on cluster). Timeout scales
 with `HYPERV_REFRESH_INTERVAL` (default ~700s).
