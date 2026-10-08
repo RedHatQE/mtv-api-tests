@@ -207,7 +207,8 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 
 ### `utilities/must_gather.py`
 
-`run_must_gather()` collects targeted MTV must-gather bundles when a test fails, and reports whether it succeeded.
+`run_must_gather()` runs the full diagnostic collection and `run_plan_must_gather()` the plan-targeted one; both report whether they succeeded and
+share image resolution.
 `collect_must_gather_for_item()`, `collect_class_must_gather()`, `collect_class_teardown_must_gather()`, `flush_pending_class_must_gathers()` and the
 `mark_class_pending_must_gather()` / `class_must_gather_collected()` / `mark_class_must_gather_collected()` bookkeeping collect one gather per failing test class,
 at the end of that class, or at session finish when the run stopped before that end.

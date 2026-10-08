@@ -120,7 +120,7 @@ In real failure runs, the XML is much more informative because it includes loggi
 When you pass `--analyze-with-ai`, the suite posts the raw JUnit XML to a **rootcoz** server and writes the enriched XML back to the same
 file. rootcoz is an external service, not part of this repository; this page only documents the client half of the contract.
 
-```495:550:utilities/pytest_utils.py
+```499:554:utilities/pytest_utils.py
 def enrich_junit_xml(session: pytest.Session) -> None:
     """Read JUnit XML, send to server for analysis, write enriched XML back.
 
@@ -232,30 +232,21 @@ failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` sh
 
 ## Must-Gather Support
 
-The suite has built-in must-gather support. When it can match a failure to a specific plan, it runs a targeted gather. Otherwise it runs a
-full, cluster-wide gather.
+The suite has built-in must-gather support. `run_plan_must_gather()` matches a failure to a specific plan and runs a targeted gather; `run_must_gather()`
+runs the full, cluster-wide gather. Both share image resolution and differ only in the arguments passed to the collector script.
 
-```174:193:utilities/must_gather.py
-must_gather_image = _resolve_must_gather_image(
-    ocp_admin_client=ocp_admin_client,
-    mtv_subs=mtv_subs,
-    mtv_csv=mtv_csv,
-)
+```206:218:utilities/must_gather.py
+        must_gather_image = _resolve_must_gather_image(
+            ocp_admin_client=ocp_admin_client,
+            mtv_subs=mtv_subs,
+            mtv_csv=mtv_csv,
+        )
 
-_must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
-
-if plan:
-    plan_name = plan["name"]
-    plan_namespace = plan["namespace"]
-    LOGGER.info(f"Running targeted must-gather for plan '{plan_name}' in namespace '{plan_namespace}'")
-    run_command(
-        shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted"),
-        verify_stderr=False,
-    )
-else:
-    LOGGER.info("Running full must-gather collection")
-    run_command(shlex.split(_must_gather_base_cmd), verify_stderr=False)
-return True
+        command = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
+        if target_args:
+            command = f"{command} -- {target_args}"
+        run_command(shlex.split(command), verify_stderr=False)
+        return True
 ```
 
 What this means in practice:
@@ -269,9 +260,9 @@ What this means in practice:
 - The class end is counted per worker: every torn-down item is counted for its class, and the class ends when this worker has torn down as many items of it as were collected. Counting rather than following collection order is what survives `--dist=load`, where the collection-last item of a class can be scheduled onto a worker that never ran the failing method.
 - A standalone test has no class end to wait for, so it collects its own must-gather immediately, under its own node name.
 - The state is kept on the session object, not in module-level variables, so under xdist each worker collects for the classes it ran. A class split across workers by `--dist=load` therefore stays pending on the worker that saw the failure and is collected by that worker's session finish.
-- `run_must_gather()` reports whether it actually collected. A gather that failed to resolve its image or to run leaves the class pending instead of counting as done, so the session-end flush retries it rather than reporting diagnostics that were never written.
+- `run_plan_must_gather()` reports whether it actually collected. A gather that failed to resolve its image or to run leaves the class pending instead of counting as done, so the session-end flush retries it rather than reporting diagnostics that were never written. It takes the plan's name and namespace explicitly; `run_must_gather()` is the unscoped full-collection variant used when there is no plan to gather for, such as a class without a `plan_resource` or the session-finish leftover gather.
 - Because the class-end gather precedes the finalizer, a class fixture that fails during its own teardown is reported after the gather already covered the resources it was tearing down. That repeat is suppressed and logged, so one class yields one gather even when its tests fail *and* its finalizer raises. A finalizer failure on a class that has not been gathered yet collects immediately, into the same class directory, and a later failure of that class cannot gather into it a second time.
-- If teardown leaves leftovers behind, a second unscoped gather runs at session finish as a fallback.
+- If teardown leaves leftovers behind, an unscoped `run_must_gather()` runs at session finish as a fallback.
 
 > **Note:** The must-gather image is not hardcoded. The code resolves it from the installed MTV operator CSV and the ImageDigestMirrorSet, so the
 > gather matches the cluster’s installed MTV build.

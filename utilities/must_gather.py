@@ -142,21 +142,55 @@ def _resolve_must_gather_image(
     return resolved_image
 
 
-def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = None) -> bool:
-    """Run ``oc adm must-gather`` to collect MTV diagnostic data.
+def run_must_gather(data_collector_path: Path) -> bool:
+    """Run ``oc adm must-gather`` to collect the full MTV diagnostic bundle.
 
-    Resolves the must-gather image by looking up the IDMS mirror URL and
-    combining it with the SHA from the installed CSV. Any errors during
-    resolution are logged but do not fail the test run.
+    Used where there is no plan to scope by: session teardown after leftovers, and an item whose
+    test class carries no ``plan_resource``. Resolves the must-gather image by looking up the IDMS
+    mirror URL and combining it with the SHA from the installed CSV. Any errors during resolution
+    are logged but do not fail the test run.
 
     Args:
         data_collector_path (Path): Directory where must-gather output is written.
-        plan (dict[str, str] | None): Optional dict with ``name`` and ``namespace``
-            keys to scope the must-gather to a specific migration plan.
 
     Returns:
         bool: True when the gather command ran. False when it did not, so the caller can keep the
             failure pending instead of recording a gather that produced no diagnostics.
+    """
+    LOGGER.info("Running full must-gather collection")
+    return _run_must_gather(data_collector_path=data_collector_path, target_args="")
+
+
+def run_plan_must_gather(data_collector_path: Path, plan: dict[str, str]) -> bool:
+    """Run the plan-targeted ``oc adm must-gather`` collection for one migration plan.
+
+    A different gather script from :func:`run_must_gather`: it runs ``/usr/bin/targeted`` with the
+    plan's name and namespace as env, so the artifact holds that plan's VMs, networks and events
+    instead of a full-cluster snapshot. Image resolution is shared with the full collection.
+
+    Args:
+        data_collector_path (Path): Directory where must-gather output is written.
+        plan (dict[str, str]): Dict with ``name`` and ``namespace`` keys identifying the plan.
+
+    Returns:
+        bool: True when the gather command ran. False when it did not, so the caller can keep the
+            failure pending instead of recording a gather that produced no diagnostics.
+    """
+    LOGGER.info(f"Running targeted must-gather for plan '{plan['name']}' in namespace '{plan['namespace']}'")
+    target_args = f"NS={plan['namespace']} PLAN={plan['name']} /usr/bin/targeted"
+    return _run_must_gather(data_collector_path=data_collector_path, target_args=target_args)
+
+
+def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
+    """Resolve the must-gather image and run ``oc adm must-gather`` with the given trailing arguments.
+
+    Args:
+        data_collector_path (Path): Directory where must-gather output is written.
+        target_args (str): Arguments appended after the image and dest-dir flags, naming the gather
+            script to run. Empty runs the full diagnostic collection.
+
+    Returns:
+        bool: True when the gather command ran. False when it did not.
     """
     try:
         # https://github.com/kubev2v/forklift-must-gather
@@ -177,19 +211,10 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
             mtv_csv=mtv_csv,
         )
 
-        _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
-
-        if plan:
-            plan_name = plan["name"]
-            plan_namespace = plan["namespace"]
-            LOGGER.info(f"Running targeted must-gather for plan '{plan_name}' in namespace '{plan_namespace}'")
-            run_command(
-                shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted"),
-                verify_stderr=False,
-            )
-        else:
-            LOGGER.info("Running full must-gather collection")
-            run_command(shlex.split(_must_gather_base_cmd), verify_stderr=False)
+        command = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
+        if target_args:
+            command = f"{command} -- {target_args}"
+        run_command(shlex.split(command), verify_stderr=False)
         return True
     except Exception as ex:
         LOGGER.exception(f"Failed to run must-gather. {ex}")
@@ -210,12 +235,12 @@ def collect_must_gather_for_item(node: pytest.Item, artifact_name: str) -> bool:
     data_collector_path = Path(
         f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(artifact_name)}"
     )
-    plan: dict[str, str] | None = None
     plan_obj: Plan | None = getattr(getattr(node, "cls", None), "plan_resource", None)
-    if plan_obj:
-        plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
+    if not plan_obj:
+        return run_must_gather(data_collector_path=data_collector_path)
 
-    return run_must_gather(data_collector_path=data_collector_path, plan=plan)
+    plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
+    return run_plan_must_gather(data_collector_path=data_collector_path, plan=plan)
 
 
 def mark_class_pending_must_gather(session: pytest.Session, cls: type, item: pytest.Item) -> None:
@@ -230,6 +255,11 @@ def mark_class_pending_must_gather(session: pytest.Session, cls: type, item: pyt
         session (pytest.Session): The session running the failing item.
         cls (type): The test class whose failures must be covered by a single must-gather.
         item (pytest.Item): The failing item, used to collect the deferred gather later.
+
+    Returns nothing. It mutates session state only: ``cls`` is added to
+    ``session._must_gather_pending_classes``, keyed to ``item``, which is what
+    ``collect_class_must_gather`` reads during class teardown and
+    ``flush_pending_class_must_gathers`` reads at session cleanup.
     """
     pending: dict[type, pytest.Item] = getattr(session, "_must_gather_pending_classes", {})
     pending.setdefault(cls, item)
@@ -256,6 +286,11 @@ def mark_class_must_gather_collected(session: pytest.Session, cls: type) -> None
     Args:
         session (pytest.Session): The session running the item.
         cls (type): The test class the must-gather was collected for.
+
+    Returns nothing. It mutates session state only: ``cls`` is added to
+    ``session._must_gather_collected_classes``, the flag every later collection path consults
+    (``class_must_gather_collected``, ``_collect_pending_class_must_gather``,
+    ``collect_class_teardown_must_gather``) so the class keeps exactly one gather.
     """
     collected: set[type] = getattr(session, "_must_gather_collected_classes", set())
     collected.add(cls)
@@ -320,6 +355,11 @@ def _collect_pending_class_must_gather(session: pytest.Session, cls: type, item:
         session (pytest.Session): The session running the item.
         cls (type): The test class owing the must-gather.
         item (pytest.Item): The item used to collect the gather and to supply the plan context.
+
+    Returns nothing. Session state is its only effect: on a successful gather it pops ``cls`` from
+    ``session._must_gather_pending_classes`` and adds it to
+    ``session._must_gather_collected_classes``; on a failed or skipped gather it leaves both
+    untouched so the class stays owed.
     """
     pending: dict[type, pytest.Item] = getattr(session, "_must_gather_pending_classes", {})
     if cls not in pending or class_must_gather_collected(session, cls):
@@ -350,6 +390,12 @@ def collect_class_must_gather(item: pytest.Item) -> None:
 
     Args:
         item (pytest.Item): The item being torn down.
+
+    Returns nothing. Its whole effect is the session state written by the helpers it calls -
+    ``_record_class_item_completed`` counting the item on
+    ``session._must_gather_class_items_completed`` and, when the class ended on this worker,
+    ``_collect_pending_class_must_gather`` clearing that class from
+    ``session._must_gather_pending_classes``.
     """
     item_cls: type | None = getattr(item, "cls", None)
     if item_cls is None:
@@ -404,6 +450,10 @@ def flush_pending_class_must_gathers(session: pytest.Session) -> None:
 
     Args:
         session (pytest.Session): The session that ran the failing items.
+
+    Returns nothing. It walks ``session._must_gather_pending_classes`` and, per class that is still
+    owed, calls ``_collect_pending_class_must_gather``, which drops the class from the pending map
+    and marks it collected in ``session._must_gather_collected_classes``.
     """
     pending: dict[type, pytest.Item] = getattr(session, "_must_gather_pending_classes", {})
     for cls, item in list(pending.items()):
