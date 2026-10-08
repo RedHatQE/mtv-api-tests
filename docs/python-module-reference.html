@@ -612,8 +612,14 @@ volume on the source through the VMware Guest Operations API before migration, a
 <p><code>run_must_gather()</code> runs the full diagnostic collection and <code>run_plan_must_gather()</code> the plan-targeted one; both report whether they succeeded and
 share image resolution.
 <code>collect_must_gather_for_item()</code>, <code>collect_class_must_gather()</code>, <code>collect_class_teardown_must_gather()</code>, <code>flush_pending_class_must_gathers()</code> and the
-<code>mark_class_pending_must_gather()</code> / <code>class_must_gather_collected()</code> / <code>mark_class_must_gather_collected()</code> bookkeeping collect one gather per failing test class,
-at the end of that class, or at session finish when the run stopped before that end.</p>
+<code>mark_class_pending_must_gather()</code> / <code>class_must_gather_collected()</code> / <code>mark_class_must_gather_collected()</code> bookkeeping attempt at most one successful gather per failing
+class-plan instance per worker. Operational failures stay pending for retry; artifacts are not guaranteed if retries fail. <code>class_plan_identity()</code> uses the Class collector node ID, class-scoped callspec indices and worker ID, shared across ordinary
+methods but distinct across plan parameter sets. <code>collect_class_must_gather(item, nextitem)</code> runs before default fixture finalization at class-plan boundaries,
+including early exits with <code>nextitem=None</code>, and binds the current Plan or explicit None for collection and all retries, even if no failure is pending yet.
+<code>initialize_class_plan_context()</code> runs from a <code>tryfirst</code> protocol wrapper before setup, clearing stale Plan attributes on identity transitions but not across
+consecutive methods of the same plan. <code>collect_must_gather_for_item()</code> takes this explicit Plan context instead of rereading mutable class state.
+Earlier method teardown failures stay pending until a boundary; session finish retries exceptional remaining cases on surviving workers, without guaranteeing
+pre-cleanup state or crash recovery. Unbound fallback contexts read the class attribute only for the active identity; others bind None for a full gather.</p>
 <h3 id="utilitiesaappy"><code>utilities/aap.py</code></h3>
 <p>AWX/AAP deployment and REST API helpers for hook integration tests: <code>is_awx_installed()</code>, <code>deploy_awx_via_helm()</code>, <code>create_awx_instance()</code>, <code>wait_for_awx_ready()</code>,
 <code>wait_for_awx_api_ready()</code>, <code>get_awx_admin_password()</code>, <code>get_awx_route_url()</code>, <code>create_awx_auth_token()</code>, <code>create_awx_project()</code>, <code>wait_for_awx_project_sync()</code>,
