@@ -202,15 +202,18 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 ### `utilities/pytest_utils.py`
 
 `is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`),
-`collect_created_resources()` (must-gather on failure), `resolve_item_plan_config()` (a collected item's plan config, failing fast when a non-parametrized item has no
+`collect_created_resources()` (writes the tracked resource inventory), `resolve_item_plan_config()` (a collected item's plan config, failing fast when a non-parametrized item has no
 `tests_params` entry), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
 
 ### `utilities/must_gather.py`
 
 `run_must_gather()` runs the full diagnostic collection and `run_plan_must_gather()` the plan-targeted one; both report whether they succeeded and
-share image resolution.
+share image resolution. Missing image metadata and the wrapper's specific resource API discovery failure return `False`; unrelated programming errors propagate.
+Standalone setup/call collector errors stay in the failing item's typed stash until the teardown wrapper yields to fixture finalizers.
+Session-flush errors are retained until pytest session hooks finish, then resource inventory writing and configured cleanup are attempted in nested `finally` blocks.
+Cleanup errors propagate with earlier errors chained; a cleanup failure can stop later cleanup steps. Inventory write failures are logged by the existing inventory helper.
 `collect_must_gather_for_item()`, `collect_class_must_gather()`, `collect_class_teardown_must_gather()`, `flush_pending_class_must_gathers()` and the
-`mark_class_pending_must_gather()` / `class_must_gather_collected()` / `mark_class_must_gather_collected()` bookkeeping attempt at most one successful gather per failing
+`mark_class_pending_must_gather()` / `class_must_gather_collected()` / `mark_class_must_gather_collected()` documented state API attempt at most one successful gather per failing
 class-plan instance per worker. Operational failures stay pending for retry; artifacts are not guaranteed if retries fail. `class_plan_identity()` uses the Class collector node ID, class-scoped callspec indices and worker ID, shared across ordinary
 methods but distinct across plan parameter sets. `collect_class_must_gather(item, nextitem)` runs before default fixture finalization at class-plan boundaries,
 including early exits with `nextitem=None`, and binds the current Plan or explicit None for collection and all retries, even if no failure is pending yet.

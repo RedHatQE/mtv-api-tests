@@ -447,13 +447,13 @@ That leads to a simple rule set:
 Both hook test classes use the repository's standard incremental class pattern. If an earlier step in
 the class fails unexpectedly, later steps are marked `xfail` instead of running anyway.
 
-```159:161:conftest.py
+```161:163:conftest.py
     # Incremental test support - track failures for class-based tests
     if "incremental" in item.keywords and rep.when == "call" and rep.failed:
         item.parent._previousfailed = item
 ```
 
-```223:228:conftest.py
+```225:230:conftest.py
 def pytest_runtest_setup(item):
     # Incremental test support - xfail if previous test in class failed
     if "incremental" in item.keywords:

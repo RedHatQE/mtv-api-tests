@@ -1027,8 +1027,11 @@ Automatic failure collection attempts at most one successful must-gather per cla
 using a percent-encoded class node ID, class parameter indices and worker ID under `.data-collector/`.
 It binds the current Plan or explicit None at the class-plan boundary before default fixture finalization,
 including early exits, and retains that context for retries. Standalone tests gather immediately.
-Known operational collection failures remain pending for retry; artifacts are not guaranteed if retries fail.
-Unexpected programming or configuration errors propagate. See
+Known operational class-plan collection failures remain pending for the session-finish retry; artifacts are not guaranteed if it fails.
+Standalone tests attempt collection on each failing phase until one succeeds, but failed attempts are not queued for session-finish retry.
+Unexpected standalone setup/call collector errors are retained on the item until pytest fixture finalization.
+Session-flush errors wait for pytest session hooks, resource inventory writing and configured cleanup attempts.
+Cleanup failures can stop later cleanup steps and propagate with earlier errors chained. See
 [diagnostic collection](docs/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
 
 ```bash
