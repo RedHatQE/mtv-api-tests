@@ -1023,9 +1023,11 @@ created, it also handles the resources the migration created:</p>
 <p><strong>Note:</strong> Failure handling is broader than cleanup. When data collection is enabled, the session writes created resources to
 <code>&lt;data-collector-path&gt;/resources.json</code> (default <code>.data-collector</code>), and <code>pytest_exception_interact</code> triggers
 <code>oc adm must-gather</code> collection so you can inspect what MTV and the cluster were doing at the time of failure.
-A shared fixture failure is collected once per test class and phase: when a class-scoped fixture errors, every
-test method in the class gets a setup error, but only the first one runs a must-gather. A test that fails on its
-own always collects its own.</p>
+Collection is per test class, not per test: a class-based test never gathers at failure time, in setup or call phase. The class is
+marked as owing one must-gather and <code>pytest_runtest_teardown</code> collects it when the class's last test tears down, into a directory named
+after the class. That hook runs before the class fixture finalizer, so the gather holds the resources that were still present when the
+class failed rather than a cleaned cluster, and a finalizer failure arriving afterwards is suppressed instead of gathered twice.
+A standalone test collects its own immediately.</p>
 </blockquote>
 <h2 id="automation-and-dry-runs">Automation And Dry Runs</h2>
 <p>The repository includes local automation, but it is deliberately conservative.</p>
