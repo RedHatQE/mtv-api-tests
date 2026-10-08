@@ -47,25 +47,38 @@ The basic cold-migration test configuration is intentionally small:
 },
 ```
 
-`add_nic` is a vSphere-only option. The `prepared_plan` fixture skips the whole class for any other provider type, and it fails fast when `add_nic_start_connected` is missing or
-is not a `bool`:
+`add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
+provider type other than vSphere:
 
-```1148:1162:conftest.py
-has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
-if has_add_nic_config:
-    if not isinstance(source_provider, VMWareProvider):
-        pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
-    for vm in virtual_machines:
-        if vm.get("add_nic"):
-            if "add_nic_start_connected" not in vm:
-                raise ValueError(
-                    f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+```373:382:conftest.py
+            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+            if source_provider_type != Provider.ProviderType.VSPHERE:
+                add_nic_skip = pytest.mark.skip(
+                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                 )
-            if not isinstance(vm["add_nic_start_connected"], bool):
-                raise ValueError(
-                    f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
-                    f"got {type(vm['add_nic_start_connected']).__name__!r}"
-                )
+                for item in items:
+                    test_config = _resolve_item_plan_config(item) or {}
+                    if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                        item.add_marker(add_nic_skip)
+```
+
+On a vSphere provider the `prepared_plan` fixture still fails fast when `add_nic_start_connected` is missing or is not a `bool`:
+
+```1176:1188:conftest.py
+        has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+        if has_add_nic_config:
+            for vm in virtual_machines:
+                if vm.get("add_nic"):
+                    if "add_nic_start_connected" not in vm:
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+                        )
+                    if not isinstance(vm["add_nic_start_connected"], bool):
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
+                            f"got {type(vm['add_nic_start_connected']).__name__!r}"
+                        )
 ```
 
 Provider details come from `.providers.json`. The example file shows the fields the suite expects, including guest credentials used for post-migration checks such as SSH
@@ -104,7 +117,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1615:1625:conftest.py
+```1641:1651:conftest.py
 @pytest.fixture(scope="class")
 def cleanup_migrated_vms(
     request: pytest.FixtureRequest,

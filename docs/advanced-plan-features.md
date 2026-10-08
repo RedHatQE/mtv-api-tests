@@ -73,7 +73,7 @@ Each entry of `virtual_machines` describes one source VM or template.
 | `add_nic_start_connected` | Required when `add_nic` is `True`; `False` yields a disconnected NIC | `False` |
 | `win_os` | Hyper-V guest OS override; must be a bool | `False` |
 
-> **Note:** `add_nic` skips the whole class on non-vSphere providers and raises `ValueError` when `add_nic_start_connected`
+> **Note:** `add_nic` is skipped at collection time on non-vSphere providers (see [cold-migrations.md](cold-migrations.md)) and raises `ValueError` when `add_nic_start_connected`
 > is missing or is not a bool. The MAC of the added NIC is written back into the VM dict as `connected_nic_mac` or
 > `disconnected_nic_mac` and is checked after migration.
 
@@ -760,7 +760,7 @@ The preparation and plan helpers fail fast rather than silently degrading. The c
 | Trigger | Error |
 | --- | --- |
 | `add_nic: True` without `add_nic_start_connected`, or with a non-bool value | `ValueError` naming the VM |
-| `add_nic: True` on a non-vSphere provider | `pytest.skip` |
+| `add_nic: True` on a non-vSphere provider | collection-time skip (see [cold-migrations.md](cold-migrations.md)) |
 | Shared-disk config on a provider without `relink_shared_disks()` | `ValueError` naming the provider |
 | `disable_drs_for_vms` on OVA or a non-VMware clone provider | `ValueError` |
 | `skip_clone` combined with an incompatible flag, or on RHV | `ValueError` listing the conflicts |

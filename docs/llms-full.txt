@@ -788,7 +788,7 @@ logic needs the Forklift inventory service. This file wraps the `forklift-invent
 
 The fixture and the factory behind it select the right inventory client at runtime:
 
-```1712:1717:conftest.py
+```1738:1742:conftest.py
     @pytest.fixture(scope="session")
     def source_provider_inventory(
         ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
@@ -1370,7 +1370,7 @@ The class-scoped `prepared_plan` fixture is where the user-facing plan config be
 the config, validates and clones source VMs, resolves the PVC name template against the provider type, creates custom namespaces
 if requested, adjusts source power state, stores source-side metadata, and creates hooks.
 
-```1062:1075:conftest.py
+```1090:1103:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -1391,7 +1391,7 @@ Cloning runs in two phases. First every VM is cloned, powered to `source_vm_powe
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
 when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
-```1367:1375:conftest.py
+```1393:1401:conftest.py
                 # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
                 # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
                 inventory_timeout = plan.get("inventory_timeout", 300)
@@ -1403,7 +1403,7 @@ when a config omits it. Other optional flags in the same fixture, such as `warm_
                 )
 ```
 
-```1404:1406:conftest.py
+```1430:1432:conftest.py
         # Create Hooks if configured
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
@@ -1473,7 +1473,7 @@ That behavior comes from `utilities/utils.py:gen_network_map_list()` and the `mu
 
 `multus_network_name` sizes the NAD set from the same data, so the count of created NADs matches the count of map entries:
 
-```876:888:conftest.py
+```902:914:conftest.py
         if class_plan_config.get("per_nic_network_map", False):
             multus_count = max(
                 0,
@@ -1919,7 +1919,7 @@ The `type` values come from the Forklift provider-type constants: `vsphere`, `op
 > **Warning:** Warm migration is not available for every source provider. The collection hook in `conftest.py` skips every `warm` item when the configured source provider cannot do
 > warm migrations.
 
-```314:324:conftest.py
+```339:348:conftest.py
                 warm_unsupported = (
                     Provider.ProviderType.OPENSTACK,
                     Provider.ProviderType.OPENSHIFT,
@@ -1936,7 +1936,7 @@ Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere
 `openshift` and `ova` sources, because those providers do not carry a CA certificate in their provider secret.
 A separate branch of the same hook enforces that:
 
-```336:346:conftest.py
+```361:371:conftest.py
                 ca_cert_unsupported = (
                     Provider.ProviderType.OPENSHIFT,
                     Provider.ProviderType.OVA,
@@ -1950,7 +1950,7 @@ A separate branch of the same hook enforces that:
                             item.add_marker(ca_cert_skip)
 ```
 
-```327:333:conftest.py
+```352:358:conftest.py
                 if source_provider_type != Provider.ProviderType.VSPHERE:
                     vsphere_only_skip = pytest.mark.skip(reason="Test is only applicable to vSphere source providers")
                     for item in items:
@@ -1958,6 +1958,22 @@ A separate branch of the same hook enforces that:
                             kw in item.keywords for kw in ("copyoffload", "shared_disk", "deep_inspection", "aap", "luks")
                         ):
                             item.add_marker(vsphere_only_skip)
+```
+
+A third capability gate of the same hook covers `add_nic`, which is a plan config flag rather than a marker, so it resolves
+each item's parametrized plan config:
+
+```373:382:conftest.py
+                # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+                # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+                if source_provider_type != Provider.ProviderType.VSPHERE:
+                    add_nic_skip = pytest.mark.skip(
+                        reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
+                    )
+                    for item in items:
+                        test_config = _resolve_item_plan_config(item) or {}
+                        if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                            item.add_marker(add_nic_skip)
 ```
 
 ## Migration Modes
@@ -5202,7 +5218,7 @@ The raw entry from `tests_params` is not used directly. The repository converts 
 
 The fixture copies the selected config, resolves a mapping-form `pvc_name_template`, and sets up runtime-only storage:
 
-```1064:1090:conftest.py
+```1090:1116:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -5236,7 +5252,7 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1186:1206:conftest.py
+```1212:1231:conftest.py
             skip_clone = plan.get("skip_clone", False)
 
             if skip_clone:
@@ -5264,7 +5280,7 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
 In the clone phase, the fixture resolves each VM through the clone provider, applies the placement flags, sets the source power state, and rewrites the VM name to the actual
 runtime name:
 
-```1239:1264:conftest.py
+```1265:1290:conftest.py
             if not skip_clone:
                 for vm in virtual_machines:
                     clone_options = {**vm, "enable_ctk": warm_migration}
@@ -5297,7 +5313,7 @@ runtime name:
 
 After the VM loop, configured hooks become real `Hook` custom resources:
 
-```1405:1406:conftest.py
+```1431:1432:conftest.py
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 ```
@@ -5785,25 +5801,38 @@ The basic cold-migration test configuration is intentionally small:
     },
 ```
 
-`add_nic` is a vSphere-only option. The `prepared_plan` fixture skips the whole class for any other provider type, and it fails fast when `add_nic_start_connected` is missing or
-is not a `bool`:
+`add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
+provider type other than vSphere:
 
-```1148:1162:conftest.py
-    has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
-    if has_add_nic_config:
-        if not isinstance(source_provider, VMWareProvider):
-            pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
-        for vm in virtual_machines:
-            if vm.get("add_nic"):
-                if "add_nic_start_connected" not in vm:
-                    raise ValueError(
-                        f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+```373:382:conftest.py
+                # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+                # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+                if source_provider_type != Provider.ProviderType.VSPHERE:
+                    add_nic_skip = pytest.mark.skip(
+                        reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                     )
-                if not isinstance(vm["add_nic_start_connected"], bool):
-                    raise ValueError(
-                        f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
-                        f"got {type(vm['add_nic_start_connected']).__name__!r}"
-                    )
+                    for item in items:
+                        test_config = _resolve_item_plan_config(item) or {}
+                        if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                            item.add_marker(add_nic_skip)
+```
+
+On a vSphere provider the `prepared_plan` fixture still fails fast when `add_nic_start_connected` is missing or is not a `bool`:
+
+```1176:1188:conftest.py
+            has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+            if has_add_nic_config:
+                for vm in virtual_machines:
+                    if vm.get("add_nic"):
+                        if "add_nic_start_connected" not in vm:
+                            raise ValueError(
+                                f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+                            )
+                        if not isinstance(vm["add_nic_start_connected"], bool):
+                            raise ValueError(
+                                f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
+                                f"got {type(vm['add_nic_start_connected']).__name__!r}"
+                            )
 ```
 
 Provider details come from `.providers.json`. The example file shows the fields the suite expects, including guest credentials used for post-migration checks such as SSH
@@ -5842,7 +5871,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1615:1625:conftest.py
+```1641:1651:conftest.py
     @pytest.fixture(scope="class")
     def cleanup_migrated_vms(
         request: pytest.FixtureRequest,
@@ -6378,7 +6407,7 @@ namespace:
     )
 ```
 
-The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:627`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
+The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:663`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
 ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.
 
 What these values do:
@@ -7457,7 +7486,7 @@ There are three destination provider fixtures in this repository. Two of them ar
 The default destination fixture in `conftest.py` creates an OpenShift `Provider` with an empty `url` and an empty `secret` block. That is the local, in-cluster destination path
 used by the non-remote tests.
 
-```674:691:conftest.py
+```700:716:conftest.py
     @pytest.fixture(scope="session")
     def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixture_store):
         kind_dict = {
@@ -7481,7 +7510,7 @@ used by the non-remote tests.
 
 The remote path creates a secret from the active OpenShift API token and then creates an explicit OpenShift `Provider` with a real API URL.
 
-```949:979:conftest.py
+```975:1005:conftest.py
     @pytest.fixture(scope="session")
     def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
         api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
@@ -8301,7 +8330,7 @@ Each entry of `virtual_machines` describes one source VM or template.
 | `add_nic_start_connected` | Required when `add_nic` is `True`; `False` yields a disconnected NIC | `False` |
 | `win_os` | Hyper-V guest OS override; must be a bool | `False` |
 
-> **Note:** `add_nic` skips the whole class on non-vSphere providers and raises `ValueError` when `add_nic_start_connected`
+> **Note:** `add_nic` is skipped at collection time on non-vSphere providers (see [cold-migrations.md](cold-migrations.md)) and raises `ValueError` when `add_nic_start_connected`
 > is missing or is not a bool. The MAC of the added NIC is written back into the VM dict as `connected_nic_mac` or
 > `disconnected_nic_mac` and is checked after migration.
 
@@ -8988,7 +9017,7 @@ The preparation and plan helpers fail fast rather than silently degrading. The c
 | Trigger | Error |
 | --- | --- |
 | `add_nic: True` without `add_nic_start_connected`, or with a non-bool value | `ValueError` naming the VM |
-| `add_nic: True` on a non-vSphere provider | `pytest.skip` |
+| `add_nic: True` on a non-vSphere provider | collection-time skip (see [cold-migrations.md](cold-migrations.md)) |
 | Shared-disk config on a provider without `relink_shared_disks()` | `ValueError` naming the provider |
 | `disable_drs_for_vms` on OVA or a non-VMware clone provider | `ValueError` |
 | `skip_clone` combined with an incompatible flag, or on RHV | `ValueError` listing the conflicts |
@@ -9736,8 +9765,8 @@ field name (`tests/cold/conftest.py:18`, `tests/cold/test_ca_crt_migration.py:76
 
 | Case | How it is created |
 | --- | --- |
-| Local destination | `kind_dict` `Provider` `${session_uuid}-local-ocp-provider`, `spec.type: openshift`, empty `spec.secret` and `spec.url` (`conftest.py:675`) |
-| Remote destination | `Secret` with `token` and `insecureSkipVerify`, then `Provider` `${session_uuid}-destination-ocp-provider` of type `openshift` (`conftest.py:950`) |
+| Local destination | `kind_dict` `Provider` `${session_uuid}-local-ocp-provider`, `spec.type: openshift`, empty `spec.secret` and `spec.url` (`conftest.py:711`) |
+| Remote destination | `Secret` with `token` and `insecureSkipVerify`, then `Provider` `${session_uuid}-destination-ocp-provider` of type `openshift` (`conftest.py:986`) |
 
 ### Provider readiness rules
 
@@ -10317,13 +10346,13 @@ problem is about `NetworkMap`, `StorageMap`, or a VM ID inside a `Plan`, start w
 ## End-To-End Flow
 
 1. The suite loads `.providers.json` from the repository root through `resolve_providers_json_path()` and `load_source_providers()` (`utilities/utils.py:77`).
-2. `py_config["source_provider"]` selects one top-level provider entry from that file (`conftest.py:718`).
+2. `py_config["source_provider"]` selects one top-level provider entry from that file (`conftest.py:754`).
 3. `create_source_provider()` creates the source `Secret` and source `Provider` CR, waits for `Provider.Status.READY`, then instantiates the matching `BaseProvider` subclass as a
    context manager (`utilities/utils.py:371`).
-4. The `source_provider_inventory` fixture calls `create_forklift_inventory()`, which picks the adapter registered for `source_provider.type` (`conftest.py:1712`,
+4. The `source_provider_inventory` fixture calls `create_forklift_inventory()`, which picks the adapter registered for `source_provider.type` (`conftest.py:1749`,
    `libs/forklift_inventory.py:33`).
-5. `prepared_plan` clones or creates source VMs, normalizes them through `vm_dict()`, and rewrites the VM name to the cloned name (`conftest.py:1310`).
-6. After **every** clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (`conftest.py:1367`).
+5. `prepared_plan` clones or creates source VMs, normalizes them through `vm_dict()`, and rewrites the VM name to the cloned name (`conftest.py:1347`).
+6. After **every** clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (`conftest.py:1404`).
 7. `get_network_migration_map()` and `get_storage_migration_map()` turn inventory data into `NetworkMap` and `StorageMap` CR payloads (`utilities/mtv_migration.py:687`,
    `utilities/mtv_migration.py:548`).
 8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:894`).
@@ -10344,7 +10373,7 @@ The synchronization step is explicitly two-phase in `conftest.py`, because waiti
 
 Two extra waits sit next to that call:
 
-- When any VM uses `add_nic`, `wait_for_added_nics_in_forklift_inventory()` forces a provider refresh and blocks until inventory shows the new NIC count (`conftest.py:1379`,
+- When any VM uses `add_nic`, `wait_for_added_nics_in_forklift_inventory()` forces a provider refresh and blocks until inventory shows the new NIC count (`conftest.py:1416`,
   `utilities/provider_inventory.py:44`).
 - On vSphere, `wait_for_cloned_vms_in_forklift_inventory()` additionally waits for inventory MAC addresses to converge with live vCenter MACs, because vSphere clones regenerate
   MACs (`utilities/provider_inventory.py:176`).
@@ -10489,7 +10518,7 @@ In practice, `BaseProvider` gives the suite six important guarantees:
   RHV plan names are templates (`libs/base_provider.py:126`, `libs/providers/rhv.py:381`).
 
 > **Warning:** `skip_clone=True` is incompatible with `disable_drs_for_vms`, `clone_to_same_host`, `migrate_shared_disks`, `add_nic`, and — outside Hyper-V — `preserve_static_ips`,
-> because all of those need the cloning phase (`conftest.py:1194`).
+> because all of those need the cloning phase (`conftest.py:1231`).
 
 ## Provider-Specific Behavior
 
@@ -10507,7 +10536,7 @@ In practice, `BaseProvider` gives the suite six important guarantees:
 - When copy-offload is configured, the source `Provider` CR also gets the annotation `forklift.konveyor.io/empty-vddk-init-image: yes` (`utilities/utils.py:533`).
 - Standard network and storage mappings come from `VsphereForkliftInventory`. Copy-offload storage mappings can bypass inventory and use explicit datastore IDs instead.
 - It is the only provider that implements shared-disk handling: `relink_shared_disks()`, `find_shared_vmdk_paths()`, and `reattach_orphaned_vmdk()`. `prepared_plan` refuses
-  `migrate_shared_disks` for any other provider type (`conftest.py:1145`).
+  `migrate_shared_disks` for any other provider type (`conftest.py:1181`).
 
 > **Note:** The test-side vSphere SDK connection uses `disableSslCertValidation=True`, while the Forklift `Provider` CR still honors `source_provider_insecure_skip_verify` and can
 > include `cacert`. That means direct provider access and MTV-side validation are related, but not identical, code paths.
@@ -10555,8 +10584,8 @@ late, map generation will be wrong.
   (`_NIC_DETAILS_SCRIPT`, `_GUEST_OS_NAME_SCRIPT`).
 - `get_vm_or_template_networks()` delegates straight to `inventory.vms_networks_mappings()` (`libs/providers/hyperv.py:990`).
 - It has `wait_for_guest_network_config()` for guest network readiness, which `prepared_plan` uses in place of the vSphere `wait_for_vmware_guest_info()` when `source_vm_power` is
-  `on` (`conftest.py:1293`).
-- `skip_clone=True` is allowed for Hyper-V, and `preserve_static_ips` stays compatible with it because guest tools are reachable without cloning (`conftest.py:1196`).
+  `on` (`conftest.py:1330`).
+- `skip_clone=True` is allowed for Hyper-V, and `preserve_static_ips` stays compatible with it because guest tools are reachable without cloning (`conftest.py:1233`).
 - Windows detection uses the guest `OSName`/`Notes` KVP token `windows`, not the VM name, so names such as `twin-server` are classified correctly (`libs/providers/hyperv.py:29`,
   `libs/providers/hyperv.py:737`).
 
@@ -10564,7 +10593,7 @@ late, map generation will be wrong.
 
 `OCPProvider` is both the destination provider for migrations and a supported source provider for source-side CNV test setups.
 
-- If OpenShift is the source, `prepared_plan` creates a source `NetworkAttachmentDefinition` plus source CNV VMs through `create_source_cnv_vms()` (`conftest.py:1122`).
+- If OpenShift is the source, `prepared_plan` creates a source `NetworkAttachmentDefinition` plus source CNV VMs through `create_source_cnv_vms()` (`conftest.py:1158`).
 - `OpenshiftForkliftInventory` resolves storage by following the VM's data volumes to PVCs and then reading `storageClassName` from the live cluster.
 - It resolves networks from the VM template: `multus.networkName` becomes a named source network, and a pod network becomes `{"type": "pod"}`.
 - `vm_dict()` waits for the CNV guest agent for up to 301 seconds and sanitizes VM names to Kubernetes-safe resource names before querying the cluster
@@ -10581,7 +10610,7 @@ late, map generation will be wrong.
   inventory instance is passed (`libs/providers/ova.py:34`).
 - `get_vm_or_template_networks()` delegates to `inventory.vms_networks_mappings()`.
 - In the current `prepared_plan` implementation, the source VM name stays unchanged; instead each VM gets a unique `targetName` derived from
-  `sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")` so parallel sessions do not collide (`conftest.py:1402`).
+  `sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")` so parallel sessions do not collide (`conftest.py:1439`).
 - In practice, OVA mapping behavior depends much more on Forklift inventory than on direct provider logic.
 
 > **Note:** Warm-migration coverage is marker-scoped rather than skipped in code. `tests/warm/test_mtv_warm_migration.py` carries `@pytest.mark.vsphere` and `@pytest.mark.rhv`, and
@@ -10638,8 +10667,8 @@ Three adapter details are especially practical:
 Network mapping is a two-step process.
 
 First, the suite decides how many destination networks it needs. It does that in the `multus_network_name` fixture by calling `source_provider.get_vm_or_template_networks()`
-(`conftest.py:869`). It creates `len(networks) - 1` NADs named `{base}-{i}`, where `base` is `cb-<hash>` derived from the node ID and `session_uuid` (`conftest.py:888`,
-`conftest.py:893`). This is why RHV can use template networks before clones exist.
+(`conftest.py:905`). It creates `len(networks) - 1` NADs named `{base}-{i}`, where `base` is `cb-<hash>` derived from the node ID and `session_uuid` (`conftest.py:924`,
+`conftest.py:929`). This is why RHV can use template networks before clones exist.
 
 Second, once the cloned or prepared source VM has been synced into Forklift inventory, the actual `NetworkMap` payload is built from inventory data.
 
@@ -10679,12 +10708,12 @@ What that means in plain language:
 1. The first source network is always mapped to the destination pod network.
 2. Every additional source network is mapped to a generated Multus NAD.
 3. Those NADs are named from a base name plus a numeric suffix: `{base}-1`, `{base}-2`, and so on.
-4. If the plan config sets `multus_namespace`, the NADs are created there instead of in the main target namespace (`conftest.py:851`).
+4. If the plan config sets `multus_namespace`, the NADs are created there instead of in the main target namespace (`conftest.py:887`).
 
 > **Warning:** Network mapping is order-based. The first source network returned by inventory becomes the pod network, so inventory ordering matters for multi-NIC VMs.
 
 > **Tip:** If a source VM has `N` networks, the suite creates `N - 1` NADs, because the first network is reserved for the destination pod network. VMs configured with `add_nic` add
-> one more NAD each (`conftest.py:875`).
+> one more NAD each (`conftest.py:911`).
 
 ## How Source Storage Mappings Are Resolved
 

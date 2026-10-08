@@ -278,6 +278,31 @@ def pytest_sessionfinish(session, exitstatus):
                 LOGGER.exception("Failed to enrich JUnit XML, original preserved")
 
 
+def _resolve_item_plan_config(item: pytest.Item) -> dict[str, Any] | None:
+    """Resolve the parametrized plan config for a collected test item.
+
+    Args:
+        item: Collected pytest item whose plan config should be resolved.
+
+    Returns:
+        The test's plan config mapping, or None when the item is neither
+        parametrized nor present in ``tests_params``.
+    """
+    test_config: dict[str, Any] | None = None
+    if hasattr(item, "callspec"):
+        # Class-based tests use class_plan_config
+        test_config = item.callspec.params.get("class_plan_config")
+        if test_config is None:
+            # Function-based tests use plan
+            test_config = item.callspec.params.get("plan")
+
+    if test_config is None:
+        # Fallback to looking up by test name (for non-parametrized tests)
+        test_config = py_config["tests_params"].get(item.originalname)
+
+    return test_config
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(session, config, items):
     # -------------------------------------------------------------------
@@ -345,6 +370,17 @@ def pytest_collection_modifyitems(session, config, items):
                     if "ca_crt" in item.keywords:
                         item.add_marker(ca_cert_skip)
 
+            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+            if source_provider_type != Provider.ProviderType.VSPHERE:
+                add_nic_skip = pytest.mark.skip(
+                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
+                )
+                for item in items:
+                    test_config = _resolve_item_plan_config(item) or {}
+                    if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                        item.add_marker(add_nic_skip)
+
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
 
@@ -352,17 +388,7 @@ def pytest_collection_modifyitems(session, config, items):
         item.name = f"{item.name}-{py_config.get('source_provider')}-{py_config.get('storage_class')}"
 
         # Get test config from parametrization or tests_params
-        test_config = None
-        if hasattr(item, "callspec"):
-            # Class-based tests use class_plan_config
-            test_config = item.callspec.params.get("class_plan_config")
-            if test_config is None:
-                # Function-based tests use plan
-                test_config = item.callspec.params.get("plan")
-
-        if test_config is None:
-            # Fallback to looking up by test name (for non-parametrized tests)
-            test_config = py_config["tests_params"].get(item.originalname)
+        test_config = _resolve_item_plan_config(item)
 
         if test_config and "virtual_machines" in test_config:
             for _vm in test_config["virtual_machines"]:
@@ -1145,10 +1171,10 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
+        # The non-vSphere provider case is gated at collection time in
+        # pytest_collection_modifyitems (pytest.skip must not be used in fixtures).
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config:
-            if not isinstance(source_provider, VMWareProvider):
-                pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
             for vm in virtual_machines:
                 if vm.get("add_nic"):
                     if "add_nic_start_connected" not in vm:
