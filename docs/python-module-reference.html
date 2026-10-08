@@ -609,7 +609,8 @@ volume on the source through the VMware Guest Operations API before migration, a
 <code>collect_created_resources()</code> (must-gather on failure), <code>resolve_item_plan_config()</code> (a collected item's plan config, failing fast when a non-parametrized item has no
 <code>tests_params</code> entry), <code>teardown_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code>.</p>
 <h3 id="utilitiesmust_gatherpy"><code>utilities/must_gather.py</code></h3>
-<p><code>run_must_gather()</code> collects targeted MTV must-gather bundles when a test fails, and reports whether it succeeded.
+<p><code>run_must_gather()</code> runs the full diagnostic collection and <code>run_plan_must_gather()</code> the plan-targeted one; both report whether they succeeded and
+share image resolution.
 <code>collect_must_gather_for_item()</code>, <code>collect_class_must_gather()</code>, <code>collect_class_teardown_must_gather()</code>, <code>flush_pending_class_must_gathers()</code> and the
 <code>mark_class_pending_must_gather()</code> / <code>class_must_gather_collected()</code> / <code>mark_class_must_gather_collected()</code> bookkeeping collect one gather per failing test class,
 at the end of that class, or at session finish when the run stopped before that end.</p>

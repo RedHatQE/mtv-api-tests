@@ -541,28 +541,19 @@ failed” to “which exact <code>Plan</code>, <code>Provider</code>, <code>Stor
 <p><strong>Tip:</strong> If you rerun the test suite, the base data collector path is recreated. Move or archive old artifacts first if you want to keep them.</p>
 </blockquote>
 <h2 id="must-gather-support">Must-Gather Support</h2>
-<p>The suite has built-in must-gather support. When it can match a failure to a specific plan, it runs a targeted gather. Otherwise it runs a
-full, cluster-wide gather.</p>
-<div class="highlight"><pre><span></span><code><span class="n">must_gather_image</span> <span class="o">=</span> <span class="n">_resolve_must_gather_image</span><span class="p">(</span>
-    <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
-    <span class="n">mtv_subs</span><span class="o">=</span><span class="n">mtv_subs</span><span class="p">,</span>
-    <span class="n">mtv_csv</span><span class="o">=</span><span class="n">mtv_csv</span><span class="p">,</span>
-<span class="p">)</span>
+<p>The suite has built-in must-gather support. <code>run_plan_must_gather()</code> matches a failure to a specific plan and runs a targeted gather; <code>run_must_gather()</code>
+runs the full, cluster-wide gather. Both share image resolution and differ only in the arguments passed to the collector script.</p>
+<div class="highlight"><pre><span></span><code>        <span class="n">must_gather_image</span> <span class="o">=</span> <span class="n">_resolve_must_gather_image</span><span class="p">(</span>
+            <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+            <span class="n">mtv_subs</span><span class="o">=</span><span class="n">mtv_subs</span><span class="p">,</span>
+            <span class="n">mtv_csv</span><span class="o">=</span><span class="n">mtv_csv</span><span class="p">,</span>
+        <span class="p">)</span>
 
-<span class="n">_must_gather_base_cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"oc adm must-gather --image=</span><span class="si">{</span><span class="n">must_gather_image</span><span class="si">}</span><span class="s2"> --dest-dir=</span><span class="si">{</span><span class="n">data_collector_path</span><span class="si">}</span><span class="s2">"</span>
-
-<span class="k">if</span> <span class="n">plan</span><span class="p">:</span>
-    <span class="n">plan_name</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
-    <span class="n">plan_namespace</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Running targeted must-gather for plan '</span><span class="si">{</span><span class="n">plan_name</span><span class="si">}</span><span class="s2">' in namespace '</span><span class="si">{</span><span class="n">plan_namespace</span><span class="si">}</span><span class="s2">'"</span><span class="p">)</span>
-    <span class="n">run_command</span><span class="p">(</span>
-        <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_must_gather_base_cmd</span><span class="si">}</span><span class="s2"> -- NS=</span><span class="si">{</span><span class="n">plan_namespace</span><span class="si">}</span><span class="s2"> PLAN=</span><span class="si">{</span><span class="n">plan_name</span><span class="si">}</span><span class="s2"> /usr/bin/targeted"</span><span class="p">),</span>
-        <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Running full must-gather collection"</span><span class="p">)</span>
-    <span class="n">run_command</span><span class="p">(</span><span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">_must_gather_base_cmd</span><span class="p">),</span> <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">return</span> <span class="kc">True</span>
+        <span class="n">command</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"oc adm must-gather --image=</span><span class="si">{</span><span class="n">must_gather_image</span><span class="si">}</span><span class="s2"> --dest-dir=</span><span class="si">{</span><span class="n">data_collector_path</span><span class="si">}</span><span class="s2">"</span>
+        <span class="k">if</span> <span class="n">target_args</span><span class="p">:</span>
+            <span class="n">command</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">command</span><span class="si">}</span><span class="s2"> -- </span><span class="si">{</span><span class="n">target_args</span><span class="si">}</span><span class="s2">"</span>
+        <span class="n">run_command</span><span class="p">(</span><span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">command</span><span class="p">),</span> <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
 </code></pre></div>
 
 <p>What this means in practice:</p>
@@ -576,9 +567,9 @@ full, cluster-wide gather.</p>
 <li>The class end is counted per worker: every torn-down item is counted for its class, and the class ends when this worker has torn down as many items of it as were collected. Counting rather than following collection order is what survives <code>--dist=load</code>, where the collection-last item of a class can be scheduled onto a worker that never ran the failing method.</li>
 <li>A standalone test has no class end to wait for, so it collects its own must-gather immediately, under its own node name.</li>
 <li>The state is kept on the session object, not in module-level variables, so under xdist each worker collects for the classes it ran. A class split across workers by <code>--dist=load</code> therefore stays pending on the worker that saw the failure and is collected by that worker's session finish.</li>
-<li><code>run_must_gather()</code> reports whether it actually collected. A gather that failed to resolve its image or to run leaves the class pending instead of counting as done, so the session-end flush retries it rather than reporting diagnostics that were never written.</li>
+<li><code>run_plan_must_gather()</code> reports whether it actually collected. A gather that failed to resolve its image or to run leaves the class pending instead of counting as done, so the session-end flush retries it rather than reporting diagnostics that were never written. It takes the plan's name and namespace explicitly; <code>run_must_gather()</code> is the unscoped full-collection variant used when there is no plan to gather for, such as a class without a <code>plan_resource</code> or the session-finish leftover gather.</li>
 <li>Because the class-end gather precedes the finalizer, a class fixture that fails during its own teardown is reported after the gather already covered the resources it was tearing down. That repeat is suppressed and logged, so one class yields one gather even when its tests fail <em>and</em> its finalizer raises. A finalizer failure on a class that has not been gathered yet collects immediately, into the same class directory, and a later failure of that class cannot gather into it a second time.</li>
-<li>If teardown leaves leftovers behind, a second unscoped gather runs at session finish as a fallback.</li>
+<li>If teardown leaves leftovers behind, an unscoped <code>run_must_gather()</code> runs at session finish as a fallback.</li>
 </ul>
 <blockquote>
 <p><strong>Note:</strong> The must-gather image is not hardcoded. The code resolves it from the installed MTV operator CSV and the ImageDigestMirrorSet, so the

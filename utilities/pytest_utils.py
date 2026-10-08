@@ -101,6 +101,10 @@ def resolve_item_plan_config(item: pytest.Item) -> dict[str, Any] | None:
             test in this suite is parametrized, so a missing entry is a configuration error that must
             fail here rather than silently run the test without its plan.
     """
+    # `Any` is deliberate at this collection boundary: the plan config is user-supplied `tests_params`
+    # data whose keys differ per test and per provider, it is handed straight to the plan-building
+    # fixtures unchanged, and it is validated where it is consumed. A narrower type here would have to
+    # either name keys this function does not read or assert a schema only the fixtures know.
     test_config: dict[str, Any] | None = None
     if hasattr(item, "callspec"):
         # Class-based tests use class_plan_config

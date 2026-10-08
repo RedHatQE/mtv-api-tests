@@ -632,7 +632,7 @@ Almost every OpenShift-side resource is created through `utilities/resources.py:
 resource and records it in `fixture_store["teardown"]`. Class-level cleanup removes migrated VMs early, and session-level cleanup
 handles everything else.
 
-```136:157:utilities/pytest_utils.py
+```140:161:utilities/pytest_utils.py
 def session_teardown(session_store: dict[str, Any]) -> None:
     LOGGER.info("Running teardown to delete all created resources")
 
@@ -660,7 +660,7 @@ def session_teardown(session_store: dict[str, Any]) -> None:
 `teardown_resources()` collects leftovers per kind and fails the teardown when anything survives. Besides the resources the tests
 created, it also handles the resources the migration created:
 
-```175:193:utilities/pytest_utils.py
+```179:197:utilities/pytest_utils.py
     migrations = session_teardown_resources.get(Migration.kind, [])
     plans = session_teardown_resources.get(Plan.kind, [])
     providers = session_teardown_resources.get(Provider.kind, [])
