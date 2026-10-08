@@ -522,7 +522,7 @@ and turns the feature off instead of failing the run.
 <p>The most important files are:</p>
 <ul>
 <li><code>.data-collector/resources.json</code>: a dump of tracked resources created during the run.</li>
-<li><code>.data-collector/&lt;pytest-node-name&gt;/...</code>: per-failure must-gather output when the failure hook runs.</li>
+<li><code>.data-collector/&lt;pytest-node-name&gt;/...</code>: per-failure must-gather output when the failure hook runs, one directory per test method that collected its own gather.</li>
 <li><code>.data-collector/...</code> at the root: session-level must-gather output when teardown cleanup fails.</li>
 </ul>
 <p>The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
@@ -565,6 +565,8 @@ full, cluster-wide gather.</p>
 <li>If the failure can be tied back to a specific plan, the gather is scoped to that plan with <code>/usr/bin/targeted</code>.</li>
 <li>Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.</li>
 <li>The per-test gather is triggered from <code>pytest_exception_interact</code>, which passes the test class's <code>plan_resource</code> when one exists.</li>
+<li>Shared fixture failures are deduplicated. A class-scoped fixture that fails, such as <code>prepared_plan</code>, errors every test method in the class, but only the first one runs a must-gather — the others are skipped, since the cluster state is the same snapshot. The dedup key is the test class, the phase, the exception type, and the truncated message, and it is kept per process, so each xdist worker dedups on its own.</li>
+<li>A test that fails on its own, in the call phase, always collects its own must-gather. A setup error and a later call-phase failure on the same test are different failures and both collect.</li>
 <li>If teardown leaves leftovers behind, a second unscoped gather runs at session finish as a fallback.</li>
 </ul>
 <blockquote>
@@ -573,7 +575,8 @@ gather matches the cluster’s installed MTV build.
 </p>
 <p><strong>Note:</strong> must-gather resolution and execution are wrapped in a broad <code>try</code>, so a must-gather problem is logged but never fails your test run.
 </p>
-<p><strong>Tip:</strong> A per-test must-gather directory is often the quickest way to answer “what did the cluster look like at the moment this test failed?”</p>
+<p><strong>Tip:</strong> A per-test must-gather directory is often the quickest way to answer “what did the cluster look like at the moment this test failed?” When a
+fixture failure is the cause, the gather sits under the first test method that hit the error, not under every method in the class.</p>
 </blockquote>
 <h2 id="common-failure-points">Common Failure Points</h2>
 <p>Most failures in this repo fall into one of these buckets.</p>

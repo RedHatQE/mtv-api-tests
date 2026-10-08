@@ -1022,7 +1022,10 @@ created, it also handles the resources the migration created:</p>
 <blockquote>
 <p><strong>Note:</strong> Failure handling is broader than cleanup. When data collection is enabled, the session writes created resources to
 <code>&lt;data-collector-path&gt;/resources.json</code> (default <code>.data-collector</code>), and <code>pytest_exception_interact</code> triggers
-<code>oc adm must-gather</code> collection so you can inspect what MTV and the cluster were doing at the time of failure.</p>
+<code>oc adm must-gather</code> collection so you can inspect what MTV and the cluster were doing at the time of failure.
+A shared fixture failure is collected once per test class and phase: when a class-scoped fixture errors, every
+test method in the class gets a setup error, but only the first one runs a must-gather. A test that fails on its
+own always collects its own.</p>
 </blockquote>
 <h2 id="automation-and-dry-runs">Automation And Dry Runs</h2>
 <p>The repository includes local automation, but it is deliberately conservative.</p>

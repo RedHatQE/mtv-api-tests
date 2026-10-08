@@ -209,7 +209,7 @@ Unless you use `--skip-data-collector`, the suite prepares a clean `.data-collec
 The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
-- `.data-collector/<pytest-node-name>/...`: per-failure must-gather output when the failure hook runs.
+- `.data-collector/<pytest-node-name>/...`: per-failure must-gather output when the failure hook runs, one directory per test method that collected its own gather.
 - `.data-collector/...` at the root: session-level must-gather output when teardown cleanup fails.
 
 The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
@@ -258,6 +258,8 @@ What this means in practice:
 - If the failure can be tied back to a specific plan, the gather is scoped to that plan with `/usr/bin/targeted`.
 - Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.
 - The per-test gather is triggered from `pytest_exception_interact`, which passes the test class's `plan_resource` when one exists.
+- Shared fixture failures are deduplicated. A class-scoped fixture that fails, such as `prepared_plan`, errors every test method in the class, but only the first one runs a must-gather — the others are skipped, since the cluster state is the same snapshot. The dedup key is the test class, the phase, the exception type, and the truncated message, and it is kept per process, so each xdist worker dedups on its own.
+- A test that fails on its own, in the call phase, always collects its own must-gather. A setup error and a later call-phase failure on the same test are different failures and both collect.
 - If teardown leaves leftovers behind, a second unscoped gather runs at session finish as a fallback.
 
 > **Note:** The must-gather image is not hardcoded. The code resolves it from the installed MTV operator CSV and the ImageDigestMirrorSet, so the
@@ -265,7 +267,8 @@ What this means in practice:
 >
 > **Note:** must-gather resolution and execution are wrapped in a broad `try`, so a must-gather problem is logged but never fails your test run.
 >
-> **Tip:** A per-test must-gather directory is often the quickest way to answer “what did the cluster look like at the moment this test failed?”
+> **Tip:** A per-test must-gather directory is often the quickest way to answer “what did the cluster look like at the moment this test failed?” When a
+> fixture failure is the cause, the gather sits under the first test method that hit the error, not under every method in the class.
 
 ## Common Failure Points
 

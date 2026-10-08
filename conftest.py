@@ -49,7 +49,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
 from libs.providers.vmware import VMWareProvider
-from utilities.constants import MTV_OPERATOR_NAME
+from utilities.constants import MUST_GATHER_DEDUP_MESSAGE_LIMIT, MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
@@ -400,11 +400,55 @@ def pytest_collection_modifyitems(session, config, items):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
+def _is_duplicate_fixture_failure(node: pytest.Item, call: pytest.CallInfo[BaseException]) -> bool:
+    """Record a setup failure and report whether its must-gather was already collected.
+
+    A class-scoped fixture failure errors every test method in the class, but the cluster state is a single
+    snapshot, so only the first method collects a must-gather. The dedup key is
+    ``(test class, phase, exception type, truncated message)``: the class scopes it to sibling tests of the same
+    fixture, the phase keeps a later call-phase failure on the same item distinct, and the exception type plus
+    message identify the root cause rather than the test that reported it. Messages differing only past
+    MUST_GATHER_DEDUP_MESSAGE_LIMIT collapse into one key, which over-collects instead of suppressing.
+
+    State lives on the session object, so under xdist every worker dedups within its own process. Because the class
+    and phase are part of the key, the set cannot leak across classes or phases and needs no explicit reset.
+
+    Args:
+        node (pytest.Item): The test item reporting the exception.
+        call (pytest.CallInfo[BaseException]): The call info of the failing phase.
+
+    Returns:
+        bool: True when an equivalent failure already triggered a must-gather for this class and phase.
+    """
+    if call.when != "setup" or call.excinfo is None or getattr(node, "cls", None) is None:
+        return False
+
+    collected: set[tuple[Any, str, type[BaseException], str]] = getattr(
+        node.session, "_must_gather_collected_fixture_failures", set()
+    )
+    dedup_key = (
+        node.cls,
+        call.when,
+        type(call.excinfo.value),
+        str(call.excinfo.value)[:MUST_GATHER_DEDUP_MESSAGE_LIMIT],
+    )
+    if dedup_key in collected:
+        return True
+
+    collected.add(dedup_key)
+    node.session._must_gather_collected_fixture_failures = collected
+    return False
+
+
 def pytest_exception_interact(node, call, report):
     if is_dry_run(node.session.config):
         return
 
     if not node.session.config.getoption("skip_data_collector"):
+        if _is_duplicate_fixture_failure(node, call):
+            LOGGER.info(f"Skipping must-gather for {node.name}: the same fixture failure was already collected")
+            return
+
         _data_collector_path = Path(
             f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(node.name)}"
         )
