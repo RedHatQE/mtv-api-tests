@@ -97,7 +97,7 @@ else:
         raise
 ```
 
-The session-finish wrapper retains unexpected pending-gather flush errors until pytest's session hooks finish. It then attempts the inventory write and configured teardown inside nested `finally` blocks before propagating the collector error. Session-hook and cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup: an escaping inventory or cleanup error can stop later steps. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.
+The modern `wrapper=True` session-finish hook yields to pytest's session hooks in `finally`, even when a pending-gather flush raises. Independent `finally` blocks then attempt the inventory write, configured teardown, temporary-directory removal, summary and enabled AI enrichment before errors propagate. Later session-hook or cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.
 
 The session teardown in `utilities/pytest_utils.py` starts by cancelling active migrations and archiving plans:
 
@@ -153,7 +153,7 @@ keyed off the tracked inventory, so a resource you never registered is never cle
 
 If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` to capture diagnostics in the same collector path.
 
-> **Warning:** `pytest_sessionfinish()` logs teardown failures, attempts a full `must-gather` when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. A teardown failure can prevent later temporary-directory removal, the extra summary and AI enrichment. Check session errors as well as individual test results.
+> **Warning:** `pytest_sessionfinish()` logs teardown failures, attempts a full `must-gather` when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. Independent `finally` blocks still attempt temporary-directory removal, the extra summary and enabled AI enrichment before the error propagates. Check session errors as well as individual test results.
 
 ## Debugging With `--skip-teardown`
 
