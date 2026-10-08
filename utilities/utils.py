@@ -544,6 +544,7 @@ def create_source_provider(
         provider_type=source_provider_data_copy["type"],
         vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
         sdk_endpoint=source_provider_data_copy.get("endpoint_type"),
+        management_type=source_provider_data_copy.get("management_type"),
         annotations=provider_annotations or None,
     )
     # OVA (NFS-based) can transiently report ConnectionFailed while NFS initializes;

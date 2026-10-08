@@ -58,6 +58,7 @@ from utilities.provider_inventory import (
     validate_source_vms_exist,
     wait_for_added_nics_in_forklift_inventory,
     wait_for_cloned_vms_in_forklift_inventory,
+    wait_for_inventory_guest_networks,
 )
 from utilities.naming import (
     generate_name_with_uuid,
@@ -1394,6 +1395,12 @@ def prepared_plan(
                     source_vm_names=original_source_vm_names,
                     cloned_vms=cloned_vm_objects,
                 )
+
+        if plan.get("preserve_static_ips") and source_provider.type == Provider.ProviderType.HYPERV:
+            wait_for_inventory_guest_networks(
+                source_provider_inventory=source_provider_inventory,
+                vm_names=[vm["name"] for vm in virtual_machines],
+            )
     else:
         # OVA VMs aren't cloned — add unique targetName to prevent destination VM name conflicts
         # across parallel test sessions. The source VM name stays unchanged (must match OVA file).

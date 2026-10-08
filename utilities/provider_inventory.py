@@ -1,3 +1,4 @@
+import os
 import time
 
 from ocp_resources.provider import Provider
@@ -20,6 +21,43 @@ _INVENTORY_REFRESH_READY_TIMEOUT = 180
 # Timeout for inventory MACs to converge with the live provider (see _wait_for_inventory_mac_convergence).
 _MAC_CONVERGENCE_TIMEOUT = 60
 _MAC_CONVERGENCE_SLEEP = 5
+
+
+def wait_for_inventory_guest_networks(
+    source_provider_inventory: ForkliftInventory,
+    vm_names: list[str],
+) -> None:
+    """Wait until Forklift inventory guestNetworks has IPv4 ip and gateway.
+
+    Args:
+        source_provider_inventory (ForkliftInventory): Source provider inventory.
+        vm_names (list[str]): VM names to poll.
+
+    Raises:
+        TimeoutExpiredError: If guestNetworks is missing IPv4 ip and gateway after the timeout.
+        ValueError: If HYPERV_REFRESH_INTERVAL is not a positive integer.
+    """
+    interval = int(os.environ.get("HYPERV_REFRESH_INTERVAL", "10"))
+    if interval <= 0:
+        raise ValueError(f"HYPERV_REFRESH_INTERVAL must be a positive integer, got {interval}")
+    timeout = 10 * (interval + 30) + 300
+
+    def _ready() -> bool:
+        for name in vm_names:
+            try:
+                networks = source_provider_inventory.get_vm(name=name).get("guestNetworks") or []
+            except ValueError:
+                return False
+            if not any(
+                isinstance(entry, dict) and entry.get("ip") and ":" not in str(entry["ip"]) and entry.get("gateway")
+                for entry in networks
+            ):
+                return False
+        return True
+
+    for ready in TimeoutSampler(wait_timeout=timeout, sleep=10, func=_ready):
+        if ready:
+            return
 
 
 def force_inventory_refresh(provider: Provider) -> None:

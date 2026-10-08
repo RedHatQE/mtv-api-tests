@@ -524,6 +524,11 @@
                 "smb_password": {
                   "type": "string",
                   "description": "Optional SMB password if different from provider credentials."
+                },
+                "management_type": {
+                  "type": "string",
+                  "enum": ["cluster", "standalone"],
+                  "description": "Hyper-V management type: 'cluster' for Failover Cluster, 'standalone' for a single host. Maps to spec.settings.managementType on the MTV Provider CR. If omitted, the field is not set and MTV uses standalone."
                 }
               }
             }

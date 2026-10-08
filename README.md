@@ -204,6 +204,14 @@ cp .providers.json.example .providers.json
 
 See `.providers.json.example` for complete templates of all supported providers.
 
+**Hyper-V `management_type`:** Optional. `"cluster"` for a Failover Cluster, `"standalone"` for a single host.
+The value is passed through to `spec.settings.managementType` on the MTV Provider CR. If the key is omitted,
+the suite does not set the field and MTV uses standalone.
+
+**Hyper-V `preserve_static_ips`:** Before creating the Plan, the suite waits until Forklift inventory has
+`guestNetworks` with both IPv4 `ip` and `gateway` (host KVP is not sufficient on cluster). Timeout scales
+with `HYPERV_REFRESH_INTERVAL` (default ~700s).
+
 > **Schema & IDE support:** `providers_schema.json` documents which fields are required vs optional
 > per provider type. Add `"$schema"` as the first key in your `.providers.json` for IDE autocomplete:
 >
