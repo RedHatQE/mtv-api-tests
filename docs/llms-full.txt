@@ -3576,24 +3576,26 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 ```
 
 Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. `_validate_cluster_credentials()`
-then rejects an incomplete set — if some but not all three are configured, it fails fast with a `ValueError` naming each absent, empty, or whitespace-only value, for example
-`Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME`. Passing none of the three is legitimate: `mtv-api-tests run` takes that path when it
-authenticates with an existing `oc` token, and the client library then uses the ambient kubeconfig.
+requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment. Otherwise, it fails fast with a `ValueError`
+naming each absent, empty, or whitespace-only value, for example `Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME`.
+Omitting all three is legitimate: `mtv-api-tests run` takes that path when it authenticates with an existing `oc` token, and the client library then uses the ambient kubeconfig.
+That kubeconfig must be available to the test process; containers do not automatically inherit the host's kubeconfig.
 
-In practice, every real run needs these values:
+Every real run needs:
 
 - `.providers.json`
 - `source_provider`
 - `storage_class`
-- `cluster_host`
-- `cluster_username`
-- `cluster_password`
+
+The explicit-credential container and generated `Job` examples below also require nonblank `cluster_host`, `cluster_username`, and `cluster_password` values.
+Runs using an existing `oc` token and a kubeconfig available to the test process may omit all three keys from both pytest config and the environment.
 
 `cluster_username` and `cluster_password` can come from the environment instead of the command line.
 That is why the generated `Job` manifest wires `CLUSTER_HOST`, `CLUSTER_USERNAME`, `CLUSTER_PASSWORD`, and `CLUSTER_VERIFY_SSL` in from a `Secret`.
 
-> **Warning:** The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
-> `Job`, you still need to provide `cluster_host`, `cluster_username`, and `cluster_password`.
+> **Warning:** The generated `Job` uses explicit credentials, so provide nonblank `cluster_host`, `cluster_username`, and `cluster_password` values for that example.
+> It does not mount the host's kubeconfig or configure the test client to use the pod service account. A token-only run requires a kubeconfig available inside the container;
+> an existing `oc` login on the host alone is not enough.
 
 ## Provider And Test Config
 
@@ -3992,9 +3994,9 @@ If either required key is missing, the session aborts with `pytest.exit(...)` an
 Cluster credentials resolve from the environment, in this order: the `--tc` value first, then the environment variable. `CLUSTER_VERIFY_SSL` takes
 precedence over `insecure_verify_skip` for OpenShift API SSL verification, and its semantics are inverted: `CLUSTER_VERIFY_SSL=true` means `insecure_verify_skip=False`.
 
-> **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. When neither `--tc` nor the environment supplies a value,
-> `get_cluster_client()` authenticates from the ambient kubeconfig — that is the path `mtv-api-tests run` takes when an existing `oc` token is available. Supplying only some
-> of the three is a configuration error: the run then fails fast while resolving them, with a `ValueError` naming each absent, empty, or whitespace-only value, for example
+> **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. All three resolved values must be nonblank unless all three keys are absent
+> from both pytest config and the environment. When all three are absent, `get_cluster_client()` authenticates from the ambient kubeconfig. That is the path `mtv-api-tests run`
+> takes when an existing `oc` token is available. Otherwise, any absent, empty, or whitespace-only value causes the run to fail fast with a `ValueError` naming each such value, for example
 > `ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")`. That happens as the `ocp_admin_client` fixture requests the
 > client, before any migration work, and the message says which variable to set.
 
@@ -7610,10 +7612,10 @@ falling back to the matching `CLUSTER_*` environment variable:
 ```
 
 Each credential resolves through `_resolve_cluster_credential()`, which reads the `--tc` value first and falls back to the matching `CLUSTER_*` environment variable.
-`_validate_cluster_credentials()` then rejects an incomplete set: if some but not all of `cluster_host`, `cluster_username` and `cluster_password` are configured, it raises
-`ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming each one that is absent, empty or whitespace-only. Passing none of
-the three is legitimate — the CLI takes that path when it authenticates with an existing `oc` token, and the client library then authenticates from the ambient kubeconfig — so
-that case reaches client creation untouched.
+`_validate_cluster_credentials()` requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment.
+Otherwise, it raises `ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming each absent, empty, or whitespace-only value.
+Omitting all three is legitimate: the CLI takes that path when it authenticates with an existing `oc` token, and the client library then authenticates from the ambient kubeconfig.
+That case reaches client creation untouched.
 
 Treat the inputs like this:
 
@@ -10328,7 +10330,7 @@ problem is about `NetworkMap`, `StorageMap`, or a VM ID inside a `Plan`, start w
 6. After **every** clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (`conftest.py:1367`).
 7. `get_network_migration_map()` and `get_storage_migration_map()` turn inventory data into `NetworkMap` and `StorageMap` CR payloads (`utilities/mtv_migration.py:687`,
    `utilities/mtv_migration.py:548`).
-8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:911`).
+8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:927`).
 
 The synchronization step is explicitly two-phase in `conftest.py`, because waiting per-VM inside the clone loop caused inventory sync failures on the second and later VMs:
 

@@ -530,10 +530,10 @@ falling back to the matching <code>CLUSTER_*</code> environment variable:</p>
 </code></pre></div>
 
 <p>Each credential resolves through <code>_resolve_cluster_credential()</code>, which reads the <code>--tc</code> value first and falls back to the matching <code>CLUSTER_*</code> environment variable.
-<code>_validate_cluster_credentials()</code> then rejects an incomplete set: if some but not all of <code>cluster_host</code>, <code>cluster_username</code> and <code>cluster_password</code> are configured, it raises
-<code>ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")</code> naming each one that is absent, empty or whitespace-only. Passing none of
-the three is legitimate — the CLI takes that path when it authenticates with an existing <code>oc</code> token, and the client library then authenticates from the ambient kubeconfig — so
-that case reaches client creation untouched.</p>
+<code>_validate_cluster_credentials()</code> requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment.
+Otherwise, it raises <code>ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")</code> naming each absent, empty, or whitespace-only value.
+Omitting all three is legitimate: the CLI takes that path when it authenticates with an existing <code>oc</code> token, and the client library then authenticates from the ambient kubeconfig.
+That case reaches client creation untouched.</p>
 <p>Treat the inputs like this:</p>
 <ul>
 <li><code>cluster_host</code>, <code>cluster_username</code>, <code>cluster_password</code>: identify and authenticate to the OpenShift cluster used by the test session.</li>

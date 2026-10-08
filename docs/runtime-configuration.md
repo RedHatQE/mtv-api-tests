@@ -58,9 +58,9 @@ If either required key is missing, the session aborts with `pytest.exit(...)` an
 Cluster credentials resolve from the environment, in this order: the `--tc` value first, then the environment variable. `CLUSTER_VERIFY_SSL` takes
 precedence over `insecure_verify_skip` for OpenShift API SSL verification, and its semantics are inverted: `CLUSTER_VERIFY_SSL=true` means `insecure_verify_skip=False`.
 
-> **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. When neither `--tc` nor the environment supplies a value,
-> `get_cluster_client()` authenticates from the ambient kubeconfig — that is the path `mtv-api-tests run` takes when an existing `oc` token is available. Supplying only some
-> of the three is a configuration error: the run then fails fast while resolving them, with a `ValueError` naming each absent, empty, or whitespace-only value, for example
+> **Note:** `cluster_host`, `cluster_username` and `cluster_password` have **no built-in default**. All three resolved values must be nonblank unless all three keys are absent
+> from both pytest config and the environment. When all three are absent, `get_cluster_client()` authenticates from the ambient kubeconfig. That is the path `mtv-api-tests run`
+> takes when an existing `oc` token is available. Otherwise, any absent, empty, or whitespace-only value causes the run to fail fast with a `ValueError` naming each such value, for example
 > `ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")`. That happens as the `ocp_admin_client` fixture requests the
 > client, before any migration work, and the message says which variable to set.
 

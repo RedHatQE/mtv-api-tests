@@ -232,10 +232,10 @@ def get_cluster_client() -> DynamicClient:
 ```
 
 Each credential resolves through `_resolve_cluster_credential()`, which reads the `--tc` value first and falls back to the matching `CLUSTER_*` environment variable.
-`_validate_cluster_credentials()` then rejects an incomplete set: if some but not all of `cluster_host`, `cluster_username` and `cluster_password` are configured, it raises
-`ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming each one that is absent, empty or whitespace-only. Passing none of
-the three is legitimate — the CLI takes that path when it authenticates with an existing `oc` token, and the client library then authenticates from the ambient kubeconfig — so
-that case reaches client creation untouched.
+`_validate_cluster_credentials()` requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment.
+Otherwise, it raises `ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming each absent, empty, or whitespace-only value.
+Omitting all three is legitimate: the CLI takes that path when it authenticates with an existing `oc` token, and the client library then authenticates from the ambient kubeconfig.
+That case reaches client creation untouched.
 
 Treat the inputs like this:
 
