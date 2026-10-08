@@ -44,6 +44,7 @@ from utilities.resources import create_and_store_resource
 LOGGER = get_logger(__name__)
 
 DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
+CLUSTER_CREDENTIAL_KEYS: tuple[str, ...] = ("cluster_host", "cluster_username", "cluster_password")
 
 
 def resolve_providers_json_path(cli_path: str | None = None) -> str:
@@ -786,6 +787,44 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             self.res["spec"] = spec
 
 
+def _resolve_cluster_credential(config_key: str) -> str | None:
+    """Resolve a single cluster credential from pytest config, then the environment.
+
+    Args:
+        config_key (str): The pytest config key, e.g. ``cluster_username``.
+            The environment fallback is the same key uppercased, e.g.
+            ``CLUSTER_USERNAME``.
+
+    Returns:
+        str | None: The resolved credential, or None when neither source sets it.
+    """
+    configured = get_value_from_py_config(config_key)
+    if configured is None:
+        configured = os.environ.get(config_key.upper())
+    return None if configured is None else str(configured)
+
+
+def _validate_cluster_credentials() -> None:
+    """Fail fast when cluster credentials are configured incompletely.
+
+    The CLI passes all three credentials from an OCP provider entry, or none of
+    them when it authenticates with an existing ``oc`` token. Anything in between
+    is a configuration error: the run would otherwise fail deep inside the client
+    library without naming what was missing, or would hand a blank credential to
+    the client.
+
+    Raises:
+        ValueError: If at least one credential is set and any of them is absent,
+            empty or whitespace-only.
+    """
+    resolved_credentials = {key: _resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
+    unusable = [key for key, credential in resolved_credentials.items() if not credential or not credential.strip()]
+    is_token_path = all(credential is None for credential in resolved_credentials.values())
+    if unusable and not is_token_path:
+        names = ", ".join(f"'{key}' in pytest config or {key.upper()}" for key in unusable)
+        raise ValueError(f"Missing cluster credentials: set {names}")
+
+
 def get_cluster_client() -> DynamicClient:
     """Get a DynamicClient for the cluster.
 
@@ -806,19 +845,13 @@ def get_cluster_client() -> DynamicClient:
         DynamicClient: The cluster client.
 
     Raises:
-        ValueError: If the client cannot be created.
+        ValueError: If the cluster credentials are configured incompletely, or
+            if the client cannot be created.
     """
-    host = get_value_from_py_config("cluster_host")
-    if host is None:
-        host = os.environ.get("CLUSTER_HOST")
-
-    username = get_value_from_py_config("cluster_username")
-    if username is None:
-        username = os.environ.get("CLUSTER_USERNAME")
-
-    password = get_value_from_py_config("cluster_password")
-    if password is None:
-        password = os.environ.get("CLUSTER_PASSWORD")
+    _validate_cluster_credentials()
+    host = _resolve_cluster_credential("cluster_host")
+    username = _resolve_cluster_credential("cluster_username")
+    password = _resolve_cluster_credential("cluster_password")
     verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
     if verify_ssl_env is not None:
         insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")

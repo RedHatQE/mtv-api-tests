@@ -347,35 +347,33 @@ A builder stage installs the toolchain and runs <code>uv sync --locked</code>, a
 <p>The suite reads provider definitions from <code>.providers.json</code> and builds the OpenShift client from pytest config values, falling back to <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and
 <code>CLUSTER_PASSWORD</code> environment variables:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">host</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">host</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_HOST"</span><span class="p">)</span>
-
-    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">username</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_USERNAME"</span><span class="p">)</span>
-
-    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">password</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">password</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_PASSWORD"</span><span class="p">)</span>
+    <span class="n">_validate_cluster_credentials</span><span class="p">()</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
     <span class="o">...</span>
     <span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
 </code></pre></div>
 
-<p>In practice, every real run needs these values:</p>
+<p>Each credential is resolved by <code>_resolve_cluster_credential()</code>: the <code>--tc</code> value first, then the matching <code>CLUSTER_*</code> environment variable. <code>_validate_cluster_credentials()</code>
+requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment. Otherwise, it fails fast with a <code>ValueError</code>
+naming each absent, empty, or whitespace-only value, for example <code>Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME</code>.
+Omitting all three is legitimate: <code>mtv-api-tests run</code> takes that path when it authenticates with an existing <code>oc</code> token, and the client library then uses the ambient kubeconfig.
+That kubeconfig must be available to the test process; containers do not automatically inherit the host's kubeconfig.</p>
+<p>Every real run needs:</p>
 <ul>
 <li><code>.providers.json</code></li>
 <li><code>source_provider</code></li>
 <li><code>storage_class</code></li>
-<li><code>cluster_host</code></li>
-<li><code>cluster_username</code></li>
-<li><code>cluster_password</code></li>
 </ul>
+<p>The explicit-credential container and generated <code>Job</code> examples below also require nonblank <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code> values.
+Runs using an existing <code>oc</code> token and a kubeconfig available to the test process may omit all three keys from both pytest config and the environment.</p>
 <p><code>cluster_username</code> and <code>cluster_password</code> can come from the environment instead of the command line.
 That is why the generated <code>Job</code> manifest wires <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, <code>CLUSTER_PASSWORD</code>, and <code>CLUSTER_VERIFY_SSL</code> in from a <code>Secret</code>.</p>
 <blockquote>
-<p><strong>Warning:</strong> The suite does not create its OpenShift client from the pod service account. Even inside an OpenShift
-<code>Job</code>, you still need to provide <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>.</p>
+<p><strong>Warning:</strong> The generated <code>Job</code> uses explicit credentials, so provide nonblank <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code> values for that example.
+It does not mount the host's kubeconfig or configure the test client to use the pod service account. A token-only run requires a kubeconfig available inside the container;
+an existing <code>oc</code> login on the host alone is not enough.</p>
 </blockquote>
 <h2 id="provider-and-test-config">Provider And Test Config</h2>
 <h3 id="providersjson"><code>.providers.json</code></h3>
