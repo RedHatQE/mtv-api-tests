@@ -401,6 +401,7 @@ def create_source_provider(
     Raises:
         ValueError: If the provider type cannot be determined from source_provider_data.
         ValueError: If the provider secret fails to create.
+        ConnectionError: If the provider is created but its availability check fails.
     """
     # common
     source_provider_secret: Secret | None = None
@@ -553,7 +554,9 @@ def create_source_provider(
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
         if not _source_provider.test:
-            pytest.fail(f"{source_provider.type} provider {source_provider_data_copy['api_url']} is not available.")
+            raise ConnectionError(
+                f"{_source_provider.type} provider {source_provider_data_copy['api_url']} is not available."
+            )
 
         yield _source_provider
 

@@ -541,7 +541,9 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.</p>
     <span class="c1"># this is for communication with the provider</span>
     <span class="k">with</span> <span class="n">source_provider</span><span class="p">(</span><span class="n">ocp_resource</span><span class="o">=</span><span class="n">ocp_resource_provider</span><span class="p">,</span> <span class="o">**</span><span class="n">provider_args</span><span class="p">)</span> <span class="k">as</span> <span class="n">_source_provider</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_source_provider</span><span class="o">.</span><span class="n">test</span><span class="p">:</span>
-            <span class="n">pytest</span><span class="o">.</span><span class="n">fail</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> provider </span><span class="si">{</span><span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s1">'api_url'</span><span class="p">]</span><span class="si">}</span><span class="s2"> is not available."</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> provider </span><span class="si">{</span><span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s1">'api_url'</span><span class="p">]</span><span class="si">}</span><span class="s2"> is not available."</span>
+            <span class="p">)</span>
 
         <span class="k">yield</span> <span class="n">_source_provider</span>
 </code></pre></div>

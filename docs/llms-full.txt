@@ -1300,7 +1300,7 @@ The source provider setup is centered around `utilities/utils.py:create_source_p
 from the `type` field, creates the source `Secret`, creates the source `Provider` custom resource, waits until that `Provider` is
 ready in Forklift, and only then opens the matching provider SDK wrapper.
 
-```413:424:utilities/utils.py
+```414:425:utilities/utils.py
         secret_string_data = {
             "url": source_provider_data_copy["api_url"],
             "insecureSkipVerify": "true" if insecure else "false",
@@ -1315,7 +1315,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         }
 ```
 
-```535:557:utilities/utils.py
+```536:561:utilities/utils.py
         ocp_resource_provider = create_and_store_resource(
             fixture_store=fixture_store,
             resource=Provider,
@@ -1337,7 +1337,9 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         # this is for communication with the provider
         with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
             if not _source_provider.test:
-                pytest.fail(f"{source_provider.type} provider {source_provider_data_copy['api_url']} is not available.")
+                raise ConnectionError(
+                    f"{_source_provider.type} provider {source_provider_data_copy['api_url']} is not available."
+                )
 
             yield _source_provider
 ```
