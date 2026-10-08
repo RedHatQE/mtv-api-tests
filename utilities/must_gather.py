@@ -236,7 +236,7 @@ def collect_must_gather_for_item(node: pytest.Item, artifact_name: str) -> bool:
         f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(artifact_name)}"
     )
     plan_obj: Plan | None = getattr(getattr(node, "cls", None), "plan_resource", None)
-    if not plan_obj:
+    if plan_obj is None:
         return run_must_gather(data_collector_path=data_collector_path)
 
     plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
