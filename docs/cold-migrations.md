@@ -50,7 +50,7 @@ The basic cold-migration test configuration is intentionally small:
 `add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
 provider type other than vSphere:
 
-```373:382:conftest.py
+```374:383:conftest.py
             # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
             # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
             if source_provider_type != Provider.ProviderType.VSPHERE:
@@ -65,7 +65,7 @@ provider type other than vSphere:
 
 On a vSphere provider the `prepared_plan` fixture still fails fast when `add_nic_start_connected` is missing or is not a `bool`:
 
-```1176:1188:conftest.py
+```1324:1336:conftest.py
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config:
             for vm in virtual_machines:
@@ -117,7 +117,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1641:1651:conftest.py
+```1704:1714:conftest.py
 @pytest.fixture(scope="class")
 def cleanup_migrated_vms(
     request: pytest.FixtureRequest,
@@ -135,7 +135,7 @@ def cleanup_migrated_vms(
 set — `warm_migration`, `copyoffload`, `xfs_check`, `copyoffload`, `target_affinity` and the rest appear only in the configs that use them. The keys read below are
 the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is `Any`.
 
-```1639:1659:conftest.py
+```1702:1722:conftest.py
 yield
 
 if request.config.getoption("skip_teardown"):
@@ -180,7 +180,7 @@ Before any map is created, the class-scoped `prepared_plan` fixture turns a smal
 the PVC name template for the current provider, decides where migrated VMs should land, prepares or clones the source VM, applies an optional power-state change, waits for
 Forklift inventory to see the VM, and stores full source VM details for later validation.
 
-```1064:1090:conftest.py
+```1127:1153:conftest.py
 # Deep copy the plan config to avoid mutation
 plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -212,7 +212,7 @@ else:
 
 Each VM is then cloned, powered, and recorded:
 
-```1284:1317:conftest.py
+```1347:1380:conftest.py
 # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
 source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
 if source_vm_power == "on":

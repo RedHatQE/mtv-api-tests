@@ -90,7 +90,7 @@ plan_wait_timeout: int = 3600
 The `snapshots_interval` value is applied through the `precopy_interval_forkliftcontroller` fixture, which patches the live `ForkliftController` custom resource in the MTV
 namespace:
 
-```649:663:conftest.py
+```712:726:conftest.py
 current_interval = getattr(forklift_controller.instance.spec, "controller_precopy_interval", None)
 
 if str(current_interval) == str(snapshots_interval):
@@ -108,7 +108,7 @@ ResourceEditor(patches={forklift_controller: {"spec": {"controller_precopy_inter
 )
 ```
 
-The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:663`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
+The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:726`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
 ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.
 
 What these values do:
@@ -169,7 +169,7 @@ Use these tuning rules:
 Warm support is not expressed per test class. It is enforced at collection time by a `pytest_collection_modifyitems` hook in the root `conftest.py`, based on the source provider
 `type` in `.providers.json`:
 
-```313:325:conftest.py
+```314:326:conftest.py
 # Skip warm migration tests for providers that do not support warm migration.
 warm_unsupported = (
     Provider.ProviderType.OPENSTACK,

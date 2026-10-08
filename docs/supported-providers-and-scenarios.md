@@ -65,7 +65,7 @@ The `type` values come from the Forklift provider-type constants: `vsphere`, `op
 > **Warning:** Warm migration is not available for every source provider. The collection hook in `conftest.py` skips every `warm` item when the configured source provider cannot do
 > warm migrations.
 
-```339:348:conftest.py
+```340:349:conftest.py
             warm_unsupported = (
                 Provider.ProviderType.OPENSTACK,
                 Provider.ProviderType.OPENSHIFT,
@@ -82,7 +82,7 @@ Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere
 `openshift` and `ova` sources, because those providers do not carry a CA certificate in their provider secret.
 A separate branch of the same hook enforces that:
 
-```361:371:conftest.py
+```362:372:conftest.py
             ca_cert_unsupported = (
                 Provider.ProviderType.OPENSHIFT,
                 Provider.ProviderType.OVA,
@@ -96,7 +96,7 @@ A separate branch of the same hook enforces that:
                         item.add_marker(ca_cert_skip)
 ```
 
-```352:358:conftest.py
+```353:359:conftest.py
             if source_provider_type != Provider.ProviderType.VSPHERE:
                 vsphere_only_skip = pytest.mark.skip(reason="Test is only applicable to vSphere source providers")
                 for item in items:
@@ -109,7 +109,7 @@ A separate branch of the same hook enforces that:
 A third capability gate of the same hook covers `add_nic`, which is a plan config flag rather than a marker, so it resolves
 each item's parametrized plan config:
 
-```373:382:conftest.py
+```374:383:conftest.py
             # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
             # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
             if source_provider_type != Provider.ProviderType.VSPHERE:
