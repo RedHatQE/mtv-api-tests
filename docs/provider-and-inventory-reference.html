@@ -330,7 +330,7 @@ problem is about <code>NetworkMap</code>, <code>StorageMap</code>, or a VM ID in
    <code>utilities/mtv_migration.py:548</code>).</p>
 </li>
 <li>
-<p><code>populate_vm_ids()</code> copies Forklift VM IDs into the <code>Plan</code> payload just before <code>create_plan_resource()</code> runs (<code>utilities/utils.py:911</code>).</p>
+<p><code>populate_vm_ids()</code> copies Forklift VM IDs into the <code>Plan</code> payload just before <code>create_plan_resource()</code> runs (<code>utilities/utils.py:927</code>).</p>
 </li>
 </ol>
 <p>The synchronization step is explicitly two-phase in <code>conftest.py</code>, because waiting per-VM inside the clone loop caused inventory sync failures on the second and later VMs:</p>
