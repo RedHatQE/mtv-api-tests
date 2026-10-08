@@ -120,13 +120,16 @@ In real failure runs, the XML is much more informative because it includes loggi
 When you pass `--analyze-with-ai`, the suite posts the raw JUnit XML to a **rootcoz** server and writes the enriched XML back to the same
 file. rootcoz is an external service, not part of this repository; this page only documents the client half of the contract.
 
-```462:517:utilities/pytest_utils.py
+```495:550:utilities/pytest_utils.py
 def enrich_junit_xml(session: pytest.Session) -> None:
     """Read JUnit XML, send to server for analysis, write enriched XML back.
 
     Reads the JUnit XML that pytest generated, POSTs the raw content to the
     rootcoz server's /analyze-failures endpoint, and writes the enriched XML
     (with analysis results) back to the same file.
+
+    Args:
+        session: The pytest session containing config options.
     """
     xml_path_raw = getattr(session.config.option, "xmlpath", None)
     if not xml_path_raw:
@@ -171,7 +174,7 @@ def enrich_junit_xml(session: pytest.Session) -> None:
 
     if enriched_xml := result.get("enriched_xml"):
         xml_path.write_text(enriched_xml)
-        LOGGER.info(f"JUnit XML enriched with AI analysis: {xml_path}")
+        LOGGER.info("JUnit XML enriched with AI analysis: %s", xml_path)
     else:
         LOGGER.info("No enriched XML returned (no failures or analysis failed)")
 ```
@@ -232,7 +235,7 @@ failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` sh
 The suite has built-in must-gather support. When it can match a failure to a specific plan, it runs a targeted gather. Otherwise it runs a
 full, cluster-wide gather.
 
-```167:186:utilities/must_gather.py
+```174:193:utilities/must_gather.py
 must_gather_image = _resolve_must_gather_image(
     ocp_admin_client=ocp_admin_client,
     mtv_subs=mtv_subs,
@@ -351,7 +354,7 @@ So “migration failed” and “test failed” are not always the same thing.
 
 Copy-offload adds extra prerequisites, so it also adds extra failure modes.
 
-```30:70:.providers.json.example
+```30:71:.providers.json.example
     "copyoffload": {
       # Supported storage_vendor_product values:
       # - "ontap"           (NetApp ONTAP)

@@ -414,6 +414,9 @@ file. rootcoz is an external service, not part of this repository; this page onl
 <span class="sd">    Reads the JUnit XML that pytest generated, POSTs the raw content to the</span>
 <span class="sd">    rootcoz server's /analyze-failures endpoint, and writes the enriched XML</span>
 <span class="sd">    (with analysis results) back to the same file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        session: The pytest session containing config options.</span>
 <span class="sd">    """</span>
     <span class="n">xml_path_raw</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="p">,</span> <span class="s2">"xmlpath"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">xml_path_raw</span><span class="p">:</span>
@@ -458,7 +461,7 @@ file. rootcoz is an external service, not part of this repository; this page onl
 
     <span class="k">if</span> <span class="n">enriched_xml</span> <span class="o">:=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"enriched_xml"</span><span class="p">):</span>
         <span class="n">xml_path</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">enriched_xml</span><span class="p">)</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"JUnit XML enriched with AI analysis: </span><span class="si">{</span><span class="n">xml_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"JUnit XML enriched with AI analysis: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">xml_path</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"No enriched XML returned (no failures or analysis failed)"</span><span class="p">)</span>
 </code></pre></div>

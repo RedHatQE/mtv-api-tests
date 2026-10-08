@@ -48,7 +48,7 @@ in `.rootcoz/settings.json`.
 
 From `utilities/pytest_utils.py`:
 
-```63:84:utilities/pytest_utils.py
+```64:85:utilities/pytest_utils.py
 def setup_ai_analysis(session: pytest.Session) -> None:
     """Configure AI analysis for test failure reporting.
 
@@ -87,7 +87,7 @@ to the rootcoz service, and writes the enriched XML back to the same file.
 
 From `utilities/pytest_utils.py`:
 
-```485:505:utilities/pytest_utils.py
+```518:538:utilities/pytest_utils.py
     server_url = os.environ["ROOTCOZ_SERVER_URL"]
     raw_xml = xml_path.read_text()
 
