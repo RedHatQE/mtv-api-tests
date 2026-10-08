@@ -407,6 +407,9 @@ def create_source_provider(
     source_provider_secret: Secret | None = None
     source_provider: Any = None
     source_provider_data_copy = copy.deepcopy(source_provider_data)
+    # Configured URL, kept before provider-specific rewrites (e.g. the OpenShift cluster host)
+    # so failure messages report the endpoint from the providers configuration.
+    configured_api_url = source_provider_data_copy["api_url"]
 
     # Check if copy-offload configuration is present
     has_copyoffload = "copyoffload" in source_provider_data_copy
@@ -554,9 +557,10 @@ def create_source_provider(
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
         if not _source_provider.test:
-            raise ConnectionError(
-                f"{_source_provider.type} provider {source_provider_data_copy['api_url']} is not available."
-            )
+            # The wrappers connect to provider_args["host"] when they have one (Hyper-V and vSphere use the
+            # fqdn, the rest use the api_url); OpenShift sets no host and connects to the cluster.
+            unavailable_endpoint = provider_args.get("host") or configured_api_url
+            raise ConnectionError(f"{_source_provider.type} provider {unavailable_endpoint} is not available.")
 
         yield _source_provider
 
