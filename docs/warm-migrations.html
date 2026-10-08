@@ -398,7 +398,7 @@ namespace:</p>
 <span class="p">)</span>
 </code></pre></div>
 
-<p>The fixture intentionally does not restore the previous interval. Its docstring (<code>conftest.py:736</code>) records why: with <code>ResourceEditor</code> restoring at teardown, one parallel worker
+<p>The fixture intentionally does not restore the previous interval. Its docstring (<code>conftest.py:721</code>) records why: with <code>ResourceEditor</code> restoring at teardown, one parallel worker
 ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.</p>
 <p>What these values do:</p>
 <ul>

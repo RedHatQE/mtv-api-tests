@@ -90,11 +90,14 @@ if session.config.getoption("skip_teardown"):
 else:
     try:
         session_teardown(session_store=_session_store)
-    except Exception as exp:
-        LOGGER.error(f"the following resources was left after tests are finished: {exp}")
+    except Exception:
+        LOGGER.exception("Resources remain after session teardown")
         if not session.config.getoption("skip_data_collector"):
             run_must_gather(data_collector_path=_data_collector_path)
+        raise
 ```
+
+The session-finish wrapper retains unexpected pending-gather flush errors until pytest's session hooks finish. It then attempts the inventory write and configured teardown inside nested `finally` blocks before propagating the collector error. Session-hook and cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup: an escaping inventory or cleanup error can stop later steps. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.
 
 The session teardown in `utilities/pytest_utils.py` starts by cancelling active migrations and archiving plans:
 
@@ -133,8 +136,7 @@ It also performs extra cleanup and verification in the target namespace by:
 - Waiting for matching pods to disappear.
 - Waiting for matching `DataVolume`, `PersistentVolumeClaim`, and `PersistentVolume` objects to be deleted.
 
-> **Note:** `.data-collector/resources.json` is written before session teardown runs. That means the file is available both when you use `--skip-teardown` and when teardown later
-reports a problem.
+> **Note:** Writing `.data-collector/resources.json` is attempted before session teardown when collection is enabled and resources are tracked. A successful write leaves the file available with `--skip-teardown` or when teardown later reports a problem; write failures are logged.
 
 ### Leftover detection
 
@@ -151,8 +153,7 @@ keyed off the tracked inventory, so a resource you never registered is never cle
 
 If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` to capture diagnostics in the same collector path.
 
-> **Warning:** Leftover teardown problems are currently surfaced through session-finish logging. `pytest_sessionfinish()` logs the teardown exception and can trigger `must-gather`,
-but it does not re-raise that exception after logging it. Always check the end-of-run output, not just the individual test results.
+> **Warning:** `pytest_sessionfinish()` logs teardown failures, attempts a full `must-gather` when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. A teardown failure can prevent later temporary-directory removal, the extra summary and AI enrichment. Check session errors as well as individual test results.
 
 ## Debugging With `--skip-teardown`
 

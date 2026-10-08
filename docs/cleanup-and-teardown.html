@@ -381,12 +381,14 @@ search on.</p>
 <span class="k">else</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">session_teardown</span><span class="p">(</span><span class="n">session_store</span><span class="o">=</span><span class="n">_session_store</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the following resources was left after tests are finished: </span><span class="si">{</span><span class="n">exp</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">"Resources remain after session teardown"</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_data_collector"</span><span class="p">):</span>
             <span class="n">run_must_gather</span><span class="p">(</span><span class="n">data_collector_path</span><span class="o">=</span><span class="n">_data_collector_path</span><span class="p">)</span>
+        <span class="k">raise</span>
 </code></pre></div>
 
+<p>The session-finish wrapper retains unexpected pending-gather flush errors until pytest's session hooks finish. It then attempts the inventory write and configured teardown inside nested <code>finally</code> blocks before propagating the collector error. Session-hook and cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup: an escaping inventory or cleanup error can stop later steps. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.</p>
 <p>The session teardown in <code>utilities/pytest_utils.py</code> starts by cancelling active migrations and archiving plans:</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">session_teardown_resources</span> <span class="o">:=</span> <span class="n">session_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"teardown"</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">migration_name</span> <span class="ow">in</span> <span class="n">session_teardown_resources</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Migration</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[]):</span>
@@ -423,8 +425,7 @@ search on.</p>
 <li>Waiting for matching <code>DataVolume</code>, <code>PersistentVolumeClaim</code>, and <code>PersistentVolume</code> objects to be deleted.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> <code>.data-collector/resources.json</code> is written before session teardown runs. That means the file is available both when you use <code>--skip-teardown</code> and when teardown later
-reports a problem.</p>
+<p><strong>Note:</strong> Writing <code>.data-collector/resources.json</code> is attempted before session teardown when collection is enabled and resources are tracked. A successful write leaves the file available with <code>--skip-teardown</code> or when teardown later reports a problem; write failures are logged.</p>
 </blockquote>
 <h3 id="leftover-detection">Leftover detection</h3>
 <p>Teardown is more than a best-effort delete loop. The code explicitly tracks leftovers and raises <code>SessionTeardownError</code> if resources are still present after cleanup attempts.</p>
@@ -438,8 +439,7 @@ keyed off the tracked inventory, so a resource you never registered is never cle
 </blockquote>
 <p>If the data collector is enabled and teardown hits a problem, the session then runs MTV <code>must-gather</code> to capture diagnostics in the same collector path.</p>
 <blockquote>
-<p><strong>Warning:</strong> Leftover teardown problems are currently surfaced through session-finish logging. <code>pytest_sessionfinish()</code> logs the teardown exception and can trigger <code>must-gather</code>,
-but it does not re-raise that exception after logging it. Always check the end-of-run output, not just the individual test results.</p>
+<p><strong>Warning:</strong> <code>pytest_sessionfinish()</code> logs teardown failures, attempts a full <code>must-gather</code> when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. A teardown failure can prevent later temporary-directory removal, the extra summary and AI enrichment. Check session errors as well as individual test results.</p>
 </blockquote>
 <h2 id="debugging-with-skip-teardown">Debugging With <code>--skip-teardown</code></h2>
 <p>The user-facing flag lives in <code>conftest.py</code>:</p>

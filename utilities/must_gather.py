@@ -77,11 +77,17 @@ def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
             quay mirror exists.
 
     Raises:
-        MustGatherImageError: If no ``imageDigestMirrors`` entry contains ``must-gather``
-            in its source, or if the matching entry has an empty mirrors list.
+        MustGatherImageError: If mirror entries or sources are missing, no entry contains
+            ``must-gather`` in its source, or the matching entry has an empty mirrors list.
     """
-    for mirror_entry in idms.instance.spec.imageDigestMirrors:
-        if "must-gather" in mirror_entry["source"]:
+    mirror_entries = idms.instance.spec.imageDigestMirrors
+    if not mirror_entries:
+        raise MustGatherImageError(f"IDMS '{idms.name}' has no imageDigestMirrors")
+    for mirror_entry in mirror_entries:
+        source = mirror_entry.get("source")
+        if not source:
+            raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry without a source")
+        if "must-gather" in source:
             mirrors = mirror_entry.get("mirrors", [])
             if not mirrors:
                 raise MustGatherImageError(f"IDMS '{idms.name}' has must-gather entry with no mirrors")
@@ -101,15 +107,21 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
         str: The MUST_GATHER_IMAGE value.
 
     Raises:
-        MustGatherImageError: If the container env list is None or MUST_GATHER_IMAGE is
-            missing from the CSV environment variables.
+        MustGatherImageError: If deployments, containers, environment variables or the
+            MUST_GATHER_IMAGE value are missing from the CSV.
     """
-    envs = mtv_csv.instance.spec.install.spec.deployments[0].spec.template.spec.containers[0].env
-    if envs is None:
+    deployments = mtv_csv.instance.spec.install.spec.deployments
+    if not deployments:
+        raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no deployments")
+    containers = deployments[0].spec.template.spec.containers
+    if not containers:
+        raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no containers")
+    envs = containers[0].env
+    if not envs:
         raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no container env list")
-    images = [env["value"] for env in envs if env["name"] == "MUST_GATHER_IMAGE"]
-    if not images:
-        raise MustGatherImageError(f"No MUST_GATHER_IMAGE found in MTV ClusterServiceVersion '{mtv_csv.name}'")
+    images = [env.get("value") for env in envs if env.get("name") == "MUST_GATHER_IMAGE"]
+    if not images or not images[0]:
+        raise MustGatherImageError(f"No MUST_GATHER_IMAGE value found in MTV ClusterServiceVersion '{mtv_csv.name}'")
     return images[0]
 
 
@@ -228,6 +240,24 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
             command = f"{command} -- {target_args}"
         success, _, _ = run_command(shlex.split(command), verify_stderr=False)
         return success
+    except NotImplementedError as ex:
+        # The wrapper has no dedicated missing-API exception; match its discovery origin and message.
+        origin = ex.__traceback__
+        while origin is not None and origin.tb_next is not None:
+            origin = origin.tb_next
+        if (
+            origin is None
+            or origin.tb_frame.f_globals.get("__name__") != "ocp_resources.resource"
+            or origin.tb_frame.f_code.co_name != "_get_api_version"
+        ):
+            raise
+        if str(ex) not in {
+            f"Couldn't find {resource.kind} in {resource.api_group} api group"
+            for resource in (Subscription, ClusterServiceVersion, ImageDigestMirrorSet)
+        }:
+            raise
+        LOGGER.exception(f"Must-gather resource API is unavailable. {ex}")
+        return False
     except (
         CalledProcessError,
         TimeoutExpired,

@@ -312,19 +312,19 @@ problem is about <code>NetworkMap</code>, <code>StorageMap</code>, or a VM ID in
 <h2 id="end-to-end-flow">End-To-End Flow</h2>
 <ol>
 <li>The suite loads <code>.providers.json</code> from the repository root through <code>resolve_providers_json_path()</code> and <code>load_source_providers()</code> (<code>utilities/utils.py:77</code>).</li>
-<li><code>py_config["source_provider"]</code> selects one top-level provider entry from that file (<code>conftest.py:827</code>).</li>
+<li><code>py_config["source_provider"]</code> selects one top-level provider entry from that file (<code>conftest.py:810</code>).</li>
 <li>
 <p><code>create_source_provider()</code> creates the source <code>Secret</code> and source <code>Provider</code> CR, waits for <code>Provider.Status.READY</code>, then instantiates the matching <code>BaseProvider</code> subclass as a
    context manager (<code>utilities/utils.py:371</code>).</p>
 </li>
 <li>
-<p>The <code>source_provider_inventory</code> fixture calls <code>create_forklift_inventory()</code>, which picks the adapter registered for <code>source_provider.type</code> (<code>conftest.py:1812</code>,
+<p>The <code>source_provider_inventory</code> fixture calls <code>create_forklift_inventory()</code>, which picks the adapter registered for <code>source_provider.type</code> (<code>conftest.py:1805</code>,
    <code>libs/forklift_inventory.py:33</code>).</p>
 </li>
 <li>
-<p><code>prepared_plan</code> clones or creates source VMs, normalizes them through <code>vm_dict()</code>, and rewrites the VM name to the cloned name (<code>conftest.py:1420</code>).</p>
+<p><code>prepared_plan</code> clones or creates source VMs, normalizes them through <code>vm_dict()</code>, and rewrites the VM name to the cloned name (<code>conftest.py:1402</code>).</p>
 </li>
-<li>After <strong>every</strong> clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (<code>conftest.py:1477</code>).</li>
+<li>After <strong>every</strong> clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (<code>conftest.py:1462</code>).</li>
 <li>
 <p><code>get_network_migration_map()</code> and <code>get_storage_migration_map()</code> turn inventory data into <code>NetworkMap</code> and <code>StorageMap</code> CR payloads (<code>utilities/mtv_migration.py:687</code>,
    <code>utilities/mtv_migration.py:548</code>).</p>
@@ -348,7 +348,7 @@ problem is about <code>NetworkMap</code>, <code>StorageMap</code>, or a VM ID in
 <p>Two extra waits sit next to that call:</p>
 <ul>
 <li>
-<p>When any VM uses <code>add_nic</code>, <code>wait_for_added_nics_in_forklift_inventory()</code> forces a provider refresh and blocks until inventory shows the new NIC count (<code>conftest.py:1489</code>,
+<p>When any VM uses <code>add_nic</code>, <code>wait_for_added_nics_in_forklift_inventory()</code> forces a provider refresh and blocks until inventory shows the new NIC count (<code>conftest.py:1474</code>,
   <code>utilities/provider_inventory.py:44</code>).</p>
 </li>
 <li>
@@ -570,7 +570,7 @@ the test code.</p>
 </ul>
 <blockquote>
 <p><strong>Warning:</strong> <code>skip_clone=True</code> is incompatible with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>, <code>migrate_shared_disks</code>, <code>add_nic</code>, and — outside Hyper-V — <code>preserve_static_ips</code>,
-because all of those need the cloning phase (<code>conftest.py:1304</code>).</p>
+because all of those need the cloning phase (<code>conftest.py:1286</code>).</p>
 </blockquote>
 <h2 id="provider-specific-behavior">Provider-Specific Behavior</h2>
 <h3 id="vsphere">vSphere</h3>
@@ -594,7 +594,7 @@ because all of those need the cloning phase (<code>conftest.py:1304</code>).</p>
 </li>
 <li>Standard network and storage mappings come from <code>VsphereForkliftInventory</code>. Copy-offload storage mappings can bypass inventory and use explicit datastore IDs instead.</li>
 <li>It is the only provider that implements shared-disk handling: <code>relink_shared_disks()</code>, <code>find_shared_vmdk_paths()</code>, and <code>reattach_orphaned_vmdk()</code>. <code>prepared_plan</code> refuses
-  <code>migrate_shared_disks</code> for any other provider type (<code>conftest.py:1254</code>).</li>
+  <code>migrate_shared_disks</code> for any other provider type (<code>conftest.py:1236</code>).</li>
 </ul>
 <blockquote>
 <p><strong>Note:</strong> The test-side vSphere SDK connection uses <code>disableSslCertValidation=True</code>, while the Forklift <code>Provider</code> CR still honors <code>source_provider_insecure_skip_verify</code> and can
@@ -646,10 +646,10 @@ late, map generation will be wrong.</p>
 </li>
 <li>
 <p>It has <code>wait_for_guest_network_config()</code> for guest network readiness, which <code>prepared_plan</code> uses in place of the vSphere <code>wait_for_vmware_guest_info()</code> when <code>source_vm_power</code> is
-  <code>on</code> (<code>conftest.py:1403</code>).</p>
+  <code>on</code> (<code>conftest.py:1263</code>).</p>
 </li>
 <li>
-<p><code>skip_clone=True</code> is allowed for Hyper-V, and <code>preserve_static_ips</code> stays compatible with it because guest tools are reachable without cloning (<code>conftest.py:1306</code>).</p>
+<p><code>skip_clone=True</code> is allowed for Hyper-V, and <code>preserve_static_ips</code> stays compatible with it because guest tools are reachable without cloning (<code>conftest.py:1287</code>).</p>
 </li>
 <li>Windows detection uses the guest <code>OSName</code>/<code>Notes</code> KVP token <code>windows</code>, not the VM name, so names such as <code>twin-server</code> are classified correctly (<code>libs/providers/hyperv.py:29</code>,
   <code>libs/providers/hyperv.py:737</code>).</li>
@@ -657,7 +657,7 @@ late, map generation will be wrong.</p>
 <h3 id="openshift">OpenShift</h3>
 <p><code>OCPProvider</code> is both the destination provider for migrations and a supported source provider for source-side CNV test setups.</p>
 <ul>
-<li>If OpenShift is the source, <code>prepared_plan</code> creates a source <code>NetworkAttachmentDefinition</code> plus source CNV VMs through <code>create_source_cnv_vms()</code> (<code>conftest.py:1231</code>).</li>
+<li>If OpenShift is the source, <code>prepared_plan</code> creates a source <code>NetworkAttachmentDefinition</code> plus source CNV VMs through <code>create_source_cnv_vms()</code> (<code>conftest.py:1214</code>).</li>
 <li><code>OpenshiftForkliftInventory</code> resolves storage by following the VM's data volumes to PVCs and then reading <code>storageClassName</code> from the live cluster.</li>
 <li>It resolves networks from the VM template: <code>multus.networkName</code> becomes a named source network, and a pod network becomes <code>{"type": "pod"}</code>.</li>
 <li>
@@ -682,7 +682,7 @@ late, map generation will be wrong.</p>
 </li>
 <li>
 <p>In the current <code>prepared_plan</code> implementation, the source VM name stays unchanged; instead each VM gets a unique <code>targetName</code> derived from
-  <code>sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")</code> so parallel sessions do not collide (<code>conftest.py:1512</code>).</p>
+  <code>sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")</code> so parallel sessions do not collide (<code>conftest.py:1494</code>).</p>
 </li>
 <li>
 <p>In practice, OVA mapping behavior depends much more on Forklift inventory than on direct provider logic.</p>
@@ -775,8 +775,8 @@ through <code>get_per_nic_networks()</code> (<code>libs/forklift_inventory.py:28
 <h2 id="how-source-network-mappings-are-resolved">How Source Network Mappings Are Resolved</h2>
 <p>Network mapping is a two-step process.</p>
 <p>First, the suite decides how many destination networks it needs. It does that in the <code>multus_network_name</code> fixture by calling <code>source_provider.get_vm_or_template_networks()</code>
-(<code>conftest.py:978</code>). It creates <code>len(networks) - 1</code> NADs named <code>{base}-{i}</code>, where <code>base</code> is <code>cb-&lt;hash&gt;</code> derived from the node ID and <code>session_uuid</code> (<code>conftest.py:997</code>,
-<code>conftest.py:1002</code>). This is why RHV can use template networks before clones exist.</p>
+(<code>conftest.py:961</code>). It creates <code>len(networks) - 1</code> NADs named <code>{base}-{i}</code>, where <code>base</code> is <code>cb-&lt;hash&gt;</code> derived from the node ID and <code>session_uuid</code> (<code>conftest.py:937</code>,
+<code>conftest.py:984</code>). This is why RHV can use template networks before clones exist.</p>
 <p>Second, once the cloned or prepared source VM has been synced into Forklift inventory, the actual <code>NetworkMap</code> payload is built from inventory data.</p>
 <p>The core rule lives in <code>utilities/utils.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">per_nic_network_map</span><span class="p">:</span>
@@ -812,12 +812,12 @@ through <code>get_per_nic_networks()</code> (<code>libs/forklift_inventory.py:28
 <li>The first source network is always mapped to the destination pod network.</li>
 <li>Every additional source network is mapped to a generated Multus NAD.</li>
 <li>Those NADs are named from a base name plus a numeric suffix: <code>{base}-1</code>, <code>{base}-2</code>, and so on.</li>
-<li>If the plan config sets <code>multus_namespace</code>, the NADs are created there instead of in the main target namespace (<code>conftest.py:960</code>).</li>
+<li>If the plan config sets <code>multus_namespace</code>, the NADs are created there instead of in the main target namespace (<code>conftest.py:943</code>).</li>
 </ol>
 <blockquote>
 <p><strong>Warning:</strong> Network mapping is order-based. The first source network returned by inventory becomes the pod network, so inventory ordering matters for multi-NIC VMs.</p>
 <p><strong>Tip:</strong> If a source VM has <code>N</code> networks, the suite creates <code>N - 1</code> NADs, because the first network is reserved for the destination pod network. VMs configured with <code>add_nic</code> add
-one more NAD each (<code>conftest.py:984</code>).</p>
+one more NAD each (<code>conftest.py:967</code>).</p>
 </blockquote>
 <h2 id="how-source-storage-mappings-are-resolved">How Source Storage Mappings Are Resolved</h2>
 <p>The storage path is simpler than the network path in standard migrations: the helper trusts the selected inventory adapter to tell it which source storage objects matter, then it
