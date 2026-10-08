@@ -1361,10 +1361,12 @@ A few important details come from this design:
   data key, which is how `tests/cold/test_ca_crt_migration.py` exercises the `ca.crt` field.
 - Copy-offload vSphere providers get the `forklift.konveyor.io/empty-vddk-init-image: "yes"` annotation and pass the
   `copyoffload` block into the provider wrapper.
-- The `ConnectionError` raised when `_source_provider.test` fails names the endpoint the wrapper actually contacted: the
-  `host` provider argument when the provider sets one (Hyper-V and vSphere connect to `fqdn`, RHV, OpenStack and OVA to
-  `api_url`), otherwise the `api_url` from the providers configuration. OpenShift sets no `host`, so its message reports the
-  configured source-provider URL rather than the destination cluster host that the provider branch rewrites
+- The `ConnectionError` raised when `_source_provider.test` fails reports what the check actually established, which differs by
+  provider. For the providers that set a `host` argument - Hyper-V and vSphere connect to the provider's `fqdn`, RHV,
+  OpenStack and OVA to its `api_url` - the message names the endpoint the wrapper dialed. OpenShift sets no `host`, and
+  `OCPProvider.test` only checks that the created `Provider` resource exists, so its message names the configured
+  source-provider URL from the providers configuration: the value an operator has to correct, but not an endpoint the wrapper
+  contacted. It is therefore the original URL, not the destination cluster host that the OpenShift branch rewrites
   `source_provider_data_copy["api_url"]` to for the secret and the `Provider` resource.
 - Remote OpenShift destination tests reuse the same basic pattern, but switch from `destination_provider` to
   `destination_ocp_provider`.
