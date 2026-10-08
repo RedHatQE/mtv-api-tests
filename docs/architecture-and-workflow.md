@@ -253,7 +253,7 @@ The class-scoped `prepared_plan` fixture is where the user-facing plan config be
 the config, validates and clones source VMs, resolves the PVC name template against the provider type, creates custom namespaces
 if requested, adjusts source power state, stores source-side metadata, and creates hooks.
 
-```1089:1102:conftest.py
+```1112:1125:conftest.py
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -274,7 +274,7 @@ Cloning runs in two phases. First every VM is cloned, powered to `source_vm_powe
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
 when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
-```1392:1400:conftest.py
+```1415:1423:conftest.py
             # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
             # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
             inventory_timeout = plan.get("inventory_timeout", 300)
@@ -286,7 +286,7 @@ when a config omits it. Other optional flags in the same fixture, such as `warm_
             )
 ```
 
-```1429:1431:conftest.py
+```1452:1454:conftest.py
     # Create Hooks if configured
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
     create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
@@ -356,7 +356,7 @@ That behavior comes from `utilities/utils.py:gen_network_map_list()` and the `mu
 
 `multus_network_name` sizes the NAD set from the same data, so the count of created NADs matches the count of map entries:
 
-```901:913:conftest.py
+```924:936:conftest.py
     if class_plan_config.get("per_nic_network_map", False):
         multus_count = max(
             0,
@@ -698,11 +698,14 @@ If `--skip-teardown` is set, the class and session cleanup paths intentionally l
 > **Note:** Failure handling is broader than cleanup. When data collection is enabled, the session writes created resources to
 > `<data-collector-path>/resources.json` (default `.data-collector`), and `pytest_exception_interact` triggers
 > `oc adm must-gather` collection so you can inspect what MTV and the cluster were doing at the time of failure.
-> Collection is per test class, not per test: a class-based test never gathers at failure time, in setup or call phase. The class is
-> marked as owing one must-gather and `pytest_runtest_teardown` collects it when the class's last test tears down, into a directory named
-> after the class. That hook runs before the class fixture finalizer, so the gather holds the resources that were still present when the
-> class failed rather than a cleaned cluster, and a finalizer failure arriving afterwards is suppressed instead of gathered twice.
-> A standalone test collects its own immediately.
+> Setup/call failures queue one gather per class-plan instance per worker. The `tryfirst` `pytest_runtest_teardown(item, nextitem)`
+> hook collects at a class or class-plan parameter boundary, including `nextitem=None` on early exit, before default fixture finalization.
+> Directories use percent-encoded class node IDs, class parameter indices and worker IDs. A `tryfirst` `pytest_runtest_protocol` wrapper
+> clears stale `plan_resource` before setup on class-plan transitions, not between consecutive methods of the same plan. The boundary
+> binds the current Plan or explicit None before finalizers and retains it for retries, gathering fully for None. Earlier method teardown
+> failures stay pending until the boundary; failures first reported after boundary cleanup use that context but collect post-finalizer state.
+> Collection attempts at most one successful gather per class-plan-worker; operational failures remain pending and artifacts are not guaranteed
+> if retries fail. A standalone test gathers immediately, once on success. Session-end retries cannot recover a crashed worker's pending state.
 
 ## Automation And Dry Runs
 

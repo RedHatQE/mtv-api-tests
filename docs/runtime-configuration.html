@@ -576,7 +576,7 @@ per-scenario plan definitions.</p>
 <p>By default, the suite collects runtime artifacts for failed runs.</p>
 <ul>
 <li>The base directory defaults to <code>.data-collector</code>.</li>
-<li>On test failure, the suite attempts to run <code>oc adm must-gather</code> into a per-test subdirectory under that path.</li>
+<li>Class setup/call failures queue <code>oc adm must-gather</code> until the pre-finalizer class-plan boundary, attempting at most one successful gather per class-plan instance per worker. Operational failures remain pending for retry; artifacts are not guaranteed if retries fail. Standalone tests gather immediately. Subdirectories use percent-encoded node identities, class parameter indices where applicable, and worker IDs.</li>
 <li>At session finish, it writes a <code>resources.json</code> file with tracked resources.</li>
 <li>If session teardown fails, it attempts an additional must-gather into the base collector directory.</li>
 </ul>

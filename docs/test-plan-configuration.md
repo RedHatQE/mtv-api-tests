@@ -445,7 +445,7 @@ The raw entry from `tests_params` is not used directly. The repository converts 
 
 The fixture copies the selected config, resolves a mapping-form `pvc_name_template`, and sets up runtime-only storage:
 
-```1089:1115:conftest.py
+```1112:1138:conftest.py
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -479,7 +479,7 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1211:1230:conftest.py
+```1234:1253:conftest.py
         skip_clone = plan.get("skip_clone", False)
 
         if skip_clone:
@@ -507,7 +507,7 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
 In the clone phase, the fixture resolves each VM through the clone provider, applies the placement flags, sets the source power state, and rewrites the VM name to the actual
 runtime name:
 
-```1264:1289:conftest.py
+```1287:1312:conftest.py
         if not skip_clone:
             for vm in virtual_machines:
                 clone_options = {**vm, "enable_ctk": warm_migration}
@@ -540,7 +540,7 @@ runtime name:
 
 After the VM loop, configured hooks become real `Hook` custom resources:
 
-```1430:1431:conftest.py
+```1453:1454:conftest.py
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
     create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 ```

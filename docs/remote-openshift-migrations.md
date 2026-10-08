@@ -78,7 +78,7 @@ There are three destination provider fixtures in this repository. Two of them ar
 The default destination fixture in `conftest.py` creates an OpenShift `Provider` with an empty `url` and an empty `secret` block. That is the local, in-cluster destination path
 used by the non-remote tests.
 
-```699:715:conftest.py
+```722:738:conftest.py
 @pytest.fixture(scope="session")
 def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixture_store):
     kind_dict = {
@@ -102,7 +102,7 @@ def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixtu
 
 The remote path creates a secret from the active OpenShift API token and then creates an explicit OpenShift `Provider` with a real API URL.
 
-```974:1004:conftest.py
+```997:1027:conftest.py
 @pytest.fixture(scope="session")
 def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
     api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
@@ -245,7 +245,7 @@ Treat the inputs like this:
 > **Warning:** `remote_ocp_cluster` is both a gate and a sanity check. In `conftest.py`, the `ocp_admin_client` fixture fails early if the configured value does not appear in the
 > connected API host:
 
-```566:568:conftest.py
+```589:591:conftest.py
 if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
     if remote_cluster_name not in _client.configuration.host:
         raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")

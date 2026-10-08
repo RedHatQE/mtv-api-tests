@@ -1023,6 +1023,14 @@ oc describe plan <plan-name> -n openshift-mtv
 
 ### Collect Debug Information
 
+Automatic failure collection attempts at most one successful must-gather per class-plan instance per worker,
+using a percent-encoded class node ID, class parameter indices and worker ID under `.data-collector/`.
+It binds the current Plan or explicit None at the class-plan boundary before default fixture finalization,
+including early exits, and retains that context for retries. Standalone tests gather immediately.
+Known operational collection failures remain pending for retry; artifacts are not guaranteed if retries fail.
+Unexpected programming or configuration errors propagate. See
+[diagnostic collection](docs/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
+
 ```bash
 oc adm must-gather --image=quay.io/kubev2v/forklift-must-gather:latest --dest-dir=/tmp/mtv-logs
 ```

@@ -525,8 +525,8 @@ and turns the feature off instead of failing the run.
 <p>The most important files are:</p>
 <ul>
 <li><code>.data-collector/resources.json</code>: a dump of tracked resources created during the run.</li>
-<li><code>.data-collector/&lt;test-class-name&gt;/...</code>: must-gather output for a class-based test, one directory per failing class.</li>
-<li><code>.data-collector/&lt;pytest-node-name&gt;/...</code>: must-gather output for a standalone (function-level) test, one directory per failing test.</li>
+<li><code>.data-collector/&lt;encoded-class-plan-identity&gt;/...</code>: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.</li>
+<li><code>.data-collector/&lt;encoded-test-node-identity&gt;/...</code>: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.</li>
 <li><code>.data-collector/...</code> at the root: session-level must-gather output when teardown cleanup fails.</li>
 </ul>
 <p>The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
@@ -552,33 +552,33 @@ runs the full, cluster-wide gather. Both share image resolution and differ only 
         <span class="n">command</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"oc adm must-gather --image=</span><span class="si">{</span><span class="n">must_gather_image</span><span class="si">}</span><span class="s2"> --dest-dir=</span><span class="si">{</span><span class="n">data_collector_path</span><span class="si">}</span><span class="s2">"</span>
         <span class="k">if</span> <span class="n">target_args</span><span class="p">:</span>
             <span class="n">command</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">command</span><span class="si">}</span><span class="s2"> -- </span><span class="si">{</span><span class="n">target_args</span><span class="si">}</span><span class="s2">"</span>
-        <span class="n">run_command</span><span class="p">(</span><span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">command</span><span class="p">),</span> <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span>
+        <span class="n">success</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run_command</span><span class="p">(</span><span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">command</span><span class="p">),</span> <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">success</span>
 </code></pre></div>
 
 <p>What this means in practice:</p>
 <ul>
 <li>If the failure can be tied back to a specific plan, the gather is scoped to that plan with <code>/usr/bin/targeted</code>.</li>
 <li>Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.</li>
-<li>The gather is triggered from <code>pytest_exception_interact</code>, which passes the test class's <code>plan_resource</code> when one exists.</li>
-<li>A class-based test never collects at failure time. Whether it errors in setup or fails in the call phase, the class is only recorded as needing one must-gather. The gather runs once, from <code>pytest_runtest_teardown</code>, at the teardown of the last item of that class on the worker running it. If the run stops before that item - <code>-x</code>, <code>--maxfail</code>, Ctrl-C, a crashed worker - the still-pending class is collected at session finish instead.</li>
-<li>That gather is taken <strong>before</strong> the class fixture finalizer runs, so it captures the cluster as it was when the class failed: the plan, VMs and namespaces are still there, because nothing has cleaned them up yet. The artifacts describe the failed state, not the cleaned one.</li>
-<li>Deferring to class end is the point. A shared fixture failure such as <code>prepared_plan</code> takes down every method in the class, and the cluster keeps moving while the remaining methods run, so a gather taken at the first failure is already stale by the last one. One gather at class end captures the final state of all of them, and all of them land in the same class-named directory.</li>
-<li>The class end is counted per worker: every torn-down item is counted for its class, and the class ends when this worker has torn down as many items of it as were collected. Counting rather than following collection order is what survives <code>--dist=load</code>, where the collection-last item of a class can be scheduled onto a worker that never ran the failing method.</li>
-<li>A standalone test has no class end to wait for, so it collects its own must-gather immediately, under its own node name.</li>
-<li>The state is kept on the session object, not in module-level variables, so under xdist each worker collects for the classes it ran. A class split across workers by <code>--dist=load</code> therefore stays pending on the worker that saw the failure and is collected by that worker's session finish.</li>
-<li><code>run_plan_must_gather()</code> reports whether it actually collected. A gather that failed to resolve its image or to run leaves the class pending instead of counting as done, so the session-end flush retries it rather than reporting diagnostics that were never written. It takes the plan's name and namespace explicitly; <code>run_must_gather()</code> is the unscoped full-collection variant used when there is no plan to gather for, such as a class without a <code>plan_resource</code> or the session-finish leftover gather.</li>
-<li>Because the class-end gather precedes the finalizer, a class fixture that fails during its own teardown is reported after the gather already covered the resources it was tearing down. That repeat is suppressed and logged, so one class yields one gather even when its tests fail <em>and</em> its finalizer raises. A finalizer failure on a class that has not been gathered yet collects immediately, into the same class directory, and a later failure of that class cannot gather into it a second time.</li>
+<li><code>pytest_exception_interact</code> records a failing class item. A <code>tryfirst</code> <code>pytest_runtest_protocol</code> wrapper clears stale <code>plan_resource</code> on entry to a different class-plan identity before setup hooks run, but preserves it across consecutive methods of the same plan. The pre-finalizer boundary binds the current Plan or explicit None, even if no failure is pending yet, and retains it for retries. Updates before that boundary are observed. If setup fails before this plan exists, the gather is full, not targeted.</li>
+<li>Setup and call failures queue one gather per class-plan instance per worker. Ordinary methods with the same class-scoped parameter indices share state; different plan parameter sets and same-named classes in different modules do not.</li>
+<li>The <code>tryfirst</code> <code>pytest_runtest_teardown(item, nextitem)</code> hook gathers pending diagnostics before pytest's default fixture finalization when <code>nextitem</code> belongs to a different class-plan instance, or is <code>None</code>. This includes early <code>-x</code>/<code>--maxfail</code> exits and local boundaries under <code>--dist=load</code>, without waiting for the worker to execute the entire collected class.</li>
+<li>A plan-parameter transition is also a boundary even if pytest retains the same Class collector. Pytest can finalize the previous parametrized fixture tree during the next setup, so the gather must run before that setup.</li>
+<li>Deferral lets later methods contribute to the failed state before a single gather captures it. Collection precedes boundary cleanup, but resources explicitly deleted by earlier tests or fixtures may already be gone.</li>
+<li>A standalone test gathers immediately into its worker-qualified node directory, with at most one successful gather across failing phases.</li>
+<li>State lives on each worker's session object. Worker-qualified artifact names prevent workers from sharing a destination. At most one successful gather is recorded per class-plan instance per worker, including if scheduling later returns to that instance.</li>
+<li>Both gather entry points report success. Known image-metadata, command, filesystem, authentication, API and transport failures return <code>False</code> and leave the class-plan instance pending for retry. Programming and configuration errors propagate rather than being swallowed. <code>run_plan_must_gather()</code> takes the plan name and namespace; <code>run_must_gather()</code> is the full-collection path when no plan exists.</li>
+<li>A teardown failure on an earlier method is queued until the class-plan boundary when possible, so it does not prematurely mark the instance collected. A failure reported after boundary finalization gathers immediately only if no successful gather exists; it uses the bound pre-finalizer Plan context but necessarily sees post-finalizer cluster state. A successful pre-finalizer gather suppresses the repeat.</li>
+<li>Session finish retries exceptional remaining pending gathers on a surviving worker using the bound context, but cannot promise pre-cleanup resources after interrupted hooks. If a boundary never bound the context, fallback reads the class attribute only for the still-active identity; otherwise it binds None and gathers fully rather than targeting another plan. It cannot recover in-memory pending state from a crashed worker. Artifacts are not guaranteed if retries fail.</li>
 <li>If teardown leaves leftovers behind, an unscoped <code>run_must_gather()</code> runs at session finish as a fallback.</li>
 </ul>
 <blockquote>
 <p><strong>Note:</strong> The must-gather image is not hardcoded. The code resolves it from the installed MTV operator CSV and the ImageDigestMirrorSet, so the
 gather matches the cluster’s installed MTV build.
 </p>
-<p><strong>Note:</strong> must-gather resolution and execution are wrapped in a broad <code>try</code>, so a must-gather problem is logged but never fails your test run.
+<p><strong>Note:</strong> Only known operational collection failures are logged and returned as <code>False</code>. Unexpected programming and configuration errors remain visible.
 </p>
-<p><strong>Tip:</strong> A must-gather directory is often the quickest way to answer “what did the cluster look like when this class failed?” When a
-fixture failure is the cause, expect one directory named after the class, taken at its last test's teardown - or at session finish if the run stopped early - and before any class fixture cleanup.</p>
+<p><strong>Tip:</strong> For a shared fixture failure, expect one directory per class-plan instance per worker, normally collected at the pre-finalizer boundary. Session-end retries and failures first reported by boundary finalizers may instead describe cleaned state.</p>
 </blockquote>
 <h2 id="common-failure-points">Common Failure Points</h2>
 <p>Most failures in this repo fall into one of these buckets.</p>

@@ -58,6 +58,7 @@ from utilities.must_gather import (
     collect_class_teardown_must_gather,
     collect_must_gather_for_item,
     flush_pending_class_must_gathers,
+    initialize_class_plan_context,
     mark_class_pending_must_gather,
     run_must_gather,
 )
@@ -207,6 +208,18 @@ def pytest_fixture_setup(fixturedef, request):
     LOGGER.info(f"Executing {fixturedef.scope} fixture: {fixturedef.argname}")
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
+    """Initialize class-plan state before setup, including hooks that can skip or fail.
+
+    Args:
+        item (pytest.Item): Item whose setup/call/teardown protocol is starting.
+    """
+    if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
+        initialize_class_plan_context(item)
+    yield
+
+
 def pytest_runtest_setup(item):
     # Incremental test support - xfail if previous test in class failed
     if "incremental" in item.keywords:
@@ -222,9 +235,17 @@ def pytest_runtest_call(item):
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='CALL')}")
 
 
-def pytest_runtest_teardown(item, nextitem):
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> None:
+    """Gather at a class-plan boundary before pytest's default fixture finalization.
+
+    Args:
+        item (pytest.Item): Item about to tear down.
+        nextitem (pytest.Item | None): Next worker item, or None when execution stops.
+    """
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='TEARDOWN')}")
-    collect_class_must_gather(item)
+    if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
+        collect_class_must_gather(item, nextitem)
 
 
 def pytest_report_teststatus(report, config):
@@ -387,14 +408,11 @@ def pytest_collection_modifyitems(session, config, items):
 def pytest_exception_interact(node, call, report):
     """Defer or collect a must-gather for a failing test.
 
-    A test inside a class never collects at failure time: the class is marked as owing one must-gather and
-    ``collect_class_must_gather`` collects it when the class ends, so a fixture failure that takes down
-    every method of the class yields one gather instead of one per method. A test without a class has no
-    class end to wait for, so it collects its own.
-
-    That class-end gather runs in ``pytest_runtest_teardown``, before the class fixture finalizer, so it
-    captures the resources as they were when the class failed. A finalizer failure is reported afterwards,
-    against that same state, and is suppressed when the class was already collected - one class, one gather.
+    Setup/call failures record the failing item by class-plan identity. The tryfirst teardown hook
+    binds Plan context at the nextitem boundary before default fixture finalization for all retries.
+    With no plan, it binds None and takes a full gather. Standalone tests gather immediately, once on success.
+    Earlier method teardown failures are deferred while the same class-plan continues. Boundary
+    finalizer failures arrive after cleanup and gather only if no successful gather already exists.
 
     Args:
         node (pytest.Item): The test item reporting the exception.
@@ -406,14 +424,19 @@ def pytest_exception_interact(node, call, report):
 
     node_cls: type | None = getattr(node, "cls", None)
     if node_cls is None:
-        collect_must_gather_for_item(node, node.name)
+        collected: set[str] = getattr(node.session, "_must_gather_collected_tests", set())
+        worker: str = getattr(node.config, "workerinput", {}).get("workerid", "master")
+        identity = f"{node.nodeid}::worker={worker}"
+        if identity not in collected and collect_must_gather_for_item(node, identity, plan_obj=None):
+            collected.add(identity)
+            setattr(node.session, "_must_gather_collected_tests", collected)
         return
 
     if call.when == "teardown":
-        collect_class_teardown_must_gather(node, node_cls)
+        collect_class_teardown_must_gather(node)
         return
 
-    mark_class_pending_must_gather(node.session, node_cls, node)
+    mark_class_pending_must_gather(node)
 
 
 # https://smarie.github.io/python-pytest-harvest/#pytest-x-dist
