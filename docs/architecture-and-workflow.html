@@ -541,9 +541,10 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.</p>
     <span class="c1"># this is for communication with the provider</span>
     <span class="k">with</span> <span class="n">source_provider</span><span class="p">(</span><span class="n">ocp_resource</span><span class="o">=</span><span class="n">ocp_resource_provider</span><span class="p">,</span> <span class="o">**</span><span class="n">provider_args</span><span class="p">)</span> <span class="k">as</span> <span class="n">_source_provider</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_source_provider</span><span class="o">.</span><span class="n">test</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> provider </span><span class="si">{</span><span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s1">'api_url'</span><span class="p">]</span><span class="si">}</span><span class="s2"> is not available."</span>
-            <span class="p">)</span>
+            <span class="c1"># The wrappers connect to provider_args["host"] when they have one (Hyper-V and vSphere use the</span>
+            <span class="c1"># fqdn, the rest use the api_url); OpenShift sets no host and connects to the cluster.</span>
+            <span class="n">unavailable_endpoint</span> <span class="o">=</span> <span class="n">provider_args</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"host"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">configured_api_url</span>
+            <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> provider </span><span class="si">{</span><span class="n">unavailable_endpoint</span><span class="si">}</span><span class="s2"> is not available."</span><span class="p">)</span>
 
         <span class="k">yield</span> <span class="n">_source_provider</span>
 </code></pre></div>
@@ -573,6 +574,13 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.</p>
 <li>
 <p>Copy-offload vSphere providers get the <code>forklift.konveyor.io/empty-vddk-init-image: "yes"</code> annotation and pass the
   <code>copyoffload</code> block into the provider wrapper.</p>
+</li>
+<li>
+<p>The <code>ConnectionError</code> raised when <code>_source_provider.test</code> fails names the endpoint the wrapper actually contacted: the
+  <code>host</code> provider argument when the provider sets one (Hyper-V and vSphere connect to <code>fqdn</code>, RHV, OpenStack and OVA to
+  <code>api_url</code>), otherwise the <code>api_url</code> from the providers configuration. OpenShift sets no <code>host</code>, so its message reports the
+  configured source-provider URL rather than the destination cluster host that the provider branch rewrites
+  <code>source_provider_data_copy["api_url"]</code> to for the secret and the <code>Provider</code> resource.</p>
 </li>
 <li>
 <p>Remote OpenShift destination tests reuse the same basic pattern, but switch from <code>destination_provider</code> to

@@ -1300,7 +1300,7 @@ The source provider setup is centered around `utilities/utils.py:create_source_p
 from the `type` field, creates the source `Secret`, creates the source `Provider` custom resource, waits until that `Provider` is
 ready in Forklift, and only then opens the matching provider SDK wrapper.
 
-```414:425:utilities/utils.py
+```417:428:utilities/utils.py
         secret_string_data = {
             "url": source_provider_data_copy["api_url"],
             "insecureSkipVerify": "true" if insecure else "false",
@@ -1315,7 +1315,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         }
 ```
 
-```536:561:utilities/utils.py
+```539:565:utilities/utils.py
         ocp_resource_provider = create_and_store_resource(
             fixture_store=fixture_store,
             resource=Provider,
@@ -1337,9 +1337,10 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         # this is for communication with the provider
         with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
             if not _source_provider.test:
-                raise ConnectionError(
-                    f"{_source_provider.type} provider {source_provider_data_copy['api_url']} is not available."
-                )
+                # The wrappers connect to provider_args["host"] when they have one (Hyper-V and vSphere use the
+                # fqdn, the rest use the api_url); OpenShift sets no host and connects to the cluster.
+                unavailable_endpoint = provider_args.get("host") or configured_api_url
+                raise ConnectionError(f"{_source_provider.type} provider {unavailable_endpoint} is not available.")
 
             yield _source_provider
 ```
@@ -1360,6 +1361,11 @@ A few important details come from this design:
   data key, which is how `tests/cold/test_ca_crt_migration.py` exercises the `ca.crt` field.
 - Copy-offload vSphere providers get the `forklift.konveyor.io/empty-vddk-init-image: "yes"` annotation and pass the
   `copyoffload` block into the provider wrapper.
+- The `ConnectionError` raised when `_source_provider.test` fails names the endpoint the wrapper actually contacted: the
+  `host` provider argument when the provider sets one (Hyper-V and vSphere connect to `fqdn`, RHV, OpenStack and OVA to
+  `api_url`), otherwise the `api_url` from the providers configuration. OpenShift sets no `host`, so its message reports the
+  configured source-provider URL rather than the destination cluster host that the provider branch rewrites
+  `source_provider_data_copy["api_url"]` to for the secret and the `Provider` resource.
 - Remote OpenShift destination tests reuse the same basic pattern, but switch from `destination_provider` to
   `destination_ocp_provider`.
 
