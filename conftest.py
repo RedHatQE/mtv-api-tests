@@ -45,7 +45,7 @@ from exceptions.exceptions import (
 )
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from utilities.copyoffload_migration import apply_copyoffload_vm_name_override, resolve_non_dedicated_esxi_host
-from libs.base_provider import BaseProvider
+from libs.base_provider import BaseProvider, supports_add_nic
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
 from libs.providers.vmware import VMWareProvider
@@ -53,7 +53,15 @@ from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
-from utilities.must_gather import run_must_gather
+from utilities.must_gather import (
+    collect_class_must_gather,
+    collect_class_teardown_must_gather,
+    collect_must_gather_for_item,
+    flush_pending_class_must_gathers,
+    initialize_class_plan_context,
+    mark_class_pending_must_gather,
+    run_must_gather,
+)
 from utilities.provider_inventory import (
     validate_source_vms_exist,
     wait_for_added_nics_in_forklift_inventory,
@@ -63,13 +71,13 @@ from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
     sanitize_kubernetes_name,
-    sanitize_test_name_for_path,
 )
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
     is_dry_run,
     prepare_base_path,
+    resolve_item_plan_config,
     session_teardown,
     setup_ai_analysis,
 )
@@ -95,6 +103,7 @@ RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
+_STANDALONE_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 
 
 # Pytest start
@@ -200,6 +209,18 @@ def pytest_fixture_setup(fixturedef, request):
     LOGGER.info(f"Executing {fixturedef.scope} fixture: {fixturedef.argname}")
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
+    """Initialize class-plan state before setup, including hooks that can skip or fail.
+
+    Args:
+        item (pytest.Item): Item whose setup/call/teardown protocol is starting.
+    """
+    if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
+        initialize_class_plan_context(item)
+    yield
+
+
 def pytest_runtest_setup(item):
     # Incremental test support - xfail if previous test in class failed
     if "incremental" in item.keywords:
@@ -215,8 +236,24 @@ def pytest_runtest_call(item):
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='CALL')}")
 
 
-def pytest_runtest_teardown(item):
+@pytest.hookimpl(tryfirst=True, wrapper=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> Generator[None, object, object]:
+    """Gather at a class-plan boundary, always allowing pytest's fixture finalization.
+
+    Args:
+        item (pytest.Item): Item about to tear down.
+        nextitem (pytest.Item | None): Next worker item, or None when execution stops.
+    """
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='TEARDOWN')}")
+    try:
+        collector_error = item.stash.get(_STANDALONE_MUST_GATHER_ERROR, None)
+        if collector_error is not None:
+            raise collector_error.with_traceback(collector_error.__traceback__)
+        if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
+            collect_class_must_gather(item, nextitem)
+    finally:
+        result = yield
+    return result
 
 
 def pytest_report_teststatus(report, config):
@@ -238,9 +275,16 @@ def pytest_report_teststatus(report, config):
             BASIC_LOGGER.info(f"\nTEST: {test_name} STATUS: \033[0;31mFAILED\033[0m")
 
 
-def pytest_sessionfinish(session, exitstatus):
+@pytest.hookimpl(tryfirst=True, wrapper=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[None, object, object]:
+    """Flush diagnostics and finish cleanup without suppressing collector programming errors.
+
+    Args:
+        session (pytest.Session): Worker-local session holding pending diagnostics and resources.
+        exitstatus (int): Pytest exit status before session cleanup.
+    """
     if is_dry_run(session.config):
-        return
+        return (yield)
 
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION FINISH')}")
 
@@ -248,34 +292,46 @@ def pytest_sessionfinish(session, exitstatus):
 
     _data_collector_path = Path(session.config.getoption("data_collector_path"))
 
-    if not session.config.getoption("skip_data_collector"):
-        collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
-
-    if session.config.getoption("skip_teardown"):
-        LOGGER.warning("User requested to skip teardown of resources")
-
-    else:
-        # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
+    try:
+        if not session.config.getoption("skip_data_collector"):
+            flush_pending_class_must_gathers(session)
+    finally:
         try:
-            session_teardown(session_store=_session_store)
-        except Exception as exp:
-            LOGGER.error(f"the following resources was left after tests are finished: {exp}")
-            if not session.config.getoption("skip_data_collector"):
-                run_must_gather(data_collector_path=_data_collector_path)
-
-    shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
-    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-    reporter.summary_stats()
-
-    if session.config.getoption("analyze_with_ai"):
-        if exitstatus == 0:
-            LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
-
-        else:
+            result = yield
+        finally:
+            # Each independent action runs even if an earlier action raises; errors stay chained.
             try:
-                enrich_junit_xml(session)
-            except Exception:
-                LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+                if not session.config.getoption("skip_data_collector"):
+                    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
+            finally:
+                try:
+                    if session.config.getoption("skip_teardown"):
+                        LOGGER.warning("User requested to skip teardown of resources")
+                    else:
+                        try:
+                            session_teardown(session_store=_session_store)
+                        except Exception:
+                            LOGGER.exception("Resources remain after session teardown")
+                            if not session.config.getoption("skip_data_collector"):
+                                run_must_gather(data_collector_path=_data_collector_path)
+                            raise
+                finally:
+                    try:
+                        shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
+                    finally:
+                        try:
+                            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+                            reporter.summary_stats()
+                        finally:
+                            if session.config.getoption("analyze_with_ai"):
+                                if exitstatus == 0:
+                                    LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
+                                else:
+                                    try:
+                                        enrich_junit_xml(session)
+                                    except Exception:
+                                        LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+    return result
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -345,6 +401,17 @@ def pytest_collection_modifyitems(session, config, items):
                     if "ca_crt" in item.keywords:
                         item.add_marker(ca_cert_skip)
 
+            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+            if not supports_add_nic(source_provider_type):
+                add_nic_skip = pytest.mark.skip(
+                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
+                )
+                for item in items:
+                    test_config = resolve_item_plan_config(item) or {}
+                    if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                        item.add_marker(add_nic_skip)
+
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
 
@@ -352,17 +419,7 @@ def pytest_collection_modifyitems(session, config, items):
         item.name = f"{item.name}-{py_config.get('source_provider')}-{py_config.get('storage_class')}"
 
         # Get test config from parametrization or tests_params
-        test_config = None
-        if hasattr(item, "callspec"):
-            # Class-based tests use class_plan_config
-            test_config = item.callspec.params.get("class_plan_config")
-            if test_config is None:
-                # Function-based tests use plan
-                test_config = item.callspec.params.get("plan")
-
-        if test_config is None:
-            # Fallback to looking up by test name (for non-parametrized tests)
-            test_config = py_config["tests_params"].get(item.originalname)
+        test_config = resolve_item_plan_config(item)
 
         if test_config and "virtual_machines" in test_config:
             for _vm in test_config["virtual_machines"]:
@@ -375,20 +432,49 @@ def pytest_collection_modifyitems(session, config, items):
 
 
 def pytest_exception_interact(node, call, report):
-    if is_dry_run(node.session.config):
+    """Defer or collect a must-gather for a failing test.
+
+    Setup/call failures record the failing item by class-plan identity. The tryfirst teardown hook
+    binds Plan context at the nextitem boundary before default fixture finalization for all retries.
+    With no plan, it binds None and takes a full gather. Standalone tests gather immediately, once on success.
+    Unexpected standalone setup/call collector errors are retained on the item until fixture finalization.
+    Earlier method teardown failures are deferred while the same class-plan continues. Boundary
+    finalizer failures arrive after cleanup and gather only if no successful gather already exists.
+
+    Args:
+        node (pytest.Item): The test item reporting the exception.
+        call (pytest.CallInfo[BaseException]): The call info of the failing phase.
+        report (pytest.TestReport): The report of the failing phase.
+    """
+    if is_dry_run(node.session.config) or node.session.config.getoption("skip_data_collector"):
         return
 
-    if not node.session.config.getoption("skip_data_collector"):
-        _data_collector_path = Path(
-            f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(node.name)}"
-        )
-        plan = None
-        if hasattr(node, "cls") and node.cls and hasattr(node.cls, "plan_resource"):
-            plan_obj = node.cls.plan_resource
-            if plan_obj:
-                plan = {"name": plan_obj.name, "namespace": plan_obj.namespace}
+    node_cls: type | None = getattr(node, "cls", None)
+    if node_cls is None:
+        collected: set[str] = getattr(node.session, "_must_gather_collected_tests", set())
+        worker: str = getattr(node.config, "workerinput", {}).get("workerid", "master")
+        identity = f"{node.nodeid}::worker={worker}"
+        collector_error = node.stash.get(_STANDALONE_MUST_GATHER_ERROR, None)
+        if call.when == "teardown" and collector_error is not None:
+            del node.stash[_STANDALONE_MUST_GATHER_ERROR]
+            return
+        if identity not in collected:
+            try:
+                if collect_must_gather_for_item(node, identity, plan_obj=None):
+                    collected.add(identity)
+                    setattr(node.session, "_must_gather_collected_tests", collected)
+            except Exception as exp:
+                if call.when not in ("setup", "call"):
+                    raise
+                # Retain the error on this item so setup/call reporting can reach fixture teardown.
+                node.stash[_STANDALONE_MUST_GATHER_ERROR] = exp
+        return
 
-        run_must_gather(data_collector_path=_data_collector_path, plan=plan)
+    if call.when == "teardown":
+        collect_class_teardown_must_gather(node)
+        return
+
+    mark_class_pending_must_gather(node)
 
 
 # https://smarie.github.io/python-pytest-harvest/#pytest-x-dist
@@ -1145,10 +1231,10 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
+        # The non-vSphere provider case is gated at collection time in
+        # pytest_collection_modifyitems (pytest.skip must not be used in fixtures).
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config:
-            if not isinstance(source_provider, VMWareProvider):
-                pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
             for vm in virtual_machines:
                 if vm.get("add_nic"):
                     if "add_nic_start_connected" not in vm:

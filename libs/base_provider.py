@@ -13,6 +13,22 @@ if TYPE_CHECKING:
     from libs.forklift_inventory import ForkliftInventory
 
 
+def supports_add_nic(provider_type: str) -> bool:
+    """Report whether a source provider type can add a NIC through the migration plan.
+
+    ``add_nic`` relies on vSphere-specific disk and network controller behaviour, so no other provider
+    can honour it. The decision lives here, in the provider layer, so the collection hook only applies
+    the resulting decision and a provider gaining support changes no general test scaffolding.
+
+    Args:
+        provider_type (str): The ``type`` of the source provider as configured in the providers JSON.
+
+    Returns:
+        bool: True when the provider type supports the plan's ``add_nic``.
+    """
+    return provider_type == Provider.ProviderType.VSPHERE
+
+
 class BaseProvider(abc.ABC):
     # Unified Representation of a VM of All Provider Types
     VIRTUAL_MACHINE_TEMPLATE: dict[str, Any] = {

@@ -6,7 +6,7 @@ import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import requests
 from dotenv import load_dotenv
@@ -22,6 +22,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
+from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import SessionTeardownError
@@ -82,6 +83,42 @@ def setup_ai_analysis(session: pytest.Session) -> None:
     if not os.environ.get("ROOTCOZ_SERVER_URL"):
         LOGGER.warning("ROOTCOZ_SERVER_URL is not set. Analyze with AI features will be disabled.")
         session.config.option.analyze_with_ai = False
+
+
+def resolve_item_plan_config(item: pytest.Item) -> dict[str, Any] | None:
+    """Resolve the plan config of a collected test item.
+
+    Args:
+        item (pytest.Item): Collected pytest item whose plan config should be resolved.
+
+    Returns:
+        dict[str, Any] | None: The test's plan config mapping, or None when the item carries none.
+        The mapping values are ``Any`` because a plan config is free-form user data from
+        ``tests_params``, not a fixed schema.
+
+    Raises:
+        KeyError: If the item is not parametrized and ``tests_params`` has no entry for its name. Every
+            test in this suite is parametrized, so a missing entry is a configuration error that must
+            fail here rather than silently run the test without its plan.
+    """
+    # `Any` is deliberate at this collection boundary: the plan config is user-supplied `tests_params`
+    # data whose keys differ per test and per provider, it is handed straight to the plan-building
+    # fixtures unchanged, and it is validated where it is consumed. A narrower type here would have to
+    # either name keys this function does not read or assert a schema only the fixtures know.
+    test_config: dict[str, Any] | None = None
+    if hasattr(item, "callspec"):
+        # Class-based tests use class_plan_config
+        test_config = item.callspec.params.get("class_plan_config")
+        if test_config is None:
+            # Function-based tests use plan
+            test_config = item.callspec.params.get("plan")
+
+    if test_config is None:
+        # Direct access on purpose: tests_params is our own config, so a missing entry has to fail fast.
+        # `originalname` exists only on function items, which is what a non-parametrized item always is.
+        test_config = py_config["tests_params"][cast("pytest.Function", item).originalname]
+
+    return test_config
 
 
 def collect_created_resources(session_store: dict[str, Any], data_collector_path: Path) -> None:

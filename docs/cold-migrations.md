@@ -16,7 +16,7 @@ A standard cold migration needs:
 
 The two values are enforced at session start. `pytest_sessionstart` exits before any fixture setup if either is missing:
 
-```157:169:conftest.py
+```166:178:conftest.py
 required_config = ("storage_class", "source_provider")
 
 if not is_dry_run(session.config):
@@ -47,25 +47,38 @@ The basic cold-migration test configuration is intentionally small:
 },
 ```
 
-`add_nic` is a vSphere-only option. The `prepared_plan` fixture skips the whole class for any other provider type, and it fails fast when `add_nic_start_connected` is missing or
-is not a `bool`:
+`add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
+provider type other than vSphere. The capability itself is decided by `supports_add_nic()` in `libs/base_provider.py`, so the shared hook only applies the decision:
 
-```1148:1162:conftest.py
-has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
-if has_add_nic_config:
-    if not isinstance(source_provider, VMWareProvider):
-        pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
-    for vm in virtual_machines:
-        if vm.get("add_nic"):
-            if "add_nic_start_connected" not in vm:
-                raise ValueError(
-                    f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+```404:413:conftest.py
+            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+            if not supports_add_nic(source_provider_type):
+                add_nic_skip = pytest.mark.skip(
+                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                 )
-            if not isinstance(vm["add_nic_start_connected"], bool):
-                raise ValueError(
-                    f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
-                    f"got {type(vm['add_nic_start_connected']).__name__!r}"
-                )
+                for item in items:
+                    test_config = resolve_item_plan_config(item) or {}
+                    if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                        item.add_marker(add_nic_skip)
+```
+
+On a vSphere provider the `prepared_plan` fixture still fails fast when `add_nic_start_connected` is missing or is not a `bool`:
+
+```1236:1248:conftest.py
+        has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+        if has_add_nic_config:
+            for vm in virtual_machines:
+                if vm.get("add_nic"):
+                    if "add_nic_start_connected" not in vm:
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+                        )
+                    if not isinstance(vm["add_nic_start_connected"], bool):
+                        raise ValueError(
+                            f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
+                            f"got {type(vm['add_nic_start_connected']).__name__!r}"
+                        )
 ```
 
 Provider details come from `.providers.json`. The example file shows the fields the suite expects, including guest credentials used for post-migration checks such as SSH
@@ -104,7 +117,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1615:1625:conftest.py
+```1701:1711:conftest.py
 @pytest.fixture(scope="class")
 def cleanup_migrated_vms(
     request: pytest.FixtureRequest,
@@ -122,7 +135,7 @@ def cleanup_migrated_vms(
 set — `warm_migration`, `copyoffload`, `xfs_check`, `copyoffload`, `target_affinity` and the rest appear only in the configs that use them. The keys read below are
 the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is `Any`.
 
-```1639:1659:conftest.py
+```1725:1745:conftest.py
 yield
 
 if request.config.getoption("skip_teardown"):
@@ -167,7 +180,7 @@ Before any map is created, the class-scoped `prepared_plan` fixture turns a smal
 the PVC name template for the current provider, decides where migrated VMs should land, prepares or clones the source VM, applies an optional power-state change, waits for
 Forklift inventory to see the VM, and stores full source VM details for later validation.
 
-```1064:1090:conftest.py
+```1150:1176:conftest.py
 # Deep copy the plan config to avoid mutation
 plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -199,7 +212,7 @@ else:
 
 Each VM is then cloned, powered, and recorded:
 
-```1284:1317:conftest.py
+```1370:1403:conftest.py
 # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
 source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
 if source_vm_power == "on":

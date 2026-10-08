@@ -998,7 +998,7 @@ file is preserved if the call fails.</p>
 Register this repository with the server if you want <code>.rootcoz/settings.json</code> applied, or set <code>ROOTCOZ_AI_PROVIDER</code> / <code>ROOTCOZ_AI_MODEL</code>
 explicitly. If you do not, the feature is simply off and nothing changes about your test run.</p>
 <p><strong>Warning:</strong> <code>enrich_junit_xml()</code> sets no <code>auth=</code> value and no <code>Authorization</code> header, because the request is a bare
-<code>requests.post(json=payload, timeout=...)</code> (<code>utilities/pytest_utils.py:501-506</code>). Requests may still send HTTP Basic Auth from a matching <code>.netrc</code> entry for
+<code>requests.post(json=payload, timeout=...)</code> (<code>utilities/pytest_utils.py:535-539</code>). Requests may still send HTTP Basic Auth from a matching <code>.netrc</code> entry for
 <code>ROOTCOZ_SERVER_URL</code>. When the rootcoz deployment requires authentication and neither a matching <code>.netrc</code> entry nor an authenticating proxy in front of
 <code>ROOTCOZ_SERVER_URL</code> supplies it, the call fails and enrichment logs the exception while preserving the original JUnit file.</p>
 </blockquote>

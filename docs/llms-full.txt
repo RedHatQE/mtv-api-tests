@@ -788,7 +788,7 @@ logic needs the Forklift inventory service. This file wraps the `forklift-invent
 
 The fixture and the factory behind it select the right inventory client at runtime:
 
-```1712:1717:conftest.py
+```1798:1802:conftest.py
     @pytest.fixture(scope="session")
     def source_provider_inventory(
         ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
@@ -1315,7 +1315,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         }
 ```
 
-```535:557:utilities/utils.py
+```535:558:utilities/utils.py
         ocp_resource_provider = create_and_store_resource(
             fixture_store=fixture_store,
             resource=Provider,
@@ -1370,7 +1370,7 @@ The class-scoped `prepared_plan` fixture is where the user-facing plan config be
 the config, validates and clones source VMs, resolves the PVC name template against the provider type, creates custom namespaces
 if requested, adjusts source power state, stores source-side metadata, and creates hooks.
 
-```1062:1075:conftest.py
+```1150:1163:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -1391,7 +1391,7 @@ Cloning runs in two phases. First every VM is cloned, powered to `source_vm_powe
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
 when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
-```1367:1375:conftest.py
+```1453:1461:conftest.py
                 # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
                 # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
                 inventory_timeout = plan.get("inventory_timeout", 300)
@@ -1403,7 +1403,7 @@ when a config omits it. Other optional flags in the same fixture, such as `warm_
                 )
 ```
 
-```1404:1406:conftest.py
+```1490:1492:conftest.py
         # Create Hooks if configured
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
@@ -1473,7 +1473,7 @@ That behavior comes from `utilities/utils.py:gen_network_map_list()` and the `mu
 
 `multus_network_name` sizes the NAD set from the same data, so the count of created NADs matches the count of map entries:
 
-```876:888:conftest.py
+```962:974:conftest.py
         if class_plan_config.get("per_nic_network_map", False):
             multus_count = max(
                 0,
@@ -1500,7 +1500,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:215:utilities/mtv_migration.py
+```187:216:utilities/mtv_migration.py
     def create_plan_resource(
         ocp_admin_client: DynamicClient,
         fixture_store: dict[str, Any],
@@ -1749,7 +1749,7 @@ Almost every OpenShift-side resource is created through `utilities/resources.py:
 resource and records it in `fixture_store["teardown"]`. Class-level cleanup removes migrated VMs early, and session-level cleanup
 handles everything else.
 
-```103:126:utilities/pytest_utils.py
+```140:161:utilities/pytest_utils.py
     def session_teardown(session_store: dict[str, Any]) -> None:
         LOGGER.info("Running teardown to delete all created resources")
 
@@ -1777,7 +1777,7 @@ handles everything else.
 `teardown_resources()` collects leftovers per kind and fails the teardown when anything survives. Besides the resources the tests
 created, it also handles the resources the migration created:
 
-```142:160:utilities/pytest_utils.py
+```179:197:utilities/pytest_utils.py
         migrations = session_teardown_resources.get(Migration.kind, [])
         plans = session_teardown_resources.get(Plan.kind, [])
         providers = session_teardown_resources.get(Provider.kind, [])
@@ -1815,6 +1815,14 @@ If `--skip-teardown` is set, the class and session cleanup paths intentionally l
 > **Note:** Failure handling is broader than cleanup. When data collection is enabled, the session writes created resources to
 > `<data-collector-path>/resources.json` (default `.data-collector`), and `pytest_exception_interact` triggers
 > `oc adm must-gather` collection so you can inspect what MTV and the cluster were doing at the time of failure.
+> Setup/call failures queue one gather per class-plan instance per worker. The `tryfirst` `pytest_runtest_teardown(item, nextitem)`
+> hook collects at a class or class-plan parameter boundary, including `nextitem=None` on early exit, before default fixture finalization.
+> Directories use percent-encoded class node IDs, class parameter indices and worker IDs. A `tryfirst` `pytest_runtest_protocol` wrapper
+> clears stale `plan_resource` before setup on class-plan transitions, not between consecutive methods of the same plan. The boundary
+> binds the current Plan or explicit None before finalizers and retains it for retries, gathering fully for None. Earlier method teardown
+> failures stay pending until the boundary; failures first reported after boundary cleanup use that context but collect post-finalizer state.
+> Collection attempts at most one successful gather per class-plan-worker; operational failures remain pending and artifacts are not guaranteed
+> if retries fail. A standalone test gathers immediately, once on success. Session-end retries cannot recover a crashed worker's pending state.
 
 ## Automation And Dry Runs
 
@@ -1919,7 +1927,7 @@ The `type` values come from the Forklift provider-type constants: `vsphere`, `op
 > **Warning:** Warm migration is not available for every source provider. The collection hook in `conftest.py` skips every `warm` item when the configured source provider cannot do
 > warm migrations.
 
-```314:324:conftest.py
+```370:379:conftest.py
                 warm_unsupported = (
                     Provider.ProviderType.OPENSTACK,
                     Provider.ProviderType.OPENSHIFT,
@@ -1936,7 +1944,7 @@ Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere
 `openshift` and `ova` sources, because those providers do not carry a CA certificate in their provider secret.
 A separate branch of the same hook enforces that:
 
-```336:346:conftest.py
+```392:402:conftest.py
                 ca_cert_unsupported = (
                     Provider.ProviderType.OPENSHIFT,
                     Provider.ProviderType.OVA,
@@ -1950,7 +1958,7 @@ A separate branch of the same hook enforces that:
                             item.add_marker(ca_cert_skip)
 ```
 
-```327:333:conftest.py
+```383:389:conftest.py
                 if source_provider_type != Provider.ProviderType.VSPHERE:
                     vsphere_only_skip = pytest.mark.skip(reason="Test is only applicable to vSphere source providers")
                     for item in items:
@@ -1958,6 +1966,22 @@ A separate branch of the same hook enforces that:
                             kw in item.keywords for kw in ("copyoffload", "shared_disk", "deep_inspection", "aap", "luks")
                         ):
                             item.add_marker(vsphere_only_skip)
+```
+
+A third capability gate of the same hook covers `add_nic`, which is a plan config flag rather than a marker, so it resolves
+each item's parametrized plan config. Whether a provider supports `add_nic` is `supports_add_nic()` in `libs/base_provider.py`:
+
+```404:413:conftest.py
+                # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+                # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+                if not supports_add_nic(source_provider_type):
+                    add_nic_skip = pytest.mark.skip(
+                        reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
+                    )
+                    for item in items:
+                        test_config = resolve_item_plan_config(item) or {}
+                        if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                            item.add_marker(add_nic_skip)
 ```
 
 ## Migration Modes
@@ -2170,7 +2194,7 @@ The comprehensive tests are the best place to look when you want end-to-end cove
 
 A warm comprehensive scenario is configured like this:
 
-```665:703:tests/tests_config/config.py
+```665:704:tests/tests_config/config.py
         "test_warm_migration_comprehensive": {
             "virtual_machines": [
                 {
@@ -4121,7 +4145,7 @@ A missing path raises `FileNotFoundError`, and an empty or non-mapping file fail
 By default, the suite collects runtime artifacts for failed runs.
 
 - The base directory defaults to `.data-collector`.
-- On test failure, the suite attempts to run `oc adm must-gather` into a per-test subdirectory under that path.
+- Class setup/call failures queue `oc adm must-gather` until the pre-finalizer class-plan boundary, attempting at most one successful gather per class-plan instance per worker. Operational class-plan failures remain pending for session-finish retry; artifacts are not guaranteed if retry fails. Standalone tests attempt collection per failing phase until one succeeds, but failed attempts are not queued for session-finish retry. Subdirectories use percent-encoded node identities, class parameter indices where applicable, and worker IDs.
 - At session finish, it writes a `resources.json` file with tracked resources.
 - If session teardown fails, it attempts an additional must-gather into the base collector directory.
 
@@ -5202,7 +5226,7 @@ The raw entry from `tests_params` is not used directly. The repository converts 
 
 The fixture copies the selected config, resolves a mapping-form `pvc_name_template`, and sets up runtime-only storage:
 
-```1064:1090:conftest.py
+```1150:1176:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -5236,7 +5260,7 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1186:1206:conftest.py
+```1272:1291:conftest.py
             skip_clone = plan.get("skip_clone", False)
 
             if skip_clone:
@@ -5264,7 +5288,7 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
 In the clone phase, the fixture resolves each VM through the clone provider, applies the placement flags, sets the source power state, and rewrites the VM name to the actual
 runtime name:
 
-```1239:1264:conftest.py
+```1325:1350:conftest.py
             if not skip_clone:
                 for vm in virtual_machines:
                     clone_options = {**vm, "enable_ctk": warm_migration}
@@ -5297,7 +5321,7 @@ runtime name:
 
 After the VM loop, configured hooks become real `Hook` custom resources:
 
-```1405:1406:conftest.py
+```1491:1492:conftest.py
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 ```
@@ -5423,7 +5447,7 @@ in `.rootcoz/settings.json`.
 
 From `utilities/pytest_utils.py`:
 
-```63:84:utilities/pytest_utils.py
+```64:85:utilities/pytest_utils.py
     def setup_ai_analysis(session: pytest.Session) -> None:
         """Configure AI analysis for test failure reporting.
 
@@ -5462,7 +5486,7 @@ to the rootcoz service, and writes the enriched XML back to the same file.
 
 From `utilities/pytest_utils.py`:
 
-```485:505:utilities/pytest_utils.py
+```522:542:utilities/pytest_utils.py
         server_url = os.environ["ROOTCOZ_SERVER_URL"]
         raw_xml = xml_path.read_text()
 
@@ -5754,7 +5778,7 @@ A standard cold migration needs:
 
 The two values are enforced at session start. `pytest_sessionstart` exits before any fixture setup if either is missing:
 
-```157:169:conftest.py
+```166:178:conftest.py
     required_config = ("storage_class", "source_provider")
 
     if not is_dry_run(session.config):
@@ -5785,25 +5809,38 @@ The basic cold-migration test configuration is intentionally small:
     },
 ```
 
-`add_nic` is a vSphere-only option. The `prepared_plan` fixture skips the whole class for any other provider type, and it fails fast when `add_nic_start_connected` is missing or
-is not a `bool`:
+`add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
+provider type other than vSphere. The capability itself is decided by `supports_add_nic()` in `libs/base_provider.py`, so the shared hook only applies the decision:
 
-```1148:1162:conftest.py
-    has_add_nic_config = any(vm.get("add_nic", False) for vm in virtual_machines)
-    if has_add_nic_config:
-        if not isinstance(source_provider, VMWareProvider):
-            pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
-        for vm in virtual_machines:
-            if vm.get("add_nic"):
-                if "add_nic_start_connected" not in vm:
-                    raise ValueError(
-                        f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+```404:413:conftest.py
+                # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+                # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+                if not supports_add_nic(source_provider_type):
+                    add_nic_skip = pytest.mark.skip(
+                        reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                     )
-                if not isinstance(vm["add_nic_start_connected"], bool):
-                    raise ValueError(
-                        f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
-                        f"got {type(vm['add_nic_start_connected']).__name__!r}"
-                    )
+                    for item in items:
+                        test_config = resolve_item_plan_config(item) or {}
+                        if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                            item.add_marker(add_nic_skip)
+```
+
+On a vSphere provider the `prepared_plan` fixture still fails fast when `add_nic_start_connected` is missing or is not a `bool`:
+
+```1236:1248:conftest.py
+            has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
+            if has_add_nic_config:
+                for vm in virtual_machines:
+                    if vm.get("add_nic"):
+                        if "add_nic_start_connected" not in vm:
+                            raise ValueError(
+                                f"VM '{vm['name']}': add_nic=True requires add_nic_start_connected to be set explicitly"
+                            )
+                        if not isinstance(vm["add_nic_start_connected"], bool):
+                            raise ValueError(
+                                f"VM '{vm['name']}': add_nic_start_connected must be a bool, "
+                                f"got {type(vm['add_nic_start_connected']).__name__!r}"
+                            )
 ```
 
 Provider details come from `.providers.json`. The example file shows the fields the suite expects, including guest credentials used for post-migration checks such as SSH
@@ -5842,7 +5879,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1615:1625:conftest.py
+```1701:1711:conftest.py
     @pytest.fixture(scope="class")
     def cleanup_migrated_vms(
         request: pytest.FixtureRequest,
@@ -5860,7 +5897,7 @@ the class finishes unless `--skip-teardown` is passed:
 set — `warm_migration`, `copyoffload`, `xfs_check`, `copyoffload`, `target_affinity` and the rest appear only in the configs that use them. The keys read below are
 the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is `Any`.
 
-```1639:1659:conftest.py
+```1725:1745:conftest.py
     yield
 
     if request.config.getoption("skip_teardown"):
@@ -5905,7 +5942,7 @@ Before any map is created, the class-scoped `prepared_plan` fixture turns a smal
 the PVC name template for the current provider, decides where migrated VMs should land, prepares or clones the source VM, applies an optional power-state change, waits for
 Forklift inventory to see the VM, and stores full source VM details for later validation.
 
-```1064:1090:conftest.py
+```1150:1176:conftest.py
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -5937,7 +5974,7 @@ Forklift inventory to see the VM, and stores full source VM details for later va
 
 Each VM is then cloned, powered, and recorded:
 
-```1284:1317:conftest.py
+```1370:1403:conftest.py
     # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
     source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
     if source_vm_power == "on":
@@ -6360,7 +6397,7 @@ Warm timing knobs live in `tests/tests_config/config.py`, which is the default t
 The `snapshots_interval` value is applied through the `precopy_interval_forkliftcontroller` fixture, which patches the live `ForkliftController` custom resource in the MTV
 namespace:
 
-```649:663:conftest.py
+```735:749:conftest.py
     current_interval = getattr(forklift_controller.instance.spec, "controller_precopy_interval", None)
 
     if str(current_interval) == str(snapshots_interval):
@@ -6378,7 +6415,7 @@ namespace:
     )
 ```
 
-The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:627`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
+The fixture intentionally does not restore the previous interval. Its docstring (`conftest.py:715`) records why: with `ResourceEditor` restoring at teardown, one parallel worker
 ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.
 
 What these values do:
@@ -6439,7 +6476,7 @@ Use these tuning rules:
 Warm support is not expressed per test class. It is enforced at collection time by a `pytest_collection_modifyitems` hook in the root `conftest.py`, based on the source provider
 `type` in `.providers.json`:
 
-```313:325:conftest.py
+```369:380:conftest.py
     # Skip warm migration tests for providers that do not support warm migration.
     warm_unsupported = (
         Provider.ProviderType.OPENSTACK,
@@ -7457,7 +7494,7 @@ There are three destination provider fixtures in this repository. Two of them ar
 The default destination fixture in `conftest.py` creates an OpenShift `Provider` with an empty `url` and an empty `secret` block. That is the local, in-cluster destination path
 used by the non-remote tests.
 
-```674:691:conftest.py
+```760:776:conftest.py
     @pytest.fixture(scope="session")
     def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixture_store):
         kind_dict = {
@@ -7481,7 +7518,7 @@ used by the non-remote tests.
 
 The remote path creates a secret from the active OpenShift API token and then creates an explicit OpenShift `Provider` with a real API URL.
 
-```949:979:conftest.py
+```1035:1065:conftest.py
     @pytest.fixture(scope="session")
     def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
         api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
@@ -7624,7 +7661,7 @@ Treat the inputs like this:
 > **Warning:** `remote_ocp_cluster` is both a gate and a sanity check. In `conftest.py`, the `ocp_admin_client` fixture fails early if the configured value does not appear in the
 > connected API host:
 
-```541:543:conftest.py
+```627:629:conftest.py
     if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
         if remote_cluster_name not in _client.configuration.host:
             raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
@@ -8196,13 +8233,13 @@ That leads to a simple rule set:
 Both hook test classes use the repository's standard incremental class pattern. If an earlier step in
 the class fails unexpectedly, later steps are marked `xfail` instead of running anyway.
 
-```151:153:conftest.py
+```160:162:conftest.py
         # Incremental test support - track failures for class-based tests
         if "incremental" in item.keywords and rep.when == "call" and rep.failed:
             item.parent._previousfailed = item
 ```
 
-```203:208:conftest.py
+```224:229:conftest.py
     def pytest_runtest_setup(item):
         # Incremental test support - xfail if previous test in class failed
         if "incremental" in item.keywords:
@@ -8301,7 +8338,7 @@ Each entry of `virtual_machines` describes one source VM or template.
 | `add_nic_start_connected` | Required when `add_nic` is `True`; `False` yields a disconnected NIC | `False` |
 | `win_os` | Hyper-V guest OS override; must be a bool | `False` |
 
-> **Note:** `add_nic` skips the whole class on non-vSphere providers and raises `ValueError` when `add_nic_start_connected`
+> **Note:** `add_nic` is skipped at collection time on non-vSphere providers (see [cold-migrations.html](cold-migrations.html)) and raises `ValueError` when `add_nic_start_connected`
 > is missing or is not a bool. The MAC of the added NIC is written back into the VM dict as `connected_nic_mac` or
 > `disconnected_nic_mac` and is checked after migration.
 
@@ -8988,7 +9025,7 @@ The preparation and plan helpers fail fast rather than silently degrading. The c
 | Trigger | Error |
 | --- | --- |
 | `add_nic: True` without `add_nic_start_connected`, or with a non-bool value | `ValueError` naming the VM |
-| `add_nic: True` on a non-vSphere provider | `pytest.skip` |
+| `add_nic: True` on a non-vSphere provider | collection-time skip (see [cold-migrations.html](cold-migrations.html)) |
 | Shared-disk config on a provider without `relink_shared_disks()` | `ValueError` naming the provider |
 | `disable_drs_for_vms` on OVA or a non-VMware clone provider | `ValueError` |
 | `skip_clone` combined with an incompatible flag, or on RHV | `ValueError` listing the conflicts |
@@ -9736,8 +9773,8 @@ field name (`tests/cold/conftest.py:18`, `tests/cold/test_ca_crt_migration.py:76
 
 | Case | How it is created |
 | --- | --- |
-| Local destination | `kind_dict` `Provider` `${session_uuid}-local-ocp-provider`, `spec.type: openshift`, empty `spec.secret` and `spec.url` (`conftest.py:675`) |
-| Remote destination | `Secret` with `token` and `insecureSkipVerify`, then `Provider` `${session_uuid}-destination-ocp-provider` of type `openshift` (`conftest.py:950`) |
+| Local destination | `kind_dict` `Provider` `${session_uuid}-local-ocp-provider`, `spec.type: openshift`, empty `spec.secret` and `spec.url` (`conftest.py:760-776`) |
+| Remote destination | `Secret` with `token` and `insecureSkipVerify`, then `Provider` `${session_uuid}-destination-ocp-provider` of type `openshift` (`conftest.py:1035-1065`) |
 
 ### Provider readiness rules
 
@@ -10317,13 +10354,13 @@ problem is about `NetworkMap`, `StorageMap`, or a VM ID inside a `Plan`, start w
 ## End-To-End Flow
 
 1. The suite loads `.providers.json` from the repository root through `resolve_providers_json_path()` and `load_source_providers()` (`utilities/utils.py:77`).
-2. `py_config["source_provider"]` selects one top-level provider entry from that file (`conftest.py:718`).
+2. `py_config["source_provider"]` selects one top-level provider entry from that file (`conftest.py:804`).
 3. `create_source_provider()` creates the source `Secret` and source `Provider` CR, waits for `Provider.Status.READY`, then instantiates the matching `BaseProvider` subclass as a
    context manager (`utilities/utils.py:371`).
-4. The `source_provider_inventory` fixture calls `create_forklift_inventory()`, which picks the adapter registered for `source_provider.type` (`conftest.py:1712`,
+4. The `source_provider_inventory` fixture calls `create_forklift_inventory()`, which picks the adapter registered for `source_provider.type` (`conftest.py:1799`,
    `libs/forklift_inventory.py:33`).
-5. `prepared_plan` clones or creates source VMs, normalizes them through `vm_dict()`, and rewrites the VM name to the cloned name (`conftest.py:1310`).
-6. After **every** clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (`conftest.py:1367`).
+5. `prepared_plan` clones or creates source VMs, normalizes them through `vm_dict()`, and rewrites the VM name to the cloned name (`conftest.py:1396`).
+6. After **every** clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (`conftest.py:1456`).
 7. `get_network_migration_map()` and `get_storage_migration_map()` turn inventory data into `NetworkMap` and `StorageMap` CR payloads (`utilities/mtv_migration.py:687`,
    `utilities/mtv_migration.py:548`).
 8. `populate_vm_ids()` copies Forklift VM IDs into the `Plan` payload just before `create_plan_resource()` runs (`utilities/utils.py:894`).
@@ -10344,7 +10381,7 @@ The synchronization step is explicitly two-phase in `conftest.py`, because waiti
 
 Two extra waits sit next to that call:
 
-- When any VM uses `add_nic`, `wait_for_added_nics_in_forklift_inventory()` forces a provider refresh and blocks until inventory shows the new NIC count (`conftest.py:1379`,
+- When any VM uses `add_nic`, `wait_for_added_nics_in_forklift_inventory()` forces a provider refresh and blocks until inventory shows the new NIC count (`conftest.py:1468`,
   `utilities/provider_inventory.py:44`).
 - On vSphere, `wait_for_cloned_vms_in_forklift_inventory()` additionally waits for inventory MAC addresses to converge with live vCenter MACs, because vSphere clones regenerate
   MACs (`utilities/provider_inventory.py:176`).
@@ -10489,7 +10526,7 @@ In practice, `BaseProvider` gives the suite six important guarantees:
   RHV plan names are templates (`libs/base_provider.py:126`, `libs/providers/rhv.py:381`).
 
 > **Warning:** `skip_clone=True` is incompatible with `disable_drs_for_vms`, `clone_to_same_host`, `migrate_shared_disks`, `add_nic`, and — outside Hyper-V — `preserve_static_ips`,
-> because all of those need the cloning phase (`conftest.py:1194`).
+> because all of those need the cloning phase (`conftest.py:1280`).
 
 ## Provider-Specific Behavior
 
@@ -10507,7 +10544,7 @@ In practice, `BaseProvider` gives the suite six important guarantees:
 - When copy-offload is configured, the source `Provider` CR also gets the annotation `forklift.konveyor.io/empty-vddk-init-image: yes` (`utilities/utils.py:533`).
 - Standard network and storage mappings come from `VsphereForkliftInventory`. Copy-offload storage mappings can bypass inventory and use explicit datastore IDs instead.
 - It is the only provider that implements shared-disk handling: `relink_shared_disks()`, `find_shared_vmdk_paths()`, and `reattach_orphaned_vmdk()`. `prepared_plan` refuses
-  `migrate_shared_disks` for any other provider type (`conftest.py:1145`).
+  `migrate_shared_disks` for any other provider type (`conftest.py:1230`).
 
 > **Note:** The test-side vSphere SDK connection uses `disableSslCertValidation=True`, while the Forklift `Provider` CR still honors `source_provider_insecure_skip_verify` and can
 > include `cacert`. That means direct provider access and MTV-side validation are related, but not identical, code paths.
@@ -10555,8 +10592,8 @@ late, map generation will be wrong.
   (`_NIC_DETAILS_SCRIPT`, `_GUEST_OS_NAME_SCRIPT`).
 - `get_vm_or_template_networks()` delegates straight to `inventory.vms_networks_mappings()` (`libs/providers/hyperv.py:990`).
 - It has `wait_for_guest_network_config()` for guest network readiness, which `prepared_plan` uses in place of the vSphere `wait_for_vmware_guest_info()` when `source_vm_power` is
-  `on` (`conftest.py:1293`).
-- `skip_clone=True` is allowed for Hyper-V, and `preserve_static_ips` stays compatible with it because guest tools are reachable without cloning (`conftest.py:1196`).
+  `on` (`conftest.py:1257`).
+- `skip_clone=True` is allowed for Hyper-V, and `preserve_static_ips` stays compatible with it because guest tools are reachable without cloning (`conftest.py:1281`).
 - Windows detection uses the guest `OSName`/`Notes` KVP token `windows`, not the VM name, so names such as `twin-server` are classified correctly (`libs/providers/hyperv.py:29`,
   `libs/providers/hyperv.py:737`).
 
@@ -10564,7 +10601,7 @@ late, map generation will be wrong.
 
 `OCPProvider` is both the destination provider for migrations and a supported source provider for source-side CNV test setups.
 
-- If OpenShift is the source, `prepared_plan` creates a source `NetworkAttachmentDefinition` plus source CNV VMs through `create_source_cnv_vms()` (`conftest.py:1122`).
+- If OpenShift is the source, `prepared_plan` creates a source `NetworkAttachmentDefinition` plus source CNV VMs through `create_source_cnv_vms()` (`conftest.py:1208`).
 - `OpenshiftForkliftInventory` resolves storage by following the VM's data volumes to PVCs and then reading `storageClassName` from the live cluster.
 - It resolves networks from the VM template: `multus.networkName` becomes a named source network, and a pod network becomes `{"type": "pod"}`.
 - `vm_dict()` waits for the CNV guest agent for up to 301 seconds and sanitizes VM names to Kubernetes-safe resource names before querying the cluster
@@ -10581,7 +10618,7 @@ late, map generation will be wrong.
   inventory instance is passed (`libs/providers/ova.py:34`).
 - `get_vm_or_template_networks()` delegates to `inventory.vms_networks_mappings()`.
 - In the current `prepared_plan` implementation, the source VM name stays unchanged; instead each VM gets a unique `targetName` derived from
-  `sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")` so parallel sessions do not collide (`conftest.py:1402`).
+  `sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")` so parallel sessions do not collide (`conftest.py:1488`).
 - In practice, OVA mapping behavior depends much more on Forklift inventory than on direct provider logic.
 
 > **Note:** Warm-migration coverage is marker-scoped rather than skipped in code. `tests/warm/test_mtv_warm_migration.py` carries `@pytest.mark.vsphere` and `@pytest.mark.rhv`, and
@@ -10638,8 +10675,8 @@ Three adapter details are especially practical:
 Network mapping is a two-step process.
 
 First, the suite decides how many destination networks it needs. It does that in the `multus_network_name` fixture by calling `source_provider.get_vm_or_template_networks()`
-(`conftest.py:869`). It creates `len(networks) - 1` NADs named `{base}-{i}`, where `base` is `cb-<hash>` derived from the node ID and `session_uuid` (`conftest.py:888`,
-`conftest.py:893`). This is why RHV can use template networks before clones exist.
+(`conftest.py:955`). It creates `len(networks) - 1` NADs named `{base}-{i}`, where `base` is `cb-<hash>` derived from the node ID and `session_uuid` (`conftest.py:931`,
+`conftest.py:978`). This is why RHV can use template networks before clones exist.
 
 Second, once the cloned or prepared source VM has been synced into Forklift inventory, the actual `NetworkMap` payload is built from inventory data.
 
@@ -10679,12 +10716,12 @@ What that means in plain language:
 1. The first source network is always mapped to the destination pod network.
 2. Every additional source network is mapped to a generated Multus NAD.
 3. Those NADs are named from a base name plus a numeric suffix: `{base}-1`, `{base}-2`, and so on.
-4. If the plan config sets `multus_namespace`, the NADs are created there instead of in the main target namespace (`conftest.py:851`).
+4. If the plan config sets `multus_namespace`, the NADs are created there instead of in the main target namespace (`conftest.py:937`).
 
 > **Warning:** Network mapping is order-based. The first source network returned by inventory becomes the pod network, so inventory ordering matters for multi-NIC VMs.
 
 > **Tip:** If a source VM has `N` networks, the suite creates `N - 1` NADs, because the first network is reserved for the destination pod network. VMs configured with `add_nic` add
-> one more NAD each (`conftest.py:875`).
+> one more NAD each (`conftest.py:961`).
 
 ## How Source Storage Mappings Are Resolved
 
@@ -10770,7 +10807,7 @@ Optional extensions used by the code include:
 - `esxi_host`, `esxi_user`, `esxi_password`
 - `default_vm_name`, `resource_pool`, `dedicated_migration_hosts`, `rdm_lun_uuid`
 
-The copy-offload storage `Secret` is built in `tests/copyoffload/conftest.py:402` with the base keys `STORAGE_HOSTNAME`, `STORAGE_USERNAME`, and `STORAGE_PASSWORD`, plus a
+The copy-offload storage `Secret` is built in `tests/copyoffload/conftest.py:396` with the base keys `STORAGE_HOSTNAME`, `STORAGE_USERNAME`, and `STORAGE_PASSWORD`, plus a
 vendor-specific table:
 
 | `storage_vendor_product` | Additional secret keys |
@@ -11125,11 +11162,25 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 ### `utilities/pytest_utils.py`
 
 `is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`),
-`collect_created_resources()` (must-gather on failure), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
+`collect_created_resources()` (writes the tracked resource inventory), `resolve_item_plan_config()` (a collected item's plan config, failing fast when a non-parametrized item has no
+`tests_params` entry), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
 
 ### `utilities/must_gather.py`
 
-`run_must_gather()` collects targeted MTV must-gather bundles when a test fails.
+`run_must_gather()` runs the full diagnostic collection and `run_plan_must_gather()` the plan-targeted one; both report whether they succeeded and
+share image resolution. Missing resources and the wrapper's specific resource API discovery failure return `False`; missing or invalid image metadata and other configuration/programming errors propagate.
+Standalone setup/call collector errors stay in the failing item's typed stash until the teardown wrapper yields to fixture finalizers.
+Session-flush errors are retained until pytest session hooks finish, then resource inventory writing and configured cleanup are attempted in nested `finally` blocks.
+Independent `finally` blocks also attempt temporary-directory removal, the summary and enabled AI enrichment despite inventory or teardown errors. Cleanup errors propagate with earlier errors chained. Both teardown and session-finish use modern `wrapper=True` hooks so ordinary fixture exceptions do not emit old-style pluggy teardown warnings. Inventory write failures are logged by the existing inventory helper.
+`collect_must_gather_for_item()`, `collect_class_must_gather()`, `collect_class_teardown_must_gather()`, `flush_pending_class_must_gathers()` and the
+`mark_class_pending_must_gather()` / `class_must_gather_collected()` / `mark_class_must_gather_collected()` documented state API attempt at most one successful gather per failing
+class-plan instance per worker. Operational failures stay pending for retry; artifacts are not guaranteed if retries fail. `class_plan_identity()` uses the Class collector node ID, class-scoped callspec indices and worker ID, shared across ordinary
+methods but distinct across plan parameter sets. `collect_class_must_gather(item, nextitem)` runs before default fixture finalization at class-plan boundaries,
+including early exits with `nextitem=None`, and binds the current Plan or explicit None for collection and all retries, even if no failure is pending yet.
+`initialize_class_plan_context()` runs from a `tryfirst` protocol wrapper before setup, clearing stale Plan attributes on identity transitions but not across
+consecutive methods of the same plan. `collect_must_gather_for_item()` takes this explicit Plan context instead of rereading mutable class state.
+Earlier method teardown failures stay pending until a boundary; session finish retries exceptional remaining cases on surviving workers, without guaranteeing
+pre-cleanup state or crash recovery. Unbound fallback contexts read the class attribute only for the active identity; others bind None for a full gather.
 
 ### `utilities/aap.py`
 
@@ -11343,13 +11394,16 @@ In real failure runs, the XML is much more informative because it includes loggi
 When you pass `--analyze-with-ai`, the suite posts the raw JUnit XML to a **rootcoz** server and writes the enriched XML back to the same
 file. rootcoz is an external service, not part of this repository; this page only documents the client half of the contract.
 
-```462:517:utilities/pytest_utils.py
+```499:554:utilities/pytest_utils.py
     def enrich_junit_xml(session: pytest.Session) -> None:
         """Read JUnit XML, send to server for analysis, write enriched XML back.
 
         Reads the JUnit XML that pytest generated, POSTs the raw content to the
         rootcoz server's /analyze-failures endpoint, and writes the enriched XML
         (with analysis results) back to the same file.
+
+        Args:
+            session: The pytest session containing config options.
         """
         xml_path_raw = getattr(session.config.option, "xmlpath", None)
         if not xml_path_raw:
@@ -11394,7 +11448,7 @@ file. rootcoz is an external service, not part of this repository; this page onl
 
         if enriched_xml := result.get("enriched_xml"):
             xml_path.write_text(enriched_xml)
-            LOGGER.info(f"JUnit XML enriched with AI analysis: {xml_path}")
+            LOGGER.info("JUnit XML enriched with AI analysis: %s", xml_path)
         else:
             LOGGER.info("No enriched XML returned (no failures or analysis failed)")
 ```
@@ -11432,7 +11486,8 @@ Unless you use `--skip-data-collector`, the suite prepares a clean `.data-collec
 The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
-- `.data-collector/<pytest-node-name>/...`: per-failure must-gather output when the failure hook runs.
+- `.data-collector/<encoded-class-plan-identity>/...`: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.
+- `.data-collector/<encoded-test-node-identity>/...`: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.
 - `.data-collector/...` at the root: session-level must-gather output when teardown cleanup fails.
 
 The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
@@ -11451,44 +11506,47 @@ failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` sh
 
 ## Must-Gather Support
 
-The suite has built-in must-gather support. When it can match a failure to a specific plan, it runs a targeted gather. Otherwise it runs a
-full, cluster-wide gather.
+The suite has built-in must-gather support. `run_plan_must_gather()` matches a failure to a specific plan and runs a targeted gather; `run_must_gather()`
+runs the full, cluster-wide gather. Both share image resolution and differ only in the arguments passed to the collector script.
 
-```167:185:utilities/must_gather.py
-    must_gather_image = _resolve_must_gather_image(
-        ocp_admin_client=ocp_admin_client,
-        mtv_subs=mtv_subs,
-        mtv_csv=mtv_csv,
-    )
+```232:242:utilities/must_gather.py
+            must_gather_image = _resolve_must_gather_image(
+                ocp_admin_client=ocp_admin_client,
+                mtv_subs=mtv_subs,
+                mtv_csv=mtv_csv,
+            )
 
-    _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
-
-    if plan:
-        plan_name = plan["name"]
-        plan_namespace = plan["namespace"]
-        LOGGER.info(f"Running targeted must-gather for plan '{plan_name}' in namespace '{plan_namespace}'")
-        run_command(
-            shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted"),
-            verify_stderr=False,
-        )
-    else:
-        LOGGER.info("Running full must-gather collection")
-        run_command(shlex.split(_must_gather_base_cmd), verify_stderr=False)
+            command = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
+            if target_args:
+                command = f"{command} -- {target_args}"
+            success, _, _ = run_command(shlex.split(command), verify_stderr=False)
+            return success
 ```
 
 What this means in practice:
 
 - If the failure can be tied back to a specific plan, the gather is scoped to that plan with `/usr/bin/targeted`.
 - Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.
-- The per-test gather is triggered from `pytest_exception_interact`, which passes the test class's `plan_resource` when one exists.
-- If teardown leaves leftovers behind, a second unscoped gather runs at session finish as a fallback.
+- `pytest_exception_interact` records a failing class item. A `tryfirst` `pytest_runtest_protocol` wrapper clears stale `plan_resource` on entry to a different class-plan identity before setup hooks run, but preserves it across consecutive methods of the same plan. The pre-finalizer boundary binds the current Plan or explicit None, even if no failure is pending yet, and retains it for retries. Updates before that boundary are observed. If setup fails before this plan exists, the gather is full, not targeted.
+- Setup and call failures queue one gather per class-plan instance per worker. Ordinary methods with the same class-scoped parameter indices share state; different plan parameter sets and same-named classes in different modules do not.
+- The `tryfirst` `pytest_runtest_teardown(item, nextitem)` hook gathers pending diagnostics before pytest's default fixture finalization when `nextitem` belongs to a different class-plan instance, or is `None`. This includes early `-x`/`--maxfail` exits and local boundaries under `--dist=load`, without waiting for the worker to execute the entire collected class.
+- A plan-parameter transition is also a boundary even if pytest retains the same Class collector. Pytest can finalize the previous parametrized fixture tree during the next setup, so the gather must run before that setup.
+- Deferral lets later methods contribute to the failed state before a single gather captures it. Collection precedes boundary cleanup, but resources explicitly deleted by earlier tests or fixtures may already be gone.
+- A standalone test attempts a gather into its worker-qualified node directory on each failing phase until one succeeds. A failed attempt is not queued for session-finish retry; an unexpected setup/call collector error stays in that item's typed stash until its teardown wrapper yields to pytest fixture finalizers, then propagates with the original traceback. Reporting that deferred error does not retry collection or mark success. A collector error first raised after teardown propagates immediately because finalizers have already run.
+- State lives on each worker's session object. Worker-qualified artifact names prevent workers from sharing a destination. At most one successful gather is recorded per class-plan instance per worker, including if scheduling later returns to that instance.
+- Both gather entry points report success. Missing collector resources and known command, filesystem, authentication, API and transport failures return `False`. Those operational failures stay pending for session-finish retry only for class-plan gathers; failed standalone attempts are not queued. Missing or invalid CSV deployments/containers/environment values, IDMS mirror entries/sources, channels or image digest separators raise `MustGatherImageError` and propagate instead of returning `False`. The class-plan pending entry remains queued after that error, so a later boundary or session-finish retry may attempt the gather again and propagate the metadata error again. The wrapper has no dedicated missing-API exception; only its `_get_api_version` discovery error for the three collector resource kinds is treated as operational. Malformed metadata structures and other programming or configuration errors also propagate with the class-plan entry left pending. `run_plan_must_gather()` takes the plan name and namespace; `run_must_gather()` is the full-collection path when no plan exists.
+- A teardown failure on an earlier method is queued until the class-plan boundary when possible, so it does not prematurely mark the instance collected. A failure reported after boundary finalization gathers immediately only if no successful gather exists; it uses the bound pre-finalizer Plan context but necessarily sees post-finalizer cluster state. A successful pre-finalizer gather suppresses the repeat.
+- The modern `wrapper=True` teardown hook yields in `finally` before propagating collector errors. Fixture finalizer exceptions propagate naturally without an old-style pluggy teardown warning, with any collector error chained. The session-finish wrapper likewise yields to pytest session hooks despite flush errors, then independently attempts resource inventory writing, configured teardown, temporary-directory removal, the extra summary and enabled AI enrichment in `finally` blocks. Later session-hook or cleanup failures take precedence with earlier errors chained, not silently discarded.
+- This guarantees independent cleanup attempts after collector, inventory or teardown errors, not successful cleanup. The existing inventory helper logs write failures. Session teardown failures are logged, trigger the configured full gather, and re-raise; if that gather raises too, its error propagates with the teardown error chained. Process crashes and forced termination remain outside this guarantee.
+- Session finish retries exceptional remaining pending gathers on a surviving worker using the bound context, but cannot promise pre-cleanup resources after interrupted hooks. If a boundary never bound the context, fallback reads the class attribute only for the still-active identity; otherwise it binds None and gathers fully rather than targeting another plan. It cannot recover in-memory pending state from a crashed worker. Artifacts are not guaranteed if retries fail.
+- If teardown leaves leftovers behind, an unscoped `run_must_gather()` runs at session finish as a fallback.
 
 > **Note:** The must-gather image is not hardcoded. The code resolves it from the installed MTV operator CSV and the ImageDigestMirrorSet, so the
 > gather matches the cluster’s installed MTV build.
 >
-> **Note:** must-gather resolution and execution are wrapped in a broad `try`, so a must-gather problem is logged but never fails your test run.
+> **Note:** Only known operational collection failures are logged and returned as `False`. Unexpected programming and configuration errors remain visible.
 >
-> **Tip:** A per-test must-gather directory is often the quickest way to answer “what did the cluster look like at the moment this test failed?”
+> **Tip:** For a shared fixture failure, expect one directory per class-plan instance per worker, normally collected at the pre-finalizer boundary. Session-end retries and failures first reported by boundary finalizers may instead describe cleaned state.
 
 ## Common Failure Points
 
@@ -11563,7 +11621,7 @@ So “migration failed” and “test failed” are not always the same thing.
 
 Copy-offload adds extra prerequisites, so it also adds extra failure modes.
 
-```30:70:.providers.json.example
+```30:71:.providers.json.example
         "copyoffload": {
           # Supported storage_vendor_product values:
           # - "ontap"           (NetApp ONTAP)
@@ -11787,11 +11845,14 @@ At the end of the session, `conftest.py` writes the resource inventory and then 
     else:
         try:
             session_teardown(session_store=_session_store)
-        except Exception as exp:
-            LOGGER.error(f"the following resources was left after tests are finished: {exp}")
+        except Exception:
+            LOGGER.exception("Resources remain after session teardown")
             if not session.config.getoption("skip_data_collector"):
                 run_must_gather(data_collector_path=_data_collector_path)
+            raise
 ```
+
+The modern `wrapper=True` session-finish hook yields to pytest's session hooks in `finally`, even when a pending-gather flush raises. Independent `finally` blocks then attempt the inventory write, configured teardown, temporary-directory removal, summary and enabled AI enrichment before errors propagate. Later session-hook or cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.
 
 The session teardown in `utilities/pytest_utils.py` starts by cancelling active migrations and archiving plans:
 
@@ -11830,8 +11891,7 @@ It also performs extra cleanup and verification in the target namespace by:
 - Waiting for matching pods to disappear.
 - Waiting for matching `DataVolume`, `PersistentVolumeClaim`, and `PersistentVolume` objects to be deleted.
 
-> **Note:** `.data-collector/resources.json` is written before session teardown runs. That means the file is available both when you use `--skip-teardown` and when teardown later
-reports a problem.
+> **Note:** Writing `.data-collector/resources.json` is attempted before session teardown when collection is enabled and resources are tracked. A successful write leaves the file available with `--skip-teardown` or when teardown later reports a problem; write failures are logged.
 
 ### Leftover detection
 
@@ -11848,8 +11908,7 @@ keyed off the tracked inventory, so a resource you never registered is never cle
 
 If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` to capture diagnostics in the same collector path.
 
-> **Warning:** Leftover teardown problems are currently surfaced through session-finish logging. `pytest_sessionfinish()` logs the teardown exception and can trigger `must-gather`,
-but it does not re-raise that exception after logging it. Always check the end-of-run output, not just the individual test results.
+> **Warning:** `pytest_sessionfinish()` logs teardown failures, attempts a full `must-gather` when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. Independent `finally` blocks still attempt temporary-directory removal, the extra summary and enabled AI enrichment before the error propagates. Check session errors as well as individual test results.
 
 ## Debugging With `--skip-teardown`
 
@@ -13689,7 +13748,7 @@ enriched XML back over the same file. That is test-report post-processing, not a
 > for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
 > untouched.
 
-```462:501:utilities/pytest_utils.py
+```499:554:utilities/pytest_utils.py
     def enrich_junit_xml(session: pytest.Session) -> None:
         """Read JUnit XML, send to server for analysis, write enriched XML back.
         ...
@@ -13731,7 +13790,7 @@ file is preserved if the call fails.
 > explicitly. If you do not, the feature is simply off and nothing changes about your test run.
 
 > **Warning:** `enrich_junit_xml()` sets no `auth=` value and no `Authorization` header, because the request is a bare
-> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:501-506`). Requests may still send HTTP Basic Auth from a matching `.netrc` entry for
+> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:535-539`). Requests may still send HTTP Basic Auth from a matching `.netrc` entry for
 > `ROOTCOZ_SERVER_URL`. When the rootcoz deployment requires authentication and neither a matching `.netrc` entry nor an authenticating proxy in front of
 > `ROOTCOZ_SERVER_URL` supplies it, the call fails and enrichment logs the exception while preserving the original JUnit file.
 

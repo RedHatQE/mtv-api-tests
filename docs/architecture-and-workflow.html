@@ -1022,7 +1022,15 @@ created, it also handles the resources the migration created:</p>
 <blockquote>
 <p><strong>Note:</strong> Failure handling is broader than cleanup. When data collection is enabled, the session writes created resources to
 <code>&lt;data-collector-path&gt;/resources.json</code> (default <code>.data-collector</code>), and <code>pytest_exception_interact</code> triggers
-<code>oc adm must-gather</code> collection so you can inspect what MTV and the cluster were doing at the time of failure.</p>
+<code>oc adm must-gather</code> collection so you can inspect what MTV and the cluster were doing at the time of failure.
+Setup/call failures queue one gather per class-plan instance per worker. The <code>tryfirst</code> <code>pytest_runtest_teardown(item, nextitem)</code>
+hook collects at a class or class-plan parameter boundary, including <code>nextitem=None</code> on early exit, before default fixture finalization.
+Directories use percent-encoded class node IDs, class parameter indices and worker IDs. A <code>tryfirst</code> <code>pytest_runtest_protocol</code> wrapper
+clears stale <code>plan_resource</code> before setup on class-plan transitions, not between consecutive methods of the same plan. The boundary
+binds the current Plan or explicit None before finalizers and retains it for retries, gathering fully for None. Earlier method teardown
+failures stay pending until the boundary; failures first reported after boundary cleanup use that context but collect post-finalizer state.
+Collection attempts at most one successful gather per class-plan-worker; operational failures remain pending and artifacts are not guaranteed
+if retries fail. A standalone test gathers immediately, once on success. Session-end retries cannot recover a crashed worker's pending state.</p>
 </blockquote>
 <h2 id="automation-and-dry-runs">Automation And Dry Runs</h2>
 <p>The repository includes local automation, but it is deliberately conservative.</p>
