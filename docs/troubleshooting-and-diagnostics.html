@@ -559,6 +559,7 @@ full, cluster-wide gather.</p>
 <span class="k">else</span><span class="p">:</span>
     <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Running full must-gather collection"</span><span class="p">)</span>
     <span class="n">run_command</span><span class="p">(</span><span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">_must_gather_base_cmd</span><span class="p">),</span> <span class="n">verify_stderr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">return</span> <span class="kc">True</span>
 </code></pre></div>
 
 <p>What this means in practice:</p>
@@ -566,13 +567,14 @@ full, cluster-wide gather.</p>
 <li>If the failure can be tied back to a specific plan, the gather is scoped to that plan with <code>/usr/bin/targeted</code>.</li>
 <li>Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.</li>
 <li>The gather is triggered from <code>pytest_exception_interact</code>, which passes the test class's <code>plan_resource</code> when one exists.</li>
-<li>A class-based test never collects at failure time. Whether it errors in setup or fails in the call phase, the class is only recorded as needing one must-gather. The gather runs once, from <code>pytest_runtest_teardown</code>, at the teardown of the class's last collected test.</li>
+<li>A class-based test never collects at failure time. Whether it errors in setup or fails in the call phase, the class is only recorded as needing one must-gather. The gather runs once, from <code>pytest_runtest_teardown</code>, at the teardown of the last item of that class on the worker running it. If the run stops before that item - <code>-x</code>, <code>--maxfail</code>, Ctrl-C, a crashed worker - the still-pending class is collected at session finish instead.</li>
 <li>That gather is taken <strong>before</strong> the class fixture finalizer runs, so it captures the cluster as it was when the class failed: the plan, VMs and namespaces are still there, because nothing has cleaned them up yet. The artifacts describe the failed state, not the cleaned one.</li>
 <li>Deferring to class end is the point. A shared fixture failure such as <code>prepared_plan</code> takes down every method in the class, and the cluster keeps moving while the remaining methods run, so a gather taken at the first failure is already stale by the last one. One gather at class end captures the final state of all of them, and all of them land in the same class-named directory.</li>
-<li>The class end is found from collection order: the last item of each class is cached on the session and the cache is rebuilt whenever the number of collected items changes. Only that item collects, so a class with ten failures still gathers once.</li>
+<li>The class end is counted per worker: every torn-down item is counted for its class, and the class ends when this worker has torn down as many items of it as were collected. Counting rather than following collection order is what survives <code>--dist=load</code>, where the collection-last item of a class can be scheduled onto a worker that never ran the failing method.</li>
 <li>A standalone test has no class end to wait for, so it collects its own must-gather immediately, under its own node name.</li>
-<li>The state is kept on the session object, not in module-level variables, so under xdist each worker collects for the classes it ran.</li>
-<li>Because the class-end gather precedes the finalizer, a class fixture that fails during its own teardown is reported after the gather already covered the resources it was tearing down. That repeat is suppressed and logged, so one class yields one gather even when its tests fail <em>and</em> its finalizer raises. A finalizer failure on a class that was collected nothing is the only case that gathers here immediately, into the same class directory.</li>
+<li>The state is kept on the session object, not in module-level variables, so under xdist each worker collects for the classes it ran. A class split across workers by <code>--dist=load</code> therefore stays pending on the worker that saw the failure and is collected by that worker's session finish.</li>
+<li><code>run_must_gather()</code> reports whether it actually collected. A gather that failed to resolve its image or to run leaves the class pending instead of counting as done, so the session-end flush retries it rather than reporting diagnostics that were never written.</li>
+<li>Because the class-end gather precedes the finalizer, a class fixture that fails during its own teardown is reported after the gather already covered the resources it was tearing down. That repeat is suppressed and logged, so one class yields one gather even when its tests fail <em>and</em> its finalizer raises. A finalizer failure on a class that has not been gathered yet collects immediately, into the same class directory, and a later failure of that class cannot gather into it a second time.</li>
 <li>If teardown leaves leftovers behind, a second unscoped gather runs at session finish as a fallback.</li>
 </ul>
 <blockquote>
@@ -582,7 +584,7 @@ gather matches the cluster’s installed MTV build.
 <p><strong>Note:</strong> must-gather resolution and execution are wrapped in a broad <code>try</code>, so a must-gather problem is logged but never fails your test run.
 </p>
 <p><strong>Tip:</strong> A must-gather directory is often the quickest way to answer “what did the cluster look like when this class failed?” When a
-fixture failure is the cause, expect one directory named after the class, taken at its last test's teardown and before any class fixture cleanup.</p>
+fixture failure is the cause, expect one directory named after the class, taken at its last test's teardown - or at session finish if the run stopped early - and before any class fixture cleanup.</p>
 </blockquote>
 <h2 id="common-failure-points">Common Failure Points</h2>
 <p>Most failures in this repo fall into one of these buckets.</p>

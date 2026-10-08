@@ -45,7 +45,7 @@ from exceptions.exceptions import (
 )
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from utilities.copyoffload_migration import apply_copyoffload_vm_name_override, resolve_non_dedicated_esxi_host
-from libs.base_provider import BaseProvider
+from libs.base_provider import BaseProvider, supports_add_nic
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
 from libs.providers.vmware import VMWareProvider
@@ -53,7 +53,14 @@ from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
-from utilities.must_gather import run_must_gather
+from utilities.must_gather import (
+    collect_class_must_gather,
+    collect_class_teardown_must_gather,
+    collect_must_gather_for_item,
+    flush_pending_class_must_gathers,
+    mark_class_pending_must_gather,
+    run_must_gather,
+)
 from utilities.provider_inventory import (
     validate_source_vms_exist,
     wait_for_added_nics_in_forklift_inventory,
@@ -63,13 +70,13 @@ from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
     sanitize_kubernetes_name,
-    sanitize_test_name_for_path,
 )
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
     is_dry_run,
     prepare_base_path,
+    resolve_item_plan_config,
     session_teardown,
     setup_ai_analysis,
 )
@@ -217,7 +224,7 @@ def pytest_runtest_call(item):
 
 def pytest_runtest_teardown(item, nextitem):
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='TEARDOWN')}")
-    _collect_class_must_gather(item)
+    collect_class_must_gather(item)
 
 
 def pytest_report_teststatus(report, config):
@@ -250,6 +257,7 @@ def pytest_sessionfinish(session, exitstatus):
     _data_collector_path = Path(session.config.getoption("data_collector_path"))
 
     if not session.config.getoption("skip_data_collector"):
+        flush_pending_class_must_gathers(session)
         collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
 
     if session.config.getoption("skip_teardown"):
@@ -277,31 +285,6 @@ def pytest_sessionfinish(session, exitstatus):
                 enrich_junit_xml(session)
             except Exception:
                 LOGGER.exception("Failed to enrich JUnit XML, original preserved")
-
-
-def _resolve_item_plan_config(item: pytest.Item) -> dict[str, Any] | None:
-    """Resolve the parametrized plan config for a collected test item.
-
-    Args:
-        item: Collected pytest item whose plan config should be resolved.
-
-    Returns:
-        The test's plan config mapping, or None when the item is neither
-        parametrized nor present in ``tests_params``.
-    """
-    test_config: dict[str, Any] | None = None
-    if hasattr(item, "callspec"):
-        # Class-based tests use class_plan_config
-        test_config = item.callspec.params.get("class_plan_config")
-        if test_config is None:
-            # Function-based tests use plan
-            test_config = item.callspec.params.get("plan")
-
-    if test_config is None:
-        # Fallback to looking up by test name (for non-parametrized tests)
-        test_config = py_config["tests_params"].get(item.originalname)
-
-    return test_config
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -373,12 +356,12 @@ def pytest_collection_modifyitems(session, config, items):
 
             # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
             # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
-            if source_provider_type != Provider.ProviderType.VSPHERE:
+            if not supports_add_nic(source_provider_type):
                 add_nic_skip = pytest.mark.skip(
                     reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                 )
                 for item in items:
-                    test_config = _resolve_item_plan_config(item) or {}
+                    test_config = resolve_item_plan_config(item) or {}
                     if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
                         item.add_marker(add_nic_skip)
 
@@ -389,7 +372,7 @@ def pytest_collection_modifyitems(session, config, items):
         item.name = f"{item.name}-{py_config.get('source_provider')}-{py_config.get('storage_class')}"
 
         # Get test config from parametrization or tests_params
-        test_config = _resolve_item_plan_config(item)
+        test_config = resolve_item_plan_config(item)
 
         if test_config and "virtual_machines" in test_config:
             for _vm in test_config["virtual_machines"]:
@@ -401,133 +384,11 @@ def pytest_collection_modifyitems(session, config, items):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
-def _run_must_gather(node: pytest.Item, artifact_name: str) -> None:
-    """Collect a must-gather for a failure into a named directory under the data collector path.
-
-    Args:
-        node (pytest.Item): The failing test item. Its class supplies the ``plan_resource`` context.
-        artifact_name (str): Base name of the artifact directory. Class-scoped failures pass the class name,
-            so every failure of that class lands in the same directory.
-    """
-    _data_collector_path = Path(
-        f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(artifact_name)}"
-    )
-    plan: dict[str, str] | None = None
-    if getattr(getattr(node, "cls", None), "plan_resource", None):
-        plan_obj = node.cls.plan_resource
-        plan = {"name": plan_obj.name, "namespace": plan_obj.namespace}
-
-    run_must_gather(data_collector_path=_data_collector_path, plan=plan)
-
-
-def _last_items_by_class(session: pytest.Session) -> dict[type, pytest.Item]:
-    """Map every collected test class to the last item of that class in collection order.
-
-    The map is cached on the session and rebuilt whenever the number of collected items changes, so
-    re-collection (``--lf``, xdist workerdist, plugins that add items) cannot leave it stale.
-
-    Args:
-        session (pytest.Session): The session whose collected items define collection order.
-
-    Returns:
-        dict[type, pytest.Item]: Last item of each class, in collection order.
-    """
-    cached_count: int | None
-    cached_map: dict[type, pytest.Item]
-    cached_count, cached_map = getattr(session, "_must_gather_last_items_by_class", (None, {}))
-    if cached_count == len(session.items):
-        return cached_map
-
-    last_items: dict[type, pytest.Item] = {}
-    for session_item in session.items:
-        item_cls: type | None = getattr(session_item, "cls", None)
-        if item_cls is not None:
-            last_items[item_cls] = session_item
-
-    session._must_gather_last_items_by_class = (len(session.items), last_items)
-    return last_items
-
-
-def _mark_class_pending_must_gather(session: pytest.Session, cls: type) -> None:
-    """Record that a test class owes one must-gather, to be collected when the class ends.
-
-    State lives on the session object, so under xdist every worker collects for the classes it ran and no
-    global state is involved.
-
-    Args:
-        session (pytest.Session): The session running the failing item.
-        cls (type): The test class whose failures must be covered by a single must-gather.
-    """
-    pending: set[type] = getattr(session, "_must_gather_pending_classes", set())
-    pending.add(cls)
-    session._must_gather_pending_classes = pending
-
-
-def _mark_class_must_gather_collected(session: pytest.Session, cls: type) -> bool:
-    """Record that the class's one class-scoped must-gather has been collected; report if it already was.
-
-    The class-end gather runs before the class fixture finalizer tears the resources down, so a finalizer
-    that fails afterwards is reported moments later, against state this gather already captured. Returning
-    whether the class was already collected is what lets that repeat be suppressed instead of duplicated.
-
-    State lives on the session object, so under xdist every worker tracks only the classes it ran.
-
-    Args:
-        session (pytest.Session): The session running the item.
-        cls (type): The test class the must-gather was collected for.
-
-    Returns:
-        bool: True if a class-scoped must-gather was already collected for this class.
-    """
-    collected: set[type] = getattr(session, "_must_gather_collected_classes", set())
-    already_collected: bool = cls in collected
-    collected.add(cls)
-    session._must_gather_collected_classes = collected
-    return already_collected
-
-
-def _collect_class_must_gather(item: pytest.Item) -> None:
-    """Collect the must-gather owed by the item's test class, once, when the class ends.
-
-    Collection is deferred to the teardown of the class's last collected item because a shared fixture
-    failure errors or fails every method in the class while the cluster keeps changing under them: a
-    must-gather taken at the first failure is already stale by the last one. One gather at class end
-    captures the final state of all those failures in a single, class-scoped artifact directory.
-
-    ``pytest_runtest_teardown`` runs before the class-scoped fixture finalizer, so this gather captures the
-    pre-cleanup state - the plan, VMs and namespaces that were still present when the class failed. That is
-    what makes it diagnostic. It also means a class fixture finalizer failure arrives after this gather,
-    and is suppressed rather than repeated, because the class is marked collected here.
-
-    The hook runs for every item, including items that errored in setup, which is what makes the
-    setup-failure case reachable. It must not be guarded on the item passing or on a recorded failure,
-    otherwise the class never gets its gather.
-
-    Args:
-        item (pytest.Item): The item being torn down.
-    """
-    item_cls: type | None = getattr(item, "cls", None)
-    if item_cls is None:
-        return
-
-    session: pytest.Session = item.session
-    if _last_items_by_class(session).get(item_cls) is not item:
-        return
-
-    pending: set[type] = getattr(session, "_must_gather_pending_classes", set())
-    if item_cls not in pending:
-        return
-
-    pending.discard(item_cls)
-    _mark_class_must_gather_collected(session, item_cls)
-    _run_must_gather(item, item_cls.__name__)
-
-
 def pytest_exception_interact(node, call, report):
     """Defer or collect a must-gather for a failing test.
 
     A test inside a class never collects at failure time: the class is marked as owing one must-gather and
-    ``_collect_class_must_gather`` collects it when the class ends, so a fixture failure that takes down
+    ``collect_class_must_gather`` collects it when the class ends, so a fixture failure that takes down
     every method of the class yields one gather instead of one per method. A test without a class has no
     class end to wait for, so it collects its own.
 
@@ -545,24 +406,14 @@ def pytest_exception_interact(node, call, report):
 
     node_cls: type | None = getattr(node, "cls", None)
     if node_cls is None:
-        _run_must_gather(node, node.name)
+        collect_must_gather_for_item(node, node.name)
         return
 
     if call.when == "teardown":
-        # This hook runs before the class fixture finalizer, so a class already collected at its last
-        # teardown has a gather covering the very resources that finalizer was tearing down. Collecting
-        # again here would duplicate that gather moments later, against near-identical state.
-        if _mark_class_must_gather_collected(node.session, node_cls):
-            LOGGER.info(
-                f"Suppressing must-gather for {node_cls.__name__}: class-end must-gather already collected "
-                "before the fixture teardown failure."
-            )
-            return
-
-        _run_must_gather(node, node_cls.__name__)
+        collect_class_teardown_must_gather(node, node_cls)
         return
 
-    _mark_class_pending_must_gather(node.session, node_cls)
+    mark_class_pending_must_gather(node.session, node_cls, node)
 
 
 # https://smarie.github.io/python-pytest-harvest/#pytest-x-dist

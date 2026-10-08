@@ -48,17 +48,17 @@ The basic cold-migration test configuration is intentionally small:
 ```
 
 `add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
-provider type other than vSphere:
+provider type other than vSphere. The capability itself is decided by `supports_add_nic()` in `libs/base_provider.py`, so the shared hook only applies the decision:
 
 ```374:383:conftest.py
             # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
             # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
-            if source_provider_type != Provider.ProviderType.VSPHERE:
+            if not supports_add_nic(source_provider_type):
                 add_nic_skip = pytest.mark.skip(
                     reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                 )
                 for item in items:
-                    test_config = _resolve_item_plan_config(item) or {}
+                    test_config = resolve_item_plan_config(item) or {}
                     if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
                         item.add_marker(add_nic_skip)
 ```

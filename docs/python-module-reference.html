@@ -606,9 +606,13 @@ volume on the source through the VMware Guest Operations API before migration, a
 <h2 id="teardown-and-diagnostics">Teardown and Diagnostics</h2>
 <h3 id="utilitiespytest_utilspy"><code>utilities/pytest_utils.py</code></h3>
 <p><code>is_dry_run()</code> (<code>--collect-only</code> / <code>--setup-plan</code>), <code>prepare_base_path()</code>, <code>setup_ai_analysis()</code> (rootcoz-backed failure analysis; disabled without <code>ROOTCOZ_SERVER_URL</code>),
-<code>collect_created_resources()</code> (must-gather on failure), <code>teardown_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code>.</p>
+<code>collect_created_resources()</code> (must-gather on failure), <code>resolve_item_plan_config()</code> (a collected item's plan config, failing fast when a non-parametrized item has no
+<code>tests_params</code> entry), <code>teardown_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code>.</p>
 <h3 id="utilitiesmust_gatherpy"><code>utilities/must_gather.py</code></h3>
-<p><code>run_must_gather()</code> collects targeted MTV must-gather bundles when a test fails.</p>
+<p><code>run_must_gather()</code> collects targeted MTV must-gather bundles when a test fails, and reports whether it succeeded.
+<code>collect_must_gather_for_item()</code>, <code>collect_class_must_gather()</code>, <code>collect_class_teardown_must_gather()</code>, <code>flush_pending_class_must_gathers()</code> and the
+<code>mark_class_pending_must_gather()</code> / <code>class_must_gather_collected()</code> / <code>mark_class_must_gather_collected()</code> bookkeeping collect one gather per failing test class,
+at the end of that class, or at session finish when the run stopped before that end.</p>
 <h3 id="utilitiesaappy"><code>utilities/aap.py</code></h3>
 <p>AWX/AAP deployment and REST API helpers for hook integration tests: <code>is_awx_installed()</code>, <code>deploy_awx_via_helm()</code>, <code>create_awx_instance()</code>, <code>wait_for_awx_ready()</code>,
 <code>wait_for_awx_api_ready()</code>, <code>get_awx_admin_password()</code>, <code>get_awx_route_url()</code>, <code>create_awx_auth_token()</code>, <code>create_awx_project()</code>, <code>wait_for_awx_project_sync()</code>,
