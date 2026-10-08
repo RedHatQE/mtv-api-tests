@@ -576,10 +576,12 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.</p>
   <code>copyoffload</code> block into the provider wrapper.</p>
 </li>
 <li>
-<p>The <code>ConnectionError</code> raised when <code>_source_provider.test</code> fails names the endpoint the wrapper actually contacted: the
-  <code>host</code> provider argument when the provider sets one (Hyper-V and vSphere connect to <code>fqdn</code>, RHV, OpenStack and OVA to
-  <code>api_url</code>), otherwise the <code>api_url</code> from the providers configuration. OpenShift sets no <code>host</code>, so its message reports the
-  configured source-provider URL rather than the destination cluster host that the provider branch rewrites
+<p>The <code>ConnectionError</code> raised when <code>_source_provider.test</code> fails reports what the check actually established, which differs by
+  provider. For the providers that set a <code>host</code> argument - Hyper-V and vSphere connect to the provider's <code>fqdn</code>, RHV,
+  OpenStack and OVA to its <code>api_url</code> - the message names the endpoint the wrapper dialed. OpenShift sets no <code>host</code>, and
+  <code>OCPProvider.test</code> only checks that the created <code>Provider</code> resource exists, so its message names the configured
+  source-provider URL from the providers configuration: the value an operator has to correct, but not an endpoint the wrapper
+  contacted. It is therefore the original URL, not the destination cluster host that the OpenShift branch rewrites
   <code>source_provider_data_copy["api_url"]</code> to for the secret and the <code>Provider</code> resource.</p>
 </li>
 <li>
