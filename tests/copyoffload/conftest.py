@@ -172,10 +172,11 @@ def multi_datastore_config(source_provider_data: dict[str, Any]) -> None:
 def populator_inflight_forkliftcontroller(
     ocp_admin_client: "DynamicClient",
     mtv_namespace: str,
+    class_plan_config: dict[str, Any],
 ) -> Generator[None, None, None]:
     """Set ForkliftController populator in-flight limit for the test class and restore pre-test value after.
 
-    Patches controller_max_populator_inflight to POPULATOR_INFLIGHT_LIMIT (2) for the class,
+    Patches controller_max_populator_inflight to the class's configured limit (default 2),
     then restores the CR and deployment limits observed before setup on teardown. A file lock
     serializes ForkliftController changes across pytest-xdist workers for the entire class
     duration (setup through check_vms), including migration and post-migration verification.
@@ -186,6 +187,7 @@ def populator_inflight_forkliftcontroller(
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         mtv_namespace (str): Namespace where ForkliftController is installed.
+        class_plan_config (dict[str, Any]): Test configuration with an optional populator limit.
 
     Yields:
         None
@@ -218,7 +220,7 @@ def populator_inflight_forkliftcontroller(
                 forklift_controller=forklift_controller,
                 ocp_admin_client=ocp_admin_client,
                 mtv_namespace=mtv_namespace,
-                test_limit=POPULATOR_INFLIGHT_LIMIT,
+                test_limit=class_plan_config.get("populator_inflight_limit", POPULATOR_INFLIGHT_LIMIT),
                 original_deployment_limit=original_deployment_limit,
             ):
                 yield
@@ -233,17 +235,19 @@ def populator_inflight_forkliftcontroller(
 def vm_populator_inflight_forkliftcontroller(
     ocp_admin_client: "DynamicClient",
     mtv_namespace: str,
+    class_plan_config: dict[str, Any],
 ) -> Generator[None, None, None]:
     """Set both VM and populator in-flight limits for the test class and restore after.
 
-    Patches controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and
-    controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (2) for the class.
-    A single combined file lock serializes ForkliftController changes across
-    pytest-xdist workers for the entire class duration.
+    Reads optional ``vm_inflight_limit`` and ``populator_inflight_limit`` values from
+    the class plan config, defaulting to the limits used by existing tests. A shared
+    file lock serializes ForkliftController changes across pytest-xdist workers for
+    the entire class duration.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         mtv_namespace (str): Namespace where ForkliftController is installed.
+        class_plan_config (dict[str, Any]): Test config with optional VM and populator limits.
 
     Yields:
         None
@@ -276,19 +280,21 @@ def vm_populator_inflight_forkliftcontroller(
                 ocp_admin_client=ocp_admin_client,
                 mtv_namespace=mtv_namespace,
             )
+            test_vm_limit = class_plan_config.get("vm_inflight_limit", VM_INFLIGHT_LIMIT)
+            test_populator_limit = class_plan_config.get("populator_inflight_limit", VM_POPULATOR_INFLIGHT_LIMIT)
 
             with vm_inflight_limit(
                 forklift_controller=forklift_controller,
                 ocp_admin_client=ocp_admin_client,
                 mtv_namespace=mtv_namespace,
-                test_limit=VM_INFLIGHT_LIMIT,
+                test_limit=test_vm_limit,
                 original_deployment_limit=original_vm_limit,
             ):
                 with populator_inflight_limit(
                     forklift_controller=forklift_controller,
                     ocp_admin_client=ocp_admin_client,
                     mtv_namespace=mtv_namespace,
-                    test_limit=VM_POPULATOR_INFLIGHT_LIMIT,
+                    test_limit=test_populator_limit,
                     original_deployment_limit=original_populator_limit,
                 ):
                     yield

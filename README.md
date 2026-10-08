@@ -591,11 +591,22 @@ troubleshooting, see:
 
 📖 **[Copy-Offload Testing Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)**
 
-> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) mutates cluster-wide
-> `ForkliftController` populator settings. Do not run it in parallel with other copy-offload tests on the
-> same cluster — the test temporarily sets `controller_max_populator_inflight` (and the populator
-> deployment `MAX_POPULATOR_INFLIGHT` env) to **2**, which caps in-flight populate pods cluster-wide for
-> every other migration running at the same time.
+> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696),
+> `TestCopyoffloadDedicatedMigrationHost`, and
+> `TestCopyoffloadDedicatedHostSharedPopulatorLimit` (MTV-4494) temporarily set the cluster-wide
+> `controller_max_populator_inflight` and populator deployment `MAX_POPULATOR_INFLIGHT` to
+> **2**, **2**, and **1**, respectively. The MTV-4494 shared-limit test also sets the cluster-wide
+> VM in-flight limit to **2** and restores the prior value afterward.
+> Do not run them alongside other MTV migrations or copy-offload tests on the same cluster. The original
+> dedicated-host test pins both source VMs away from configured dedicated hosts and retains
+> multi-host coverage. The shared-limit scenario requires exactly one configured dedicated
+> ESXi host and at least one other ESXi host; it places one source VM on each and checks that
+> their populate pods stay within the shared runtime-host populator limit. The assertion checks
+> the peak observed Pending/Running-pod count during migration; it does not require a specific
+> count of `PopulatorThrottled` events. It does require one event correlated with a different
+> source host's active worker to prove contention. Runtime-host grouping prefers `throttleHost` when present
+> and otherwise uses the worker's `--migration-host` argument, because current Forklift builds
+> may reuse the populate Pod's `sourceHost` label for the runtime host.
 
 For array-specific Secret keys not covered by built-in vendor fields, use `storage_secret_extra` in the
 `copyoffload` section of `.providers.json` (or `COPYOFFLOAD_STORAGE_SECRET_EXTRA`); see the guide.

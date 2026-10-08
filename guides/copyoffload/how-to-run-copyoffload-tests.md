@@ -417,6 +417,7 @@ The Job automatically reads cluster credentials from the Secret created in Step 
 - `test_copyoffload_multi_disk_different_path_migration` - Multi-disk with different paths
 - `test_copyoffload_rdm_virtual_disk_migration` - RDM virtual disk migration
 - `test_copyoffload_dedicated_migration_host_migration` - Dedicated migration host routing and per-host throttling
+- `TestCopyoffloadDedicatedHostSharedPopulatorLimit` - Shared populator limit across source hosts
 - `test_copyoffload_dedicated_migration_host_invalid_id_migration` - Invalid dedicated host ID fails fast
 
 > **Note**: Additional copy-offload tests are being developed and automated. Use `pytest --collect-only -m copyoffload`

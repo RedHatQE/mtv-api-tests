@@ -892,14 +892,22 @@ class TestNameHere:
   pods). With sequential VMs (`VM_INFLIGHT_LIMIT=1`), pass `min_expected_throttled` to
   `verify_populator_throttling()` as `vm_count * max(0, disks_per_vm - limit)` instead of the default
   `pod_count - limit`. Requires the `vm_populator_inflight_forkliftcontroller` fixture.
-- **7-step copy-offload dedicated-host pattern**: storagemap -> networkmap -> plan -> migrate ->
-  verify_dedicated_migration_host -> check_xcopy_used -> check_vms
+- **8-step copy-offload dedicated-host pattern**: verify_source_vm_placement -> storagemap ->
+  networkmap -> plan -> migrate -> verify_dedicated_migration_host -> check_xcopy_used -> check_vms
   Configures StorageMap `offloadPlugin.vsphereXcopyConfig.dedicatedMigrationHosts` from
   `copyoffload.dedicated_migration_hosts` (via the `configured_dedicated_hosts` fixture) and verifies
-  XCOPY executed on those hosts instead of each VM's registered host, using
-  `verify_dedicated_migration_host()` from `utilities/copyoffload_migration.py`. Every VM is pinned to
-  a non-dedicated host via the `pin_to_non_dedicated_host` plan flag (see "Plan Configuration Options"),
-  so a VM's own host can never coincide with a dedicated host and produce a false pass. The negative
+  XCOPY executed on configured hosts using `verify_dedicated_migration_host()` from
+  `utilities/copyoffload_migration.py`. The original `TestCopyoffloadDedicatedMigrationHost` pins
+  both VMs to non-dedicated hosts and retains multi-dedicated-host coverage with the default populator
+  limit. `TestCopyoffloadDedicatedHostSharedPopulatorLimit` configures exactly one dedicated host,
+  pins VM1 there and VM2 elsewhere, and lowers the populator limit to 1 to check the observed runtime-host
+  concurrency ceiling.
+  It also requires an event from one source host while the other source host has an active worker
+  on the shared runtime host; it does not depend on a fixed event count.
+  Both scenarios verify source placement and determine the runtime XCOPY host from `throttleHost`
+  when available, otherwise from `--migration-host` (current controllers may write that host to
+  the populate Pod's `sourceHost` label). Do not confuse Pod labels with the original host on the
+  VSphereXcopyVolumePopulator CR/PVC. The negative
   case (an ESXi host ID absent from inventory) uses the same storagemap -> networkmap -> plan -> migrate
   steps but expects `test_migrate_vms` to raise `MigrationPlanExecError`, then verifies the populate pod
   failure reason with `verify_populate_pod_failure_reason()`; see
@@ -921,8 +929,9 @@ then the base five through `test_migrate_vms`, then `test_verify_shared_disk_dat
 `test_check_xcopy_used`, `test_check_vms`. Copy-offload throttling tests: same through `test_migrate_vms`, then
 `test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. Copy-offload VM+populator
 throttling tests: same through `test_migrate_vms`, then `test_verify_vm_inflight_throttling`,
-`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. Copy-offload dedicated-host tests: same
-through `test_migrate_vms`, then `test_verify_dedicated_migration_host`, `test_check_xcopy_used`, `test_check_vms`.
+`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. Copy-offload dedicated-host tests:
+`test_verify_source_vm_placement`, then the base methods through `test_migrate_vms`, followed by
+`test_verify_dedicated_migration_host`, `test_check_xcopy_used`, `test_check_vms`.
 LUKS tests: same through `test_migrate_vms`, then
 `test_verify_luks_encryption`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
 `test_verify_xfs_version`, `test_check_vms`. Plan-archive PVC cleanup tests: same through
@@ -969,20 +978,23 @@ tests_params: dict = {
 
 **Plan Configuration Options:**
 
-| Option                      | Required | Description                                                                                                                 |
-| --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `warm_migration`            | No       | True for warm migration                                                                                                     |
-| `preserve_static_ips`       | No       | True to preserve static IP addresses after migration                                                                        |
-| `copyoffload`               | No       | True to enable copy-offload (XCOPY) migration                                                                               |
-| `xfs_compatibility`         | No       | True to enable XFS v4 filesystem compatibility                                                                              |
-| `migrate_shared_disks`      | No       | True to enable shared disk migration at plan level                                                                          |
-| `inventory_timeout`         | No       | Per-VM Forklift inventory wait timeout, in seconds                                                                          |
-| `clone_to_same_host`        | No       | True to default VM2+ to VM1's ESXi host; explicit `target_esxi_host` overrides                                              |
-| `pin_to_non_dedicated_host` | No       | True to pin every VM to an ESXi host outside `copyoffload.dedicated_migration_hosts`; explicit `target_esxi_host` overrides |
-| `disable_drs_for_vms`       | No       | True to disable vSphere DRS per VM after cloning; not supported for OVA; requires a VMware clone provider                   |
-| `per_nic_network_map`       | No       | True to create per-NIC network mappings (allows duplicate source network entries in NetworkMap)                             |
-| `skip_clone`                | No       | True to skip VM cloning in prepared_plan fixture (for plan-readiness tests that use existing VMs)                           |
-| `rdm_as_lun`                | No       | True to map RDM disks as LUN devices with SCSI bus instead of default virtio                                                |
+| Option                           | Required | Description                                                                                                                 |
+| -------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `warm_migration`                 | No       | True for warm migration                                                                                                     |
+| `preserve_static_ips`            | No       | True to preserve static IP addresses after migration                                                                        |
+| `copyoffload`                    | No       | True to enable copy-offload (XCOPY) migration                                                                               |
+| `xfs_compatibility`              | No       | True to enable XFS v4 filesystem compatibility                                                                              |
+| `migrate_shared_disks`           | No       | True to enable shared disk migration at plan level                                                                          |
+| `inventory_timeout`              | No       | Per-VM Forklift inventory wait timeout, in seconds                                                                          |
+| `clone_to_same_host`             | No       | True to default VM2+ to VM1's ESXi host; explicit `target_esxi_host` overrides                                              |
+| `pin_to_non_dedicated_host`      | No       | True to pin VMs without an explicit host target outside `copyoffload.dedicated_migration_hosts`                             |
+| `pin_first_vm_to_dedicated_host` | No       | Pin VM1 to the sole dedicated host; conflicts with an explicit target host                                                  |
+| `vm_inflight_limit`              | No       | Per-class VM migration limit for the shared controller fixture; defaults to 1                                               |
+| `populator_inflight_limit`       | No       | Per-class populator limit for the shared controller fixture; defaults to 2                                                  |
+| `disable_drs_for_vms`            | No       | True to disable vSphere DRS per VM after cloning; not supported for OVA; requires a VMware clone provider                   |
+| `per_nic_network_map`            | No       | True to create per-NIC network mappings (allows duplicate source network entries in NetworkMap)                             |
+| `skip_clone`                     | No       | True to skip VM cloning in prepared_plan fixture (for plan-readiness tests that use existing VMs)                           |
+| `rdm_as_lun`                     | No       | True to map RDM disks as LUN devices with SCSI bus instead of default virtio                                                |
 
 **Test Verification Configuration:**
 

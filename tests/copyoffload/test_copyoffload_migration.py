@@ -32,12 +32,18 @@ from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT, VM_INFLIGHT_LIMIT, VM_POPULATOR_INFLIGHT_LIMIT
+from utilities.copyoffload_constants import (
+    POPULATOR_INFLIGHT_LIMIT,
+    THROTTLE_HOST_LABEL,
+    VM_INFLIGHT_LIMIT,
+    VM_POPULATOR_INFLIGHT_LIMIT,
+)
 from utilities.copyoffload_migration import (
     create_log_capture_callback,
     execute_copyoffload_migration,
     execute_migration_monitoring_populator_inflight,
     execute_migration_monitoring_vm_and_populator_inflight,
+    get_vm_esxi_host,
     resolve_invalid_dedicated_host_id,
     verify_dedicated_migration_host,
     verify_populate_pod_failure_reason,
@@ -3781,52 +3787,48 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         )
 
 
-@pytest.mark.vsphere
-@pytest.mark.copyoffload
-@pytest.mark.incremental
-@pytest.mark.parametrize(
-    "class_plan_config",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_dedicated_migration_host_migration"])],
-    indirect=True,
-    ids=["MTV-4494:copyoffload-dedicated-migration-host"],
-)
-@pytest.mark.usefixtures(
-    "vmware_cloud_init_ready",
-    "multus_network_name",
-    "copyoffload_config",
-    "populator_inflight_forkliftcontroller",
-    "copyoffload_ssh_key",
-    "cleanup_migrated_vms",
-)
-class TestCopyoffloadDedicatedMigrationHost:
-    """Copy-offload migration (MTV-4494): dedicated migration host routing and per-host throttling.
-
-    Configures StorageMap offloadPlugin.vsphereXcopyConfig.dedicatedMigrationHosts from
-    providers.json copyoffload.dedicated_migration_hosts and verifies XCOPY executes on
-    those hosts instead of each VM's registered ESXi host.
-
-    Every VM in this test is pinned to an ESXi host outside the configured dedicated hosts via
-    the plan's pin_to_non_dedicated_host flag, handled in prepared_plan (root conftest.py) the
-    same way clone_to_same_host is: it resolves one non-dedicated host once and injects it as
-    target_esxi_host on every VM's clone_options before cloning. This guarantees a VM's actual
-    host can never coincide with a dedicated host, deterministically (guards against a
-    false-pass regression, MTV-6136), rather than reacting after the fact to wherever DRS
-    happens to place unpinned VMs. VM-to-VM host diversity is not required for correctness:
-    Forklift's dedicated-host selection logic does not branch on a VM's own host.
-
-    Forklift selects a dedicated host at random per disk (not round-robin, not per-VM).
-    With a single configured host the test is fully deterministic: every disk shares one
-    throttle budget, so peak populator concurrency must reach min(limit, disk_count) and
-    produce PopulatorThrottled events. With more than one configured host, disks split
-    their throttle budget unpredictably, so only the per-host concurrency ceiling is
-    enforced and a warning (not a failure) is logged if fewer distinct hosts were observed
-    across the migrated disks than were configured.
-    """
+class CopyoffloadDedicatedMigrationHostBase:
+    """Shared resource creation and verification for dedicated-host scenarios."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
     max_concurrent_by_host: dict[str, int]
+
+    def test_verify_source_vm_placement(
+        self,
+        prepared_plan: dict[str, Any],
+        source_provider_inventory: ForkliftInventory,
+        configured_dedicated_hosts: list[str],
+    ) -> None:
+        """Verify source VM placement matches the selected dedicated-host scenario.
+
+        Args:
+            prepared_plan (dict[str, Any]): Plan with cloned source VMs.
+            source_provider_inventory (ForkliftInventory): Source inventory with VM host IDs.
+            configured_dedicated_hosts (list[str]): Configured dedicated host IDs.
+        """
+        vms = prepared_plan["virtual_machines"]
+        assert len(vms) == 2, f"Dedicated-host coverage requires exactly two VMs; found {len(vms)}"
+        dedicated_host_ids = set(configured_dedicated_hosts)
+        assert dedicated_host_ids, "At least one dedicated ESXi host must be configured"
+        first_vm_is_dedicated = prepared_plan.get("pin_first_vm_to_dedicated_host", False)
+        if first_vm_is_dedicated:
+            assert len(dedicated_host_ids) == 1, (
+                "Shared-populator-limit coverage requires exactly one distinct dedicated ESXi host; "
+                f"found {sorted(dedicated_host_ids)}"
+            )
+
+        for vm_index, vm in enumerate(vms):
+            vm_name = vm["name"]
+            actual_host_id = get_vm_esxi_host(source_provider_inventory.get_vm(vm_name), vm_name)
+            expected_dedicated = first_vm_is_dedicated and vm_index == 0
+            is_dedicated = actual_host_id in dedicated_host_ids
+            assert is_dedicated == expected_dedicated, (
+                f"VM '{vm_name}' is registered on ESXi host '{actual_host_id}'; "
+                f"expected {'dedicated' if expected_dedicated else 'non-dedicated'} placement "
+                f"relative to configured dedicated hosts {sorted(dedicated_host_ids)}"
+            )
 
     def test_create_storagemap(
         self,
@@ -3932,14 +3934,19 @@ class TestCopyoffloadDedicatedMigrationHost:
         fixture_store: dict[str, Any],
         ocp_admin_client: DynamicClient,
         target_namespace: str,
+        prepared_plan: dict[str, Any],
     ) -> None:
-        """Execute migration while monitoring populator concurrency per ESXi host."""
+        """Execute migration while monitoring active populate pods per runtime host."""
         self.__class__.max_concurrent_by_host = execute_migration_monitoring_populator_inflight(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
-            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+            max_populator_inflight=prepared_plan.get("populator_inflight_limit", POPULATOR_INFLIGHT_LIMIT),
+            host_label=THROTTLE_HOST_LABEL,
+            include_pending=True,
+            use_runtime_host=True,
+            require_cross_source_contention=prepared_plan.get("require_cross_source_contention", False),
         )
 
     def test_verify_dedicated_migration_host(
@@ -3948,6 +3955,7 @@ class TestCopyoffloadDedicatedMigrationHost:
         target_namespace: str,
         fixture_store: dict[str, Any],
         configured_dedicated_hosts: list[str],
+        prepared_plan: dict[str, Any],
     ) -> None:
         """Verify XCOPY executed on configured dedicated hosts, not VMs' registered hosts.
 
@@ -3956,6 +3964,8 @@ class TestCopyoffloadDedicatedMigrationHost:
             target_namespace (str): Namespace where populate pods and PVCs exist.
             fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
             configured_dedicated_hosts (list[str]): Configured dedicatedMigrationHosts.
+            prepared_plan (dict[str, Any]): Plan configuration with the populator limit and
+                shared-host contention requirement.
         """
         verify_dedicated_migration_host(
             ocp_admin_client=ocp_admin_client,
@@ -3964,7 +3974,8 @@ class TestCopyoffloadDedicatedMigrationHost:
             dedicated_hosts=configured_dedicated_hosts,
             max_concurrent_by_host=self.max_concurrent_by_host,
             fixture_store=fixture_store,
-            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+            max_populator_inflight=prepared_plan.get("populator_inflight_limit", POPULATOR_INFLIGHT_LIMIT),
+            require_cross_source_contention=prepared_plan.get("require_cross_source_contention", False),
         )
 
     def test_check_xcopy_used(
@@ -4014,6 +4025,120 @@ class TestCopyoffloadDedicatedMigrationHost:
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
         )
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_dedicated_migration_host_migration"])],
+    indirect=True,
+    ids=["MTV-4494:copyoffload-dedicated-migration-host"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "populator_inflight_forkliftcontroller",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadDedicatedMigrationHost(CopyoffloadDedicatedMigrationHostBase):
+    """Verify dedicated-host routing while every source VM runs elsewhere.
+
+    Purpose/Regression:
+        MTV-4494 routes copy-offload disks to configured dedicated ESXi hosts. This
+        scenario confirms that every disk uses a configured host and cannot pass by
+        coincidence because a source VM already runs on that host.
+
+    Prerequisites:
+        Register a vSphere source and OpenShift destination with accessible network
+        and XCOPY-capable shared storage. Provide disposable source VMs or templates,
+        the copy-offload storage secret, and permission to change the ForkliftController
+        populator limit. Configure at least one dedicated ESXi host and a separate
+        non-dedicated host. Prevent DRS from moving cloned VMs during the check.
+
+    Test plan:
+        1. Clone two VMs and pin both to a non-dedicated host; verify their registered
+           host IDs are outside the configured dedicated-host set.
+        2. Create an XCOPY StorageMap using the configured host IDs, a NetworkMap, and
+           a cold Plan for both VMs. Confirm the Plan is Ready.
+        3. Migrate both VMs and confirm every populate pod uses a configured dedicated
+           host and no observed host exceeds the configured populator limit. With one
+           dedicated host, verify the observed Running-pod peak; with
+           multiple configured hosts, host selection is random per disk and only the
+           per-host ceiling is required.
+        4. Confirm all disks used XCOPY and both migrated VMs pass connectivity and
+           disk-count checks. Remove migration resources, destination VMs and PVCs,
+           disposable source clones, generated secrets and network attachments, and
+           restore the prior controller limit.
+
+    Expected result:
+        Migration succeeds and each populate pod is routed to a configured host that
+        differs from both VMs' registered hosts. The observed Running-pod peak stays
+        within the configured per-host limit.
+    """
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_dedicated_host_shared_populator_limit_migration"])],
+    indirect=True,
+    ids=["MTV-4494:dedicated-host-shared-populator-limit"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "vm_populator_inflight_forkliftcontroller",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadDedicatedHostSharedPopulatorLimit(CopyoffloadDedicatedMigrationHostBase):
+    """Verify MTV-4494: VMs from different source hosts share the dedicated host's populator limit.
+
+    Purpose/Regression:
+        A host-counting regression can let disks from VMs registered on different
+        source hosts bypass the same dedicated host's populator limit. This scenario
+        routes disks from one VM on the dedicated host and one VM elsewhere to that
+        single host, then monitors active populate pods against its configured limit.
+
+    Prerequisites:
+        Register a vSphere source and OpenShift destination with accessible network
+        and XCOPY-capable shared storage. Prepare two disposable Linux VMs or clones
+        with two disks each on that storage. Configure exactly one dedicated ESXi
+        host and at least one other ESXi host. Provide the copy-offload storage secret
+        and permission to change the ForkliftController VM and populator in-flight
+        limits. Use an isolated migration namespace and prevent DRS from moving the
+        VMs during the check.
+
+    Test plan:
+        1. Set the VM in-flight limit to 2 and the per-host populator limit to 1. Clone
+           one VM onto the dedicated host and the other onto a non-dedicated host;
+           confirm both source host IDs.
+        2. Create an XCOPY StorageMap using the dedicated host, a NetworkMap, and a
+           cold Plan for both VMs. Confirm the Plan is Ready.
+        3. Migrate both VMs. Confirm each populate pod's runtime-host metadata, worker
+           argument, and logs identify the dedicated host. Prefer throttleHost when
+           present; otherwise use --migration-host (the current controller may write the
+           runtime host to sourceHost). Monitor Pending and Running pods per runtime host
+           and verify the observed peak never exceeds 1. Also require a throttled PVC from
+           one source host while another source host has a Running worker on that runtime
+           host; no fixed event count is required.
+        4. Confirm all disks used XCOPY and both migrated VMs pass connectivity and
+           disk-count checks. Remove migration resources, destination VMs and PVCs,
+           disposable source clones, generated secrets and network attachments, and
+           restore the prior controller limit.
+
+    Expected result:
+        Migration succeeds with disks from both original hosts executing on the sole
+        dedicated host under one shared limit. If routing or throttling fails, inspect
+        populate pod labels, worker args, PVC events, and Plan status.
+    """
 
 
 @pytest.mark.vsphere
