@@ -202,11 +202,15 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 ### `utilities/pytest_utils.py`
 
 `is_dry_run()` (`--collect-only` / `--setup-plan`), `prepare_base_path()`, `setup_ai_analysis()` (rootcoz-backed failure analysis; disabled without `ROOTCOZ_SERVER_URL`),
-`collect_created_resources()` (must-gather on failure), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
+`collect_created_resources()` (must-gather on failure), `resolve_item_plan_config()` (a collected item's plan config, failing fast when a non-parametrized item has no
+`tests_params` entry), `teardown_resources()`, `session_teardown()`, `enrich_junit_xml()`.
 
 ### `utilities/must_gather.py`
 
-`run_must_gather()` collects targeted MTV must-gather bundles when a test fails.
+`run_must_gather()` collects targeted MTV must-gather bundles when a test fails, and reports whether it succeeded.
+`collect_must_gather_for_item()`, `collect_class_must_gather()`, `collect_class_teardown_must_gather()`, `flush_pending_class_must_gathers()` and the
+`mark_class_pending_must_gather()` / `class_must_gather_collected()` / `mark_class_must_gather_collected()` bookkeeping collect one gather per failing test class,
+at the end of that class, or at session finish when the run stopped before that end.
 
 ### `utilities/aap.py`
 
