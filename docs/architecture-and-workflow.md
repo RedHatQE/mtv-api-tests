@@ -198,7 +198,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
     }
 ```
 
-```535:557:utilities/utils.py
+```535:558:utilities/utils.py
     ocp_resource_provider = create_and_store_resource(
         fixture_store=fixture_store,
         resource=Provider,
@@ -253,7 +253,7 @@ The class-scoped `prepared_plan` fixture is where the user-facing plan config be
 the config, validates and clones source VMs, resolves the PVC name template against the provider type, creates custom namespaces
 if requested, adjusts source power state, stores source-side metadata, and creates hooks.
 
-```1238:1251:conftest.py
+```1089:1102:conftest.py
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -274,7 +274,7 @@ Cloning runs in two phases. First every VM is cloned, powered to `source_vm_powe
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
 when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
-```1541:1549:conftest.py
+```1392:1400:conftest.py
             # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
             # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
             inventory_timeout = plan.get("inventory_timeout", 300)
@@ -286,7 +286,7 @@ when a config omits it. Other optional flags in the same fixture, such as `warm_
             )
 ```
 
-```1578:1580:conftest.py
+```1429:1431:conftest.py
     # Create Hooks if configured
     create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
     create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
@@ -356,7 +356,7 @@ That behavior comes from `utilities/utils.py:gen_network_map_list()` and the `mu
 
 `multus_network_name` sizes the NAD set from the same data, so the count of created NADs matches the count of map entries:
 
-```1050:1062:conftest.py
+```901:913:conftest.py
     if class_plan_config.get("per_nic_network_map", False):
         multus_count = max(
             0,
@@ -383,7 +383,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:215:utilities/mtv_migration.py
+```187:216:utilities/mtv_migration.py
 def create_plan_resource(
     ocp_admin_client: DynamicClient,
     fixture_store: dict[str, Any],
@@ -632,7 +632,7 @@ Almost every OpenShift-side resource is created through `utilities/resources.py:
 resource and records it in `fixture_store["teardown"]`. Class-level cleanup removes migrated VMs early, and session-level cleanup
 handles everything else.
 
-```103:126:utilities/pytest_utils.py
+```136:157:utilities/pytest_utils.py
 def session_teardown(session_store: dict[str, Any]) -> None:
     LOGGER.info("Running teardown to delete all created resources")
 
@@ -660,7 +660,7 @@ def session_teardown(session_store: dict[str, Any]) -> None:
 `teardown_resources()` collects leftovers per kind and fails the teardown when anything survives. Besides the resources the tests
 created, it also handles the resources the migration created:
 
-```142:160:utilities/pytest_utils.py
+```175:193:utilities/pytest_utils.py
     migrations = session_teardown_resources.get(Migration.kind, [])
     plans = session_teardown_resources.get(Plan.kind, [])
     providers = session_teardown_resources.get(Provider.kind, [])

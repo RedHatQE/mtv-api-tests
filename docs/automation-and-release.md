@@ -663,7 +663,7 @@ enriched XML back over the same file. That is test-report post-processing, not a
 > for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
 > untouched.
 
-```462:501:utilities/pytest_utils.py
+```495:532:utilities/pytest_utils.py
 def enrich_junit_xml(session: pytest.Session) -> None:
     """Read JUnit XML, send to server for analysis, write enriched XML back.
     ...
@@ -705,7 +705,7 @@ file is preserved if the call fails.
 > explicitly. If you do not, the feature is simply off and nothing changes about your test run.
 
 > **Warning:** `enrich_junit_xml()` sets no `auth=` value and no `Authorization` header, because the request is a bare
-> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:501-506`). Requests may still send HTTP Basic Auth from a matching `.netrc` entry for
+> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:535-539`). Requests may still send HTTP Basic Auth from a matching `.netrc` entry for
 > `ROOTCOZ_SERVER_URL`. When the rootcoz deployment requires authentication and neither a matching `.netrc` entry nor an authenticating proxy in front of
 > `ROOTCOZ_SERVER_URL` supplies it, the call fails and enrichment logs the exception while preserving the original JUnit file.
 

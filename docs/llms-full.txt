@@ -788,7 +788,7 @@ logic needs the Forklift inventory service. This file wraps the `forklift-invent
 
 The fixture and the factory behind it select the right inventory client at runtime:
 
-```1801:1805:conftest.py
+```1737:1741:conftest.py
     @pytest.fixture(scope="session")
     def source_provider_inventory(
         ocp_admin_client: DynamicClient, mtv_namespace: str, source_provider: BaseProvider
@@ -1315,7 +1315,7 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.
         }
 ```
 
-```535:557:utilities/utils.py
+```535:558:utilities/utils.py
         ocp_resource_provider = create_and_store_resource(
             fixture_store=fixture_store,
             resource=Provider,
@@ -1370,7 +1370,7 @@ The class-scoped `prepared_plan` fixture is where the user-facing plan config be
 the config, validates and clones source VMs, resolves the PVC name template against the provider type, creates custom namespaces
 if requested, adjusts source power state, stores source-side metadata, and creates hooks.
 
-```1238:1251:conftest.py
+```1089:1102:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -1391,7 +1391,7 @@ Cloning runs in two phases. First every VM is cloned, powered to `source_vm_powe
 in `plan["source_vms_data"]`. Then a single blocking wait covers all of them. `inventory_timeout` is one of the optional plan flags — it defaults to `300` seconds
 when a config omits it. Other optional flags in the same fixture, such as `warm_migration`, are read the same way; only keys a plan must supply are read with direct indexing:
 
-```1541:1549:conftest.py
+```1392:1400:conftest.py
                 # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
                 # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.
                 inventory_timeout = plan.get("inventory_timeout", 300)
@@ -1403,7 +1403,7 @@ when a config omits it. Other optional flags in the same fixture, such as `warm_
                 )
 ```
 
-```1578:1580:conftest.py
+```1429:1431:conftest.py
         # Create Hooks if configured
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
@@ -1473,7 +1473,7 @@ That behavior comes from `utilities/utils.py:gen_network_map_list()` and the `mu
 
 `multus_network_name` sizes the NAD set from the same data, so the count of created NADs matches the count of map entries:
 
-```1050:1062:conftest.py
+```901:913:conftest.py
         if class_plan_config.get("per_nic_network_map", False):
             multus_count = max(
                 0,
@@ -1500,7 +1500,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:215:utilities/mtv_migration.py
+```187:216:utilities/mtv_migration.py
     def create_plan_resource(
         ocp_admin_client: DynamicClient,
         fixture_store: dict[str, Any],
@@ -1749,7 +1749,7 @@ Almost every OpenShift-side resource is created through `utilities/resources.py:
 resource and records it in `fixture_store["teardown"]`. Class-level cleanup removes migrated VMs early, and session-level cleanup
 handles everything else.
 
-```103:126:utilities/pytest_utils.py
+```136:157:utilities/pytest_utils.py
     def session_teardown(session_store: dict[str, Any]) -> None:
         LOGGER.info("Running teardown to delete all created resources")
 
@@ -1777,7 +1777,7 @@ handles everything else.
 `teardown_resources()` collects leftovers per kind and fails the teardown when anything survives. Besides the resources the tests
 created, it also handles the resources the migration created:
 
-```142:160:utilities/pytest_utils.py
+```175:193:utilities/pytest_utils.py
         migrations = session_teardown_resources.get(Migration.kind, [])
         plans = session_teardown_resources.get(Plan.kind, [])
         providers = session_teardown_resources.get(Provider.kind, [])
@@ -1924,7 +1924,7 @@ The `type` values come from the Forklift provider-type constants: `vsphere`, `op
 > **Warning:** Warm migration is not available for every source provider. The collection hook in `conftest.py` skips every `warm` item when the configured source provider cannot do
 > warm migrations.
 
-```340:349:conftest.py
+```323:332:conftest.py
                 warm_unsupported = (
                     Provider.ProviderType.OPENSTACK,
                     Provider.ProviderType.OPENSHIFT,
@@ -1941,7 +1941,7 @@ Copy-offload, shared-disk, deep-inspection, AAP hook, and LUKS tests are vSphere
 `openshift` and `ova` sources, because those providers do not carry a CA certificate in their provider secret.
 A separate branch of the same hook enforces that:
 
-```362:372:conftest.py
+```345:355:conftest.py
                 ca_cert_unsupported = (
                     Provider.ProviderType.OPENSHIFT,
                     Provider.ProviderType.OVA,
@@ -1955,7 +1955,7 @@ A separate branch of the same hook enforces that:
                             item.add_marker(ca_cert_skip)
 ```
 
-```353:359:conftest.py
+```336:342:conftest.py
                 if source_provider_type != Provider.ProviderType.VSPHERE:
                     vsphere_only_skip = pytest.mark.skip(reason="Test is only applicable to vSphere source providers")
                     for item in items:
@@ -1968,7 +1968,7 @@ A separate branch of the same hook enforces that:
 A third capability gate of the same hook covers `add_nic`, which is a plan config flag rather than a marker, so it resolves
 each item's parametrized plan config. Whether a provider supports `add_nic` is `supports_add_nic()` in `libs/base_provider.py`:
 
-```374:383:conftest.py
+```357:366:conftest.py
                 # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
                 # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
                 if not supports_add_nic(source_provider_type):
@@ -2191,7 +2191,7 @@ The comprehensive tests are the best place to look when you want end-to-end cove
 
 A warm comprehensive scenario is configured like this:
 
-```665:703:tests/tests_config/config.py
+```665:704:tests/tests_config/config.py
         "test_warm_migration_comprehensive": {
             "virtual_machines": [
                 {
@@ -5223,7 +5223,7 @@ The raw entry from `tests_params` is not used directly. The repository converts 
 
 The fixture copies the selected config, resolves a mapping-form `pvc_name_template`, and sets up runtime-only storage:
 
-```1238:1264:conftest.py
+```1089:1115:conftest.py
         # Deep copy the plan config to avoid mutation
         plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -5257,7 +5257,7 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1360:1379:conftest.py
+```1211:1230:conftest.py
             skip_clone = plan.get("skip_clone", False)
 
             if skip_clone:
@@ -5285,7 +5285,7 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
 In the clone phase, the fixture resolves each VM through the clone provider, applies the placement flags, sets the source power state, and rewrites the VM name to the actual
 runtime name:
 
-```1413:1438:conftest.py
+```1264:1289:conftest.py
             if not skip_clone:
                 for vm in virtual_machines:
                     clone_options = {**vm, "enable_ctk": warm_migration}
@@ -5318,7 +5318,7 @@ runtime name:
 
 After the VM loop, configured hooks become real `Hook` custom resources:
 
-```1579:1580:conftest.py
+```1430:1431:conftest.py
         create_hook_if_configured(plan, "pre_hook", "pre", fixture_store, ocp_admin_client, target_namespace)
         create_hook_if_configured(plan, "post_hook", "post", fixture_store, ocp_admin_client, target_namespace)
 ```
@@ -5444,7 +5444,7 @@ in `.rootcoz/settings.json`.
 
 From `utilities/pytest_utils.py`:
 
-```63:84:utilities/pytest_utils.py
+```64:85:utilities/pytest_utils.py
     def setup_ai_analysis(session: pytest.Session) -> None:
         """Configure AI analysis for test failure reporting.
 
@@ -5483,7 +5483,7 @@ to the rootcoz service, and writes the enriched XML back to the same file.
 
 From `utilities/pytest_utils.py`:
 
-```485:505:utilities/pytest_utils.py
+```518:538:utilities/pytest_utils.py
         server_url = os.environ["ROOTCOZ_SERVER_URL"]
         raw_xml = xml_path.read_text()
 
@@ -5775,7 +5775,7 @@ A standard cold migration needs:
 
 The two values are enforced at session start. `pytest_sessionstart` exits before any fixture setup if either is missing:
 
-```157:169:conftest.py
+```164:176:conftest.py
     required_config = ("storage_class", "source_provider")
 
     if not is_dry_run(session.config):
@@ -5809,7 +5809,7 @@ The basic cold-migration test configuration is intentionally small:
 `add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
 provider type other than vSphere. The capability itself is decided by `supports_add_nic()` in `libs/base_provider.py`, so the shared hook only applies the decision:
 
-```374:383:conftest.py
+```357:366:conftest.py
                 # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
                 # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
                 if not supports_add_nic(source_provider_type):
@@ -5824,7 +5824,7 @@ provider type other than vSphere. The capability itself is decided by `supports_
 
 On a vSphere provider the `prepared_plan` fixture still fails fast when `add_nic_start_connected` is missing or is not a `bool`:
 
-```1324:1336:conftest.py
+```1175:1187:conftest.py
             has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
             if has_add_nic_config:
                 for vm in virtual_machines:
@@ -5876,7 +5876,7 @@ validation:
 The class is marked `@pytest.mark.incremental`, so later stages only make sense after earlier ones succeed. It also uses `cleanup_migrated_vms`, which removes migrated VMs after
 the class finishes unless `--skip-teardown` is passed:
 
-```1704:1714:conftest.py
+```1640:1650:conftest.py
     @pytest.fixture(scope="class")
     def cleanup_migrated_vms(
         request: pytest.FixtureRequest,
@@ -5894,7 +5894,7 @@ the class finishes unless `--skip-teardown` is passed:
 set — `warm_migration`, `copyoffload`, `xfs_check`, `copyoffload`, `target_affinity` and the rest appear only in the configs that use them. The keys read below are
 the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is `Any`.
 
-```1702:1722:conftest.py
+```1664:1684:conftest.py
     yield
 
     if request.config.getoption("skip_teardown"):
@@ -5939,7 +5939,7 @@ Before any map is created, the class-scoped `prepared_plan` fixture turns a smal
 the PVC name template for the current provider, decides where migrated VMs should land, prepares or clones the source VM, applies an optional power-state change, waits for
 Forklift inventory to see the VM, and stores full source VM details for later validation.
 
-```1127:1153:conftest.py
+```1089:1115:conftest.py
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
 
@@ -5971,7 +5971,7 @@ Forklift inventory to see the VM, and stores full source VM details for later va
 
 Each VM is then cloned, powered, and recorded:
 
-```1347:1380:conftest.py
+```1309:1342:conftest.py
     # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
     source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
     if source_vm_power == "on":
@@ -6394,7 +6394,7 @@ Warm timing knobs live in `tests/tests_config/config.py`, which is the default t
 The `snapshots_interval` value is applied through the `precopy_interval_forkliftcontroller` fixture, which patches the live `ForkliftController` custom resource in the MTV
 namespace:
 
-```712:726:conftest.py
+```674:688:conftest.py
     current_interval = getattr(forklift_controller.instance.spec, "controller_precopy_interval", None)
 
     if str(current_interval) == str(snapshots_interval):
@@ -6473,7 +6473,7 @@ Use these tuning rules:
 Warm support is not expressed per test class. It is enforced at collection time by a `pytest_collection_modifyitems` hook in the root `conftest.py`, based on the source provider
 `type` in `.providers.json`:
 
-```314:326:conftest.py
+```322:333:conftest.py
     # Skip warm migration tests for providers that do not support warm migration.
     warm_unsupported = (
         Provider.ProviderType.OPENSTACK,
@@ -7491,7 +7491,7 @@ There are three destination provider fixtures in this repository. Two of them ar
 The default destination fixture in `conftest.py` creates an OpenShift `Provider` with an empty `url` and an empty `secret` block. That is the local, in-cluster destination path
 used by the non-remote tests.
 
-```763:779:conftest.py
+```699:715:conftest.py
     @pytest.fixture(scope="session")
     def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixture_store):
         kind_dict = {
@@ -7515,7 +7515,7 @@ used by the non-remote tests.
 
 The remote path creates a secret from the active OpenShift API token and then creates an explicit OpenShift `Provider` with a real API URL.
 
-```1038:1068:conftest.py
+```974:1004:conftest.py
     @pytest.fixture(scope="session")
     def destination_ocp_secret(fixture_store, ocp_admin_client, target_namespace):
         api_key: str = ocp_admin_client.configuration.api_key.get("authorization")
@@ -7658,7 +7658,7 @@ Treat the inputs like this:
 > **Warning:** `remote_ocp_cluster` is both a gate and a sanity check. In `conftest.py`, the `ocp_admin_client` fixture fails early if the configured value does not appear in the
 > connected API host:
 
-```604:606:conftest.py
+```566:568:conftest.py
     if remote_cluster_name := get_value_from_py_config("remote_ocp_cluster"):
         if remote_cluster_name not in _client.configuration.host:
             raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
@@ -8230,13 +8230,13 @@ That leads to a simple rule set:
 Both hook test classes use the repository's standard incremental class pattern. If an earlier step in
 the class fails unexpectedly, later steps are marked `xfail` instead of running anyway.
 
-```151:153:conftest.py
+```158:160:conftest.py
         # Incremental test support - track failures for class-based tests
         if "incremental" in item.keywords and rep.when == "call" and rep.failed:
             item.parent._previousfailed = item
 ```
 
-```203:208:conftest.py
+```210:215:conftest.py
     def pytest_runtest_setup(item):
         # Incremental test support - xfail if previous test in class failed
         if "incremental" in item.keywords:
@@ -11381,13 +11381,16 @@ In real failure runs, the XML is much more informative because it includes loggi
 When you pass `--analyze-with-ai`, the suite posts the raw JUnit XML to a **rootcoz** server and writes the enriched XML back to the same
 file. rootcoz is an external service, not part of this repository; this page only documents the client half of the contract.
 
-```462:517:utilities/pytest_utils.py
+```495:550:utilities/pytest_utils.py
     def enrich_junit_xml(session: pytest.Session) -> None:
         """Read JUnit XML, send to server for analysis, write enriched XML back.
 
         Reads the JUnit XML that pytest generated, POSTs the raw content to the
         rootcoz server's /analyze-failures endpoint, and writes the enriched XML
         (with analysis results) back to the same file.
+
+        Args:
+            session: The pytest session containing config options.
         """
         xml_path_raw = getattr(session.config.option, "xmlpath", None)
         if not xml_path_raw:
@@ -11432,7 +11435,7 @@ file. rootcoz is an external service, not part of this repository; this page onl
 
         if enriched_xml := result.get("enriched_xml"):
             xml_path.write_text(enriched_xml)
-            LOGGER.info(f"JUnit XML enriched with AI analysis: {xml_path}")
+            LOGGER.info("JUnit XML enriched with AI analysis: %s", xml_path)
         else:
             LOGGER.info("No enriched XML returned (no failures or analysis failed)")
 ```
@@ -11493,7 +11496,7 @@ failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` sh
 The suite has built-in must-gather support. When it can match a failure to a specific plan, it runs a targeted gather. Otherwise it runs a
 full, cluster-wide gather.
 
-```167:186:utilities/must_gather.py
+```174:193:utilities/must_gather.py
     must_gather_image = _resolve_must_gather_image(
         ocp_admin_client=ocp_admin_client,
         mtv_subs=mtv_subs,
@@ -11612,7 +11615,7 @@ So “migration failed” and “test failed” are not always the same thing.
 
 Copy-offload adds extra prerequisites, so it also adds extra failure modes.
 
-```30:70:.providers.json.example
+```30:71:.providers.json.example
         "copyoffload": {
           # Supported storage_vendor_product values:
           # - "ontap"           (NetApp ONTAP)
@@ -13738,7 +13741,7 @@ enriched XML back over the same file. That is test-report post-processing, not a
 > for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
 > untouched.
 
-```462:501:utilities/pytest_utils.py
+```495:532:utilities/pytest_utils.py
     def enrich_junit_xml(session: pytest.Session) -> None:
         """Read JUnit XML, send to server for analysis, write enriched XML back.
         ...
@@ -13780,7 +13783,7 @@ file is preserved if the call fails.
 > explicitly. If you do not, the feature is simply off and nothing changes about your test run.
 
 > **Warning:** `enrich_junit_xml()` sets no `auth=` value and no `Authorization` header, because the request is a bare
-> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:501-506`). Requests may still send HTTP Basic Auth from a matching `.netrc` entry for
+> `requests.post(json=payload, timeout=...)` (`utilities/pytest_utils.py:535-539`). Requests may still send HTTP Basic Auth from a matching `.netrc` entry for
 > `ROOTCOZ_SERVER_URL`. When the rootcoz deployment requires authentication and neither a matching `.netrc` entry nor an authenticating proxy in front of
 > `ROOTCOZ_SERVER_URL` supplies it, the call fails and enrichment logs the exception while preserving the original JUnit file.
 
