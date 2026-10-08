@@ -42,7 +42,7 @@ class TestColdMigrationComprehensive:
 
     This test validates:
     - Static IP preservation
-    - PVC name template functionality
+    - PVC name template functionality (skipped on RHV/oVirt, which does not support pvcNameTemplate)
     - PVC generateName support
     - Target node selector configuration
     - Target VM labels

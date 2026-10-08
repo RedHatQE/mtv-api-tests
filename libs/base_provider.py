@@ -12,6 +12,22 @@ from utilities.naming import generate_name_with_uuid
 if TYPE_CHECKING:
     from libs.forklift_inventory import ForkliftInventory
 
+# Providers whose Forklift adapter ignores spec.pvcNameTemplate: the oVirt adapter creates
+# PVCs with the disk-attachment ID as generateName instead of a rendered template.
+_PROVIDERS_WITHOUT_PVC_NAME_TEMPLATE: frozenset[str] = frozenset({Provider.ProviderType.RHV})
+
+
+def supports_pvc_name_template(source_provider_type: str) -> bool:
+    """Whether the provider applies the Plan's ``spec.pvcNameTemplate`` to migrated PVCs.
+
+    Args:
+        source_provider_type: The source provider type (e.g. ``Provider.ProviderType.VSPHERE``).
+
+    Returns:
+        bool: True when the provider honors the configured PVC name template, False otherwise.
+    """
+    return source_provider_type not in _PROVIDERS_WITHOUT_PVC_NAME_TEMPLATE
+
 
 class BaseProvider(abc.ABC):
     # Unified Representation of a VM of All Provider Types

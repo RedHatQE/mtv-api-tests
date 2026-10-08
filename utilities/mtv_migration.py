@@ -19,7 +19,7 @@ from exceptions.exceptions import (
     VmNotFoundError,
     VmPipelineError,
 )
-from libs.base_provider import BaseProvider
+from libs.base_provider import BaseProvider, supports_pvc_name_template
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.resources import create_and_store_resource
@@ -131,13 +131,17 @@ def _get_all_vms_failed_steps(plan_resource: Plan, vm_names: list[str]) -> dict[
 def resolve_pvc_name_template(
     pvc_name_template: str | dict[str, str],
     source_provider_type: str,
-) -> str:
+) -> str | None:
     """Resolve a provider-appropriate PVC name template.
 
     Accepts either a ready-to-use template string (returned unchanged) or a
     provider-keyed mapping. For a mapping, the template for
     ``source_provider_type`` is used, falling back to the ``"default"`` key
     when no provider-specific entry exists.
+
+    Providers that do not support ``spec.pvcNameTemplate`` (see
+    :func:`libs.base_provider.supports_pvc_name_template`) get no template at
+    all, so the Plan is created without ``pvcNameTemplate``.
 
     Args:
         pvc_name_template (str | dict[str, str]): A template string, or a
@@ -148,7 +152,8 @@ def resolve_pvc_name_template(
             (e.g. ``Provider.ProviderType.VSPHERE``).
 
     Returns:
-        str: The resolved PVC name template string.
+        str | None: The resolved PVC name template string, or None when the
+        provider does not support ``pvcNameTemplate``.
 
     Raises:
         ValueError: If the mapping contains a key that is not a valid
@@ -156,6 +161,13 @@ def resolve_pvc_name_template(
             mapping has no entry matching ``source_provider_type`` and no
             ``"default"`` key.
     """
+    if not supports_pvc_name_template(source_provider_type):
+        LOGGER.info(
+            f"Provider '{source_provider_type}' does not support pvcNameTemplate, "
+            f"ignoring configured template: {pvc_name_template}"
+        )
+        return None
+
     if isinstance(pvc_name_template, dict):
         valid_provider_types = {
             value

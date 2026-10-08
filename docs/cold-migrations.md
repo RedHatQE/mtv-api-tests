@@ -251,7 +251,7 @@ A few practical details matter here:
 `test_create_storagemap()` takes the VM names from `prepared_plan` and passes them to `get_storage_migration_map()`. The helper does not hardcode source datastores or storage
 domains. Instead, it asks Forklift inventory which storages those VMs actually use, then maps each one to the selected OpenShift `storage_class`.
 
-```665:684:utilities/mtv_migration.py
+```677:696:utilities/mtv_migration.py
 LOGGER.info(f"Creating standard storage map for VMs: {vms}")
 storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
 for storage in storage_migration_map:
@@ -331,7 +331,7 @@ builds a `Plan` CR that ties together the source provider, destination provider,
 
 The same helper also shows an important namespace detail: by default, migrated VMs land in the same `target_namespace`, but `vm_target_namespace` can override that when needed.
 
-```281:296:utilities/mtv_migration.py
+```293:308:utilities/mtv_migration.py
 plan_kwargs: dict[str, Any] = {
     "client": ocp_admin_client,
     "fixture_store": fixture_store,
@@ -352,7 +352,7 @@ plan_kwargs: dict[str, Any] = {
 
 `create_plan_resource()` then waits for the Plan to reach `Ready` with a hard-coded 360-second timeout, independent of `plan_wait_timeout`:
 
-```340:346:utilities/mtv_migration.py
+```352:358:utilities/mtv_migration.py
 plan = create_and_store_resource(**plan_kwargs)
 
 try:
@@ -363,7 +363,7 @@ except TimeoutExpiredError:
 
 `plan_wait_timeout` applies later, to the migration wait:
 
-```382:392:utilities/mtv_migration.py
+```394:404:utilities/mtv_migration.py
 create_and_store_resource(
     client=ocp_admin_client,
     fixture_store=fixture_store,

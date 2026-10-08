@@ -24,7 +24,7 @@ from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from libs.base_provider import BaseProvider
+from libs.base_provider import BaseProvider, supports_pvc_name_template
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
 from utilities.deep_inspection import verify_captured_di_results
@@ -1069,9 +1069,20 @@ def check_pvc_names(
 
         When use_generate_name=True, verifies PVC name starts with template (prefix match).
         When use_generate_name=False, verifies exact name match.
+
+        Providers that do not support pvcNameTemplate (e.g. RHV/oVirt, where PVCs are created
+        from the disk-attachment ID) log a warning and skip the verification instead of failing.
     """
     if not pvc_name_template:
         LOGGER.info("No pvc_name_template specified, skipping PVC name verification")
+        return
+
+    if source_provider and not supports_pvc_name_template(source_provider.type):
+        LOGGER.warning(
+            f"pvcNameTemplate is not supported by provider '{source_provider.type}', "
+            f"skipping PVC name verification for template '{pvc_name_template}'. "
+            "The adapter creates PVCs from the disk-attachment ID instead."
+        )
         return
 
     uses_file_name = re.search(r"\{\{-?\s*\.FileName\b", pvc_name_template) is not None

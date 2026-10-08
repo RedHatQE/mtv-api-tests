@@ -319,6 +319,7 @@ A few details are easy to miss:
 - In `target_labels`, a value of `None` means the suite replaces that value with the session UUID at runtime.
 - When `vm_target_namespace` is set, the fixture creates that namespace if needed before migration.
 - `pvc_name_template` may be a provider-keyed mapping. `prepared_plan` resolves it with `resolve_pvc_name_template()`, which falls back to the `"default"` key.
+- `resolve_pvc_name_template()` returns no template for RHV/oVirt, which does not support `pvcNameTemplate`, so the Plan is created without it and `check_pvc_names()` skips the assertion.
 - PVC template rendering supports Go template syntax and Sprig functions in the validation path.
 
 > **Note:** The `{{.FileName}}` template token is resolved from vSphere inventory disk paths only. For a non-vSphere source provider, `check_pvc_names()` logs a warning and skips

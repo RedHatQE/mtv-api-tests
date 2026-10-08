@@ -1500,7 +1500,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:215:utilities/mtv_migration.py
+```199:227:utilities/mtv_migration.py
     def create_plan_resource(
         ocp_admin_client: DynamicClient,
         fixture_store: dict[str, Any],
@@ -1547,7 +1547,7 @@ The two `Any` types are deliberate, not laziness:
 Everything the suite itself constructs — `virtual_machines_list: list[dict[str, Any]]`, `pvc_name_template`, `target_labels`, `target_node_selector` — is typed as
 narrowly as its content allows.
 
-```281:305:utilities/mtv_migration.py
+```293:317:utilities/mtv_migration.py
         plan_kwargs: dict[str, Any] = {
             "client": ocp_admin_client,
             "fixture_store": fixture_store,
@@ -1572,7 +1572,7 @@ narrowly as its content allows.
 
 Optional features are only added when requested, so an unset flag never lands on the `Plan` CR:
 
-```307:341:utilities/mtv_migration.py
+```319:353:utilities/mtv_migration.py
         if target_node_selector:
             plan_kwargs["target_node_selector"] = target_node_selector
 
@@ -5008,7 +5008,7 @@ plan for later validation:
 
 If you omit `target_power_state`, post-migration validation falls back to the source VM power state:
 
-```1287:1307:utilities/post_migration.py
+```1298:1318:utilities/post_migration.py
     def check_vms_power_state(
         source_vm: dict[str, Any],
         destination_vm: dict[str, Any],
@@ -5181,7 +5181,7 @@ A plan that drives dedicated-host verification looks like this:
 
 There is one more important implementation detail: when the helper creates an MTV plan with `copyoffload=True`, it forces `pvc_name_template` to `"pvc"`.
 
-```328:333:utilities/mtv_migration.py
+```340:345:utilities/mtv_migration.py
         # Add copy-offload specific parameters if enabled
         if copyoffload:
             # Set PVC naming template for copy-offload migrations
@@ -5989,7 +5989,7 @@ A few practical details matter here:
 `test_create_storagemap()` takes the VM names from `prepared_plan` and passes them to `get_storage_migration_map()`. The helper does not hardcode source datastores or storage
 domains. Instead, it asks Forklift inventory which storages those VMs actually use, then maps each one to the selected OpenShift `storage_class`.
 
-```665:684:utilities/mtv_migration.py
+```677:696:utilities/mtv_migration.py
     LOGGER.info(f"Creating standard storage map for VMs: {vms}")
     storage_migration_map = source_provider_inventory.vms_storages_mappings(vms=vms)
     for storage in storage_migration_map:
@@ -6069,7 +6069,7 @@ builds a `Plan` CR that ties together the source provider, destination provider,
 
 The same helper also shows an important namespace detail: by default, migrated VMs land in the same `target_namespace`, but `vm_target_namespace` can override that when needed.
 
-```281:296:utilities/mtv_migration.py
+```293:308:utilities/mtv_migration.py
     plan_kwargs: dict[str, Any] = {
         "client": ocp_admin_client,
         "fixture_store": fixture_store,
@@ -6090,7 +6090,7 @@ The same helper also shows an important namespace detail: by default, migrated V
 
 `create_plan_resource()` then waits for the Plan to reach `Ready` with a hard-coded 360-second timeout, independent of `plan_wait_timeout`:
 
-```340:346:utilities/mtv_migration.py
+```352:358:utilities/mtv_migration.py
     plan = create_and_store_resource(**plan_kwargs)
 
     try:
@@ -6101,7 +6101,7 @@ The same helper also shows an important namespace detail: by default, migrated V
 
 `plan_wait_timeout` applies later, to the migration wait:
 
-```382:392:utilities/mtv_migration.py
+```394:404:utilities/mtv_migration.py
     create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
@@ -6589,6 +6589,7 @@ A few details are easy to miss:
 - In `target_labels`, a value of `None` means the suite replaces that value with the session UUID at runtime.
 - When `vm_target_namespace` is set, the fixture creates that namespace if needed before migration.
 - `pvc_name_template` may be a provider-keyed mapping. `prepared_plan` resolves it with `resolve_pvc_name_template()`, which falls back to the `"default"` key.
+- `resolve_pvc_name_template()` returns no template for RHV/oVirt, which does not support `pvcNameTemplate`, so the Plan is created without it and `check_pvc_names()` skips the assertion.
 - PVC template rendering supports Go template syntax and Sprig functions in the validation path.
 
 > **Note:** The `{{.FileName}}` template token is resolved from vSphere inventory disk paths only. For a non-vSphere source provider, `check_pvc_names()` logs a warning and skips
@@ -7635,7 +7636,7 @@ Treat the inputs like this:
 Once the suite has picked the destination provider, the rest of the path is shared. The same helper code in `utilities/mtv_migration.py` threads the selected destination provider
 into the `Plan`.
 
-```281:296:utilities/mtv_migration.py
+```293:308:utilities/mtv_migration.py
     plan_kwargs: dict[str, Any] = {
         "client": ocp_admin_client,
         "fixture_store": fixture_store,
@@ -7852,7 +7853,7 @@ creates the MTV `Plan`, it passes those hook references into the Plan helper. Pr
 `pre_hook_name` and `pre_hook_namespace`. Post-hooks are passed through the helper as
 `after_hook_name` and `after_hook_namespace`.
 
-```275:305:utilities/mtv_migration.py
+```287:317:utilities/mtv_migration.py
         for vm in vms_for_plan:
             if "migrate_shared_disks" in vm:
                 vm["migrateSharedDisks"] = vm.pop("migrate_shared_disks")
@@ -8494,6 +8495,12 @@ validates the PVC by prefix match. When it is `False`, the validator expects an 
 
 > **Warning:** Templates using `{{.FileName}}` need VMDK filenames from a vSphere inventory. On any other provider the
 > PVC-name verifier logs a warning and skips that validation path.
+
+> **Note:** MTV does not support `pvcNameTemplate` for RHV/oVirt. The oVirt adapter creates PVCs from the disk-attachment
+> ID instead. `resolve_pvc_name_template()` (in `utilities/mtv_migration.py`) returns no template for that provider, so the
+> Plan is created without `pvcNameTemplate`, and `check_pvc_names()` logs a warning and skips the assertion instead of
+> failing. Both decisions come from the single capability helper `supports_pvc_name_template()` in `libs/base_provider.py`.
+> vSphere, OpenStack, OVA and OpenShift keep full validation.
 
 There is one important exception for copy-offload migrations. In `utilities/mtv_migration.py`, `copyoffload=True`
 overrides any custom template:

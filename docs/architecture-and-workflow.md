@@ -383,7 +383,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:215:utilities/mtv_migration.py
+```199:227:utilities/mtv_migration.py
 def create_plan_resource(
     ocp_admin_client: DynamicClient,
     fixture_store: dict[str, Any],
@@ -430,7 +430,7 @@ The two `Any` types are deliberate, not laziness:
 Everything the suite itself constructs — `virtual_machines_list: list[dict[str, Any]]`, `pvc_name_template`, `target_labels`, `target_node_selector` — is typed as
 narrowly as its content allows.
 
-```281:305:utilities/mtv_migration.py
+```293:317:utilities/mtv_migration.py
     plan_kwargs: dict[str, Any] = {
         "client": ocp_admin_client,
         "fixture_store": fixture_store,
@@ -455,7 +455,7 @@ narrowly as its content allows.
 
 Optional features are only added when requested, so an unset flag never lands on the `Plan` CR:
 
-```307:341:utilities/mtv_migration.py
+```319:353:utilities/mtv_migration.py
     if target_node_selector:
         plan_kwargs["target_node_selector"] = target_node_selector
 

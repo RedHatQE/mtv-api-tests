@@ -622,6 +622,7 @@ immediately.</p>
 <li>In <code>target_labels</code>, a value of <code>None</code> means the suite replaces that value with the session UUID at runtime.</li>
 <li>When <code>vm_target_namespace</code> is set, the fixture creates that namespace if needed before migration.</li>
 <li><code>pvc_name_template</code> may be a provider-keyed mapping. <code>prepared_plan</code> resolves it with <code>resolve_pvc_name_template()</code>, which falls back to the <code>"default"</code> key.</li>
+<li><code>resolve_pvc_name_template()</code> returns no template for RHV/oVirt, which does not support <code>pvcNameTemplate</code>, so the Plan is created without it and <code>check_pvc_names()</code> skips the assertion.</li>
 <li>PVC template rendering supports Go template syntax and Sprig functions in the validation path.</li>
 </ul>
 <blockquote>

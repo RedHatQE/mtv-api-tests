@@ -251,7 +251,7 @@ plan for later validation:
 
 If you omit `target_power_state`, post-migration validation falls back to the source VM power state:
 
-```1287:1307:utilities/post_migration.py
+```1298:1318:utilities/post_migration.py
 def check_vms_power_state(
     source_vm: dict[str, Any],
     destination_vm: dict[str, Any],
@@ -424,7 +424,7 @@ A plan that drives dedicated-host verification looks like this:
 
 There is one more important implementation detail: when the helper creates an MTV plan with `copyoffload=True`, it forces `pvc_name_template` to `"pvc"`.
 
-```328:333:utilities/mtv_migration.py
+```340:345:utilities/mtv_migration.py
     # Add copy-offload specific parameters if enabled
     if copyoffload:
         # Set PVC naming template for copy-offload migrations

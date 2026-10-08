@@ -816,6 +816,11 @@ validates the PVC by prefix match. When it is <code>False</code>, the validator 
 comparing it with the actual PVC name.</p>
 <p><strong>Warning:</strong> Templates using <code>{{.FileName}}</code> need VMDK filenames from a vSphere inventory. On any other provider the
 PVC-name verifier logs a warning and skips that validation path.</p>
+<p><strong>Note:</strong> MTV does not support <code>pvcNameTemplate</code> for RHV/oVirt. The oVirt adapter creates PVCs from the disk-attachment
+ID instead. <code>resolve_pvc_name_template()</code> (in <code>utilities/mtv_migration.py</code>) returns no template for that provider, so the
+Plan is created without <code>pvcNameTemplate</code>, and <code>check_pvc_names()</code> logs a warning and skips the assertion instead of
+failing. Both decisions come from the single capability helper <code>supports_pvc_name_template()</code> in <code>libs/base_provider.py</code>.
+vSphere, OpenStack, OVA and OpenShift keep full validation.</p>
 </blockquote>
 <p>There is one important exception for copy-offload migrations. In <code>utilities/mtv_migration.py</code>, <code>copyoffload=True</code>
 overrides any custom template:</p>
