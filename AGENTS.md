@@ -72,7 +72,6 @@ Rules:
 
 - **Type Annotations (MUST):** All new functions and functions with signature changes must have complete type annotations. Use built-in Python typing (dict, list, tuple).
   Using `Any` must be justified — don't use it as a shortcut when the actual type is known.
-  Default `None` on non-optional parameters is a mypy error — use `str | None = None`, not `str = None`.
 - **Package Management:** Use `uv` for all dependency management
 - **Pre-commit (MUST):** Must pass before any commit - never use `--no-verify`
 - **No Auto-Skip:** Never use `pytest.skip()` or `pytest.fail()` for validation inside fixtures or test methods.
@@ -88,22 +87,7 @@ Rules:
 
 ### No Inline Imports (MUST)
 
-All imports must be at the top of the file. Never import inside functions, methods, or conditional blocks.
-
-```python
-# Wrong
-def create_plan_resource(...):
-    from utilities.resources import create_and_store_resource
-    return create_and_store_resource(...)
-
-# Correct
-from utilities.resources import create_and_store_resource
-
-def create_plan_resource(...):
-    return create_and_store_resource(...)
-```
-
-**Only exception:** `TYPE_CHECKING` block for type-only imports.
+Imports belong at the top of the file — enforced by ruff `PLC0415`, except type-only imports in a module-level `TYPE_CHECKING` block.
 
 ### OpenShift/Kubernetes Resource Interactions
 
