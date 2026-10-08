@@ -29,7 +29,7 @@
       } else {
         display = count.toString();
       }
-      starsEl.textContent = display;
+      starsEl.textContent = '★ ' + display;
       starsEl.title = count.toLocaleString() + ' stars';
     })
     .catch(function() {

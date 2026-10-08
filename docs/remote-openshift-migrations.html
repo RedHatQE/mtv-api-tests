@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Remote OpenShift Migrations - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -155,7 +156,7 @@
 
                     <li>
                         <a href="remote-openshift-migrations.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Remote OpenShift Migrations
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,42 +302,102 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="remote-openshift-migrations">Remote OpenShift Migrations</h1>
-<p>Remote OpenShift migrations in <code>mtv-api-tests</code> use the same MTV lifecycle as the default OpenShift destination flow. The suite still creates a <code>StorageMap</code>, creates a <code>NetworkMap</code>, creates a <code>Plan</code>, executes the migration, and validates the migrated VMs.</p>
-<p>If you already know the default local-destination flow, the easiest way to understand the remote path is this: the test flow stays the same, but the destination OpenShift provider changes from the implicit local form to an explicit provider that includes an API URL and token-backed secret.</p>
+<p>Remote OpenShift migrations in <code>mtv-api-tests</code> use the same MTV lifecycle as the default OpenShift destination flow. The suite still creates a <code>StorageMap</code>, creates a
+<code>NetworkMap</code>, creates a <code>Plan</code>, executes the migration, and validates the migrated VMs.</p>
+<p>If you already know the default local-destination flow, the easiest way to understand the remote path is this: the test flow stays the same, but the destination OpenShift
+provider changes from the implicit local form to an explicit provider that includes an API URL and token-backed secret.</p>
 <h2 id="what-remote-means-in-this-repository">What "remote" means in this repository</h2>
-<p>The repository exposes remote scenarios as dedicated pytest classes marked with <code>remote</code>. Those classes live in <code>tests/test_mtv_warm_migration.py</code> and <code>tests/test_mtv_cold_migration.py</code>, and they are only enabled when <code>remote_ocp_cluster</code> is set.</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">remote</span>
+<p>The repository exposes remote scenarios as dedicated pytest classes marked with <code>remote</code>. There are four of them:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Plan config</th>
+<th><code>ids</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TestColdRemoteOcp</code></td>
+<td><code>test_cold_remote_ocp</code></td>
+<td><code>MTV-79</code></td>
+</tr>
+<tr>
+<td><code>TestWarmRemoteOcp</code></td>
+<td><code>test_warm_remote_ocp</code></td>
+<td><code>MTV-394</code></td>
+</tr>
+<tr>
+<td><code>TestClusterroleWarmMtvMigration</code></td>
+<td><code>test_mtv_clusterrole_warm_migration</code></td>
+<td><code>MTV-3129-clusterrole-warm</code></td>
+</tr>
+<tr>
+<td><code>TestClusterroleWarmWithSccMigration</code></td>
+<td><code>test_mtv_clusterrole_warm_migration_with_scc</code></td>
+<td><code>MTV-3129-...-with-scc</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>TestColdRemoteOcp</code> lives in <code>tests/cold/test_mtv_cold_migration.py</code>. The other three live in <code>tests/warm/</code>.</p>
+<p>All of them are skipped unless <code>remote_ocp_cluster</code> is set:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">vsphere</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">rhv</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">warm</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">remote</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">incremental</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
-    <span class="s2">&quot;class_plan_config&quot;</span><span class="p">,</span>
+    <span class="s2">"class_plan_config"</span><span class="p">,</span>
     <span class="p">[</span>
         <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
-            <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;tests_params&quot;</span><span class="p">][</span><span class="s2">&quot;test_warm_remote_ocp&quot;</span><span class="p">],</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">"tests_params"</span><span class="p">][</span><span class="s2">"test_warm_remote_ocp"</span><span class="p">],</span>
         <span class="p">)</span>
     <span class="p">],</span>
     <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;MTV-394&quot;</span><span class="p">],</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">"MTV-394"</span><span class="p">],</span>
 <span class="p">)</span>
-<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span><span class="ow">not</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;remote_ocp_cluster&quot;</span><span class="p">),</span> <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;No remote OCP cluster provided&quot;</span><span class="p">)</span>
-<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">&quot;precopy_interval_forkliftcontroller&quot;</span><span class="p">,</span> <span class="s2">&quot;cleanup_migrated_vms&quot;</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span><span class="ow">not</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"remote_ocp_cluster"</span><span class="p">),</span> <span class="n">reason</span><span class="o">=</span><span class="s2">"No remote OCP cluster provided"</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">"precopy_interval_forkliftcontroller"</span><span class="p">,</span> <span class="s2">"cleanup_migrated_vms"</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TestWarmRemoteOcp</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Warm remote OCP migration test.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Warm remote OCP migration test."""</span>
 </code></pre></div>
 
-<p>The repository’s <code>pytest.ini</code> registers the <code>remote</code> marker and loads default config from <code>tests/tests_config/config.py</code>.</p>
+<p>The cold remote class is gated the same way and additionally uses <code>destination_ocp_provider</code> instead of <code>destination_provider</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">remote</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">incremental</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span><span class="ow">not</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"remote_ocp_cluster"</span><span class="p">),</span> <span class="n">reason</span><span class="o">=</span><span class="s2">"No remote OCP cluster provided"</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
+    <span class="s2">"class_plan_config"</span><span class="p">,</span>
+    <span class="p">[</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">"tests_params"</span><span class="p">][</span><span class="s2">"test_cold_remote_ocp"</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="p">],</span>
+    <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">"MTV-79"</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">"cleanup_migrated_vms"</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestColdRemoteOcp</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Cold migration test to remote OCP cluster."""</span>
+</code></pre></div>
+
+<p>The repository's <code>pytest.ini</code> registers the <code>remote</code> marker and loads default config from <code>tests/tests_config/config.py</code>.</p>
 <blockquote>
-<p><strong>Note:</strong> In this codebase, remote scenarios do not introduce a second checked-in cluster credential set. The active OpenShift connection still comes from the standard cluster settings.</p>
+<p><strong>Note:</strong> In this codebase, remote scenarios do not introduce a second checked-in cluster credential set. The active OpenShift connection still comes from the standard cluster
+settings.</p>
 </blockquote>
 <h2 id="destination-provider-handling">Destination Provider Handling</h2>
+<p>There are three destination provider fixtures in this repository. Two of them are used by remote scenarios.</p>
 <h3 id="default-local-destination-flow">Default local destination flow</h3>
-<p>The default destination fixture in <code>conftest.py</code> creates an OpenShift <code>Provider</code> with an empty <code>url</code> and an empty <code>secret</code> block. That is the local, in-cluster destination path used by the non-remote tests.</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
+<p>The default destination fixture in <code>conftest.py</code> creates an OpenShift <code>Provider</code> with an empty <code>url</code> and an empty <code>secret</code> block. That is the local, in-cluster destination path
+used by the non-remote tests.</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">"session"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">destination_provider</span><span class="p">(</span><span class="n">session_uuid</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">):</span>
     <span class="n">kind_dict</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;apiVersion&quot;</span><span class="p">:</span> <span class="s2">&quot;forklift.konveyor.io/v1beta1&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;Provider&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-local-ocp-provider&quot;</span><span class="p">,</span> <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">},</span>
-        <span class="s2">&quot;spec&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;secret&quot;</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;openshift&quot;</span><span class="p">,</span> <span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">},</span>
+        <span class="s2">"apiVersion"</span><span class="p">:</span> <span class="s2">"forklift.konveyor.io/v1beta1"</span><span class="p">,</span>
+        <span class="s2">"kind"</span><span class="p">:</span> <span class="s2">"Provider"</span><span class="p">,</span>
+        <span class="s2">"metadata"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-local-ocp-provider"</span><span class="p">,</span> <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">},</span>
+        <span class="s2">"spec"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"secret"</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"openshift"</span><span class="p">,</span> <span class="s2">"url"</span><span class="p">:</span> <span class="s2">""</span><span class="p">},</span>
     <span class="p">}</span>
 
     <span class="n">provider</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span>
@@ -350,30 +412,30 @@
 
 <h3 id="remote-destination-flow">Remote destination flow</h3>
 <p>The remote path creates a secret from the active OpenShift API token and then creates an explicit OpenShift <code>Provider</code> with a real API URL.</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">"session"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">destination_ocp_secret</span><span class="p">(</span><span class="n">fixture_store</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">):</span>
-    <span class="n">api_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">ocp_admin_client</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">api_key</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;authorization&quot;</span><span class="p">)</span>
+    <span class="n">api_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">ocp_admin_client</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">api_key</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"authorization"</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">api_key</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;API key not found in configuration&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"API key not found in configuration"</span><span class="p">)</span>
 
     <span class="n">secret</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span>
         <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
         <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
         <span class="n">resource</span><span class="o">=</span><span class="n">Secret</span><span class="p">,</span>
         <span class="n">namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
-        <span class="c1"># API key format: &#39;Bearer sha256~&lt;token&gt;&#39;, split it to get token.</span>
-        <span class="n">string_data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;token&quot;</span><span class="p">:</span> <span class="n">api_key</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;insecureSkipVerify&quot;</span><span class="p">:</span> <span class="s2">&quot;true&quot;</span><span class="p">},</span>
+        <span class="c1"># API key format: 'Bearer sha256~&lt;token&gt;', split it to get token.</span>
+        <span class="n">string_data</span><span class="o">=</span><span class="p">{</span><span class="s2">"token"</span><span class="p">:</span> <span class="n">api_key</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="s2">"insecureSkipVerify"</span><span class="p">:</span> <span class="s2">"true"</span><span class="p">},</span>
     <span class="p">)</span>
     <span class="k">yield</span> <span class="n">secret</span>
 
 
-<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">"session"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">destination_ocp_provider</span><span class="p">(</span><span class="n">fixture_store</span><span class="p">,</span> <span class="n">destination_ocp_secret</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">session_uuid</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">):</span>
     <span class="n">provider</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span>
         <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
         <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
         <span class="n">resource</span><span class="o">=</span><span class="n">Provider</span><span class="p">,</span>
-        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-destination-ocp-provider&quot;</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-destination-ocp-provider"</span><span class="p">,</span>
         <span class="n">namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
         <span class="n">secret_name</span><span class="o">=</span><span class="n">destination_ocp_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
         <span class="n">secret_namespace</span><span class="o">=</span><span class="n">destination_ocp_secret</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
@@ -383,25 +445,46 @@
     <span class="k">yield</span> <span class="n">OCPProvider</span><span class="p">(</span><span class="n">ocp_resource</span><span class="o">=</span><span class="n">provider</span><span class="p">,</span> <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">)</span>
 </code></pre></div>
 
+<p>This fixture backs <code>TestWarmRemoteOcp</code> and <code>TestColdRemoteOcp</code>.</p>
+<h3 id="clusterrole-destination-flow">ClusterRole destination flow</h3>
+<p>The two <code>TestClusterrole*</code> classes use a different destination provider defined in <code>tests/warm/conftest.py</code>. Instead of reusing the session API token, it creates a fresh
+<code>ServiceAccount</code> in the MTV namespace, binds it to the pre-existing <code>forklift-migrator-role</code> ClusterRole, waits for the ServiceAccount token Secret to be populated, and uses that
+token as the Provider secret:</p>
+<div class="highlight"><pre><span></span><code><span class="n">sa_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-forklift-migrator-sa"</span>
+<span class="n">binding_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-forklift-migrator-binding"</span>
+<span class="n">token_secret_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-clusterrole-token"</span>
+<span class="n">provider_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-clusterrole-destination-ocp-provider"</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="mf">3.</span> <span class="n">Create</span> <span class="n">a</span> <span class="n">token</span> <span class="k">for</span> <span class="n">that</span> <span class="n">SA</span> <span class="p">(</span><span class="n">equivalent</span> <span class="n">to</span><span class="p">:</span> <span class="n">oc</span> <span class="n">create</span> <span class="n">token</span> <span class="o">&lt;</span><span class="n">sa</span><span class="o">&gt;</span> <span class="o">-</span><span class="n">n</span> <span class="o">&lt;</span><span class="n">mtv</span><span class="o">-</span><span class="n">namespace</span><span class="o">&gt;</span><span class="p">)</span>
+<span class="mf">4.</span> <span class="n">Create</span> <span class="n">Forklift</span> <span class="n">Provider</span> <span class="n">CR</span> <span class="n">using</span> <span class="n">that</span> <span class="n">token</span> <span class="p">(</span><span class="ow">in</span> <span class="n">target</span> <span class="n">namespace</span><span class="p">)</span>
+
+<span class="n">Does</span> <span class="n">NOT</span> <span class="n">create</span> <span class="n">the</span> <span class="n">ClusterRole</span><span class="p">;</span> <span class="n">forklift</span><span class="o">-</span><span class="n">migrator</span><span class="o">-</span><span class="n">role</span> <span class="n">must</span> <span class="n">already</span> <span class="n">exist</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">cluster</span><span class="o">.</span>
+</code></pre></div>
+
+<p><code>TestClusterroleWarmMtvMigration</code> runs a warm migration that is expected to fail without an SCC binding, and <code>TestClusterroleWarmWithSccMigration</code> adds a class-scoped
+<code>forklift_scc_binding</code> fixture that grants <code>forklift-controller-scc</code> to the default ServiceAccount, so the same migration is expected to succeed.</p>
 <p>For users, the practical difference is straightforward:</p>
 <ul>
 <li>Local destination tests use the implicit local OpenShift provider form.</li>
 <li>Remote destination tests use an explicit OpenShift provider with a token and API URL.</li>
+<li>The ClusterRole remote tests use an explicit OpenShift provider backed by a dedicated ServiceAccount token.</li>
 <li>The destination provider is created automatically at runtime. You do not define it in <code>.providers.json</code>.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> The destination secret hardcodes <code>insecureSkipVerify: "true"</code> for the remote OpenShift provider. There is no separate destination-side SSL verification toggle in <code>tests/tests_config/config.py</code>.</p>
+<p><strong>Note:</strong> The destination secret hardcodes <code>insecureSkipVerify: "true"</code> for the remote OpenShift provider. There is no separate destination-side SSL verification toggle in
+<code>tests/tests_config/config.py</code>.</p>
 </blockquote>
 <h2 id="remote-specific-configuration">Remote-Specific Configuration</h2>
 <p>The shared config file already contains the remote toggle and the runtime knobs that matter to remote runs:</p>
-<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>  <span class="c1"># SSL verification for OCP API connections</span>
-<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>  <span class="c1"># SSL verification for source provider (VMware, RHV, etc.)</span>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"true"</span>  <span class="c1"># SSL verification for OCP API connections</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"false"</span>  <span class="c1"># SSL verification for source provider (VMware, RHV, etc.)</span>
 <span class="n">number_of_vms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
 <span class="n">check_vms_signals</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
-<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
-<span class="n">vm_name_search_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"openshift-mtv"</span>
+<span class="n">vm_name_search_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
 <span class="n">snapshots_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
 <span class="n">mins_before_cutover</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
 <span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
@@ -410,25 +493,43 @@
 <blockquote>
 <p><strong>Note:</strong> <code>remote_ocp_cluster</code> is empty by default. If you do not override it, the remote classes are skipped.</p>
 </blockquote>
-<p>Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code> in <code>utilities/utils.py</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a DynamicClient for the cluster.</span>
+<p>The three remote warm plan configs additionally disable preflight Deep Inspection — <code>test_warm_remote_ocp</code>,
+<code>test_mtv_clusterrole_warm_migration</code>, and <code>test_mtv_clusterrole_warm_migration_with_scc</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_warm_remote_ocp"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"run_preflight_inspection"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
 
-<span class="sd">    Returns:</span>
-<span class="sd">        DynamicClient: The cluster client.</span>
+<p>Remote runs still use the same cluster connection inputs as the default flow. The OpenShift client is built from <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code>, each
+falling back to the matching <code>CLUSTER_*</code> environment variable:</p>
+<div class="highlight"><pre><span></span><code><span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">host</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_HOST"</span><span class="p">)</span>
 
-<span class="sd">    Raises:</span>
-<span class="sd">        ValueError: If the client cannot be created.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_host&quot;</span><span class="p">)</span>
-    <span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_username&quot;</span><span class="p">)</span>
-    <span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;cluster_password&quot;</span><span class="p">)</span>
-    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;insecure_verify_skip&quot;</span><span class="p">)</span>
-    <span class="n">_client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+<span class="n">username</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_USERNAME"</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_client</span><span class="p">,</span> <span class="n">DynamicClient</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">_client</span>
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Failed to get client for cluster&quot;</span><span class="p">)</span>
+<span class="n">password</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">password</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_PASSWORD"</span><span class="p">)</span>
+<span class="n">verify_ssl_env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_VERIFY_SSL"</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">verify_ssl_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">verify_ssl_env</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"true"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">,</span> <span class="s2">"yes"</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"insecure_verify_skip"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">insecure_verify_skip</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">get_client</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">verify_ssl</span><span class="o">=</span><span class="ow">not</span> <span class="n">insecure_verify_skip</span><span class="p">)</span>
+<span class="k">return</span> <span class="n">client</span>
 </code></pre></div>
 
 <p>Treat the inputs like this:</p>
@@ -440,26 +541,33 @@
 <li><code>snapshots_interval</code>, <code>mins_before_cutover</code>, and <code>plan_wait_timeout</code>: still apply because remote runs share the same warm/cold migration helpers.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>remote_ocp_cluster</code> is both a gate and a sanity check. In <code>conftest.py</code>, the session fails early if the configured value does not appear in the connected API host.</p>
+<p><strong>Warning:</strong> <code>remote_ocp_cluster</code> is both a gate and a sanity check. In <code>conftest.py</code>, the <code>ocp_admin_client</code> fixture fails early if the configured value does not appear in the
+connected API host:</p>
 </blockquote>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">remote_cluster_name</span> <span class="o">:=</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"remote_ocp_cluster"</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">remote_cluster_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_client</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">host</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">RemoteClusterAndLocalCluterNamesError</span><span class="p">(</span><span class="s2">"Remote cluster must be the same as local cluster."</span><span class="p">)</span>
+</code></pre></div>
+
 <h2 id="the-migration-path-after-provider-selection">The Migration Path After Provider Selection</h2>
-<p>Once the suite has picked the destination provider, the rest of the path is shared. The same helper code in <code>utilities/mtv_migration.py</code> threads the selected destination provider into the <code>Plan</code>.</p>
+<p>Once the suite has picked the destination provider, the rest of the path is shared. The same helper code in <code>utilities/mtv_migration.py</code> threads the selected destination provider
+into the <code>Plan</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="n">plan_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;client&quot;</span><span class="p">:</span> <span class="n">ocp_admin_client</span><span class="p">,</span>
-    <span class="s2">&quot;fixture_store&quot;</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
-    <span class="s2">&quot;resource&quot;</span><span class="p">:</span> <span class="n">Plan</span><span class="p">,</span>
-    <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">,</span>
-    <span class="s2">&quot;source_provider_name&quot;</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;source_provider_namespace&quot;</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;destination_provider_name&quot;</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;destination_provider_namespace&quot;</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;storage_map_name&quot;</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;storage_map_namespace&quot;</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;network_map_name&quot;</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;network_map_namespace&quot;</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;virtual_machines_list&quot;</span><span class="p">:</span> <span class="n">virtual_machines_list</span><span class="p">,</span>
-    <span class="s2">&quot;target_namespace&quot;</span><span class="p">:</span> <span class="n">vm_target_namespace</span> <span class="ow">or</span> <span class="n">target_namespace</span><span class="p">,</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">,</span>
+    <span class="s2">"client"</span><span class="p">:</span> <span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="s2">"fixture_store"</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
+    <span class="s2">"resource"</span><span class="p">:</span> <span class="n">Plan</span><span class="p">,</span>
+    <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">,</span>
+    <span class="s2">"source_provider_name"</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"source_provider_namespace"</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"destination_provider_name"</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"destination_provider_namespace"</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"storage_map_name"</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"storage_map_namespace"</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"network_map_name"</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"network_map_namespace"</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"virtual_machines_list"</span><span class="p">:</span> <span class="n">vms_for_plan</span><span class="p">,</span>
+    <span class="s2">"target_namespace"</span><span class="p">:</span> <span class="n">vm_target_namespace</span> <span class="ow">or</span> <span class="n">target_namespace</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">,</span>
 </code></pre></div>
 
 <p>That is why remote scenarios behave so much like local ones:</p>
@@ -470,10 +578,10 @@
 </ul>
 <p>This is the most useful mental model for users: in <code>mtv-api-tests</code>, remote OpenShift migration is mainly a destination-provider swap, not a separate migration architecture.</p>
 <h2 id="warm-and-cold-remote-scenarios">Warm and Cold Remote Scenarios</h2>
-<p>The checked-in remote coverage is currently split into two classes:</p>
+<p>The checked-in remote coverage is currently split across four classes:</p>
 <ul>
-<li><code>TestWarmRemoteOcp</code></li>
-<li><code>TestColdRemoteOcp</code></li>
+<li><code>TestWarmRemoteOcp</code> and <code>TestColdRemoteOcp</code> use <code>destination_ocp_provider</code>.</li>
+<li><code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code> use <code>clusterrole_destination_ocp_provider</code>.</li>
 </ul>
 <p>The warm remote path keeps the normal warm-migration behavior:</p>
 <ul>
@@ -482,11 +590,24 @@
 <li>It uses the same post-migration validation flow as the local warm path.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> Remote warm migration does not bypass the repository’s normal warm-migration limits. In <code>tests/test_mtv_warm_migration.py</code>, warm tests are still skipped for <code>openstack</code>, <code>openshift</code>, and <code>ova</code> source providers.</p>
+<p><strong>Warning:</strong> Remote warm migration does not bypass the repository's normal warm-migration limits. Warm tests are still skipped at collection time for <code>openstack</code>, <code>openshift</code>,
+<code>ova</code>, and <code>hyperv</code> source providers by the hook in the root <code>conftest.py</code>.</p>
 </blockquote>
-<p>The cold remote path also stays close to the default flow: it creates the same resources, executes the same migration helper, and runs the same validation logic after completion.</p>
+<p>The cold remote path also stays close to the default flow: it creates the same resources, executes the same migration helper, and runs the same validation logic after completion.
+Its plan config migrates two VMs, one RHEL and one Windows:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_cold_remote_ocp"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">},</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2019-79"</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">},</span>
+</code></pre></div>
+
 <h2 id="how-remote-differs-from-the-default-local-destination-flow">How Remote Differs From the Default Local Destination Flow</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Area</th>
@@ -531,12 +652,14 @@
 <td>Same shared warm logic</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <blockquote>
-<p><strong>Tip:</strong> When you troubleshoot or document a remote scenario, start with provider creation and config values first. Most of the remote-specific behavior is in destination provider setup, not in the migration execution steps.</p>
+<p><strong>Tip:</strong> When you troubleshoot or document a remote scenario, start with provider creation and config values first. Most of the remote-specific behavior is in destination
+provider setup, not in the migration execution steps.</p>
 </blockquote>
 <h2 id="automation-and-job-patterns">Automation and Job Patterns</h2>
-<p>This repository does not include a dedicated remote-specific pipeline, workflow, or job file. The closest checked-in automation example is the OpenShift Job pattern in <code>docs/copyoffload/how-to-run-copyoffload-tests.md</code>, which shows how the project passes cluster settings into <code>pytest</code>.</p>
+<p>This repository does not include a dedicated remote-specific pipeline, workflow, or job file. The closest checked-in automation example is the OpenShift Job pattern in
+<code>guides/copyoffload/how-to-run-copyoffload-tests.md</code>, which shows how the project passes cluster settings into <code>pytest</code>.</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="p">:+--tc=cluster_host:</span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
@@ -555,12 +678,14 @@
 <p>For remote scenarios, the extra remote-specific value is <code>remote_ocp_cluster</code>, and test selection happens through the <code>remote</code> marker rather than a special runner script.</p>
 <h2 id="practical-guidance">Practical Guidance</h2>
 <ul>
-<li>Keep <code>.providers.json</code> focused on the source provider. The destination OpenShift provider is created by fixtures in <code>conftest.py</code>.</li>
+<li>Keep <code>.providers.json</code> focused on the source provider. The destination OpenShift provider is created by fixtures in <code>conftest.py</code> and <code>tests/warm/conftest.py</code>.</li>
 <li>Treat <code>remote_ocp_cluster</code> as both an enable switch and a hostname sanity check.</li>
 <li>Expect remote warm and remote cold runs to behave like their local equivalents after the destination provider has been created.</li>
-<li>If you need to automate remote runs, follow the repository’s existing <code>--tc=</code> pattern rather than looking for a separate remote-only pipeline in this checkout.</li>
+<li>If the <code>forklift-migrator-role</code> ClusterRole is not present in the cluster, the two <code>TestClusterrole*</code> classes cannot run; the fixture deliberately does not create it.</li>
+<li>If you need to automate remote runs, follow the repository's existing <code>--tc=</code> pattern rather than looking for a separate remote-only pipeline in this checkout.</li>
 </ul>
-<p>In short, the remote OpenShift path in <code>mtv-api-tests</code> keeps the normal MTV test lifecycle but replaces the implicit local destination provider with an explicit OpenShift provider built from the active cluster’s API endpoint and token.</p>
+<p>In short, the remote OpenShift path in <code>mtv-api-tests</code> keeps the normal MTV test lifecycle but replaces the implicit local destination provider with an explicit OpenShift
+provider built from the active cluster's API endpoint and token.</p>
                 </div>
             </article>
             <nav class="page-nav">
@@ -587,6 +712,7 @@
 <li><a href="#destination-provider-handling">Destination Provider Handling</a><ul>
 <li><a href="#default-local-destination-flow">Default local destination flow</a></li>
 <li><a href="#remote-destination-flow">Remote destination flow</a></li>
+<li><a href="#clusterrole-destination-flow">ClusterRole destination flow</a></li>
 </ul>
 </li>
 <li><a href="#remote-specific-configuration">Remote-Specific Configuration</a></li>
@@ -601,24 +727,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -664,5 +793,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

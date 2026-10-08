@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cold Migrations - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -134,7 +135,7 @@
 
                     <li>
                         <a href="cold-migrations.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Cold Migrations
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,8 +302,10 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="cold-migrations">Cold Migrations</h1>
-<p>Cold migration tests in <code>mtv-api-tests</code> follow a consistent pattern: prepare the source VM data, create a <code>StorageMap</code>, create a <code>NetworkMap</code>, create a <code>Plan</code>, execute a <code>Migration</code>, and then validate the migrated VM on the destination side. If you understand that flow, you understand the repository’s standard cold migration pattern.</p>
-<p>These are real integration tests, not unit tests. They create actual MTV and OpenShift resources, talk to a real source provider through Forklift inventory, and verify the migrated VM after the move finishes.</p>
+<p>Cold migration tests in <code>mtv-api-tests</code> follow a consistent pattern: prepare the source VM data, create a <code>StorageMap</code>, create a <code>NetworkMap</code>, create a <code>Plan</code>, execute a
+<code>Migration</code>, and then validate the migrated VM on the destination side. If you understand that flow, you understand the repository's standard cold migration pattern.</p>
+<p>These are real integration tests, not unit tests. They create actual MTV and OpenShift resources, talk to a real source provider through Forklift inventory, and verify the
+migrated VM after the move finishes. The MTV version under test is pinned in the <code>MTV-VERSION</code> file at the repository root (currently <code>2.12</code>).</p>
 <h2 id="required-inputs">Required Inputs</h2>
 <p>A standard cold migration needs:</p>
 <ul>
@@ -309,97 +313,213 @@
 <li>A source-provider entry in <code>.providers.json</code></li>
 <li>Session config that includes <code>source_provider</code> and <code>storage_class</code></li>
 </ul>
+<p>The two values are enforced at session start. <code>pytest_sessionstart</code> exits before any fixture setup if either is missing:</p>
+<div class="highlight"><pre><span></span><code><span class="n">required_config</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"storage_class"</span><span class="p">,</span> <span class="s2">"source_provider"</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="ow">not</span> <span class="n">is_dry_run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="p">):</span>
+    <span class="n">BASIC_LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">separator</span><span class="p">(</span><span class="n">symbol_</span><span class="o">=</span><span class="s1">'-'</span><span class="p">,</span><span class="w"> </span><span class="n">val</span><span class="o">=</span><span class="s1">'SESSION START'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="n">missing_configs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">_req</span> <span class="ow">in</span> <span class="n">required_config</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">py_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_req</span><span class="p">):</span>
+            <span class="n">missing_configs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_req</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">missing_configs</span><span class="p">:</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Some required config is missing </span><span class="si">{</span><span class="n">required_config</span><span class="si">=}</span><span class="s2"> - </span><span class="si">{</span><span class="n">missing_configs</span><span class="si">=}</span><span class="s2">"</span><span class="p">,</span> <span class="n">returncode</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div>
+
+<p>This is the sanctioned exception to the direct-access rule for controlled config: <code>.get()</code> is used only to gather <em>every</em> missing key so the operator sees the whole
+list at once, and the run still fails before any fixture executes. It never substitutes a default for a value the suite then acts on.</p>
 <p>The basic cold-migration test configuration is intentionally small:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span> <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_sanity_cold_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span> <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"add_nic"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"add_nic_start_connected"</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"per_nic_network_map"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
-<p>Provider details come from <code>.providers.json</code>. The example file shows the fields the suite expects, including guest credentials used for post-migration checks such as SSH validation:</p>
-<div class="highlight"><pre><span></span><code>&quot;vsphere&quot;: {
-  &quot;type&quot;: &quot;vsphere&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-  &quot;username&quot;: &quot;USERNAME&quot;,
-  &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-  &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
-  &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+<p><code>add_nic</code> is a vSphere-only option. The <code>prepared_plan</code> fixture skips the whole class for any other provider type, and it fails fast when <code>add_nic_start_connected</code> is missing or
+is not a <code>bool</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">has_add_nic_config</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">has_add_nic_config</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source_provider</span><span class="p">,</span> <span class="n">VMWareProvider</span><span class="p">):</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="sa">f</span><span class="s2">"add_nic is vSphere-only; skipping for provider '</span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">'"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="s2">"add_nic_start_connected"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">vm</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"VM '</span><span class="si">{</span><span class="n">vm</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">': add_nic=True requires add_nic_start_connected to be set explicitly"</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">vm</span><span class="p">[</span><span class="s2">"add_nic_start_connected"</span><span class="p">],</span> <span class="nb">bool</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"VM '</span><span class="si">{</span><span class="n">vm</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">': add_nic_start_connected must be a bool, "</span>
+                    <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">vm</span><span class="p">[</span><span class="s1">'add_nic_start_connected'</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2">"</span>
+                <span class="p">)</span>
+</code></pre></div>
+
+<p>Provider details come from <code>.providers.json</code>. The example file shows the fields the suite expects, including guest credentials used for post-migration checks such as SSH
+validation:</p>
+<div class="highlight"><pre><span></span><code>"vsphere": {
+    "type": "vsphere",
+    "version": "&lt;SERVER VERSION&gt;",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",  # pragma: allowlist secret
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+    "guest_vm_win_user": "WINDOWS VMS USERNAME",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+    "luks_passphrase": "LUKS DISK ENCRYPTION PASSPHRASE",  # pragma: allowlist secret
+    "vddk_init_image": "&lt;PATH TO VDDK INIT IMAGE&gt;",
+    "endpoint_type": "vcenter",
 },
 </code></pre></div>
 
 <blockquote>
 <p><strong>Note:</strong> <code>.providers.json.example</code> contains inline comments for documentation. Remove those comments in your real <code>.providers.json</code>, because JSON does not support comments.</p>
 </blockquote>
-<p>At runtime, <code>conftest.py</code> also enforces <code>source_provider</code> and <code>storage_class</code> before the session starts, so a real cold-migration run needs both values in place.</p>
 <h2 id="the-standard-flow">The Standard Flow</h2>
-<p>In <code>tests/test_mtv_cold_migration.py</code>, the class-based cold test follows the same six stages every time:</p>
+<p><code>TestSanityColdMtvMigration</code> in <code>tests/cold/test_mtv_cold_migration.py</code> is the reference cold class. It has exactly five test methods:</p>
 <ol>
-<li><code>prepared_plan</code> builds the class-scoped migration input.</li>
 <li><code>test_create_storagemap</code> creates the <code>StorageMap</code>.</li>
 <li><code>test_create_networkmap</code> creates the <code>NetworkMap</code>.</li>
 <li><code>test_create_plan</code> creates the <code>Plan</code>.</li>
 <li><code>test_migrate_vms</code> creates the <code>Migration</code> CR and waits for completion.</li>
 <li><code>test_check_vms</code> validates the migrated VM.</li>
 </ol>
-<p>The class is marked <code>@pytest.mark.incremental</code>, so later stages only make sense after earlier ones succeed. It also uses <code>cleanup_migrated_vms</code>, which removes migrated VMs after the class finishes unless teardown is explicitly skipped.</p>
-<p>The same shape is reused for the remote-cluster cold migration class as well. The only meaningful difference there is the destination provider fixture.</p>
+<p>The class is marked <code>@pytest.mark.incremental</code>, so later stages only make sense after earlier ones succeed. It also uses <code>cleanup_migrated_vms</code>, which removes migrated VMs after
+the class finishes unless <code>--skip-teardown</code> is passed:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">"class"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cleanup_migrated_vms</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">FixtureRequest</span><span class="p">,</span>
+    <span class="n">ocp_admin_client</span><span class="p">:</span> <span class="n">DynamicClient</span><span class="p">,</span>
+    <span class="n">target_namespace</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">prepared_plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+    <span class="s2">"""Cleanup migrated VMs after test class completes.</span>
+
+<span class="s2">    Teardown-only fixture that deletes VMs migrated during the test class.</span>
+<span class="s2">    Honors --skip-teardown flag. Session teardown handles any leftovers.</span>
+</code></pre></div>
+
+<p><code>prepared_plan</code> is annotated <code>dict[str, Any]</code> on purpose: it is the mutated <code>class_plan_config</code> dict, and its shape depends on which optional plan flags a test
+set — <code>warm_migration</code>, <code>copyoffload</code>, <code>xfs_check</code>, <code>copyoffload</code>, <code>target_affinity</code> and the rest appear only in the configs that use them. The keys read below are
+the ones the fixture guarantees on every run, which is why they can be indexed directly even though the type is <code>Any</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="k">yield</span>
+
+<span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_teardown"</span><span class="p">):</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Skipping VM cleanup due to --skip-teardown flag"</span><span class="p">)</span>
+    <span class="k">return</span>
+
+<span class="c1"># Use custom namespace if configured, otherwise fall back to target_namespace</span>
+<span class="n">vm_namespace</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"_vm_target_namespace"</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]:</span>
+    <span class="n">vm_name</span> <span class="o">=</span> <span class="n">resolve_destination_vm_name</span><span class="p">(</span><span class="n">vm</span><span class="p">)</span>
+    <span class="n">vm_obj</span> <span class="o">=</span> <span class="n">VirtualMachine</span><span class="p">(</span>
+        <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">vm_name</span><span class="p">,</span>
+        <span class="n">namespace</span><span class="o">=</span><span class="n">vm_namespace</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">vm_obj</span><span class="o">.</span><span class="n">exists</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Cleaning up migrated VM: </span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2"> from namespace: </span><span class="si">{</span><span class="n">vm_namespace</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">vm_obj</span><span class="o">.</span><span class="n">clean_up</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"VM </span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2"> already deleted from namespace: </span><span class="si">{</span><span class="n">vm_namespace</span><span class="si">}</span><span class="s2">, skipping cleanup"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The same five-step shape is reused by the remote-cluster cold class <code>TestColdRemoteOcp</code> in the same file. The only meaningful difference there is the destination provider
+fixture: it takes <code>destination_ocp_provider</code> instead of <code>destination_provider</code>, and it is gated on <code>remote_ocp_cluster</code>.</p>
+<p>Other cold classes extend the pattern with extra verification steps. <code>AGENTS.md</code> documents each of them, and the ones that matter for cold coverage are:</p>
+<ul>
+<li><strong>6-step XFS pattern</strong> in <code>tests/cold/test_cold_migration_xfs.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_xfs_version</code> -&gt; check_vms</li>
+<li><strong>6-step LUKS pattern</strong> in <code>tests/luks/test_luks_cold_migration.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_luks_encryption</code> -&gt; check_vms</li>
+<li>
+<p><strong>6-step shared-disk pattern (Linux)</strong> in <code>tests/shared_disk/test_shared_disk_rhel_migration.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_shared_disk_data</code>
+  -&gt; check_vms</p>
+</li>
+<li>
+<p><strong>7-step shared-disk pattern (Windows)</strong> in <code>tests/shared_disk/test_shared_disk_windows_migration.py</code>: <code>test_label_shared_disk</code> -&gt; storagemap -&gt; networkmap -&gt; plan -&gt; migrate
+  -&gt; <code>test_verify_shared_disk_data</code> -&gt; check_vms</p>
+</li>
+<li>
+<p><strong>4-step plan-readiness pattern</strong> in <code>tests/cold/test_ca_crt_migration.py</code>: <code>test_verify_ca_crt_secret</code> -&gt; storagemap -&gt; networkmap -&gt; plan. No migration is executed.</p>
+</li>
+<li><strong>3-step plan-readiness pattern</strong> in <code>tests/cold/test_dual_nic_cold_migration.py</code>: storagemap -&gt; networkmap -&gt; plan. Plan readiness alone proves the per-NIC NetworkMap is
+  accepted.</li>
+</ul>
 <h2 id="1-prepare-the-plan">1. Prepare The Plan</h2>
-<p>Before any map is created, the <code>prepared_plan</code> fixture turns a small config entry into something the rest of the test class can use. It copies the config, decides where migrated VMs should land, prepares or clones the source VM, applies an optional power-state change, waits for Forklift inventory to see the VM, and stores full source VM details for later validation.</p>
-<div class="highlight"><pre><span></span><code><span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">class_plan_config</span><span class="p">)</span>
-<span class="n">virtual_machines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">]</span>
-<span class="n">warm_migration</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;warm_migration&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+<p>Before any map is created, the class-scoped <code>prepared_plan</code> fixture turns a small config entry into something the rest of the test class can use. It copies the config, resolves
+the PVC name template for the current provider, decides where migrated VMs should land, prepares or clones the source VM, applies an optional power-state change, waits for
+Forklift inventory to see the VM, and stores full source VM details for later validation.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Deep copy the plan config to avoid mutation</span>
+<span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">class_plan_config</span><span class="p">)</span>
 
-<span class="n">plan</span><span class="p">[</span><span class="s2">&quot;source_vms_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">if</span> <span class="s2">"pvc_name_template"</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
+    <span class="n">plan</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">]</span> <span class="o">=</span> <span class="n">resolve_pvc_name_template</span><span class="p">(</span>
+        <span class="n">pvc_name_template</span><span class="o">=</span><span class="n">plan</span><span class="p">[</span><span class="s2">"pvc_name_template"</span><span class="p">],</span>
+        <span class="n">source_provider_type</span><span class="o">=</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+    <span class="p">)</span>
 
-<span class="n">vm_target_namespace</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">)</span>
+<span class="n">virtual_machines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]</span>
+<span class="n">warm_migration</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"warm_migration"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+<span class="c1"># Initialize separate storage for source VM data (keeps virtual_machines clean for Plan CR serialization)</span>
+<span class="n">plan</span><span class="p">[</span><span class="s2">"source_vms_data"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c1"># Handle custom VM target namespace</span>
+<span class="n">vm_target_namespace</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"vm_target_namespace"</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">vm_target_namespace</span><span class="p">:</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using custom VM target namespace: </span><span class="si">{</span><span class="n">vm_target_namespace</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Using custom VM target namespace: </span><span class="si">{</span><span class="n">vm_target_namespace</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="n">get_or_create_namespace</span><span class="p">(</span>
         <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
         <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
         <span class="n">namespace_name</span><span class="o">=</span><span class="n">vm_target_namespace</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;_vm_target_namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vm_target_namespace</span>
+    <span class="n">plan</span><span class="p">[</span><span class="s2">"_vm_target_namespace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">vm_target_namespace</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;_vm_target_namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_namespace</span>
+    <span class="n">plan</span><span class="p">[</span><span class="s2">"_vm_target_namespace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_namespace</span>
+</code></pre></div>
 
-<span class="c1"># ... each VM is prepared before the Plan is created ...</span>
+<p>Each VM is then cloned, powered, and recorded:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged</span>
+<span class="n">source_vm_power</span> <span class="o">=</span> <span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"source_vm_power"</span><span class="p">)</span>  <span class="c1"># Optional - if not set, VM power state unchanged</span>
+<span class="k">if</span> <span class="n">source_vm_power</span> <span class="o">==</span> <span class="s2">"on"</span><span class="p">:</span>
+    <span class="n">source_provider</span><span class="o">.</span><span class="n">start_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span>
+        <span class="n">source_provider</span><span class="o">.</span><span class="n">wait_for_vmware_guest_info</span><span class="p">(</span>
+            <span class="n">provider_vm_api</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">class_plan_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"guest_agent_timeout"</span><span class="p">,</span> <span class="mi">120</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">:</span>
+        <span class="n">source_provider</span><span class="o">.</span><span class="n">wait_for_guest_network_config</span><span class="p">(</span>
+            <span class="n">vm</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">class_plan_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"guest_agent_timeout"</span><span class="p">,</span> <span class="mi">120</span><span class="p">),</span>
+        <span class="p">)</span>
+<span class="k">elif</span> <span class="n">source_vm_power</span> <span class="o">==</span> <span class="s2">"off"</span><span class="p">:</span>
+    <span class="n">source_provider</span><span class="o">.</span><span class="n">stop_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
 
-<span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">:</span>
-    <span class="n">clone_options</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">vm</span><span class="p">,</span> <span class="s2">&quot;enable_ctk&quot;</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">}</span>
-    <span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">get_vm_by_name</span><span class="p">(</span>
-        <span class="n">query</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-        <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
-        <span class="n">clone_vm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;session_uuid&quot;</span><span class="p">],</span>
-        <span class="n">clone_options</span><span class="o">=</span><span class="n">clone_options</span><span class="p">,</span>
-    <span class="p">)</span>
+<span class="c1"># NOW call vm_dict() with VM in correct power state for guest info</span>
+<span class="n">source_vm_details</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">vm_dict</span><span class="p">(</span>
+    <span class="n">provider_vm_api</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">"name"</span><span class="p">],</span>
+    <span class="n">namespace</span><span class="o">=</span><span class="n">source_vms_namespace</span><span class="p">,</span>
+    <span class="n">clone</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Already cloned above</span>
+    <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
+    <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">"session_uuid"</span><span class="p">],</span>
+    <span class="n">clone_options</span><span class="o">=</span><span class="n">vm</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">vm</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+<span class="n">cloned_vm_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">vm</span><span class="p">[</span><span class="s2">"name"</span><span class="p">])</span>
 
-    <span class="n">source_vm_power</span> <span class="o">=</span> <span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source_vm_power&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">source_vm_power</span> <span class="o">==</span> <span class="s2">&quot;on&quot;</span><span class="p">:</span>
-        <span class="n">source_provider</span><span class="o">.</span><span class="n">start_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">source_vm_power</span> <span class="o">==</span> <span class="s2">&quot;off&quot;</span><span class="p">:</span>
-        <span class="n">source_provider</span><span class="o">.</span><span class="n">stop_vm</span><span class="p">(</span><span class="n">provider_vm_api</span><span class="p">)</span>
+<span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">"provider_vm_api"</span><span class="p">]</span>
 
-    <span class="n">source_vm_details</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">vm_dict</span><span class="p">(</span>
-        <span class="n">provider_vm_api</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">,</span>
-        <span class="n">name</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-        <span class="n">namespace</span><span class="o">=</span><span class="n">source_vms_namespace</span><span class="p">,</span>
-        <span class="n">clone</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
-        <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;session_uuid&quot;</span><span class="p">],</span>
-        <span class="n">clone_options</span><span class="o">=</span><span class="n">vm</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-    <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">wait_for_vm</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
-    <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;source_vms_data&quot;</span><span class="p">][</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">source_vm_details</span>
+<span class="n">vm</span><span class="p">[</span><span class="s2">"snapshots_before_migration"</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">"snapshots_data"</span><span class="p">]</span>
+<span class="c1"># Store complete source VM data separately (keeps virtual_machines clean for Plan CR serialization)</span>
+<span class="n">plan</span><span class="p">[</span><span class="s2">"source_vms_data"</span><span class="p">][</span><span class="n">vm</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]]</span> <span class="o">=</span> <span class="n">source_vm_details</span>
 </code></pre></div>
 
 <p>A few practical details matter here:</p>
@@ -407,23 +527,21 @@
 <li><code>source_vm_power</code> is optional. If you do not set it, the fixture leaves the source VM power state unchanged.</li>
 <li><code>source_vms_data</code> is where the suite keeps rich source-side details for later checks such as static IP and PVC-name validation.</li>
 <li><code>_vm_target_namespace</code> can be different from the namespace that holds the migration resources. That distinction matters in advanced cold-migration scenarios.</li>
+<li><code>preserve_static_ips: True</code> requires <code>source_vm_power: "on"</code> on every VM. The fixture raises a <code>ValueError</code> otherwise, because guest tools must be running to collect static IP
+  and NIC data.</li>
 </ul>
 <blockquote>
 <p><strong>Tip:</strong> If you only need baseline cold-migration coverage, start with the minimal config shown above and let <code>prepared_plan</code> do the rest.</p>
 </blockquote>
 <h2 id="2-create-the-storagemap">2. Create The StorageMap</h2>
-<p><code>test_create_storagemap()</code> takes the VM names from <code>prepared_plan</code> and passes them to <code>get_storage_migration_map()</code>. The helper does not hardcode source datastores or storage domains. Instead, it asks Forklift inventory which storages those VMs actually use, then maps each one to the selected OpenShift <code>storage_class</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="n">target_storage_class</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">storage_class</span> <span class="ow">or</span> <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;storage_class&quot;</span><span class="p">]</span>
-<span class="n">storage_map_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
-
-<span class="c1"># ... copy-offload branch omitted ...</span>
-
-<span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating standard storage map for VMs: </span><span class="si">{</span><span class="n">vms</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<p><code>test_create_storagemap()</code> takes the VM names from <code>prepared_plan</code> and passes them to <code>get_storage_migration_map()</code>. The helper does not hardcode source datastores or storage
+domains. Instead, it asks Forklift inventory which storages those VMs actually use, then maps each one to the selected OpenShift <code>storage_class</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Creating standard storage map for VMs: </span><span class="si">{</span><span class="n">vms</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="n">storage_migration_map</span> <span class="o">=</span> <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_storages_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storage_migration_map</span><span class="p">:</span>
     <span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-        <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">},</span>
-        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">storage</span><span class="p">,</span>
+        <span class="s2">"destination"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"storageClass"</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">},</span>
+        <span class="s2">"source"</span><span class="p">:</span> <span class="n">storage</span><span class="p">,</span>
     <span class="p">})</span>
 
 <span class="n">storage_map</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span>
@@ -437,84 +555,90 @@
     <span class="n">destination_provider_name</span><span class="o">=</span><span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
     <span class="n">destination_provider_namespace</span><span class="o">=</span><span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="k">return</span> <span class="n">storage_map</span>
 </code></pre></div>
 
-<p>This is why the cold tests stay fairly small at the test-method level. Storage discovery is delegated to the provider-specific inventory code in <code>libs/forklift_inventory.py</code>, so the test only has to name the VM and the target storage class.</p>
+<p>The destination storage class comes from the <code>storage_class</code> parameter, falling back to the session config value. The same helper also has a copy-offload branch that adds
+<code>offloadPlugin</code> entries instead of inventory-discovered datastores; that branch is covered on the <a href="copy-offload-migrations.html">Copy-Offload Migrations</a> page.</p>
+<p>This is why the cold tests stay fairly small at the test-method level. Storage discovery is delegated to the provider-specific inventory code in <code>libs/forklift_inventory.py</code>, so
+the test only has to name the VM and the target storage class.</p>
 <h2 id="3-create-the-networkmap">3. Create The NetworkMap</h2>
-<p>Network mapping follows the same inventory-driven idea. The suite asks Forklift inventory which source networks the chosen VM uses, then maps those networks to either the pod network or class-scoped Multus networks.</p>
+<p>Network mapping follows the same inventory-driven idea. The suite asks Forklift inventory which source networks the chosen VM uses, then maps those networks to either the pod
+network or class-scoped Multus networks.</p>
 <p>The key rule is simple: the first network goes to the pod network, and every additional network is mapped to a Multus <code>NetworkAttachmentDefinition</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_networks_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)):</span>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">networks</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">pod_only</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pod&quot;</span><span class="p">}</span>
+        <span class="c1"># First network or pod_only mode → pod network</span>
+        <span class="n">_destination</span> <span class="o">=</span> <span class="n">_destination_pod</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span>
+        <span class="c1"># Extract base name and namespace from multus_network_name (only when needed)</span>
+        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span>
 
-        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="c1"># Generate unique NAD name for each additional network</span>
+        <span class="c1"># Use consistent naming: {base_name}-1, {base_name}-2, etc.</span>
+        <span class="c1"># Where base_name includes unique test identifier (e.g., cnv-bridge-abc12345)</span>
+        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">"</span>
 
         <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
-            <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
-            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;multus&quot;</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
+            <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
+            <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"multus"</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">multus_counter</span> <span class="o">+=</span> <span class="mi">1</span>
 
     <span class="n">network_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-        <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">_destination</span><span class="p">,</span>
-        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
+        <span class="s2">"destination"</span><span class="p">:</span> <span class="n">_destination</span><span class="p">,</span>
+        <span class="s2">"source"</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
     <span class="p">})</span>
+<span class="k">return</span> <span class="n">network_map_list</span>
 </code></pre></div>
 
 <p>That behavior is user-friendly in practice:</p>
 <ul>
 <li>Single-NIC VMs usually need no special network setup beyond the default pod network.</li>
 <li>Multi-NIC VMs automatically get additional Multus attachments.</li>
-<li>If your config sets <code>multus_namespace</code>, the suite creates those NADs in that namespace instead of the default migration namespace.</li>
+<li>
+<p><code>per_nic_network_map: True</code> disables deduplication, so one NetworkMap entry is created per VM NIC. That is what allows two NICs attached to the same source network to map to
+  different destinations without a <code>VMDuplicateNADMappings</code> plan error.</p>
+</li>
+<li>
+<p>If your config sets <code>multus_namespace</code>, the <code>multus_network_name</code> fixture creates those NADs in that namespace instead of the default migration namespace.</p>
+</li>
 </ul>
 <h2 id="4-create-the-plan-and-execute-the-migration">4. Create The Plan And Execute The Migration</h2>
-<p>Before creating the <code>Plan</code>, the cold tests call <code>populate_vm_ids()</code> so each VM in <code>virtual_machines</code> includes the Forklift inventory ID MTV expects. Then <code>create_plan_resource()</code> builds a <code>Plan</code> CR that ties together the source provider, destination provider, storage map, network map, VM list, and any optional plan features.</p>
+<p>Before creating the <code>Plan</code>, the cold tests call <code>populate_vm_ids()</code> so each VM in <code>virtual_machines</code> includes the Forklift inventory ID MTV expects. Then <code>create_plan_resource()</code>
+builds a <code>Plan</code> CR that ties together the source provider, destination provider, storage map, network map, VM list, and any optional plan features.</p>
 <p>The same helper also shows an important namespace detail: by default, migrated VMs land in the same <code>target_namespace</code>, but <code>vm_target_namespace</code> can override that when needed.</p>
 <div class="highlight"><pre><span></span><code><span class="n">plan_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;client&quot;</span><span class="p">:</span> <span class="n">ocp_admin_client</span><span class="p">,</span>
-    <span class="s2">&quot;fixture_store&quot;</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
-    <span class="s2">&quot;resource&quot;</span><span class="p">:</span> <span class="n">Plan</span><span class="p">,</span>
-    <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">,</span>
-    <span class="s2">&quot;source_provider_name&quot;</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;source_provider_namespace&quot;</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;destination_provider_name&quot;</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;destination_provider_namespace&quot;</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;storage_map_name&quot;</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;storage_map_namespace&quot;</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;network_map_name&quot;</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-    <span class="s2">&quot;network_map_namespace&quot;</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;virtual_machines_list&quot;</span><span class="p">:</span> <span class="n">virtual_machines_list</span><span class="p">,</span>
-    <span class="s2">&quot;target_namespace&quot;</span><span class="p">:</span> <span class="n">vm_target_namespace</span> <span class="ow">or</span> <span class="n">target_namespace</span><span class="p">,</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">,</span>
-    <span class="s2">&quot;pre_hook_name&quot;</span><span class="p">:</span> <span class="n">pre_hook_name</span><span class="p">,</span>
-    <span class="s2">&quot;pre_hook_namespace&quot;</span><span class="p">:</span> <span class="n">pre_hook_namespace</span><span class="p">,</span>
-    <span class="s2">&quot;after_hook_name&quot;</span><span class="p">:</span> <span class="n">after_hook_name</span><span class="p">,</span>
-    <span class="s2">&quot;after_hook_namespace&quot;</span><span class="p">:</span> <span class="n">after_hook_namespace</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="n">preserve_static_ips</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="n">pvc_name_template</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="n">pvc_name_template_use_generate_name</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="n">target_power_state</span><span class="p">,</span>
-<span class="p">}</span>
+    <span class="s2">"client"</span><span class="p">:</span> <span class="n">ocp_admin_client</span><span class="p">,</span>
+    <span class="s2">"fixture_store"</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
+    <span class="s2">"resource"</span><span class="p">:</span> <span class="n">Plan</span><span class="p">,</span>
+    <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">target_namespace</span><span class="p">,</span>
+    <span class="s2">"source_provider_name"</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"source_provider_namespace"</span><span class="p">:</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"destination_provider_name"</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"destination_provider_namespace"</span><span class="p">:</span> <span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"storage_map_name"</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"storage_map_namespace"</span><span class="p">:</span> <span class="n">storage_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"network_map_name"</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+    <span class="s2">"network_map_namespace"</span><span class="p">:</span> <span class="n">network_map</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+    <span class="s2">"virtual_machines_list"</span><span class="p">:</span> <span class="n">vms_for_plan</span><span class="p">,</span>
+    <span class="s2">"target_namespace"</span><span class="p">:</span> <span class="n">vm_target_namespace</span> <span class="ow">or</span> <span class="n">target_namespace</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">,</span>
+</code></pre></div>
 
-<span class="k">if</span> <span class="n">target_node_selector</span><span class="p">:</span>
-    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">&quot;target_node_selector&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_node_selector</span>
+<p><code>create_plan_resource()</code> then waits for the Plan to reach <code>Ready</code> with a hard-coded 360-second timeout, independent of <code>plan_wait_timeout</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">plan</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span><span class="o">**</span><span class="n">plan_kwargs</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="n">target_labels</span><span class="p">:</span>
-    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">&quot;target_labels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_labels</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">plan</span><span class="o">.</span><span class="n">wait_for_condition</span><span class="p">(</span><span class="n">condition</span><span class="o">=</span><span class="n">Plan</span><span class="o">.</span><span class="n">Condition</span><span class="o">.</span><span class="n">READY</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">Plan</span><span class="o">.</span><span class="n">Condition</span><span class="o">.</span><span class="n">Status</span><span class="o">.</span><span class="n">TRUE</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">TimeoutExpiredError</span><span class="p">:</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Plan </span><span class="si">{</span><span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> failed to reach status </span><span class="si">{</span><span class="n">Plan</span><span class="o">.</span><span class="n">Condition</span><span class="o">.</span><span class="n">Status</span><span class="o">.</span><span class="n">TRUE</span><span class="si">}</span><span class="se">\n\t</span><span class="si">{</span><span class="n">plan</span><span class="o">.</span><span class="n">instance</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
 
-<span class="k">if</span> <span class="n">target_affinity</span><span class="p">:</span>
-    <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">&quot;target_affinity&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_affinity</span>
-
-<span class="n">plan</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span><span class="o">**</span><span class="n">plan_kwargs</span><span class="p">)</span>
-<span class="n">plan</span><span class="o">.</span><span class="n">wait_for_condition</span><span class="p">(</span><span class="n">condition</span><span class="o">=</span><span class="n">Plan</span><span class="o">.</span><span class="n">Condition</span><span class="o">.</span><span class="n">READY</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">Plan</span><span class="o">.</span><span class="n">Condition</span><span class="o">.</span><span class="n">Status</span><span class="o">.</span><span class="n">TRUE</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
-
-<span class="c1"># ... later, execution creates the Migration CR ...</span>
-
-<span class="n">create_and_store_resource</span><span class="p">(</span>
+<p><code>plan_wait_timeout</code> applies later, to the migration wait:</p>
+<div class="highlight"><pre><span></span><code><span class="n">create_and_store_resource</span><span class="p">(</span>
     <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
     <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
     <span class="n">resource</span><span class="o">=</span><span class="n">Migration</span><span class="p">,</span>
@@ -524,18 +648,20 @@
     <span class="n">cut_over</span><span class="o">=</span><span class="n">cut_over</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">wait_for_migration_complate</span><span class="p">(</span><span class="n">plan</span><span class="o">=</span><span class="n">plan</span><span class="p">)</span>
+<span class="n">wait_for_migration_complate</span><span class="p">(</span><span class="n">plan</span><span class="o">=</span><span class="n">plan</span><span class="p">,</span> <span class="n">on_status_poll</span><span class="o">=</span><span class="n">on_status_poll</span><span class="p">)</span>
 </code></pre></div>
 
 <p>For standard cold migrations, the important switch is <code>warm_migration=False</code>. That means:</p>
 <ul>
 <li>There is no warm-only precopy fixture.</li>
-<li>There is no scheduled cutover time in the normal cold flow.</li>
+<li><code>cut_over</code> is <code>None</code>, so the Migration CR has no scheduled cutover time.</li>
 <li>Execution goes directly from a ready <code>Plan</code> to a real <code>Migration</code> CR.</li>
 </ul>
-<p>By default, the config sets <code>plan_wait_timeout</code> to <code>3600</code> seconds in <code>tests/tests_config/config.py</code>, so long-running migrations have a wider execution window than the helper’s fallback default.</p>
+<p>The config sets <code>plan_wait_timeout</code> to <code>3600</code> seconds by default in <code>tests/tests_config/config.py</code>, and <code>wait_for_migration_complate()</code> polls the Plan status until it reaches
+<code>Succeeded</code> or <code>Failed</code>, raising <code>MigrationPlanExecError</code> on failure or timeout.</p>
 <h2 id="5-validate-the-migrated-vm">5. Validate The Migrated VM</h2>
-<p>The post-migration phase is much more than “the VM exists.” The <code>check_vms()</code> helper fetches both the source VM and the destination VM, runs a series of validations, accumulates any mismatches per VM, and fails at the end if anything is wrong.</p>
+<p>The post-migration phase is much more than "the VM exists." The <code>check_vms()</code> helper fetches both the source VM and the destination VM, runs a series of validations, accumulates
+any mismatches per VM, and fails at the end if anything is wrong.</p>
 <p>In the standard cold flow, it checks:</p>
 <ul>
 <li>Power state</li>
@@ -553,97 +679,126 @@
 <li>Target node placement</li>
 <li>Target labels</li>
 <li>Affinity rules</li>
+<li>Nested-virtualization CPU features, when <code>enable_nested_virtualization</code> is <code>False</code></li>
 </ul>
 <p>Some checks are provider-specific:</p>
 <ul>
-<li>Snapshot comparison and serial preservation are used for VMware-backed migrations.</li>
+<li><code>check_ssl_configuration()</code> runs for vSphere, RHV, and OpenStack sources.</li>
+<li>Snapshot comparison, serial preservation, boot configuration, and disconnected-NIC state are used for VMware-backed migrations.</li>
 <li>False power-off validation is used for RHV-backed migrations.</li>
-<li>Static IP preservation is currently implemented for Windows VMs migrated from vSphere.</li>
+<li>Static IP preservation runs for vSphere and Hyper-V sources. Inside the check, Windows guests are inspected with <code>ipconfig /all</code> and Linux guests with <code>nmcli device show</code>.</li>
 </ul>
-<p>This validation step is where the cold migration pattern becomes genuinely useful. A migration can “finish” and still be wrong. The repository’s cold tests treat success as “the VM moved and still matches expectations,” not just “the Migration CR reached a terminal state.”</p>
+<p>The default invocation passes <code>vm_ssh_connections</code> but not <code>plan_resource</code>, so the plan-driven Deep Inspection verification block is skipped unless a test opts in.</p>
+<p>This validation step is where the cold migration pattern becomes genuinely useful. A migration can "finish" and still be wrong. The repository's cold tests treat success as "the
+VM moved and still matches expectations," not just "the Migration CR reached a terminal state."</p>
 <blockquote>
 <p><strong>Note:</strong> <code>cleanup_migrated_vms</code> removes migrated VMs after the class finishes. If you run with <code>--skip-teardown</code>, those VMs are intentionally left behind for debugging.</p>
 </blockquote>
 <h2 id="advanced-cold-migration-features">Advanced Cold Migration Features</h2>
 <p>The comprehensive cold migration test shows how the same pattern scales up when you want to validate plan features, not just a successful move:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_cold_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_cold_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2019-3disks&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2019-3disks"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>  <span class="c1"># VM must be on for guest tools to report static IP info</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s2">&quot;{{.VmName}}-disk-{{.DiskIndex}}&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;target_node_selector&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-node&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+    <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
+    <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"target_node_selector"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"mtv-comprehensive-node"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-label&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="s2">&quot;test-type&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive&quot;</span><span class="p">,</span>
+    <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"mtv-comprehensive-label"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+        <span class="s2">"test-type"</span><span class="p">:</span> <span class="s2">"comprehensive"</span><span class="p">,</span>  <span class="c1"># Static value</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;test&quot;</span><span class="p">}},</span>
-                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                    <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"test"</span><span class="p">}},</span>
+                        <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
                     <span class="p">},</span>
-                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
+                    <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="p">]</span>
         <span class="p">}</span>
     <span class="p">},</span>
-    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-comprehensive-vms&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+    <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-cold-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+    <span class="s2">"guest_agent_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
 <p>Each of those fields drives a real plan feature or a real validation path:</p>
 <ul>
-<li><code>source_vm_power: "off"</code> tells the preparation fixture to power the source VM off before migration.</li>
-<li><code>target_power_state: "on"</code> proves that the destination VM can come up powered on even if the source was prepared powered off.</li>
-<li><code>preserve_static_ips: True</code> enables static-IP verification. In the current codebase, that check is meant for Windows VMs coming from vSphere.</li>
-<li><code>pvc_name_template</code> and <code>pvc_name_template_use_generate_name</code> turn on PVC-name validation after migration. The helper also supports more advanced template behavior, including <code>generateName</code> handling.</li>
-<li><code>target_node_selector</code> causes a worker node to be labeled for the test, and post-migration validation checks that the migrated VM lands there.</li>
-<li><code>target_labels</code> adds expected labels to the migrated VM. When a value is <code>None</code>, the fixture replaces it with the current <code>session_uuid</code> so labels stay unique across runs.</li>
-<li><code>target_affinity</code> lets the test verify full affinity configuration on the destination VM.</li>
-<li><code>vm_target_namespace</code> separates the VM’s destination namespace from the namespace that holds the MTV resources.</li>
+<li>
+<p><code>source_vm_power: "on"</code> powers the source VM on before cloning finishes so VMware guest tools can report static IP and NIC data. It is mandatory when <code>preserve_static_ips</code> is
+  set.</p>
+</li>
+<li>
+<p><code>target_power_state: "on"</code> proves that the destination VM comes up powered on.</p>
+</li>
+<li><code>preserve_static_ips: True</code> enables static-IP verification, and additionally NIC-name preservation for vSphere sources.</li>
+<li>
+<p><code>pvc_name_template</code> and <code>pvc_name_template_use_generate_name</code> turn on PVC-name validation after migration. A template can also be a provider-keyed mapping, resolved by
+  <code>resolve_pvc_name_template()</code>.</p>
+</li>
+<li>
+<p><code>target_node_selector</code> causes a worker node to be labeled for the test. The <code>labeled_worker_node</code> fixture picks the worker with the most available memory, appends the
+  <code>session_uuid</code> to the label value when the config value is <code>None</code>, and post-migration validation checks that the migrated VM lands there.</p>
+</li>
+<li>
+<p><code>target_labels</code> adds expected labels to the migrated VM. When a value is <code>None</code>, the <code>target_vm_labels</code> fixture replaces it with the current <code>session_uuid</code> so labels stay
+  unique across runs.</p>
+</li>
+<li>
+<p><code>target_affinity</code> lets the test verify full affinity configuration on the destination VM.</p>
+</li>
+<li><code>enable_nested_virtualization: False</code> makes the suite assert that CPU features such as <code>vmx</code> and <code>svm</code> are disabled on the migrated VM.</li>
+<li><code>vm_target_namespace</code> separates the VM's destination namespace from the namespace that holds the MTV resources.</li>
 <li><code>multus_namespace</code> lets the test create its NADs outside the default migration namespace.</li>
+<li><code>guest_agent_timeout</code> overrides the default 120-second wait for VMware guest info during preparation, and is passed to the destination VM lookup in <code>check_vms()</code>.</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> Use <code>test_sanity_cold_mtv_migration</code> when you want baseline cold-migration coverage. Use <code>test_cold_migration_comprehensive</code> when you want to validate plan behavior such as target power state, PVC naming, labels, affinity, or custom VM namespaces.</p>
+<p><strong>Tip:</strong> Use <code>test_sanity_cold_mtv_migration</code> when you want baseline cold-migration coverage. Use <code>test_cold_migration_comprehensive</code> when you want to validate plan behavior
+such as target power state, PVC naming, labels, affinity, or custom VM namespaces.</p>
 </blockquote>
 <h2 id="how-automation-treats-cold-tests">How Automation Treats Cold Tests</h2>
-<p>The repository’s automation is careful about the difference between “this suite is structurally valid” and “a real cold migration succeeded.”</p>
-<p>Pytest is wired through <code>pytest.ini</code> to load <code>tests/tests_config/config.py</code> automatically and to use <code>--dist=loadscope</code>, which fits the class-based, incremental cold-migration pattern well.</p>
+<p>The repository's automation is careful about the difference between "this suite is structurally valid" and "a real cold migration succeeded."</p>
+<p>Pytest is wired through <code>pytest.ini</code> to load <code>tests/tests_config/config.py</code> automatically and to use <code>--dist=loadscope</code>, which fits the class-based, incremental cold-migration
+pattern well.</p>
 <p>The included <code>tox</code> environment does not perform a live migration run. Instead, it uses dry-run style checks:</p>
-<div class="highlight"><pre><span></span><code><span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="k">[env.pytest-check]</span>
+<span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--setup-plan&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--setup-plan"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--collect-only"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="p">]</span>
 </code></pre></div>
 
 <p>The container image follows the same philosophy: its default command is <code>uv run pytest --collect-only</code>.</p>
 <blockquote>
-<p><strong>Warning:</strong> A successful <code>tox</code> run or container dry-run only proves that the suite can be collected and its fixtures can be planned. It does not prove that a cold migration will succeed against your real OpenShift cluster, source provider, network setup, or storage class.</p>
+<p><strong>Warning:</strong> A successful <code>tox</code> run or container dry-run only proves that the suite can be collected and its fixtures can be planned. It does not prove that a cold migration
+will succeed against your real OpenShift cluster, source provider, network setup, or storage class.</p>
 </blockquote>
-<p>That split is important for users. The repository can validate test structure in automation, but real cold-migration confidence still comes from running the suite in a live environment with real provider and cluster access.</p>
+<p>That split is important for users. The repository can validate test structure in automation, but real cold-migration confidence still comes from running the suite in a live
+environment with real provider and cluster access.</p>
                 </div>
             </article>
             <nav class="page-nav">
@@ -681,24 +836,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -744,5 +902,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

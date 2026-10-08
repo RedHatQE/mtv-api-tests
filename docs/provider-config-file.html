@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Provider Config File - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -106,7 +107,7 @@
 
                     <li>
                         <a href="provider-config-file.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Provider Config File
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,391 +302,905 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="provider-config-file">Provider Config File</h1>
-<p><code>mtv-api-tests</code> does not ship a separate JSON Schema document for provider settings. The effective schema comes from <code>.providers.json.example</code> and the Python code that loads <code>./.providers.json</code>. In practice, that means the file is flexible, but specific fields become required when a provider path or validation step reads them.</p>
+<p><code>mtv-api-tests</code> keeps source provider definitions in <code>.providers.json</code>. Two shipped files describe it: <code>providers_schema.json</code> is a JSON Schema (draft 2020-12) that your editor
+can validate against, and <code>.providers.json.example</code> is an annotated template with one entry per provider type.</p>
+<p>At runtime the suite only parses JSON. It reads specific fields per provider type and ignores the rest, so the schema is the reference for what each provider entry may contain.</p>
 <blockquote>
-<p><strong>Warning:</strong> <code>.providers.json.example</code> is an annotated template, not a ready-to-use <code>.providers.json</code>. The loader parses <code>.providers.json</code> with <code>json.loads(...)</code>, so your real file must be strict JSON: remove comments, keep valid quoting, and avoid trailing commas.</p>
+<p><strong>Warning:</strong> <code>.providers.json.example</code> is an annotated template, not a ready-to-use <code>.providers.json</code>. The loader parses the file with <code>json.loads(...)</code>, so your real file
+must be strict JSON: remove comments, keep valid quoting, and avoid trailing commas.</p>
 <p><strong>Warning:</strong> <code>.providers.json</code> usually contains provider passwords and guest OS passwords. Treat it as a secret file.</p>
-<p><strong>Note:</strong> The top-level key is the provider name you select with <code>source_provider</code>. It does not have to match <code>type</code>. For example, the example file has a key named <code>vsphere-copy-offload</code>, but its <code>"type"</code> is still <code>"vsphere"</code>.</p>
+<p><strong>Note:</strong> The top-level key is the provider name you select with <code>source_provider</code>. It does not have to match <code>type</code>. For example, the example file has a key named
+<code>vsphere-copy-offload</code>, but its <code>"type"</code> is still <code>"vsphere"</code>.</p>
 </blockquote>
-<h2 id="how-the-file-is-used">How the file is used</h2>
+<h2 id="how-the-file-is-located">How the file is located</h2>
+<p><code>load_source_providers()</code> resolves the path in this order:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Order</th>
+<th>Source</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>--providers-json &lt;path&gt;</code></td>
+<td>Custom pytest option</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>PROVIDERS_JSON_PATH</code> environment variable</td>
+<td>CI-friendly override</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>.providers.json</code></td>
+<td>Relative to the current working directory</td>
+</tr>
+</tbody>
+</table></div>
+<p>Fail-fast behavior:</p>
 <ul>
-<li>The test harness looks for <code>./.providers.json</code> in the directory where you run the tests.</li>
-<li>The file can contain multiple provider entries in one JSON object.</li>
-<li><code>source_provider</code> must match one of the top-level keys in that file.</li>
-<li>A missing or empty file fails fast.</li>
-<li><code>version</code> is used mainly in generated test resource names. It is not the field that decides how to connect.</li>
-<li>There is no strict field whitelist. Extra keys are usually harmless until a specific provider or test path reads them.</li>
+<li>A path that does not exist raises <code>FileNotFoundError</code>.</li>
+<li>An empty or whitespace-only file raises <code>ProviderEmptyContentError</code>.</li>
+<li>A file whose top level is not a JSON object raises <code>ValueError</code>.</li>
+<li><code>source_provider</code> must match one of the top-level keys, or provider lookups fail later.</li>
 </ul>
-<h2 id="common-fields">Common fields</h2>
-<table>
+<h2 id="top-level-shape">Top-Level Shape</h2>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"$schema"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://raw.githubusercontent.com/RedHatQE/mtv-api-tests/main/providers_schema.json"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"vsphere"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vsphere"</span><span class="p">,</span><span class="w"> </span><span class="nt">"..."</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ul>
+<li>The root is an object. Every key except <code>$schema</code> is a provider definition.</li>
+<li><code>$schema</code> is optional and is used only for editor validation.</li>
+<li>Each provider definition is validated against a <code>oneOf</code> block, one per provider type. Exactly one type block must match.</li>
+</ul>
+<blockquote>
+<p><strong>Warning:</strong> The OpenShift provider block sets <code>additionalProperties: false</code>. Unknown keys in an <code>openshift</code> entry fail schema validation, even though the runtime loader
+ignores extra keys on other provider types.</p>
+</blockquote>
+<h2 id="fields-by-provider-type">Fields By Provider Type</h2>
+<p><code>type</code> selects the block. These tables match <code>providers_schema.json</code> exactly.</p>
+<h3 id="type-vsphere"><code>type: "vsphere"</code></h3>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Field</th>
-<th>Meaning</th>
+<th>Required</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>type</code></td>
-<td>Provider implementation to use</td>
-<td>Supported values from the example file are <code>vsphere</code>, <code>ovirt</code>, <code>openstack</code>, <code>openshift</code>, and <code>ova</code>.</td>
+<td>Yes</td>
+<td>Constant <code>vsphere</code>.</td>
 </tr>
 <tr>
 <td><code>version</code></td>
-<td>Provider version label</td>
-<td>Used mainly in generated test resource names. Keep it populated for every entry.</td>
+<td>Yes</td>
+<td>Platform version label, for example <code>8.0.3</code>. Used in generated resource names.</td>
 </tr>
 <tr>
 <td><code>fqdn</code></td>
-<td>Provider host name or IP</td>
-<td>Important for VMware direct connections and for CA certificate download in secure VMware, RHV, and OpenStack flows.</td>
+<td>Yes</td>
+<td>vCenter or ESXi host name or IP.</td>
 </tr>
 <tr>
 <td><code>api_url</code></td>
-<td>Provider API endpoint or share URL</td>
-<td>Expected format depends on the provider: <code>/sdk</code> for vSphere, <code>/ovirt-engine/api</code> for RHV, <code>/v3</code> for OpenStack, and an NFS share URL for OVA.</td>
+<td>Yes</td>
+<td>Provider API URL. vSphere expects a <code>/sdk</code> suffix.</td>
 </tr>
 <tr>
-<td><code>username</code> / <code>password</code></td>
-<td>Provider login credentials</td>
-<td>Required for VMware, RHV, and OpenStack. Kept as placeholders in the OpenShift and OVA examples.</td>
+<td><code>username</code></td>
+<td>Yes</td>
+<td>vSphere login.</td>
 </tr>
 <tr>
-<td><code>guest_vm_linux_user</code> / <code>guest_vm_linux_password</code></td>
-<td>Linux guest login</td>
-<td>Used for SSH-based post-migration validation, not for connecting to the source provider.</td>
+<td><code>password</code></td>
+<td>Yes</td>
+<td>vSphere password.</td>
 </tr>
 <tr>
-<td><code>guest_vm_win_user</code> / <code>guest_vm_win_password</code></td>
-<td>Windows guest login</td>
-<td>Also used for post-migration validation, not provider login.</td>
+<td><code>endpoint_type</code></td>
+<td>No</td>
+<td><code>vcenter</code> or <code>esxi</code>. Defaults to vCenter behavior when omitted.</td>
 </tr>
 <tr>
 <td><code>vddk_init_image</code></td>
-<td>vSphere-specific provider field</td>
-<td>Passed through to the MTV <code>Provider</code> resource when set.</td>
+<td>No</td>
+<td>VDDK init container image reference passed to the MTV <code>Provider</code>.</td>
+</tr>
+<tr>
+<td><code>clone_provider</code></td>
+<td>No</td>
+<td>Name of a vCenter entry used for ESXi cloning.</td>
+</tr>
+<tr>
+<td><code>luks_passphrase</code></td>
+<td>No</td>
+<td>Provider-level LUKS passphrase, used when a VM has no per-VM override.</td>
 </tr>
 <tr>
 <td><code>copyoffload</code></td>
-<td>vSphere-only nested settings</td>
-<td>Used by copy-offload tests to build storage secrets and storage-map plugin config.</td>
+<td>No</td>
+<td>Nested copy-offload block. See <a href="#vsphere-copy-offload">vSphere copy-offload</a>.</td>
+</tr>
+<tr>
+<td><code>guest_vm_linux_user</code> / <code>guest_vm_linux_password</code></td>
+<td>No</td>
+<td>Linux guest SSH credentials.</td>
+</tr>
+<tr>
+<td><code>guest_vm_win_user</code> / <code>guest_vm_win_password</code></td>
+<td>No</td>
+<td>Windows guest WinRM credentials.</td>
 </tr>
 </tbody>
-</table>
-<h2 id="guest-credentials">Guest credentials</h2>
+</table></div>
+<h3 id="type-ovirt"><code>type: "ovirt"</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Yes</td>
+<td>Constant <code>ovirt</code>. Use this even for an RHV source.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>Yes</td>
+<td>Platform version label.</td>
+</tr>
+<tr>
+<td><code>fqdn</code></td>
+<td>Yes</td>
+<td>Engine host name or IP. Also used for the CA certificate download.</td>
+</tr>
+<tr>
+<td><code>api_url</code></td>
+<td>Yes</td>
+<td>Engine API URL. Expect an <code>/ovirt-engine/api</code> suffix.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>Yes</td>
+<td>RHV login.</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>Yes</td>
+<td>RHV password.</td>
+</tr>
+<tr>
+<td><code>guest_vm_linux_user</code> / <code>guest_vm_linux_password</code></td>
+<td>No</td>
+<td>Linux guest SSH credentials.</td>
+</tr>
+<tr>
+<td><code>guest_vm_win_user</code> / <code>guest_vm_win_password</code></td>
+<td>No</td>
+<td>Windows guest WinRM credentials.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="type-openstack"><code>type: "openstack"</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Yes</td>
+<td>Constant <code>openstack</code>.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>Yes</td>
+<td>Platform version label.</td>
+</tr>
+<tr>
+<td><code>fqdn</code></td>
+<td>Yes</td>
+<td>Host name or IP. Also used for the CA certificate download.</td>
+</tr>
+<tr>
+<td><code>api_url</code></td>
+<td>Yes</td>
+<td>Keystone v3 endpoint, for example <code>host:5000/v3</code>.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>Yes</td>
+<td>OpenStack login.</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>Yes</td>
+<td>OpenStack password.</td>
+</tr>
+<tr>
+<td><code>user_domain_name</code></td>
+<td>Yes</td>
+<td>Keystone user domain name.</td>
+</tr>
+<tr>
+<td><code>region_name</code></td>
+<td>Yes</td>
+<td>Region name.</td>
+</tr>
+<tr>
+<td><code>project_name</code></td>
+<td>Yes</td>
+<td>Project or tenant name.</td>
+</tr>
+<tr>
+<td><code>user_domain_id</code></td>
+<td>Yes</td>
+<td>Keystone user domain UUID.</td>
+</tr>
+<tr>
+<td><code>project_domain_id</code></td>
+<td>Yes</td>
+<td>Keystone project domain UUID.</td>
+</tr>
+<tr>
+<td><code>guest_vm_linux_user</code> / <code>guest_vm_linux_password</code></td>
+<td>No</td>
+<td>Linux guest SSH credentials.</td>
+</tr>
+<tr>
+<td><code>guest_vm_win_user</code> / <code>guest_vm_win_password</code></td>
+<td>No</td>
+<td>Windows guest WinRM credentials.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="type-openshift"><code>type: "openshift"</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Yes</td>
+<td>Constant <code>openshift</code>.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>Yes</td>
+<td>Platform version label.</td>
+</tr>
+<tr>
+<td><code>host</code></td>
+<td>Yes</td>
+<td>Cluster API host name or URL. Required by the schema.</td>
+</tr>
+<tr>
+<td><code>api_url</code></td>
+<td>Yes</td>
+<td>Cluster API URL. Required by the schema.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>Yes</td>
+<td>Required by the schema.</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>Yes</td>
+<td>Required by the schema.</td>
+</tr>
+<tr>
+<td><code>storage_class</code></td>
+<td>Yes</td>
+<td>Default storage class for target PVCs. Required by the schema.</td>
+</tr>
+<tr>
+<td><code>verify_ssl</code></td>
+<td>No</td>
+<td><code>true</code> or <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>ca_bundle</code></td>
+<td>No</td>
+<td>Path to a CA bundle file for SSL verification.</td>
+</tr>
+</tbody>
+</table></div>
+<p>This block is the strict one: <code>additionalProperties</code> is <code>false</code>, so no other keys are allowed.</p>
+<blockquote>
+<p><strong>Note:</strong> The runtime path for an <code>openshift</code> entry does not authenticate with these values. The loader rewrites <code>api_url</code> to the current cluster host and reuses the
+session's own token secret, which is always created with <code>insecureSkipVerify: "true"</code>. See <a href="#openshift">OpenShift</a>.</p>
+</blockquote>
+<h3 id="type-ova"><code>type: "ova"</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Yes</td>
+<td>Constant <code>ova</code>.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>Yes</td>
+<td>Platform version label. Any placeholder value works; it is used for naming only.</td>
+</tr>
+<tr>
+<td><code>fqdn</code></td>
+<td>Yes</td>
+<td>Not used for OVA connections.</td>
+</tr>
+<tr>
+<td><code>api_url</code></td>
+<td>Yes</td>
+<td>NFS share URL. This is the field the OVA provider actually consumes.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>Yes</td>
+<td>Not used for OVA connections.</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>Yes</td>
+<td>Not used for OVA connections.</td>
+</tr>
+<tr>
+<td><code>guest_vm_linux_user</code> / <code>guest_vm_linux_password</code></td>
+<td>No</td>
+<td>Linux guest SSH credentials.</td>
+</tr>
+<tr>
+<td><code>guest_vm_win_user</code> / <code>guest_vm_win_password</code></td>
+<td>No</td>
+<td>Windows guest WinRM credentials.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="type-hyperv"><code>type: "hyperv"</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Yes</td>
+<td>Constant <code>hyperv</code>.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>Yes</td>
+<td>Platform version label.</td>
+</tr>
+<tr>
+<td><code>fqdn</code></td>
+<td>Yes</td>
+<td>Hyper-V host address.</td>
+</tr>
+<tr>
+<td><code>api_url</code></td>
+<td>Yes</td>
+<td>Hyper-V host address.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>Yes</td>
+<td>Hyper-V host login.</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>Yes</td>
+<td>Hyper-V host password.</td>
+</tr>
+<tr>
+<td><code>smb_url</code></td>
+<td>Yes</td>
+<td>SMB share URL used for VM disk transfer.</td>
+</tr>
+<tr>
+<td><code>smb_user</code></td>
+<td>No</td>
+<td>SMB user, when it differs from the provider credentials.</td>
+</tr>
+<tr>
+<td><code>smb_password</code></td>
+<td>No</td>
+<td>SMB password, when it differs from the provider credentials.</td>
+</tr>
+<tr>
+<td><code>guest_vm_linux_user</code> / <code>guest_vm_linux_password</code></td>
+<td>No</td>
+<td>Linux guest SSH credentials.</td>
+</tr>
+<tr>
+<td><code>guest_vm_win_user</code> / <code>guest_vm_win_password</code></td>
+<td>No</td>
+<td>Windows guest WinRM credentials.</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Note:</strong> Hyper-V is the only provider that fetches its CA certificate from port <code>5986</code> instead of <code>443</code>.</p>
+</blockquote>
+<h2 id="fields-the-runtime-always-reads">Fields The Runtime Always Reads</h2>
+<p>Before dispatching on <code>type</code>, the loader builds the provider secret and connection arguments from three fields. They must be present for every provider entry, including
+<code>openshift</code> and <code>ova</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>api_url</code></td>
+<td>Becomes the <code>url</code> key of the provider Secret.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>Becomes the provider connection username.</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>Becomes the provider connection password.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="guest-credentials">Guest Credentials</h2>
 <p>Guest credentials are separate from provider credentials.</p>
-<p>The provider <code>username</code> and <code>password</code> fields log in to the source platform itself. The <code>guest_vm_*</code> fields are read later by post-migration SSH checks when the destination VM is powered on. If those checks run and the matching guest credentials are missing, validation fails.</p>
-<p>This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so it is fine to add <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code> to any provider entry when your selected tests need them.</p>
+<p>The provider <code>username</code> and <code>password</code> fields log in to the source platform itself. The <code>guest_vm_*</code> fields are read later by post-migration SSH or WinRM checks when the
+destination VM is powered on. If those checks run and the matching guest credentials are missing, validation fails.</p>
+<p>This matters even if the shipped example for a provider does not show guest credentials. The loader keeps extra keys, so you can add <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code>
+to a <code>vsphere</code>, <code>ovirt</code>, <code>openstack</code>, <code>ova</code>, or <code>hyperv</code> provider entry when your selected tests need them. The <code>openshift</code> entry is the exception: its schema block sets
+<code>additionalProperties: false</code>, so guest credential keys there fail schema validation in your editor and must be left out.</p>
 <blockquote>
 <p><strong>Tip:</strong> Think of <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code> as per-guest test credentials, not part of the provider login.</p>
 </blockquote>
-<h2 id="ssl-behavior">SSL behavior</h2>
+<h2 id="ssl-behavior">SSL Behavior</h2>
 <p>Source-provider SSL behavior is controlled in <code>tests/tests_config/config.py</code>, not inside <code>.providers.json</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>  <span class="c1"># SSL verification for OCP API connections</span>
-<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>  <span class="c1"># SSL verification for source provider (VMware, RHV, etc.)</span>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"true"</span>  <span class="c1"># SSL verification for OCP API connections</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"false"</span>  <span class="c1"># SSL verification for source provider (VMware, RHV, etc.)</span>
 </code></pre></div>
 
 <p>Key points:</p>
 <ul>
-<li><code>source_provider_insecure_skip_verify</code> controls the source provider secret created for VMware, RHV, OpenStack, and OVA.</li>
-<li><code>insecure_verify_skip</code> is for OpenShift API connections and does not control VMware/RHV/OpenStack provider validation.</li>
-<li>These settings are stored as strings, so use <code>"true"</code> or <code>"false"</code>.</li>
-<li>When <code>source_provider_insecure_skip_verify</code> is <code>"false"</code>, the harness fetches a CA certificate from <code>fqdn:443</code> and stores it in the provider secret for VMware and OpenStack.</li>
-<li>RHV is special: the code always fetches the CA certificate, even when verification is skipped, because the ImageIO path still needs it.</li>
-<li>OpenShift is also special: the source provider reuses the current cluster token secret, which is created with <code>insecureSkipVerify: "true"</code>.</li>
+<li><code>source_provider_insecure_skip_verify</code> controls the source provider Secret created for vSphere, RHV, OpenStack, and Hyper-V.</li>
+<li><code>insecure_verify_skip</code> is for OpenShift API connections and does not control source provider validation.</li>
+<li>
+<p>These settings are stored as strings, so use <code>"true"</code> or <code>"false"</code>.
+  When <code>source_provider_insecure_skip_verify</code> is <code>"false"</code>, the harness fetches a CA certificate from <code>fqdn</code> and stores it in the provider Secret for vSphere, OpenStack, and
+  Hyper-V.</p>
+</li>
+<li>
+<p>RHV is special: the code always fetches the CA certificate, even when verification is skipped, because the ImageIO path still needs it. It is stored under <code>cacert</code> by default.</p>
+</li>
+<li>OpenShift is also special: the source provider reuses the current cluster token Secret, which is created with <code>insecureSkipVerify: "true"</code>.</li>
 <li>OVA has no CA download step.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> Secure mode only works if <code>fqdn</code> points to a host that serves the provider certificate on port <code>443</code>. If the certificate fetch fails, provider creation fails.</p>
+<p><strong>Note:</strong> Secure mode only works if <code>fqdn</code> points to a host that serves the provider certificate on the expected port. If the certificate fetch fails, provider creation fails.</p>
 </blockquote>
 <h2 id="vsphere">vSphere</h2>
 <p><em>Example from <code>.providers.json.example</code>:</em></p>
-<div class="highlight"><pre><span></span><code>&quot;vsphere&quot;: {
-  &quot;type&quot;: &quot;vsphere&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-  &quot;username&quot;: &quot;USERNAME&quot;,
-  &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-  &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
-  &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+<div class="highlight"><pre><span></span><code>"vsphere": {
+  "type": "vsphere",
+  "version": "&lt;SERVER VERSION&gt;",
+  "fqdn": "SERVER FQDN/IP",
+  "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+  "username": "USERNAME",
+  "password": "PASSWORD",  # pragma: allowlist secret
+  "guest_vm_linux_user": "LINUX VMS USERNAME",
+  "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+  "guest_vm_win_user": "WINDOWS VMS USERNAME",
+  "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+  "luks_passphrase": "LUKS DISK ENCRYPTION PASSPHRASE",  # pragma: allowlist secret
+  "vddk_init_image": "&lt;PATH TO VDDK INIT IMAGE&gt;",
+  "endpoint_type": "vcenter",
 }
 </code></pre></div>
 
 <p>What matters for vSphere:</p>
 <ul>
-<li><code>type</code> must be <code>vsphere</code>.</li>
 <li><code>fqdn</code> is used for the direct vSphere connection.</li>
-<li><code>api_url</code> becomes the MTV provider URL and should end with <code>/sdk</code>.</li>
-<li><code>username</code> and <code>password</code> are the vSphere credentials used by the harness.</li>
-<li>The Linux and Windows guest credentials are used only for guest-level validation after migration.</li>
+<li>In secure mode the API URL is normalized for TLS before the certificate is downloaded.</li>
 <li><code>vddk_init_image</code> is passed to the MTV <code>Provider</code> resource when present.</li>
+<li><code>endpoint_type</code> maps to <code>sdkEndpoint</code> in the MTV <code>Provider</code> resource settings. Use <code>"esxi"</code> for direct ESXi host connections.</li>
+<li><code>luks_passphrase</code> here is the provider-level fallback. A per-VM <code>luks_passphrase</code> in the test plan config takes precedence.</li>
 </ul>
-<blockquote>
-<p><strong>Tip:</strong> Keep a separate vSphere entry for copy-offload, like the example’s <code>vsphere-copy-offload</code>. That makes it easy to switch between regular and copy-offload test runs by changing only <code>source_provider</code>.</p>
-</blockquote>
-<h2 id="vsphere-copy-offload">vSphere copy-offload</h2>
-<p>The <code>copyoffload</code> section is only meaningful for vSphere entries. The code validates it before copy-offload tests run, uses it to build the storage secret, and then passes that secret into the <code>vsphereXcopyConfig</code> storage-map plugin configuration.</p>
-<p><em>Core copy-offload fields from <code>.providers.json.example</code>:</em></p>
-<div class="highlight"><pre><span></span><code>&quot;copyoffload&quot;: {
-  # Supported storage_vendor_product values:
-  # - &quot;ontap&quot;           (NetApp ONTAP)
-  # - &quot;vantara&quot;         (Hitachi Vantara)
-  # - &quot;primera3par&quot;     (HPE Primera/3PAR)
-  # - &quot;pureFlashArray&quot;  (Pure Storage FlashArray)
-  # - &quot;powerflex&quot;       (Dell PowerFlex)
-  # - &quot;powermax&quot;        (Dell PowerMax)
-  # - &quot;powerstore&quot;      (Dell PowerStore)
-  # - &quot;infinibox&quot;       (Infinidat InfiniBox)
-  # - &quot;flashsystem&quot;     (IBM FlashSystem)
-  &quot;storage_vendor_product&quot;: &quot;ontap&quot;,
-
-  # Primary datastore for copy-offload operations (required)
-  # This is the vSphere datastore ID (e.g., &quot;datastore-12345&quot;) where VMs reside
-  # Get via vSphere: Datacenter → Storage → Datastore → Summary → More Objects ID
-  &quot;datastore_id&quot;: &quot;datastore-12345&quot;,
-
-  # Optional: Secondary datastore for multi-datastore copy-offload tests
-  # Only needed when testing VMs with disks spanning multiple datastores
-  # When specified, tests can validate copy-offload with disks on different datastores
-  &quot;secondary_datastore_id&quot;: &quot;datastore-67890&quot;,
-
-  # Optional: Non-XCOPY datastore for mixed datastore tests
-  # This should be a datastore that does NOT support XCOPY/VAAI primitives
-  # Used for testing VMs with disks on both XCOPY and non-XCOPY datastores
-  &quot;non_xcopy_datastore_id&quot;: &quot;datastore-99999&quot;,
-
-  &quot;default_vm_name&quot;: &quot;rhel9-template&quot;,
-  &quot;storage_hostname&quot;: &quot;storage.example.com&quot;,
-  &quot;storage_username&quot;: &quot;admin&quot;,
-  &quot;storage_password&quot;: &quot;your-password-here&quot;,  # pragma: allowlist secret
+<h3 id="esxi-cloning-via-clone_provider">ESXi cloning via clone_provider</h3>
+<p>ESXi hosts do not support the <code>CloneVM_Task</code> API. That is a vCenter-only operation. To enable VM cloning for test isolation when the source provider is an ESXi host, configure
+<code>clone_provider</code> so the harness can reach a vCenter entry that performs the clone.</p>
+<p>How it works:</p>
+<ul>
+<li>The <code>clone_provider</code> value must match a top-level key in <code>.providers.json</code>.</li>
+<li>A missing key fails with a <code>ValueError</code> that lists the available provider names.</li>
+<li>The referenced entry must be a vSphere provider.</li>
+<li>When <code>clone_provider</code> is set, the harness creates a separate <code>VMWareProvider</code> connection to that vCenter and uses it for cloning operations.</li>
+<li>If <code>clone_provider</code> is not set, the harness uses the source provider for cloning. That works for vCenter entries but will fail for ESXi.</li>
+</ul>
+<p><em>ESXi provider example:</em></p>
+<div class="highlight"><pre><span></span><code><span class="nt">"vsphere-esxi"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vsphere"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SERVER VERSION&gt;"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"fqdn"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ESXI HOST FQDN/IP"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"api_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;ESXI HOST FQDN/IP&gt;/sdk"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"username"</span><span class="p">:</span><span class="w"> </span><span class="s2">"USERNAME"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PASSWORD"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"endpoint_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"esxi"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"vddk_init_image"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;PATH TO VDDK INIT IMAGE&gt;"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"clone_provider"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vsphere"</span>
+<span class="p">}</span>
 </code></pre></div>
 
-<p>Copy-offload field reference:</p>
-<table>
+<p>Here <code>"clone_provider": "vsphere"</code> references the <code>"vsphere"</code> entry shown earlier, which must be a vCenter that manages <code>ESXI HOST FQDN/IP</code>.</p>
+<blockquote>
+<p><strong>Tip:</strong> Keep a separate vSphere entry for copy-offload, like the example's <code>vsphere-copy-offload</code>. That makes it easy to switch between regular and copy-offload runs by
+changing only <code>source_provider</code>.</p>
+</blockquote>
+<h3 id="vsphere-copy-offload">vSphere copy-offload</h3>
+<p>The <code>copyoffload</code> block is only meaningful for vSphere entries. The code validates it before copy-offload tests run, uses it to build the storage Secret, and passes that Secret
+into the <code>vsphereXcopyConfig</code> storage-map plugin configuration.</p>
+<h4 id="required-fields">Required fields</h4>
+<p>The schema requires exactly two fields, and the copy-offload fixture re-validates both at runtime:</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Field</th>
-<th>Required when</th>
-<th>Meaning</th>
+<th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>storage_vendor_product</code></td>
-<td>Always</td>
-<td>Storage backend name. Must be one of the supported values listed above.</td>
+<td>One of the supported vendor values listed below.</td>
 </tr>
 <tr>
 <td><code>datastore_id</code></td>
-<td>Always</td>
 <td>Primary vSphere datastore MoRef ID, such as <code>datastore-12345</code>.</td>
 </tr>
-<tr>
-<td><code>storage_hostname</code></td>
-<td>Always, unless provided by environment variable</td>
-<td>Storage system host used to build the copy-offload secret.</td>
-</tr>
-<tr>
-<td><code>storage_username</code></td>
-<td>Always, unless provided by environment variable</td>
-<td>Storage login name.</td>
-</tr>
-<tr>
-<td><code>storage_password</code></td>
-<td>Always, unless provided by environment variable</td>
-<td>Storage password.</td>
-</tr>
-<tr>
-<td><code>secondary_datastore_id</code></td>
-<td>Only for multi-datastore tests</td>
-<td>Second XCOPY-capable datastore.</td>
-</tr>
-<tr>
-<td><code>non_xcopy_datastore_id</code></td>
-<td>Only for mixed/fallback tests</td>
-<td>Datastore that does not support XCOPY/VAAI.</td>
-</tr>
-<tr>
-<td><code>default_vm_name</code></td>
-<td>Optional</td>
-<td>Overrides the source VM/template name for cloned copy-offload tests.</td>
-</tr>
-<tr>
-<td><code>esxi_clone_method</code></td>
-<td>Optional</td>
-<td><code>vib</code> is the default. Set it to <code>ssh</code> to make the provider use SSH-based ESXi cloning.</td>
-</tr>
-<tr>
-<td><code>esxi_host</code> / <code>esxi_user</code> / <code>esxi_password</code></td>
-<td>Required when <code>esxi_clone_method</code> is <code>ssh</code></td>
-<td>ESXi SSH connection settings.</td>
-</tr>
-<tr>
-<td><code>rdm_lun_uuid</code></td>
-<td>Only for RDM tests</td>
-<td>Required when running RDM disk tests.</td>
-</tr>
 </tbody>
-</table>
-<p>Vendor-specific fields:</p>
-<table>
+</table></div>
+<p>Supported <code>storage_vendor_product</code> values:</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
-<th><code>storage_vendor_product</code> value</th>
-<th>Additional fields</th>
+<th>Value</th>
+<th>Storage array</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ontap</code></td>
+<td>NetApp ONTAP</td>
+</tr>
+<tr>
+<td><code>primera3par</code></td>
+<td>HPE Primera/3PAR</td>
+</tr>
+<tr>
+<td><code>pureFlashArray</code></td>
+<td>Pure Storage FlashArray</td>
+</tr>
+<tr>
+<td><code>powerflex</code></td>
+<td>Dell PowerFlex</td>
+</tr>
+<tr>
+<td><code>powermax</code></td>
+<td>Dell PowerMax</td>
+</tr>
+<tr>
+<td><code>powerstore</code></td>
+<td>Dell PowerStore</td>
+</tr>
+<tr>
+<td><code>vantara</code></td>
+<td>Hitachi Vantara</td>
+</tr>
+<tr>
+<td><code>infinibox</code></td>
+<td>Infinidat InfiniBox</td>
+</tr>
+<tr>
+<td><code>flashsystem</code></td>
+<td>IBM FlashSystem</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Warning:</strong> These values are fixed in code. Use the exact spellings above.</p>
+</blockquote>
+<h4 id="vendor-specific-required-fields">Vendor-specific required fields</h4>
+<p>The schema requires extra fields for some vendors, and the copy-offload fixture raises when a required vendor field is missing:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>storage_vendor_product</code></th>
+<th>Additional required fields</th>
+<th>Secret keys added</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>ontap</code></td>
 <td><code>ontap_svm</code></td>
+<td><code>ONTAP_SVM</code></td>
 </tr>
 <tr>
 <td><code>vantara</code></td>
 <td><code>vantara_storage_id</code>, <code>vantara_storage_port</code>, <code>vantara_hostgroup_id_list</code></td>
+<td><code>STORAGE_ID</code>, <code>STORAGE_PORT</code>, <code>HOSTGROUP_ID_LIST</code></td>
 </tr>
 <tr>
 <td><code>primera3par</code></td>
+<td>none</td>
 <td>none</td>
 </tr>
 <tr>
 <td><code>pureFlashArray</code></td>
 <td><code>pure_cluster_prefix</code></td>
+<td><code>PURE_CLUSTER_PREFIX</code></td>
 </tr>
 <tr>
 <td><code>powerflex</code></td>
 <td><code>powerflex_system_id</code></td>
+<td><code>POWERFLEX_SYSTEM_ID</code></td>
 </tr>
 <tr>
 <td><code>powermax</code></td>
 <td><code>powermax_symmetrix_id</code></td>
+<td><code>POWERMAX_SYMMETRIX_ID</code></td>
 </tr>
 <tr>
 <td><code>powerstore</code></td>
+<td>none</td>
 <td>none</td>
 </tr>
 <tr>
 <td><code>infinibox</code></td>
 <td>none</td>
+<td>none</td>
 </tr>
 <tr>
 <td><code>flashsystem</code></td>
 <td>none</td>
+<td>none</td>
 </tr>
 </tbody>
-</table>
+</table></div>
+<h4 id="optional-fields">Optional fields</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default_vm_name</code></td>
+<td>Overrides the source VM name for cloned copy-offload tests. Applied only to VMs with <code>clone: true</code>.</td>
+</tr>
+<tr>
+<td><code>storage_hostname</code></td>
+<td>Storage array management host. Required at runtime unless <code>COPYOFFLOAD_STORAGE_HOSTNAME</code> is set.</td>
+</tr>
+<tr>
+<td><code>storage_username</code></td>
+<td>Storage array user. Required at runtime unless <code>COPYOFFLOAD_STORAGE_USERNAME</code> is set.</td>
+</tr>
+<tr>
+<td><code>storage_password</code></td>
+<td>Storage array password. Required at runtime unless <code>COPYOFFLOAD_STORAGE_PASSWORD</code> is set.</td>
+</tr>
+<tr>
+<td><code>secondary_datastore_id</code></td>
+<td>Second XCOPY-capable datastore, for multi-datastore tests.</td>
+</tr>
+<tr>
+<td><code>non_xcopy_datastore_id</code></td>
+<td>Datastore without XCOPY support, for fallback and negative tests.</td>
+</tr>
+<tr>
+<td><code>storage_secret_extra</code></td>
+<td>Object of extra Kubernetes Secret <code>stringData</code> keys for vendor configuration.</td>
+</tr>
+<tr>
+<td><code>dedicated_migration_hosts</code></td>
+<td>Array of ESXi host MoRef IDs used for XCOPY extraction. Required for dedicated-host tests.</td>
+</tr>
+<tr>
+<td><code>resource_pool</code></td>
+<td>vSphere resource pool for clone placement. See the priority order below.</td>
+</tr>
+<tr>
+<td><code>esxi_clone_method</code></td>
+<td><code>vib</code> or <code>ssh</code>. <code>vib</code> is the default.</td>
+</tr>
+<tr>
+<td><code>esxi_host</code> / <code>esxi_user</code> / <code>esxi_password</code></td>
+<td>Required by the schema and at runtime when <code>esxi_clone_method</code> is <code>ssh</code>.</td>
+</tr>
+<tr>
+<td><code>rdm_lun_uuid</code></td>
+<td>NAA-format LUN identifier for RDM tests. Must match the <code>^naa\.</code> pattern.</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>resource_pool</code> selection priority order:</p>
+<ol>
+<li>The configured <code>resource_pool</code> value.</li>
+<li>The target ESXi host's pool, when <code>target_esxi_host</code> is set on the clone options.</li>
+<li>The source VM's or template's pool.</li>
+<li>A cluster-wide search with a datastore compatibility check.</li>
+</ol>
+<p><code>dedicated_migration_hosts</code> must be a non-empty list of non-empty strings. When more than one host is listed, Forklift selects one at random per disk. Dedicated-host tests raise
+a <code>ValueError</code> when this field is missing.</p>
 <blockquote>
-<p><strong>Tip:</strong> Every copy-offload credential can come from an environment variable instead of the file, and environment variables win. The code builds names as <code>COPYOFFLOAD_&lt;FIELD_IN_UPPERCASE&gt;</code>, so examples include <code>COPYOFFLOAD_STORAGE_HOSTNAME</code>, <code>COPYOFFLOAD_STORAGE_USERNAME</code>, <code>COPYOFFLOAD_STORAGE_PASSWORD</code>, <code>COPYOFFLOAD_ONTAP_SVM</code>, <code>COPYOFFLOAD_ESXI_HOST</code>, <code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code>.</p>
-<p><strong>Warning:</strong> The supported <code>storage_vendor_product</code> values are fixed in code. Use the exact spellings shown in the example and table above.</p>
+<p><strong>Tip:</strong> Every copy-offload credential can come from an environment variable instead of the file, and environment variables win. Names are built as
+<code>COPYOFFLOAD_&lt;FIELD_IN_UPPERCASE&gt;</code>, so examples include <code>COPYOFFLOAD_STORAGE_HOSTNAME</code>, <code>COPYOFFLOAD_STORAGE_USERNAME</code>, <code>COPYOFFLOAD_STORAGE_PASSWORD</code>, <code>COPYOFFLOAD_ONTAP_SVM</code>,
+<code>COPYOFFLOAD_ESXI_HOST</code>, <code>COPYOFFLOAD_ESXI_USER</code>, and <code>COPYOFFLOAD_ESXI_PASSWORD</code>. <code>storage_secret_extra</code> has its own JSON-object override, <code>COPYOFFLOAD_STORAGE_SECRET_EXTRA</code>.</p>
 </blockquote>
 <h2 id="rhv-ovirt">RHV / oVirt</h2>
 <p>The RHV source path uses <code>type: "ovirt"</code>.</p>
 <p><em>Example from <code>.providers.json.example</code>:</em></p>
-<div class="highlight"><pre><span></span><code>&quot;ovirt&quot;: {
-  &quot;type&quot;: &quot;ovirt&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/ovirt-engine/api&quot;,
-  &quot;username&quot;: &quot;USERNAME&quot;,
-  &quot;password&quot;: &quot;PASSWORD&quot;  # pragma: allowlist secret
+<div class="highlight"><pre><span></span><code>"ovirt": {
+  "type": "ovirt",
+  "version": "&lt;SERVER VERSION&gt;",
+  "fqdn": "SERVER FQDN/IP",
+  "api_url": "&lt;SERVER FQDN/IP&gt;/ovirt-engine/api",
+  "username": "USERNAME",
+  "password": "PASSWORD"  # pragma: allowlist secret
 }
 </code></pre></div>
 
 <p>What matters for RHV:</p>
 <ul>
 <li>Use <code>type: "ovirt"</code> even if you think of the source as RHV.</li>
-<li><code>api_url</code> should point to the engine API and end with <code>/ovirt-engine/api</code>.</li>
-<li><code>fqdn</code> should point to the engine host, because the CA certificate is fetched from <code>fqdn:443</code>.</li>
-<li><code>username</code> and <code>password</code> are required for the provider connection.</li>
-<li>If your selected tests perform SSH-based guest validation, add <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code> to this entry even though the example does not show them.</li>
+<li><code>fqdn</code> should point to the engine host, because the CA certificate is fetched from it.</li>
+<li>The RHV provider also expects a data center named <code>MTV-CNV</code> to exist with status <code>up</code>. That is not configurable in <code>.providers.json</code>, but it is enforced during connection.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> RHV is the one provider where the harness always downloads the CA certificate. In secure mode it is used for SDK validation; in insecure mode it is still carried because the ImageIO flow needs it.</p>
-<p><strong>Note:</strong> The RHV provider code also expects a data center named <code>MTV-CNV</code> to exist and be <code>up</code>. That is not configured in <code>.providers.json</code>, but it is enforced during connection.</p>
+<p><strong>Note:</strong> RHV is the one provider where the harness always downloads the CA certificate. In secure mode it is used for SDK validation; in insecure mode it is still carried
+because the ImageIO flow needs it.</p>
 </blockquote>
 <h2 id="openstack">OpenStack</h2>
 <p><em>Example from <code>.providers.json.example</code>:</em></p>
-<div class="highlight"><pre><span></span><code>&quot;openstack&quot;: {
-  &quot;type&quot;: &quot;openstack&quot;,
-  &quot;version&quot;: &quot;SERVER VERSION&quot;,
-  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;:&lt;PORT&gt;/v3&quot;,
-  &quot;username&quot;: &quot;USERNAME&quot;,
-  &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;user_domain_name&quot;: &quot;&lt;DOMAIN&gt;&quot;,
-  &quot;region_name&quot;: &quot;&lt;REGION&gt;&quot;,
-  &quot;project_name&quot;: &quot;&lt;PROJECT&gt;&quot;,
-  &quot;user_domain_id&quot;: &quot;&lt;USER DOMAIN ID&gt;&quot;,
-  &quot;project_domain_id&quot;: &quot;PROJECT DOMAIN ID&quot;,
-  &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-  &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;  # pragma: allowlist secret
+<div class="highlight"><pre><span></span><code>"openstack": {
+  "type": "openstack",
+  "version": "SERVER VERSION",
+  "fqdn": "SERVER FQDN/IP",
+  "api_url": "&lt;SERVER FQDN/IP&gt;:&lt;PORT&gt;/v3",
+  "username": "USERNAME",
+  "password": "PASSWORD",  # pragma: allowlist secret
+  "user_domain_name": "&lt;DOMAIN&gt;",
+  "region_name": "&lt;REGION&gt;",
+  "project_name": "&lt;PROJECT&gt;",
+  "user_domain_id": "&lt;USER DOMAIN ID&gt;",
+  "project_domain_id": "PROJECT DOMAIN ID",
+  "guest_vm_linux_user": "LINUX VMS USERNAME",
+  "guest_vm_linux_password": "LINUX VMS PASSWORD"  # pragma: allowlist secret
 }
 </code></pre></div>
 
 <p>What matters for OpenStack:</p>
 <ul>
-<li><code>api_url</code> should be the Keystone v3 endpoint.</li>
-<li><code>project_name</code>, <code>user_domain_name</code>, <code>region_name</code>, <code>user_domain_id</code>, and <code>project_domain_id</code> are all read by the OpenStack provider code. Keep all of them populated.</li>
-<li><code>fqdn</code> still matters in secure mode because the harness fetches a CA certificate from <code>fqdn:443</code>.</li>
-<li>The example includes Linux guest credentials because post-migration validation may SSH into powered-on Linux guests.</li>
-<li>If your test selection includes powered-on Windows guests with guest-level validation, add <code>guest_vm_win_user</code> and <code>guest_vm_win_password</code> as well.</li>
+<li><code>project_name</code>, <code>user_domain_name</code>, <code>region_name</code>, <code>user_domain_id</code>, and <code>project_domain_id</code> are all passed to the provider. All five are required by the schema.</li>
+<li><code>fqdn</code> still matters in secure mode because the harness fetches a CA certificate from it.</li>
 </ul>
 <h2 id="openshift">OpenShift</h2>
 <p><em>Example from <code>.providers.json.example</code>:</em></p>
-<div class="highlight"><pre><span></span><code>&quot;openshift&quot;: {
-  &quot;type&quot;: &quot;openshift&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-  &quot;fqdn&quot;: &quot;&quot;,
-  &quot;api_url&quot;: &quot;&quot;,
-  &quot;username&quot;: &quot;&quot;,
-  &quot;password&quot;: &quot;&quot;  # pragma: allowlist secret
+<div class="highlight"><pre><span></span><code>"openshift": {
+  "type": "openshift",
+  "version": "&lt;SERVER VERSION&gt;",
+  "host": "&lt;CLUSTER API URL&gt;",
+  "api_url": "&lt;CLUSTER API URL&gt;",
+  "username": "&lt;USERNAME&gt;",
+  "password": "&lt;PASSWORD&gt;",  # pragma: allowlist secret
+  "storage_class": "&lt;STORAGE CLASS NAME&gt;"
 }
 </code></pre></div>
 
 <p>What matters for OpenShift:</p>
 <ul>
-<li>Keep the placeholder shape from the example.</li>
-<li>In this repo, the OpenShift source provider does not use <code>fqdn</code>, <code>api_url</code>, <code>username</code>, or <code>password</code> from <code>.providers.json</code> to log in.</li>
-<li>Instead, the code rewrites the URL to the current cluster and reuses the current cluster token secret.</li>
-<li>The blank values in the example are intentional.</li>
-<li>If you run OpenShift-source scenarios that perform guest SSH validation, you can still add <code>guest_vm_linux_*</code> and <code>guest_vm_win_*</code> to this entry even though the example omits them.</li>
+<li>Keep the placeholder shape from the example; <code>openshift</code> entries allow no extra keys.</li>
+<li>The OpenShift source provider does not use these values to log in. The code rewrites <code>api_url</code> to the current cluster host and reuses the current cluster token Secret.</li>
+<li>Because this provider block sets <code>additionalProperties: false</code>, do not add guest credential keys here. Use a separate source provider entry if your tests need them.</li>
+<li>The schema requires <code>host</code> and <code>storage_class</code>, but the loader never reads them. Target storage comes from the runtime <code>storage_class</code> value passed with <code>--tc</code>.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> The reused OpenShift secret is created with <code>insecureSkipVerify: "true"</code>, so <code>source_provider_insecure_skip_verify</code> does not affect OpenShift the same way it affects VMware, RHV, or OpenStack.</p>
+<p><strong>Note:</strong> The reused OpenShift Secret is created with <code>insecureSkipVerify: "true"</code>, so <code>source_provider_insecure_skip_verify</code> does not affect OpenShift the same way it
+affects vSphere, RHV, OpenStack, or Hyper-V.</p>
 </blockquote>
 <h2 id="ova">OVA</h2>
 <p><em>Example from <code>.providers.json.example</code>:</em></p>
-<div class="highlight"><pre><span></span><code>&quot;ova&quot;: {
-  &quot;type&quot;: &quot;ova&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;, # Can be anything, just placeholder
-  &quot;fqdn&quot;: &quot;&quot;,
-  &quot;api_url&quot;: &quot;&lt;NFS SHARE URL&gt;&quot;,
-  &quot;username&quot;: &quot;&lt;USERNAME&gt;&quot;,
-  &quot;password&quot;: &quot;&quot;  # pragma: allowlist secret
+<div class="highlight"><pre><span></span><code>"ova": {
+  "type": "ova",
+  "version": "&lt;SERVER VERSION&gt;", # Can be anything, just placeholder
+  "fqdn": "",
+  "api_url": "&lt;NFS SHARE URL&gt;",
+  "username": "&lt;USERNAME&gt;",
+  "password": ""  # pragma: allowlist secret
 }
 </code></pre></div>
 
 <p>What matters for OVA:</p>
 <ul>
-<li><code>api_url</code> is the NFS share URL.</li>
-<li>The example already notes that <code>version</code> can be a placeholder. The code mainly uses it for naming, not for protocol negotiation.</li>
-<li>The current OVA provider implementation only consumes <code>api_url</code>.</li>
-<li><code>username</code> and <code>password</code> stay in the example mostly to keep the provider entry shape consistent.</li>
-<li>The OVA test path uses a fixed source VM name, <code>1nisim-rhel9-efi</code>, rather than selecting a source VM name from <code>.providers.json</code>.</li>
+<li><code>api_url</code> is the NFS share URL and the only field the OVA provider consumes for its connection.</li>
+<li><code>version</code> is used for naming, not protocol negotiation.</li>
+<li><code>fqdn</code>, <code>username</code>, and <code>password</code> must still be present because the loader reads them for every provider type.</li>
+<li>OVA source VMs are never cloned. The test flow requires each plan VM name to match an existing OVA file.</li>
 <li>There is no CA download step for OVA.</li>
 </ul>
-<h2 id="practical-checklist">Practical checklist</h2>
+<h2 id="hyper-v">Hyper-V</h2>
+<p><em>Example from <code>.providers.json.example</code>:</em></p>
+<div class="highlight"><pre><span></span><code>"hyperv": {
+  "type": "hyperv",
+  "version": "2025",
+  "fqdn": "hyperv-host.example.com",
+  "api_url": "hyperv-host.example.com",
+  "username": "Administrator",
+  "password": "PASSWORD",  # pragma: allowlist secret
+  "smb_url": "//hyperv-host.example.com/VMShare",
+  "smb_user": "",  # Optional: SMB username if different from provider credentials
+  "smb_password": "",  # pragma: allowlist secret  # Optional: SMB password if different from provider credentials
+  "guest_vm_linux_user": "root",
+  "guest_vm_linux_password": "PASSWORD",  # pragma: allowlist secret
+  "guest_vm_win_user": "Administrator",
+  "guest_vm_win_password": "PASSWORD"  # pragma: allowlist secret
+}
+</code></pre></div>
+
+<p>What matters for Hyper-V:</p>
+<ul>
+<li><code>smb_url</code> is required by the schema and is what the provider uses to transfer VM disks.</li>
+<li><code>smb_user</code> and <code>smb_password</code> are optional. When present and non-empty they become the <code>smbUser</code> and <code>smbPassword</code> Secret keys.</li>
+<li>In secure mode the CA certificate is fetched from <code>fqdn</code> on port <code>5986</code>.</li>
+<li>Hyper-V guest OS detection can be overridden per VM with the <code>win_os</code> key in the test plan config.</li>
+</ul>
+<h2 id="practical-checklist">Practical Checklist</h2>
 <ul>
 <li>Start from <code>.providers.json.example</code>, then remove all comments before saving the real <code>.providers.json</code>.</li>
+<li>Validate your editor against the <code>providers_schema.json</code> URL in the <code>$schema</code> key.</li>
 <li>Make sure your <code>source_provider</code> setting matches a top-level key in the file.</li>
-<li>Keep <code>fqdn</code> accurate for VMware, RHV, and OpenStack, especially if SSL verification is enabled.</li>
-<li>Add guest credentials for any provider entry whose powered-on guests will be validated over SSH.</li>
+<li>Keep <code>fqdn</code> accurate for vSphere, RHV, OpenStack, and Hyper-V, especially if SSL verification is enabled.</li>
+<li>Add guest credentials for any provider entry whose powered-on guests will be validated over SSH or WinRM.</li>
 <li>For vSphere copy-offload, populate both the common storage credentials and the vendor-specific fields required by your chosen <code>storage_vendor_product</code>.</li>
+<li>Remember that OpenShift is the only provider type that rejects unknown keys.</li>
 </ul>
                 </div>
             </article>
@@ -708,41 +1224,58 @@
                     <h3>On this page</h3>
                     <div class="toc">
 <ul>
-<li><a href="#how-the-file-is-used">How the file is used</a></li>
-<li><a href="#common-fields">Common fields</a></li>
-<li><a href="#guest-credentials">Guest credentials</a></li>
-<li><a href="#ssl-behavior">SSL behavior</a></li>
-<li><a href="#vsphere">vSphere</a></li>
+<li><a href="#how-the-file-is-located">How the file is located</a></li>
+<li><a href="#top-level-shape">Top-Level Shape</a></li>
+<li><a href="#fields-by-provider-type">Fields By Provider Type</a><ul>
+<li><a href="#type-vsphere">type: "vsphere"</a></li>
+<li><a href="#type-ovirt">type: "ovirt"</a></li>
+<li><a href="#type-openstack">type: "openstack"</a></li>
+<li><a href="#type-openshift">type: "openshift"</a></li>
+<li><a href="#type-ova">type: "ova"</a></li>
+<li><a href="#type-hyperv">type: "hyperv"</a></li>
+</ul>
+</li>
+<li><a href="#fields-the-runtime-always-reads">Fields The Runtime Always Reads</a></li>
+<li><a href="#guest-credentials">Guest Credentials</a></li>
+<li><a href="#ssl-behavior">SSL Behavior</a></li>
+<li><a href="#vsphere">vSphere</a><ul>
+<li><a href="#esxi-cloning-via-clone_provider">ESXi cloning via clone_provider</a></li>
 <li><a href="#vsphere-copy-offload">vSphere copy-offload</a></li>
+</ul>
+</li>
 <li><a href="#rhv-ovirt">RHV / oVirt</a></li>
 <li><a href="#openstack">OpenStack</a></li>
 <li><a href="#openshift">OpenShift</a></li>
 <li><a href="#ova">OVA</a></li>
-<li><a href="#practical-checklist">Practical checklist</a></li>
+<li><a href="#hyper-v">Hyper-V</a></li>
+<li><a href="#practical-checklist">Practical Checklist</a></li>
 </ul>
 </div>
 
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -788,5 +1321,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Automation And Release - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -246,7 +247,7 @@
 
                     <li>
                         <a href="automation-and-release.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Automation And Release
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,22 +302,40 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="automation-and-release">Automation And Release</h1>
-<p>Most of the automation in <code>mtv-api-tests</code> is configuration-driven. The repository tells tools what to check, how to build the test image, how to cut a release, how dependencies should be updated, and how pull requests should be reviewed. What it does not include is the CI/CD pipeline definition that decides when those things run.</p>
+<p>Most of the automation in <code>mtv-api-tests</code> is configuration-driven. The repository tells tools what to check, how to build the test image, how to cut a release, how dependencies
+should be updated, and how pull requests should be reviewed. What it does not include is the CI/CD pipeline definition that decides when those things run.</p>
 <blockquote>
-<p><strong>Note:</strong> No GitHub Actions workflows, <code>Jenkinsfile</code>, Tekton definitions, or <code>.gitlab-ci.yml</code> files are present in this repository. Treat the repo as the source of automation policy, not as the orchestration layer.</p>
+<p><strong>Note:</strong> No GitHub Actions workflows, <code>Jenkinsfile</code>, Tekton definitions, or <code>.gitlab-ci.yml</code> files are present in this repository. Treat the repo as the source of automation
+policy, not as the orchestration layer.</p>
 </blockquote>
 <h2 id="what-is-automated-here">What Is Automated Here</h2>
 <ul>
-<li><code>pre-commit</code> enforces repository hygiene, Python linting and formatting, type checking, markdown linting, and secret scanning.</li>
-<li><code>release-it</code> handles version bumping, commit and tag creation, pushing, changelog generation, and GitHub release creation.</li>
+<li>
+<p><code>pre-commit</code> enforces repository hygiene, Python linting and formatting, type checking, markdown linting, secret scanning, and a set of
+  local AST checks that turn <code>AGENTS.md</code> rules into blocking hooks.</p>
+</li>
+<li>
+<p><code>release-it</code> handles version bumping, commit and tag creation, pushing, changelog generation, and GitHub release creation.</p>
+</li>
 <li>Renovate manages dependency update PRs and weekly lock-file maintenance.</li>
-<li>The <code>Dockerfile</code> defines a repeatable container build for the test suite.</li>
+<li>The <code>Dockerfile</code> defines a repeatable, multi-stage container build for the test suite.</li>
 <li>CodeRabbit and Qodo Merge/PR-Agent automate pull request review.</li>
 <li><code>pytest</code> and <code>tox</code> expose CI-friendly entry points and artifacts such as JUnit XML.</li>
+<li>The <code>mtv-api-tests</code> Typer CLI generates a providers file and an OpenShift Job manifest, then runs tests locally or as a Job.</li>
+<li>rootcoz post-processes failed JUnit XML with AI analysis when <code>--analyze-with-ai</code> is used.</li>
+<li><code>pi-docsite</code> builds the documentation site in <code>docs/</code> from Markdown sources.</li>
 </ul>
+<p>There is one more marker file worth knowing about: <code>MTV-VERSION</code> is a tracked plain-text file holding the MTV release this suite is currently
+aligned with (currently <code>2.12</code>). No code in the repository reads it, so changing it is a human decision, not a mechanical one.</p>
 <h2 id="pre-commit-quality-gates">Pre-commit Quality Gates</h2>
-<p>The first automation layer is <code>.pre-commit-config.yaml</code>. It combines generic repository safety checks with Python tooling and security scanning, so a single <code>pre-commit</code> run catches a lot of problems early.</p>
+<p>The first automation layer is <code>.pre-commit-config.yaml</code>. It combines generic repository safety checks with Python tooling, security scanning,
+and repo-specific AST checks, so a single <code>pre-commit</code> run catches a lot of problems early.</p>
 <div class="highlight"><pre><span></span><code><span class="nn">---</span>
+<span class="nt">ci</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">autofix_prs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">    </span><span class="nt">autoupdate_commit_msg</span><span class="p">:</span><span class="w"> </span><span class="s">"chore:</span><span class="nv"> </span><span class="s">pre-commit</span><span class="nv"> </span><span class="s">autoupdate"</span>
+<span class="w">    </span><span class="nt">autoupdate_schedule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">weekly</span>
+
 <span class="nt">default_language_version</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python3.13</span>
 
@@ -340,7 +360,7 @@
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-toml</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/PyCQA/flake8</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.3.0</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.4.1</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flake8</span>
 <span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--config=.flake8</span><span class="p p-Indicator">]</span>
@@ -350,9 +370,10 @@
 <span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.5.0</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">detect-secrets</span>
+<span class="w">        </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^docs/</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/astral-sh/ruff-pre-commit</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.15.4</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.16.9</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff-format</span>
@@ -361,47 +382,178 @@
 <span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v8.30.0</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gitleaks</span>
+<span class="w">        </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^docs/</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/pre-commit/mirrors-mypy</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.19.1</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.3.1</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mypy</span>
 <span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span>
 <span class="w">          </span><span class="p p-Indicator">[</span>
-<span class="w">            </span><span class="s">&quot;types-pyvmomi&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-requests&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-six&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-pytz&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-PyYAML&quot;</span><span class="p p-Indicator">,</span>
-<span class="w">            </span><span class="s">&quot;types-paramiko&quot;</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-pyvmomi"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-requests"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-six"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-pytz"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-PyYAML"</span><span class="p p-Indicator">,</span>
+<span class="w">            </span><span class="s">"types-paramiko"</span><span class="p p-Indicator">,</span>
 <span class="w">          </span><span class="p p-Indicator">]</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/DavidAnson/markdownlint-cli2</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.21.0</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.23.3</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">markdownlint-cli2</span>
-<span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;--fix&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"--fix"</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^docs/</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-no-kubernetes-runtime</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ban kubernetes runtime imports (except kubernetes.dynamic.exceptions and from kubernetes.dynamic import exceptions)</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_no_kubernetes_runtime.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-no-dynamicclient-construct</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ban DynamicClient() construction</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_no_dynamicclient_construct.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-no-except-exception</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ban except Exception (except pytest_* in conftest.py)</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_no_except_exception.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-no-module-load-source-providers</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ban module-level load_source_providers in tests/</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_no_module_load_source_providers.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^tests/</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-exceptions-location</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">require Exception subclasses in exceptions/exceptions.py</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_exceptions_location.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-test-file-location</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ban test_*.py directly under tests/</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_test_file_location.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^tests/</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-autouse-fixtures</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only autouse_fixtures may use autouse=True</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_autouse_fixtures.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-no-runtimeerror</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ban raise RuntimeError (except pytest_* in conftest.py)</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_no_runtimeerror.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
 </code></pre></div>
 
+<h2 id="agentsmd-enforcement-hooks">AGENTS.md Enforcement Hooks</h2>
+<p>The <code>repo: local</code> block is the most distinctive part of this file. Each of those eight hooks is a small AST-based script under
+<code>scripts/hooks/</code> that turns one "MUST" rule from <code>AGENTS.md</code> into a blocking check.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Hook id</th>
+<th>Enforces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-no-kubernetes-runtime</code></td>
+<td>No <code>kubernetes.*</code> runtime imports, except <code>kubernetes.dynamic.exceptions</code> and <code>from kubernetes.dynamic import exceptions</code></td>
+</tr>
+<tr>
+<td><code>check-no-dynamicclient-construct</code></td>
+<td>No <code>DynamicClient()</code> construction; use <code>get_client()</code> instead</td>
+</tr>
+<tr>
+<td><code>check-no-except-exception</code></td>
+<td>No <code>except Exception</code>, except in <code>pytest_*</code> functions in <code>conftest.py</code></td>
+</tr>
+<tr>
+<td><code>check-no-module-load-source-providers</code></td>
+<td>No module-level <code>load_source_providers()</code> calls under <code>tests/</code></td>
+</tr>
+<tr>
+<td><code>check-exceptions-location</code></td>
+<td><code>Exception</code> subclasses belong in <code>exceptions/exceptions.py</code></td>
+</tr>
+<tr>
+<td><code>check-test-file-location</code></td>
+<td>No <code>test_*.py</code> directly under <code>tests/</code></td>
+</tr>
+<tr>
+<td><code>check-autouse-fixtures</code></td>
+<td>Only the <code>autouse_fixtures</code> fixture in <code>conftest.py</code> may declare <code>autouse=True</code></td>
+</tr>
+<tr>
+<td><code>check-no-runtimeerror</code></td>
+<td>No <code>raise RuntimeError</code>, except in <code>pytest_*</code> functions in <code>conftest.py</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Two of them are scoped further with <code>files: ^tests/</code>, so they only run on files under <code>tests/</code>.</p>
+<p>Run the whole suite, one hook, or one script directly:</p>
+<div class="highlight"><pre><span></span><code>pre-commit<span class="w"> </span>run<span class="w"> </span>--all-files
+pre-commit<span class="w"> </span>run<span class="w"> </span>check-no-except-exception<span class="w"> </span>--all-files
+.venv/bin/python<span class="w"> </span>scripts/hooks/check_no_except_exception.py
+</code></pre></div>
+
+<h3 id="baseline-ratchet">Baseline Ratchet</h3>
+<p>Four of these hooks still fail on legacy code. Rather than blocking every contribution, those findings are grandfathered in
+<code>scripts/hooks/baselines/&lt;hook_id&gt;.txt</code>. The current baselines are:</p>
+<ul>
+<li><code>check_exceptions_location.txt</code></li>
+<li><code>check_no_except_exception.txt</code></li>
+<li><code>check_no_kubernetes_runtime.txt</code></li>
+<li><code>check_no_runtimeerror.txt</code></li>
+</ul>
+<p>The filename is the snake_case script stem, not the kebab-case pre-commit id: <code>check_no_except_exception.py</code> maps to
+<code>check_no_except_exception.txt</code>.</p>
+<p>Each baseline line is <code>relative/posix/path:&lt;16-char-sha256-hex&gt;</code>, where the fingerprint is <code>sha256(span)[:16]</code>. For a single-line finding the
+span is that line; for a multi-line AST node it is the joined source lines. Matching is on path plus content fingerprint with occurrence
+counts, not on line number, so refactoring that moves a violation does not silently un-baseline it.</p>
+<blockquote>
+<p><strong>Tip:</strong> Shrink a baseline row when you fix the underlying violation. Do not expand baselines casually; a new path/fingerprint pair that is not
+listed must fail the hook.
+</p>
+<p><strong>Warning:</strong> Baselines are a ratchet, not an amnesty. Adding a line to a baseline is a deliberate reviewable act, not a way to get a red hook
+to go green.</p>
+</blockquote>
+<h2 id="generic-hook-behavior">Generic Hook Behavior</h2>
 <p>That hook list tells you what the repo cares about:</p>
 <ul>
 <li>repository safety: large files, merge conflicts, broken symlinks, stray debug statements, invalid TOML, and missing EOF newlines</li>
 <li>Python quality: <code>flake8</code>, <code>ruff</code>, <code>ruff-format</code>, and <code>mypy</code></li>
 <li>secret prevention: <code>detect-private-key</code>, <code>detect-secrets</code>, and <code>gitleaks</code></li>
 <li>docs hygiene: <code>markdownlint-cli2 --fix</code></li>
+<li>project rules: the eight <code>AGENTS.md</code> AST hooks listed above</li>
 </ul>
+<p>The <code>ci:</code> block at the top pins the behavior of pre-commit.ci itself: <code>autoupdate_schedule: weekly</code> and <code>autofix_prs: false</code>. That means hook
+revisions are bumped on a schedule, and no autofix PR is opened for you.</p>
+<p>Three hooks carry <code>exclude: ^docs/</code>: <code>detect-secrets</code>, <code>gitleaks</code>, and <code>markdownlint-cli2</code>. The documentation tree is generated-site territory,
+so it is excluded from linting and secret scanning by design.</p>
+<blockquote>
+<p><strong>Note:</strong> Because <code>markdownlint-cli2</code> skips <code>docs/</code>, the Markdown under <code>docs/</code> is never auto-fixed and never fails CI. <code>.markdownlint.yaml</code>
+still documents the house rules (<code>MD013</code> at 180 characters, <code>MD033</code> allowing only <code>details</code>, <code>summary</code>, and <code>strong</code>), and they are what a
+reviewer expects those pages to follow.</p>
+</blockquote>
 <p>The repo-specific behavior for <code>ruff</code> and <code>mypy</code> lives in <code>pyproject.toml</code>, so the hooks follow local rules rather than generic defaults.</p>
 <div class="highlight"><pre><span></span><code><span class="k">[tool.ruff]</span>
 <span class="n">preview</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">line-length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">120</span>
 <span class="n">fix</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">output-format</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;grouped&quot;</span>
+<span class="n">output-format</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"grouped"</span>
 
 <span class="k">[tool.ruff.format]</span>
-<span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;.git&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;.venv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;.mypy_cache&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;.tox&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;__pycache__&quot;</span><span class="p">]</span>
+<span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">".git"</span><span class="p">,</span><span class="w"> </span><span class="s2">".venv"</span><span class="p">,</span><span class="w"> </span><span class="s2">".mypy_cache"</span><span class="p">,</span><span class="w"> </span><span class="s2">".tox"</span><span class="p">,</span><span class="w"> </span><span class="s2">"__pycache__"</span><span class="p">]</span>
 
 <span class="k">[tool.ruff.lint]</span>
-<span class="n">select</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;PLC0415&quot;</span><span class="p">]</span>
+<span class="n">select</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"PLC0415"</span><span class="p">]</span>
 
 <span class="k">[tool.mypy]</span>
 <span class="n">disallow_any_generics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
@@ -409,6 +561,10 @@
 <span class="n">no_implicit_optional</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">show_error_codes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">warn_unused_ignores</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+
+<span class="k">[[tool.mypy.overrides]]</span>
+<span class="n">module</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"paramiko"</span>
+<span class="n">ignore_missing_imports</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 </code></pre></div>
 
 <p>A few practical takeaways matter for contributors and CI maintainers:</p>
@@ -418,59 +574,65 @@
 <li><code>flake8</code> is intentionally narrow here: <code>.flake8</code> selects <code>M511</code> and loads <code>flake8-mutable</code>.</li>
 <li>Markdown formatting can be auto-corrected during a hook run instead of being fixed manually.</li>
 </ul>
-<p>Because the repo runs both <code>detect-secrets</code> and <code>gitleaks</code>, example files can contain <code># pragma: allowlist secret</code> comments to keep fake credentials from being flagged. That is why files such as <code>.providers.json.example</code> contain secret-looking placeholders with allowlist annotations.</p>
+<p>Because the repo runs both <code>detect-secrets</code> and <code>gitleaks</code>, example files can contain <code># pragma: allowlist secret</code> comments to keep fake credentials from being flagged. That is
+why files such as <code>.providers.json.example</code> contain secret-looking placeholders with allowlist annotations.</p>
+<p><code>.gitleaksignore</code> holds the remaining accepted false positives, one <code>path:rule:line</code> per entry, so the scanners stay quiet on known example
+credentials without disabling the scanners.</p>
 <blockquote>
-<p><strong>Warning:</strong> Pre-commit hook environments are pinned to <code>python3.13</code>, while the project itself allows <code>&gt;=3.12,&lt;3.14</code> and the container image sets <code>UV_PYTHON=python3.12</code>. Make sure your local machine or CI runner can provide the hook interpreter.</p>
-<p><strong>Tip:</strong> If you copy snippets out of example JSON-like files, remove <code># pragma: allowlist secret</code> comments before using them as real JSON. Those comments exist for secret scanners, not for JSON parsers.</p>
+<p><strong>Warning:</strong> Pre-commit hook environments are pinned to <code>python3.13</code>, while the project itself allows <code>&gt;=3.12,&lt;3.14</code> and the container image sets <code>UV_PYTHON=python3.12</code>. Make
+sure your local machine or CI runner can provide the hook interpreter.
+</p>
+<p><strong>Tip:</strong> If you copy snippets out of example JSON-like files, remove <code># pragma: allowlist secret</code> comments before using them as real JSON. Those comments exist for secret
+scanners, not for JSON parsers.</p>
 </blockquote>
 <h2 id="release-automation-with-release-it">Release Automation With <code>release-it</code></h2>
 <p>Release configuration lives in <code>.release-it.json</code>. This repository uses <code>release-it</code> for Git and GitHub release operations, not for publishing an npm package.</p>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;npm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;publish&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">  </span><span class="nt">"npm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"publish"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;git&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;requireCleanWorkingDir&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;requireBranch&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;requireUpstream&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;requireCommits&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;addUntrackedFiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;commit&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;commitMessage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Release ${version}&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;commitArgs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">    </span><span class="nt">&quot;tag&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;tagName&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;tagMatch&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;tagAnnotation&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Release ${version}&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;tagArgs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">    </span><span class="nt">&quot;push&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;pushArgs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;--follow-tags&quot;</span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;pushRepo&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;changelog&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;git log --no-merges --pretty=format:\&quot;* %s (%h) by %an on %as\&quot; ${from}...${to}&quot;</span>
+<span class="w">  </span><span class="nt">"git"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"requireCleanWorkingDir"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"requireBranch"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"requireUpstream"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"requireCommits"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"addUntrackedFiles"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"commit"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"commitMessage"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Release ${version}"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"commitArgs"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">"tag"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"tagName"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"tagMatch"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"tagAnnotation"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Release ${version}"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"tagArgs"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">"push"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"pushArgs"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"--follow-tags"</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">"pushRepo"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"changelog"</span><span class="p">:</span><span class="w"> </span><span class="s2">"git log --no-merges --pretty=format:\"* %s (%h) by %an on %as\" ${from}...${to}"</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;release&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;releaseName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Release ${version}&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;releaseNotes&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;autoGenerate&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;preRelease&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;draft&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;tokenRef&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;GITHUB_TOKEN&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;assets&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;host&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;timeout&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;proxy&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;skipChecks&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;web&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">  </span><span class="nt">"github"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"release"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"releaseName"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Release ${version}"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"releaseNotes"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"autoGenerate"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"preRelease"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"draft"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"tokenRef"</span><span class="p">:</span><span class="w"> </span><span class="s2">"GITHUB_TOKEN"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"assets"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"host"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"timeout"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"proxy"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"skipChecks"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"web"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;plugins&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;@release-it/bumper&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;in&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pyproject.toml&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;out&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pyproject.toml&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;project.version&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"plugins"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"@release-it/bumper"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"in"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pyproject.toml"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"out"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"file"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pyproject.toml"</span><span class="p">,</span><span class="w"> </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"project.version"</span><span class="w"> </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;hooks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;after:bump&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uv sync&quot;</span>
+<span class="w">  </span><span class="nt">"hooks"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"after:bump"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uv sync"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
@@ -486,12 +648,26 @@
 </ul>
 <p>The version source is the Python project metadata in <code>pyproject.toml</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[project]</span>
-<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.12, &lt;3.14&quot;</span>
-<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;mtv-api-tests&quot;</span>
-<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2.8.3&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&gt;=3.12, &lt;3.14"</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"mtv-api-tests"</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"5.0.0"</span>
+<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"MTV API Tests"</span>
 </code></pre></div>
 
-<p>That is important because the release flow is Python-package-centric even though the release tool comes from the Node ecosystem. The <code>@release-it/bumper</code> plugin updates <code>project.version</code>, and the <code>after:bump</code> hook runs <code>uv sync</code> so the environment and <code>uv.lock</code> stay aligned with the new release.</p>
+<p>That is important because the release flow is Python-package-centric even though the release tool comes from the Node ecosystem. The <code>@release-it/bumper</code> plugin updates
+<code>project.version</code>, and the <code>after:bump</code> hook runs <code>uv sync</code> so the environment and <code>uv.lock</code> stay aligned with the new release.</p>
+<p><code>pyproject.toml</code> also declares the console entry point that the CLI is installed from, and the wheel packages that get shipped:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[build-system]</span>
+<span class="n">requires</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"hatchling"</span><span class="p">]</span>
+<span class="n">build-backend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"hatchling.build"</span>
+
+<span class="k">[tool.hatch.build.targets.wheel]</span>
+<span class="n">packages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"cli"</span><span class="p">,</span><span class="w"> </span><span class="s2">"utilities"</span><span class="p">,</span><span class="w"> </span><span class="s2">"libs"</span><span class="p">,</span><span class="w"> </span><span class="s2">"exceptions"</span><span class="p">]</span>
+
+<span class="k">[project.scripts]</span>
+<span class="n">mtv-api-tests</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"cli.mtv_api_tests:app"</span>
+</code></pre></div>
+
 <p>Two details are easy to miss:</p>
 <ul>
 <li><code>requireBranch</code> is <code>false</code>, so the repo itself does not enforce a release branch policy</li>
@@ -499,27 +675,29 @@
 </ul>
 <p>If you want stricter rules, enforce them in your external release pipeline.</p>
 <blockquote>
-<p><strong>Warning:</strong> The repository contains <code>.release-it.json</code>, but it does not contain <code>package.json</code>, <code>package-lock.json</code>, <code>yarn.lock</code>, or <code>pnpm-lock.yaml</code>. Your release runner must provide <code>release-it</code>, <code>@release-it/bumper</code>, and <code>GITHUB_TOKEN</code> from outside the repo.</p>
+<p><strong>Warning:</strong> The repository contains <code>.release-it.json</code>, but it does not contain <code>package.json</code>, <code>package-lock.json</code>, <code>yarn.lock</code>, or <code>pnpm-lock.yaml</code>. Your release runner must
+provide <code>release-it</code>, <code>@release-it/bumper</code>, and <code>GITHUB_TOKEN</code> from outside the repo.</p>
 </blockquote>
 <h2 id="dependency-updates-with-renovate">Dependency Updates With Renovate</h2>
 <p>Renovate behavior is defined in <code>renovate.json</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://docs.renovatebot.com/renovate-schema.json&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;extends&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;:dependencyDashboard&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;:maintainLockFilesWeekly&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;:prHourlyLimitNone&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;:semanticCommitTypeAll(ci )&quot;</span>
+<span class="w">  </span><span class="nt">"$schema"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://docs.renovatebot.com/renovate-schema.json"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"baseBranches"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"main"</span><span class="p">,</span><span class="w"> </span><span class="s2">"/^v\\d+\\.\\d+$/"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"extends"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">":dependencyDashboard"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">":maintainLockFilesWeekly"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">":prHourlyLimitNone"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">":semanticCommitTypeAll(ci )"</span>
 <span class="w">  </span><span class="p">],</span>
-<span class="w">  </span><span class="nt">&quot;prConcurrentLimit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;recreateWhen&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;never&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;lockFileMaintenance&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">  </span><span class="nt">"prConcurrentLimit"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"recreateWhen"</span><span class="p">:</span><span class="w"> </span><span class="s2">"never"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"lockFileMaintenance"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;packageRules&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"packageRules"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;matchPackagePatterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;*&quot;</span><span class="p">],</span>
-<span class="w">      </span><span class="nt">&quot;groupName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;python-deps&quot;</span>
+<span class="w">      </span><span class="nt">"matchPackagePatterns"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"*"</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">"groupName"</span><span class="p">:</span><span class="w"> </span><span class="s2">"python-deps"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">]</span>
 <span class="p">}</span>
@@ -534,73 +712,122 @@
 <li>closed PRs are not automatically recreated</li>
 <li>matched dependencies are grouped under <code>python-deps</code></li>
 </ul>
+<p><code>baseBranches</code> is the part that ties Renovate to the release flow: update PRs target <code>main</code> and any <code>v&lt;major&gt;.&lt;minor&gt;</code> maintenance branch. Those
+maintenance branches are <strong>not</strong> created by <code>release-it</code> — <code>.release-it.json</code> only commits, tags, and pushes the branch you run it on, so a maintainer
+must create and push <code>v&lt;major&gt;.&lt;minor&gt;</code> by hand when a release line needs one.</p>
 <p>Because this project uses <code>uv</code> and checks in <code>uv.lock</code>, Renovate is not just bumping top-level requirements. It is also part of keeping the lock file fresh.</p>
 <blockquote>
 <p><strong>Tip:</strong> Grouping everything under <code>python-deps</code> reduces PR noise, but it also means update PRs can be broader than a one-package-at-a-time workflow.</p>
 </blockquote>
 <h2 id="container-image-build-inputs">Container Image Build Inputs</h2>
-<p>The container image is built from <code>Dockerfile</code>, and the file is very explicit about what goes into the image:</p>
-<div class="highlight"><pre><span></span><code><span class="k">FROM</span><span class="w"> </span><span class="s">quay.io/fedora/fedora:41</span>
+<p>The container image is built from <code>Dockerfile</code>. It is a two-stage build: a builder stage that compiles dependencies, and a slim runtime
+stage that carries only the runtime libraries.</p>
+<div class="highlight"><pre><span></span><code><span class="c"># syntax=docker/dockerfile:1</span>
+
+<span class="c"># ------------------------------------------------------------------------------</span>
+<span class="c"># Stage 1: builder - install build deps, compile extensions, sync dependencies</span>
+<span class="c"># ------------------------------------------------------------------------------</span>
+<span class="k">FROM</span><span class="w"> </span><span class="s">registry.access.redhat.com/ubi10/ubi-minimal:10.1@sha256:c858c2eb5bd336d8c400f6ee976a9d731beccf3351fa7a6f485dced24ae4af17</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">builder</span>
 
 <span class="k">ARG</span><span class="w"> </span><span class="nv">APP_DIR</span><span class="o">=</span>/app
-
-<span class="k">ENV</span><span class="w"> </span><span class="nv">JUNITFILE</span><span class="o">=</span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/output/
+<span class="k">ARG</span><span class="w"> </span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="o">=</span><span class="s1">''</span>
+<span class="k">ARG</span><span class="w"> </span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="o">=</span><span class="s1">''</span>
 
 <span class="k">ENV</span><span class="w"> </span><span class="nv">UV_PYTHON</span><span class="o">=</span>python3.12
 <span class="k">ENV</span><span class="w"> </span><span class="nv">UV_COMPILE_BYTECODE</span><span class="o">=</span><span class="m">1</span>
 <span class="k">ENV</span><span class="w"> </span><span class="nv">UV_NO_SYNC</span><span class="o">=</span><span class="m">1</span>
-<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_CACHE_DIR</span><span class="o">=</span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/.cache
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_NO_CACHE</span><span class="o">=</span><span class="m">1</span>
 
-<span class="k">RUN</span><span class="w"> </span>dnf<span class="w"> </span>-y<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="k">RUN</span><span class="w"> </span>microdnf<span class="w"> </span>-y<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>libxml2-devel<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>libcurl-devel<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>openssl<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>openssl-devel<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>libcurl-devel<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>gcc<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>clang<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>git<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python3-devel<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>dnf<span class="w"> </span>clean<span class="w"> </span>all<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span>/var/cache/dnf<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span>/var/lib/dnf<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>truncate<span class="w"> </span>-s0<span class="w"> </span>/var/log/*.log<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span>/var/cache/yum
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>microdnf<span class="w"> </span>clean<span class="w"> </span>all
+
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>ghcr.io/astral-sh/uv:latest<span class="w"> </span>/uv<span class="w"> </span>/uvx<span class="w"> </span>/usr/local/bin/
 
 <span class="k">WORKDIR</span><span class="w"> </span><span class="s">${APP_DIR}</span>
 
-<span class="k">RUN</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/output
-
+<span class="k">COPY</span><span class="w"> </span>cli<span class="w"> </span>cli
+<span class="k">COPY</span><span class="w"> </span>docs<span class="w"> </span>docs
 <span class="k">COPY</span><span class="w"> </span>utilities<span class="w"> </span>utilities
 <span class="k">COPY</span><span class="w"> </span>tests<span class="w"> </span>tests
 <span class="k">COPY</span><span class="w"> </span>libs<span class="w"> </span>libs
 <span class="k">COPY</span><span class="w"> </span>exceptions<span class="w"> </span>exceptions
 <span class="k">COPY</span><span class="w"> </span>README.md<span class="w"> </span>pyproject.toml<span class="w"> </span>uv.lock<span class="w"> </span>conftest.py<span class="w"> </span>pytest.ini<span class="w"> </span>./
 
-<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>ghcr.io/astral-sh/uv:latest<span class="w"> </span>/uv<span class="w"> </span>/uvx<span class="w"> </span>/usr/local/bin/
+<span class="k">RUN</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/output
 
-<span class="k">ARG</span><span class="w"> </span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="o">=</span><span class="s1">&#39;&#39;</span>
-<span class="k">ARG</span><span class="w"> </span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="o">=</span><span class="s1">&#39;&#39;</span>
-
-<span class="k">RUN</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--locked<span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/RedHatQE/openshift-python-wrapper.git@<span class="nv">$OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/RedHatQE/openshift-python-utilities.git@<span class="nv">$OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>find<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/<span class="w"> </span>-type<span class="w"> </span>d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;__pycache__&quot;</span><span class="w"> </span>-print0<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>-0<span class="w"> </span>rm<span class="w"> </span>-rfv<span class="w"> </span><span class="se">\</span>
+<span class="k">RUN</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--locked<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"git+https://github.com/RedHatQE/openshift-python-wrapper.git@</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_WRAPPER_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"git+https://github.com/RedHatQE/openshift-python-utilities.git@</span><span class="si">${</span><span class="nv">OPENSHIFT_PYTHON_UTILITIES_COMMIT</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>find<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/<span class="w"> </span>-type<span class="w"> </span>d<span class="w"> </span>-name<span class="w"> </span><span class="s2">"__pycache__"</span><span class="w"> </span>-print0<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>-0<span class="w"> </span>-r<span class="w"> </span>rm<span class="w"> </span>-rfv<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/.cache
 
-<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">]</span>
+<span class="c"># ------------------------------------------------------------------------------</span>
+<span class="c"># Stage 2: runtime - clean image with only runtime dependencies</span>
+<span class="c"># ------------------------------------------------------------------------------</span>
+<span class="k">FROM</span><span class="w"> </span><span class="s">registry.access.redhat.com/ubi10/ubi-minimal:10.1@sha256:c858c2eb5bd336d8c400f6ee976a9d731beccf3351fa7a6f485dced24ae4af17</span>
+
+<span class="k">ARG</span><span class="w"> </span><span class="nv">APP_DIR</span><span class="o">=</span>/app
+
+<span class="c"># Runtime shared libraries required by compiled Python extensions:</span>
+<span class="c">#   libxml2  - lxml</span>
+<span class="c">#   libcurl  - pycurl (libcurl-minimal from the base image provides libcurl.so)</span>
+<span class="c">#   openssl  - cryptography / TLS</span>
+<span class="k">RUN</span><span class="w"> </span>microdnf<span class="w"> </span>-y<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python3<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>libxml2<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>openssl<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>git<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>microdnf<span class="w"> </span>clean<span class="w"> </span>all
+
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>ghcr.io/astral-sh/uv:latest<span class="w"> </span>/uv<span class="w"> </span>/uvx<span class="w"> </span>/usr/local/bin/
+
+<span class="k">ENV</span><span class="w"> </span><span class="nv">JUNITFILE</span><span class="o">=</span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/output/
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_PYTHON</span><span class="o">=</span>python3.12
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_COMPILE_BYTECODE</span><span class="o">=</span><span class="m">1</span>
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_NO_SYNC</span><span class="o">=</span><span class="m">1</span>
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_NO_CACHE</span><span class="o">=</span><span class="m">1</span>
+<span class="c"># Prevents Python from writing .pyc files to disk</span>
+<span class="k">ENV</span><span class="w"> </span><span class="nv">PYTHONDONTWRITEBYTECODE</span><span class="o">=</span><span class="m">1</span>
+<span class="c"># Ensures Python output is logged straight to the terminal (useful for OpenShift logs)</span>
+<span class="k">ENV</span><span class="w"> </span><span class="nv">PYTHONUNBUFFERED</span><span class="o">=</span><span class="m">1</span>
+
+<span class="k">WORKDIR</span><span class="w"> </span><span class="s">${APP_DIR}</span>
+
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>builder<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span><span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>
+
+<span class="k">RUN</span><span class="w"> </span>chgrp<span class="w"> </span>-R<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>chmod<span class="w"> </span>-R<span class="w"> </span><span class="nv">g</span><span class="o">=</span>u<span class="w"> </span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>
+
+<span class="k">USER</span><span class="w"> </span><span class="s">1001</span>
+
+<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--collect-only"</span><span class="p">]</span>
 </code></pre></div>
 
 <p>This build has a few important characteristics:</p>
 <ul>
-<li>the base image is <code>quay.io/fedora/fedora:41</code></li>
+<li>the base image is <code>registry.access.redhat.com/ubi10/ubi-minimal:10.1</code>, pinned to a digest, not a floating Fedora tag</li>
+<li>the runtime stage installs only <code>python3</code>, <code>libxml2</code>, <code>openssl</code>, and <code>git</code>; build tooling never reaches the shipped layer</li>
 <li>Python dependency installation is driven by <code>uv sync --locked</code>, so <code>uv.lock</code> matters</li>
-<li>only a specific subset of the repository is copied into the image</li>
+<li>the copied subset is explicit: <code>cli</code>, <code>docs</code>, <code>utilities</code>, <code>tests</code>, <code>libs</code>, <code>exceptions</code>, plus <code>README.md</code>, <code>pyproject.toml</code>, <code>uv.lock</code>, <code>conftest.py</code>, and <code>pytest.ini</code></li>
 <li>the build can optionally swap in development commits of <code>openshift-python-wrapper</code> and <code>openshift-python-utilities</code></li>
+<li>the image runs as non-root <code>USER 1001</code>, with <code>chgrp -R 0 &amp;&amp; chmod -R g=u</code> for OpenShift's arbitrary-UID model</li>
+<li><code>PYTHONUNBUFFERED=1</code> means pytest output reaches <code>oc logs</code> without buffering delays</li>
 <li>the default container command only performs test collection</li>
 </ul>
 <p>That last point is intentional: a plain container run validates the test suite can be discovered, but it does not launch a real migration test job.</p>
-<p>The repository's <code>.dockerignore</code> is minimal, so the effective build-input boundary is the <code>COPY</code> list in <code>Dockerfile</code>, not the ignore file. In other words, the image is controlled more by what is explicitly copied than by what is excluded.</p>
+<p>The repository's <code>.dockerignore</code> is minimal, so the effective build-input boundary is the <code>COPY</code> list in <code>Dockerfile</code>, not the ignore file. In other words, the image is controlled
+more by what is explicitly copied than by what is excluded.</p>
 <blockquote>
-<p><strong>Tip:</strong> <code>OPENSHIFT_PYTHON_WRAPPER_COMMIT</code> and <code>OPENSHIFT_PYTHON_UTILITIES_COMMIT</code> are practical escape hatches when you need to validate this test suite against unreleased helper-library commits.</p>
+<p><strong>Tip:</strong> <code>OPENSHIFT_PYTHON_WRAPPER_COMMIT</code> and <code>OPENSHIFT_PYTHON_UTILITIES_COMMIT</code> are practical escape hatches when you need to validate this test suite against unreleased
+helper-library commits.
+</p>
 <p><strong>Warning:</strong> The default container command is <code>uv run pytest --collect-only</code>. If your CI job should run real tests, it must override <code>CMD</code> or pass an explicit command.</p>
 </blockquote>
 <h2 id="ai-review-bots">AI Review Bots</h2>
@@ -625,47 +852,14 @@
 
 <span class="w">  </span><span class="c1"># Auto-review configuration</span>
 <span class="w">  </span><span class="nt">auto_review</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">auto_pause_after_reviewed_commits</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
 <span class="w">    </span><span class="nt">auto_incremental_review</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">ignore_title_keywords</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;WIP&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"WIP"</span>
 <span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">drafts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">    </span><span class="nt">base_branches</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
-
-<span class="w">  </span><span class="c1"># Enable relevant tools for Python/JavaScript project</span>
-<span class="w">  </span><span class="nt">tools</span><span class="p">:</span>
-<span class="w">    </span><span class="c1"># Python linting</span>
-<span class="w">    </span><span class="nt">ruff</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">pylint</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="w">    </span><span class="c1"># JavaScript linting</span>
-<span class="w">    </span><span class="nt">eslint</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="w">    </span><span class="c1"># Shell script checking</span>
-<span class="w">    </span><span class="nt">shellcheck</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="w">    </span><span class="c1"># YAML validation</span>
-<span class="w">    </span><span class="nt">yamllint</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="w">    </span><span class="c1"># Security scanning</span>
-<span class="w">    </span><span class="nt">gitleaks</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">semgrep</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="w">    </span><span class="c1"># GitHub Actions workflow validation</span>
-<span class="w">    </span><span class="nt">actionlint</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-
-<span class="w">    </span><span class="c1"># Dockerfile linting</span>
-<span class="w">    </span><span class="nt">hadolint</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </code></pre></div>
 
 <p>That configuration tells users a lot about expected review behavior:</p>
@@ -676,68 +870,181 @@
 <li>the bot can ask for changes</li>
 <li>review coverage is broader than just Python style, including security, YAML, shell, and Dockerfile checks</li>
 </ul>
-<p>CodeRabbit also points its knowledge-base and guideline logic at <code>CLAUDE.md</code>, so it is expected to review against repository-specific rules instead of only generic style advice.</p>
+<p>Above the <code>reviews</code> block the same file sets <code>language: en-US</code>, an explicit severity ladder in <code>tone_instructions</code> (<code>CRITICAL</code>, <code>HIGH</code>, <code>MEDIUM</code>,
+<code>LOW</code>), and <code>early_access: true</code>. Below it, a <code>knowledge_base</code> block opts out of nothing, enforces <code>code_guidelines</code> sourced from <code>CLAUDE.md</code>, and
+scopes <code>learnings</code>, <code>issues</code>, and <code>pull_requests</code> learning to <code>auto</code>. <code>auto_pause_after_reviewed_commits: 0</code> means CodeRabbit never stops
+re-reviewing an open PR, and <code>chat.auto_reply: true</code> lets it answer PR comments.</p>
+<p>CodeRabbit therefore points its knowledge-base and guideline logic at <code>CLAUDE.md</code>, so it is expected to review against repository-specific rules
+instead of only generic style advice.</p>
 <h3 id="qodo-merge-pr-agent">Qodo Merge / PR-Agent</h3>
 <p>Qodo Merge is configured in <code>.pr_agent.toml</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[config]</span>
-<span class="n">response_language</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;en-US&quot;</span>
+<span class="n">response_language</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"en-US"</span>
 <span class="n">add_repo_metadata</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">add_repo_metadata_file_list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;CLAUDE.md&quot;</span><span class="p">]</span>
-<span class="n">ignore_pr_title</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;^</span><span class="se">\\</span><span class="s2">[WIP</span><span class="se">\\</span><span class="s2">]&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;^WIP:&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;^Draft:&quot;</span><span class="p">]</span>
-<span class="n">ignore_pr_labels</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;wip&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;work-in-progress&quot;</span><span class="p">]</span>
+<span class="n">add_repo_metadata_file_list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"CLAUDE.md"</span><span class="p">]</span>
+<span class="n">ignore_pr_title</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="s2">"^</span><span class="se">\\</span><span class="s2">[WIP</span><span class="se">\\</span><span class="s2">]"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"^WIP:"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"^Draft:"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"chore: pre-commit autoupdate"</span><span class="p">,</span>
+<span class="p">]</span>
+<span class="n">ignore_pr_labels</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"wip"</span><span class="p">,</span><span class="w"> </span><span class="s2">"work-in-progress"</span><span class="p">]</span>
 
 <span class="k">[github_app]</span>
-<span class="n">handle_pr_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;opened&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;reopened&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ready_for_review&quot;</span><span class="p">]</span>
-<span class="n">pr_commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;/describe&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;/review&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;/improve&quot;</span><span class="p">]</span>
-<span class="n">feedback_on_draft_pr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
 <span class="n">handle_push_trigger</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">push_commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;/review&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;/improve&quot;</span><span class="p">]</span>
+<span class="n">pr_commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"/agentic_review"</span><span class="p">,</span><span class="w"> </span><span class="s2">"/agentic_describe"</span><span class="p">]</span>
+<span class="n">push_commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"/agentic_review"</span><span class="p">]</span>
+<span class="n">handle_pr_actions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"opened"</span><span class="p">,</span><span class="w"> </span><span class="s2">"reopened"</span><span class="p">,</span><span class="w"> </span><span class="s2">"ready_for_review"</span><span class="p">]</span>
+<span class="n">feedback_on_draft_pr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+
+<span class="k">[review_agent]</span>
+<span class="n">comments_location_policy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"both"</span>
+<span class="n">inline_comments_severity_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
 
 <span class="k">[pr_reviewer]</span>
-<span class="n">extra_instructions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&quot;&quot;</span>
+<span class="n">extra_instructions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"""</span>
 <span class="s2">Review Style:</span>
 <span class="s2">- Be direct and specific. Explain WHY rules exist.</span>
-<span class="s2">- Classify each finding by severity:</span>
-<span class="s2">  * CRITICAL: Security vulnerabilities, blocking issues - must fix before merge</span>
-<span class="s2">  * HIGH: Type errors, defensive programming issues - should fix</span>
-<span class="s2">  * MEDIUM: Style/code quality issues - nice to fix</span>
-<span class="s2">  * LOW: Suggestions/optional enhancements</span>
 
 <span class="s2">Focus Areas:</span>
 <span class="s2">- Python code quality (type annotations, exception handling)</span>
 <span class="s2">- Security vulnerabilities (injection, credential exposure)</span>
 <span class="s2">- YAML syntax validation</span>
 <span class="s2">- Follow CLAUDE.md guidelines for project-specific standards</span>
-<span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">"""</span>
 <span class="n">require_security_review</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">require_tests_review</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">require_estimate_effort_to_review</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <span class="n">require_score_review</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
-<span class="n">enable_review_labels_security</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">enable_review_labels_effort</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">num_max_findings</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">50</span>
-<span class="n">persistent_comment</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
-<span class="n">enable_help_text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 
 <span class="k">[pr_code_suggestions]</span>
-<span class="n">extra_instructions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Focus on Python best practices, security, and maintainability. Follow CLAUDE.md standards.&quot;</span>
+<span class="n">extra_instructions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Focus on Python best practices, security, and maintainability. Follow CLAUDE.md standards."</span>
 <span class="n">focus_only_on_problems</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
 <span class="n">suggestions_score_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span>
+
+<span class="k">[ignore]</span>
+<span class="c1"># Generated by pi-docsite (see AGENTS.md "Documentation Site"). The Markdown</span>
+<span class="c1"># sources (docs/*.md) and docs/nav.json stay in review scope on purpose.</span>
+<span class="n">glob</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="s2">"docs/*.html"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"docs/assets/*"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"docs/search-index.json"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"docs/llms.txt"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"docs/llms-full.txt"</span><span class="p">,</span>
+<span class="p">]</span>
+<span class="n">regex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[]</span>
 </code></pre></div>
 
 <p>Compared to CodeRabbit, this config emphasizes command-driven interaction:</p>
 <ul>
 <li>GitHub App events trigger reviews on open, reopen, ready-for-review, and push</li>
-<li>reviewers can explicitly ask for <code>/describe</code>, <code>/review</code>, or <code>/improve</code></li>
+<li>reviewers ask for <code>/agentic_review</code> or <code>/agentic_describe</code>; pushes only answer <code>/agentic_review</code></li>
+<li><code>[review_agent]</code> posts inline comments at severity 1 and up, in both the diff and a summary</li>
 <li>security review and tests review are required focus areas</li>
-<li>WIP and draft states are intentionally ignored</li>
+<li>WIP and draft states are intentionally ignored, and so is the automated <code>chore: pre-commit autoupdate</code> commit</li>
+<li>generated documentation artifacts are excluded from review by glob, while <code>docs/*.md</code> and <code>docs/nav.json</code> stay in scope</li>
 </ul>
 <blockquote>
 <p><strong>Note:</strong> Both bot configs pull repository-specific guidance from <code>CLAUDE.md</code>. They are meant to reinforce the repo's own standards, not replace human ownership or branch policy.</p>
 </blockquote>
-<p>There is also a separate, opt-in AI feature inside the pytest plugin. <code>conftest.py</code> adds <code>--analyze-with-ai</code>, and <code>utilities/pytest_utils.py</code> uses <code>JJI_SERVER_URL</code>, <code>JJI_AI_PROVIDER</code>, and <code>JJI_AI_MODEL</code> to enrich JUnit XML through an external <code>/analyze-failures</code> service. That is test-report post-processing, not a pull-request review bot.</p>
+<h2 id="ai-failure-analysis-with-rootcoz">AI Failure Analysis With rootcoz</h2>
+<p>There is a separate, opt-in AI feature inside the pytest plugin, and it is unrelated to the PR review bots above. <code>conftest.py</code> adds
+<code>--analyze-with-ai</code>, and <code>utilities/pytest_utils.py</code> POSTs the JUnit XML to a rootcoz server's <code>/analyze-failures</code> endpoint and writes the
+enriched XML back over the same file. That is test-report post-processing, not a pull-request review bot.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>/analyze-failures</code> is the contract this repository's client expects, and it is not the rootcoz CLI's Jenkins <code>analyze</code> job API. The
+request is <code>POST {ROOTCOZ_SERVER_URL}/analyze-failures</code> with a JSON body of <code>{"raw_xml": "&lt;junit xml&gt;"}</code> (plus optional <code>ai_provider</code> and
+<code>ai_model</code>), and the response must be JSON containing <code>enriched_xml</code>. The call is synchronous — it blocks for up to <code>ROOTCOZ_TIMEOUT</code> seconds
+and returns the enriched report in the same response, with no job id to poll. A server that only exposes <code>POST /analyze</code> (which returns a job id
+for the Jenkins-oriented flow) cannot serve this client; enrichment then fails, the exception is logged, and the original JUnit file is left
+untouched.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">enrich_junit_xml</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Session</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Read JUnit XML, send to server for analysis, write enriched XML back.</span>
+<span class="sd">    ...</span>
+<span class="sd">    """</span>
+    <span class="o">...</span>
+    <span class="n">server_url</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"ROOTCOZ_SERVER_URL"</span><span class="p">]</span>
+    <span class="n">raw_xml</span> <span class="o">=</span> <span class="n">xml_path</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">timeout_value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_TIMEOUT"</span><span class="p">,</span> <span class="s2">"600"</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Invalid ROOTCOZ_TIMEOUT value, using default 600 seconds"</span><span class="p">)</span>
+        <span class="n">timeout_value</span> <span class="o">=</span> <span class="mi">600</span>
+
+    <span class="c1"># Optional overrides; when omitted, rootcoz uses .rootcoz/settings.json</span>
+    <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"raw_xml"</span><span class="p">:</span> <span class="n">raw_xml</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">ai_provider</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_AI_PROVIDER"</span><span class="p">):</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">"ai_provider"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ai_provider</span>
+    <span class="k">if</span> <span class="n">ai_model</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_AI_MODEL"</span><span class="p">):</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">"ai_model"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ai_model</span>
+</code></pre></div>
+
+<p>The client half of the contract is four environment variables: <code>ROOTCOZ_SERVER_URL</code> (required), <code>ROOTCOZ_TIMEOUT</code> (default <code>600</code>), and the
+optional <code>ROOTCOZ_AI_PROVIDER</code> / <code>ROOTCOZ_AI_MODEL</code> overrides. This repository also carries <code>.rootcoz/settings.json</code>, which the rootcoz <strong>server</strong> reads after
+cloning this repository: it pins the AI provider and model, an AI call timeout, peer AI configs, and the <code>additional_repos</code> rootcoz may consult. The rootcoz <strong>CLI</strong>
+does not read that file — it uses its own <code>~/.config/rootcoz/config.toml</code> (<code>rootcoz config show</code>), so CLI runs need the provider and model set there or on the
+command line.</p>
+<blockquote>
+<p><strong>Note:</strong> The payload carries only <code>raw_xml</code> and the optional overrides — it sends no repository URL. <code>.rootcoz/settings.json</code> in this repo is
+therefore applied only when the server already knows about this repository (server-side configuration or a configured <code>additional_repos</code>
+entry). Without that, rootcoz has no repository path from which to load the settings and falls back to its own defaults, which is also why
+<code>ROOTCOZ_AI_PROVIDER</code> and <code>ROOTCOZ_AI_MODEL</code> exist: set them explicitly when you need a specific provider or model.</p>
+</blockquote>
+<p>Enrichment is skipped when the session exit code is <code>0</code>, and it is force-disabled under <code>--collect-only</code> and <code>--setup-plan</code>. The original JUnit
+file is preserved if the call fails.</p>
+<blockquote>
+<p><strong>Note:</strong> If you operate rootcoz yourself, <code>ROOTCOZ_SERVER_URL</code> is the only required setting, plus a server that exposes <code>/analyze-failures</code>.
+Register this repository with the server if you want <code>.rootcoz/settings.json</code> applied, or set <code>ROOTCOZ_AI_PROVIDER</code> / <code>ROOTCOZ_AI_MODEL</code>
+explicitly. If you do not, the feature is simply off and nothing changes about your test run.</p>
+<p><strong>Warning:</strong> <code>enrich_junit_xml()</code> sets no <code>auth=</code> value and no <code>Authorization</code> header, because the request is a bare
+<code>requests.post(json=payload, timeout=...)</code> (<code>utilities/pytest_utils.py:501-506</code>). Requests may still send HTTP Basic Auth from a matching <code>.netrc</code> entry for
+<code>ROOTCOZ_SERVER_URL</code>. When the rootcoz deployment requires authentication and neither a matching <code>.netrc</code> entry nor an authenticating proxy in front of
+<code>ROOTCOZ_SERVER_URL</code> supplies it, the call fails and enrichment logs the exception while preserving the original JUnit file.</p>
+</blockquote>
+<h2 id="documentation-site-rebuild">Documentation Site Rebuild</h2>
+<p>The <code>docs/</code> tree is a <a href="https://pypi.org/project/pi-docsite/">pi-docsite</a> project. Only the Markdown sources and <code>docs/nav.json</code> are hand-edited;
+everything else in <code>docs/</code> is generated and committed.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs/*.md</code></td>
+<td>Sources — the only files humans edit</td>
+</tr>
+<tr>
+<td><code>docs/nav.json</code></td>
+<td>Sidebar layout: groups and page order</td>
+</tr>
+<tr>
+<td><code>docs/*.html</code>, <code>docs/assets/</code>, <code>docs/search-index.json</code>, <code>docs/llms.txt</code>, <code>docs/llms-full.txt</code></td>
+<td>Generated — never hand-edit</td>
+</tr>
+</tbody>
+</table></div>
+<p>Rebuild after any change to a <code>docs/*.md</code> file or to <code>docs/nav.json</code>:</p>
+<div class="highlight"><pre><span></span><code>uvx<span class="w"> </span>pi-docsite<span class="w"> </span>--docs-dir<span class="w"> </span>docs<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tagline<span class="w"> </span><span class="s2">"Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."</span>
+</code></pre></div>
+
+<p>The rules that matter for automation:</p>
+<ul>
+<li>edit the Markdown, never the generated HTML; fix the source and rebuild</li>
+<li>generated files are committed, so a source change and its rebuilt output belong in the same commit</li>
+<li>a new page needs a <code>docs/&lt;slug&gt;.md</code> with exactly one H1 and a matching <code>nav.json</code> entry; a slug with no <code>.md</code> behind it is a build error</li>
+<li>output is byte-for-byte reproducible, so churn in untouched files means the generator changed, not a stale build</li>
+<li>search only works when <code>docs/</code> is served over HTTP, because <code>search-index.json</code> is fetched with <code>fetch()</code></li>
+</ul>
+<p>This is also why <code>.pr_agent.toml</code> carries an <code>[ignore]</code> block for the generated artifacts and why three pre-commit hooks exclude <code>^docs/</code>. The
+generated files are real deliverables, but they are never a review or lint target.</p>
 <h2 id="what-external-cicd-must-do">What External CI/CD Must Do</h2>
-<p>Because orchestration lives outside this repository, your CI/CD platform needs to call the repo's entry points explicitly. The repo already provides a good integration contract for that.</p>
+<p>Because orchestration lives outside this repository, your CI/CD platform needs to call the repo's entry points explicitly. The repo already provides a good integration contract
+for that.</p>
 <p><code>pytest.ini</code> makes test output CI-friendly by default, especially through JUnit XML generation:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[pytest]</span>
 <span class="na">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">tests</span>
@@ -749,57 +1056,71 @@
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
 <span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
-<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
 <span class="w">  </span><span class="na">--show-progress</span>
 <span class="w">  </span><span class="na">--strict-markers</span>
-<span class="w">  </span><span class="na">--jira</span>
 <span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
 
 <span class="na">markers</span><span class="w"> </span><span class="o">=</span>
 <span class="w">    </span><span class="na">tier0</span><span class="o">:</span><span class="w"> </span><span class="s">Core functionality tests (smoke tests)</span>
+<span class="w">    </span><span class="na">tier1</span><span class="o">:</span><span class="w"> </span><span class="s">Extended functionality tests</span>
 <span class="w">    </span><span class="na">remote</span><span class="o">:</span><span class="w"> </span><span class="s">Remote cluster migration tests</span>
 <span class="w">    </span><span class="na">warm</span><span class="o">:</span><span class="w"> </span><span class="s">Warm migration tests</span>
 <span class="w">    </span><span class="na">copyoffload</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload (XCOPY) tests</span>
+<span class="w">    </span><span class="na">copyoffload_sanity</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload sanity tests - core scenarios for quick validation</span>
+<span class="w">    </span><span class="na">copyoffload_snapshots</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload snapshot tests (vSphere only)</span>
+<span class="w">    </span><span class="na">shared_disk</span><span class="o">:</span><span class="w"> </span><span class="s">Shared disk migration tests (vSphere only)</span>
 <span class="w">    </span><span class="na">incremental</span><span class="o">:</span><span class="w"> </span><span class="s">marks tests as incremental (xfail on previous failure)</span>
-<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version(&quot;2.6.0&quot;))</span>
+<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version("2.6.0"))</span>
+<span class="w">    </span><span class="na">ova</span><span class="o">:</span><span class="w"> </span><span class="s">OVA provider-specific tests</span>
+<span class="w">    </span><span class="na">vsphere</span><span class="o">:</span><span class="w"> </span><span class="s">vSphere provider-specific tests</span>
+<span class="w">    </span><span class="na">esxi</span><span class="o">:</span><span class="w"> </span><span class="s">ESXi provider-specific tests</span>
+<span class="w">    </span><span class="na">rhv</span><span class="o">:</span><span class="w"> </span><span class="s">RHV provider-specific tests</span>
+<span class="w">    </span><span class="na">hyperv</span><span class="o">:</span><span class="w"> </span><span class="s">Hyper-V provider-specific tests</span>
+<span class="w">    </span><span class="na">openstack</span><span class="o">:</span><span class="w"> </span><span class="s">OpenStack provider-specific tests</span>
+<span class="w">    </span><span class="na">openshift</span><span class="o">:</span><span class="w"> </span><span class="s">OpenShift provider-specific tests</span>
+<span class="w">    </span><span class="na">deep_inspection</span><span class="o">:</span><span class="w"> </span><span class="s">Deep Inspection / Conversion CR tests (vSphere only)</span>
+<span class="w">    </span><span class="na">ca_crt</span><span class="o">:</span><span class="w"> </span><span class="s">CA certificate field (ca.crt) provider secret tests</span>
+<span class="w">    </span><span class="na">aap</span><span class="o">:</span><span class="w"> </span><span class="s">AAP (Ansible Automation Platform) hook integration tests (vSphere only)</span>
+<span class="w">    </span><span class="na">upgrade</span><span class="o">:</span><span class="w"> </span><span class="s">MTV operator upgrade tests</span>
 
 <span class="na">junit_logging</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
 
 <p>That default configuration is designed for automation consumers:</p>
 <ul>
-<li>JUnit XML is always generated as <code>junit-report.xml</code></li>
-<li>marker handling is strict</li>
-<li>xdist is configured with <code>--dist=loadscope</code></li>
-<li>logging is enabled in a CI-readable way</li>
+<li>JUnit XML is always generated as <code>junit-report.xml</code>, with <code>junit_logging = all</code> so the logs ride along</li>
+<li>marker handling is strict, so an unregistered marker fails the run rather than silently running everything</li>
+<li>xdist is configured with <code>--dist=loadscope</code>, so parallel workers group by class</li>
+<li><code>testpaths = tests</code>, so a bare <code>pytest</code> never picks up the docs or tooling directories</li>
 </ul>
+<p><code>--jira</code> is deliberately absent from <code>addopts</code>. <code>pytest-jira</code> is installed and <code>jira.cfg.example</code> exists, but Jira reporting is opt-in per run.</p>
 <p>The repo also ships a small <code>tox</code> surface for automation:</p>
 <div class="highlight"><pre><span></span><code><span class="n">skipsdist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<span class="n">env_list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;pytest-check&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;unused-code&quot;</span><span class="p">]</span>
+<span class="n">env_list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"pytest-check"</span><span class="p">,</span><span class="w"> </span><span class="s2">"unused-code"</span><span class="p">]</span>
 
 <span class="k">[env.pytest-check]</span>
 <span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--setup-plan&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--setup-plan"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--collect-only"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="p">]</span>
 
 
-<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Run pytest collect-only and setup-plan&quot;</span>
-<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">]</span>
+<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run pytest collect-only and setup-plan"</span>
+<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">]</span>
 <span class="k">[env.unused-code]</span>
-<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Find unused code&quot;</span>
-<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;python-utility-scripts&quot;</span><span class="p">]</span>
-<span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="s2">&quot;pyutils-unusedcode&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--exclude-function-prefixes&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest_&quot;</span><span class="p">]]</span>
+<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Find unused code"</span>
+<span class="n">deps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"python-utility-scripts"</span><span class="p">]</span>
+<span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="s2">"pyutils-unusedcode"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--exclude-function-prefixes"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest_"</span><span class="p">]]</span>
 </code></pre></div>
 
 <p>That means an external pipeline can use the repository in layers:</p>
@@ -807,14 +1128,58 @@
 <li>run <code>pre-commit run --all-files</code></li>
 <li>run <code>tox -e pytest-check</code> or <code>uv run pytest --collect-only</code> as a fast wiring check</li>
 <li>build the image from <code>Dockerfile</code></li>
+<li>generate the Job manifest with <code>mtv-api-tests generate</code> if you want cluster-side isolation, or pass <code>--tc=</code> flags directly</li>
 <li>run real, cluster-backed test jobs with the required provider credentials and OpenShift access</li>
 <li>collect <code>junit-report.xml</code> as an artifact</li>
-<li>optionally enable <code>--analyze-with-ai</code> if you operate the external analysis service</li>
+<li>optionally enable <code>--analyze-with-ai</code> if you operate a rootcoz server</li>
 <li>run <code>release-it</code> in a dedicated release job when you are ready to cut a version</li>
 </ol>
-<p>The repo also adds extra pytest switches in <code>conftest.py</code>, including <code>--skip-data-collector</code>, <code>--skip-teardown</code>, <code>--openshift-python-wrapper-log-debug</code>, and <code>--analyze-with-ai</code>. Those are useful knobs for external jobs, but they are not pipeline definitions by themselves.</p>
+<p><code>tox.toml</code> also carries an <code>unused-code</code> environment that runs <code>pyutils-unusedcode --exclude-function-prefixes pytest_</code>, which is useful as a
+periodic dead-code sweep even though nothing in the repo depends on it.</p>
+<p>The repo adds pytest switches in <code>conftest.py</code> too: <code>--analyze-with-ai</code>, <code>--providers-json</code>, <code>--skip-data-collector</code>, <code>--data-collector-path</code>,
+<code>--skip-teardown</code>, and <code>--openshift-python-wrapper-log-debug</code>. Those are useful knobs for external jobs, but they are not pipeline definitions
+by themselves.</p>
+<h2 id="the-mtv-api-tests-cli">The <code>mtv-api-tests</code> CLI</h2>
+<p><code>pyproject.toml</code> installs one console script, <code>mtv-api-tests</code>, backed by the Typer app in <code>cli/mtv_api_tests/</code>. It has exactly two subcommands.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mtv-api-tests generate</code></td>
+<td>Interactive wizard that discovers datastores, VMs, ESXi hosts, and storage classes, then writes <code>.providers.json</code> and a Job manifest</td>
+</tr>
+<tr>
+<td><code>mtv-api-tests run</code></td>
+<td>Runs the tests. <code>--mode local</code> shells out to <code>uv run pytest</code>; <code>--mode job</code> runs <code>oc apply -f</code> against the manifest</td>
+</tr>
+</tbody>
+</table></div>
+<p>Both accept <code>--category</code> (a pytest marker), and <code>run</code> accepts <code>--source-provider</code>, <code>--destination-provider</code>, <code>--storage-class</code>,
+<code>--test-filter</code> / <code>-k</code>, and <code>--job-yaml</code>. <code>generate</code> additionally accepts <code>--image</code> for the Job container image.</p>
+<p>Useful entry points for automation and debugging:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Interactive configuration, writes .providers.json and the Job manifest</span>
+mtv-api-tests<span class="w"> </span>generate
+
+<span class="c1"># Run locally with explicit provider keys</span>
+mtv-api-tests<span class="w"> </span>run<span class="w"> </span>--mode<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--source-provider<span class="w"> </span>&lt;key&gt;<span class="w"> </span>--destination-provider<span class="w"> </span>&lt;key&gt;<span class="w"> </span>--storage-class<span class="w"> </span>&lt;sc&gt;
+
+<span class="c1"># Deploy the previously generated manifest and follow its logs</span>
+mtv-api-tests<span class="w"> </span>run<span class="w"> </span>--mode<span class="w"> </span>job
+</code></pre></div>
+
+<p>In <code>local</code> mode the CLI passes the cluster host and SSL setting as <code>--tc=</code> arguments but the username and password as <code>CLUSTER_USERNAME</code> and
+<code>CLUSTER_PASSWORD</code> environment variables, specifically so credentials do not appear in process listings. If no OpenShift provider is available it
+falls back to the token from <code>oc whoami -t</code>.</p>
+<p>Both commands read the providers file from <code>PROVIDERS_JSON_PATH</code>, falling back to <code>.providers.json</code> in the working directory — the same
+resolution order pytest uses for <code>--providers-json</code>.</p>
 <blockquote>
-<p><strong>Tip:</strong> The cleanest mental model is: this repository defines automation rules, while your CI/CD platform supplies the runner, credentials, scheduling, and environment needed to execute them.</p>
+<p><strong>Tip:</strong> The cleanest mental model is: this repository defines automation rules, while your CI/CD platform supplies the runner, credentials, scheduling, and environment needed
+to execute them.</p>
 </blockquote>
                 </div>
             </article>
@@ -837,6 +1202,11 @@
 <ul>
 <li><a href="#what-is-automated-here">What Is Automated Here</a></li>
 <li><a href="#pre-commit-quality-gates">Pre-commit Quality Gates</a></li>
+<li><a href="#agentsmd-enforcement-hooks">AGENTS.md Enforcement Hooks</a><ul>
+<li><a href="#baseline-ratchet">Baseline Ratchet</a></li>
+</ul>
+</li>
+<li><a href="#generic-hook-behavior">Generic Hook Behavior</a></li>
 <li><a href="#release-automation-with-release-it">Release Automation With release-it</a></li>
 <li><a href="#dependency-updates-with-renovate">Dependency Updates With Renovate</a></li>
 <li><a href="#container-image-build-inputs">Container Image Build Inputs</a></li>
@@ -845,31 +1215,37 @@
 <li><a href="#qodo-merge-pr-agent">Qodo Merge / PR-Agent</a></li>
 </ul>
 </li>
+<li><a href="#ai-failure-analysis-with-rootcoz">AI Failure Analysis With rootcoz</a></li>
+<li><a href="#documentation-site-rebuild">Documentation Site Rebuild</a></li>
 <li><a href="#what-external-cicd-must-do">What External CI/CD Must Do</a></li>
+<li><a href="#the-mtv-api-tests-cli">The mtv-api-tests CLI</a></li>
 </ul>
 </div>
 
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -915,5 +1291,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

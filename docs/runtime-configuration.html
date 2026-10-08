@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Runtime Configuration - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -99,7 +100,7 @@
 
                     <li>
                         <a href="runtime-configuration.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Runtime Configuration
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,12 +302,13 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="runtime-configuration">Runtime Configuration</h1>
-<p><code>mtv-api-tests</code> uses <code>pytest-testconfig</code> for suite settings and plain pytest flags for per-run behavior. In practice, you keep shared defaults in <code>tests/tests_config/config.py</code>, keep provider definitions in <code>.providers.json</code>, and pass environment-specific values such as <code>source_provider</code> and <code>storage_class</code> with <code>--tc=key:value</code>.</p>
+<p><code>mtv-api-tests</code> uses <code>pytest-testconfig</code> for suite settings and plain pytest flags for per-run behavior. In practice, you keep shared defaults in <code>tests/tests_config/config.py</code>,
+keep provider definitions in <code>.providers.json</code>, and pass environment-specific values such as <code>source_provider</code> and <code>storage_class</code> with <code>--tc=key:value</code>.</p>
 <p>Most users only need to remember three things:</p>
 <ol>
 <li><code>pytest.ini</code> already loads the default runtime config file for you.</li>
 <li>A normal test run requires <code>source_provider</code> and <code>storage_class</code>.</li>
-<li>The repo adds several custom pytest flags for cleanup, artifact collection, logging, and AI analysis.</li>
+<li>The repo adds custom pytest flags for cleanup, artifact collection, logging, provider-file selection, and AI analysis.</li>
 </ol>
 <h2 id="how-configuration-is-loaded">How Configuration Is Loaded</h2>
 <p>The baseline pytest behavior is defined in <code>pytest.ini</code>:</p>
@@ -319,10 +322,8 @@
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
 <span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
-<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
 <span class="w">  </span><span class="na">--show-progress</span>
 <span class="w">  </span><span class="na">--strict-markers</span>
-<span class="w">  </span><span class="na">--jira</span>
 <span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
 </code></pre></div>
 
@@ -335,11 +336,12 @@
 <li>Pytest's built-in logging plugin is disabled, and the suite configures its own logger.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> The default <code>addopts</code> also enable <code>--jira</code>. If you use JIRA-linked tests, <code>jira.cfg.example</code> shows the expected file format.</p>
+<p><strong>Note:</strong> JIRA integration is installed but opt-in. <code>pytest-jira</code> is a project dependency, and it registers <code>--jira</code> with a default of <code>False</code>. <code>--jira</code> is <strong>not</strong> part of
+<code>addopts</code>. Add it yourself when you want JIRA-linked markers to drive test behavior; <code>jira.cfg.example</code> shows the expected <code>jira.cfg</code> format.</p>
 </blockquote>
 <h2 id="required-runtime-overrides">Required Runtime Overrides</h2>
 <p>For a normal run, the suite expects two runtime values even though they are not defined in the default config file:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -361,58 +363,66 @@
 <tr>
 <td><code>cluster_host</code></td>
 <td>Optional</td>
-<td>Passed into cluster client creation when supplied</td>
+<td>Cluster API URL. Falls back to the <code>CLUSTER_HOST</code> environment variable</td>
 </tr>
 <tr>
 <td><code>cluster_username</code></td>
 <td>Optional</td>
-<td>Passed into cluster client creation when supplied</td>
+<td>Cluster user. Falls back to the <code>CLUSTER_USERNAME</code> environment variable</td>
 </tr>
 <tr>
 <td><code>cluster_password</code></td>
 <td>Optional</td>
-<td>Passed into cluster client creation when supplied</td>
+<td>Cluster password. Falls back to the <code>CLUSTER_PASSWORD</code> environment variable</td>
 </tr>
 <tr>
 <td><code>target_ocp_version</code></td>
 <td>Optional</td>
-<td>Used only for generated VM suffix naming</td>
+<td>Used only for the generated VM name suffix, where dots are replaced with dashes</td>
 </tr>
 </tbody>
-</table>
-<p>The repository's own copy-offload job example uses <code>--tc=</code> overrides like this:</p>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
+</table></div>
+<p>If either required key is missing, the session aborts with <code>pytest.exit(...)</code> and return code <code>1</code> before any fixture runs.</p>
+<p>Cluster credentials resolve from the environment, in this order: the <code>--tc</code> value first, then the environment variable. <code>CLUSTER_VERIFY_SSL</code> takes
+precedence over <code>insecure_verify_skip</code> for OpenShift API SSL verification, and its semantics are inverted: <code>CLUSTER_VERIFY_SSL=true</code> means <code>insecure_verify_skip=False</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>cluster_host</code>, <code>cluster_username</code> and <code>cluster_password</code> have <strong>no built-in default</strong>. When neither <code>--tc</code> nor the environment supplies a value,
+<code>get_cluster_client()</code> resolves it to <code>None</code> and <code>get_client()</code> cannot build a client, so the function raises
+<code>ValueError("Failed to get client for cluster")</code>. The run stops as the <code>ocp_admin_client</code> fixture requests the client, before any migration work. Supply all three
+explicitly. Adding presence checks that name the missing variable is tracked in RedHatQE/mtv-api-tests#712.</p>
+</blockquote>
+<p>The repository's OpenShift Job template in <code>README.md</code> uses <code>--tc=</code> overrides like this:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">"[TEST_MARKERS]"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="p">:+--tc=cluster_host:</span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_USERNAME</span><span class="p">:+--tc=cluster_username:</span><span class="si">${</span><span class="nv">CLUSTER_USERNAME</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="p">:+--tc=cluster_password:</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--tc<span class="o">=</span>source_provider:vsphere-8.0.3.00400<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--tc<span class="o">=</span>storage_class:my-block-storageclass
+<span class="w">  </span>--tc<span class="o">=</span>source_provider:<span class="o">[</span>SOURCE_PROVIDER<span class="o">]</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>storage_class:<span class="o">[</span>STORAGE_CLASS<span class="o">]</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> <code>source_provider</code> is not the provider type. It must match a key in <code>.providers.json</code> exactly.</p>
+<p><strong>Warning:</strong> <code>source_provider</code> is not the provider type. It must match a top-level key in <code>.providers.json</code> exactly.</p>
 </blockquote>
-<p>The provider definitions themselves are loaded from <code>.providers.json</code> in the repository root. If that file is missing, the suite cannot resolve the requested provider.</p>
 <h2 id="global-pytest-testconfig-values">Global <code>pytest-testconfig</code> Values</h2>
 <p>The default shared values live at the top of <code>tests/tests_config/config.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">global</span> <span class="n">config</span>
 
-<span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>  <span class="c1"># SSL verification for OCP API connections</span>
-<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>  <span class="c1"># SSL verification for source provider (VMware, RHV, etc.)</span>
+<span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"true"</span>  <span class="c1"># SSL verification for OCP API connections</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"false"</span>  <span class="c1"># SSL verification for source provider (VMware, RHV, etc.)</span>
 <span class="n">number_of_vms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
 <span class="n">check_vms_signals</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
-<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
-<span class="n">vm_name_search_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"openshift-mtv"</span>
+<span class="n">vm_name_search_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
 <span class="n">snapshots_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
 <span class="n">mins_before_cutover</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
 <span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
 </code></pre></div>
 
 <h3 id="actively-used-global-values">Actively used global values</h3>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -462,10 +472,10 @@
 <td>Timeout used while waiting for migration plans to complete.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="defined-in-the-default-file-but-not-currently-used-elsewhere">Defined in the default file but not currently used elsewhere</h3>
 <p>A repository-wide search shows these keys are defined in <code>tests/tests_config/config.py</code> but are not referenced by the rest of the codebase today:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -486,71 +496,82 @@
 <td><code>""</code></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <blockquote>
-<p><strong>Warning:</strong> For boolean-style CLI overrides such as <code>insecure_verify_skip</code> and <code>source_provider_insecure_skip_verify</code>, use lowercase string values like <code>true</code> and <code>false</code>. The default config file stores them as strings, and some code paths handle them that way.</p>
+<p><strong>Warning:</strong> For boolean-style CLI overrides such as <code>insecure_verify_skip</code> and <code>source_provider_insecure_skip_verify</code>, use lowercase string values like <code>true</code> and <code>false</code>.
+The default config file stores them as strings, and some code paths handle them that way.</p>
 </blockquote>
 <h2 id="named-test-plans-in-tests_params">Named Test Plans In <code>tests_params</code></h2>
-<p>The same config file also contains <code>tests_params</code>, which is the catalog of named migration scenarios used by the test classes. These are not suite-wide defaults; they are per-scenario plan definitions.</p>
-<p>A real example from <code>tests/tests_config/config.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="p">},</span>
+<p>The same config file also contains <code>tests_params</code>, which is the catalog of named migration scenarios used by the test classes. These are not suite-wide defaults; they are
+per-scenario plan definitions.</p>
+<p>A minimal real entry from <code>tests/tests_config/config.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_sanity_cold_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span> <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"add_nic"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"add_nic_start_connected"</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-        <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
-    <span class="p">},</span>
-    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
-                <span class="p">{</span>
-                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
-                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
-                    <span class="p">},</span>
-                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
-                <span class="p">}</span>
-            <span class="p">]</span>
-        <span class="p">}</span>
-    <span class="p">},</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"per_nic_network_map"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
-<p>Those named plans are referenced directly by the tests. For example:</p>
+<p>Those named plans are referenced directly by the tests through <code>class_plan_config</code> with <code>indirect=True</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
-    <span class="s2">&quot;class_plan_config&quot;</span><span class="p">,</span>
+    <span class="s2">"class_plan_config"</span><span class="p">,</span>
     <span class="p">[</span>
         <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
-            <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;tests_params&quot;</span><span class="p">][</span><span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">],</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">"tests_params"</span><span class="p">][</span><span class="s2">"test_warm_migration_comprehensive"</span><span class="p">],</span>
         <span class="p">)</span>
     <span class="p">],</span>
     <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;comprehensive-warm&quot;</span><span class="p">],</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">"comprehensive-warm"</span><span class="p">],</span>
 <span class="p">)</span>
 </code></pre></div>
 
-<p>Common <code>tests_params</code> keys you will see in this repository include:</p>
-<ul>
-<li><code>virtual_machines</code> for the VM list and per-VM options such as <code>name</code>, <code>source_vm_power</code>, <code>guest_agent</code>, <code>clone</code>, and <code>disk_type</code>.</li>
-<li><code>warm_migration</code> and <code>copyoffload</code> for the main migration mode.</li>
-<li><code>target_power_state</code>, <code>preserve_static_ips</code>, <code>vm_target_namespace</code>, <code>multus_namespace</code>, <code>pvc_name_template</code>, <code>target_labels</code>, and <code>target_affinity</code> for plan behavior.</li>
-<li><code>pre_hook</code>, <code>post_hook</code>, and <code>expected_migration_result</code> for hook-driven scenarios.</li>
-<li><code>guest_agent_timeout</code> for scenarios that need a longer wait after migration.</li>
-</ul>
+<p><a href="test-plan-configuration.html">Test Plan Configuration</a> documents every per-VM key and plan-level flag the code supports, with the real names.</p>
 <h2 id="custom-pytest-options">Custom Pytest Options</h2>
-<p>The repository adds four user-facing runtime features on top of standard pytest options: artifact collection, teardown control, extra logging, and AI analysis.</p>
+<p>The repository adds six user-facing pytest options on top of the standard pytest set:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Group</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--providers-json &lt;path&gt;</code></td>
+<td>Providers</td>
+</tr>
+<tr>
+<td><code>--skip-data-collector</code></td>
+<td>DataCollector</td>
+</tr>
+<tr>
+<td><code>--data-collector-path &lt;path&gt;</code></td>
+<td>DataCollector</td>
+</tr>
+<tr>
+<td><code>--skip-teardown</code></td>
+<td>Teardown</td>
+</tr>
+<tr>
+<td><code>--openshift-python-wrapper-log-debug</code></td>
+<td>Openshift Python Wrapper</td>
+</tr>
+<tr>
+<td><code>--analyze-with-ai</code></td>
+<td>Analyze with AI</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="provider-file-selection">Provider file selection</h3>
+<p>Resolution order when the suite loads provider definitions:</p>
+<ol>
+<li><code>--providers-json</code> CLI value.</li>
+<li><code>PROVIDERS_JSON_PATH</code> environment variable.</li>
+<li><code>.providers.json</code> in the current working directory.</li>
+</ol>
+<p>A missing path raises <code>FileNotFoundError</code>, and an empty or non-mapping file fails fast. See <a href="provider-config-file.html">Provider Config File</a>.</p>
 <h3 id="data-collection">Data collection</h3>
 <p>By default, the suite collects runtime artifacts for failed runs.</p>
 <ul>
@@ -614,14 +635,14 @@
 </ul>
 <p>When enabled, the code does the following:</p>
 <ul>
+<li>Disables itself in dry-run mode (<code>--collect-only</code>, <code>--setup-plan</code>).</li>
 <li>Calls <code>load_dotenv()</code>, so a local <code>.env</code> file can supply the settings.</li>
-<li>Checks <code>JJI_SERVER_URL</code>.</li>
-<li>Uses default values for provider and model if you did not set them.</li>
-<li>After a failed run, reads the JUnit XML file and posts the raw XML to <code>${JJI_SERVER_URL}/analyze-failures</code>.</li>
+<li>Requires <code>ROOTCOZ_SERVER_URL</code>; if unset, it logs a warning and turns the feature off.</li>
+<li>After a failed run, reads the JUnit XML file and posts the raw XML to <code>${ROOTCOZ_SERVER_URL}/analyze-failures</code>.</li>
 <li>If enrichment succeeds, writes the enriched XML back to the same file.</li>
 </ul>
 <p>Environment variables used by this feature:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Variable</th>
@@ -632,40 +653,53 @@
 </thead>
 <tbody>
 <tr>
-<td><code>JJI_SERVER_URL</code></td>
+<td><code>ROOTCOZ_SERVER_URL</code></td>
 <td>Yes</td>
 <td>None</td>
-<td>URL of the analysis service</td>
+<td>Base URL of the analysis service</td>
 </tr>
 <tr>
-<td><code>JJI_AI_PROVIDER</code></td>
-<td>No</td>
-<td><code>claude</code></td>
-<td>AI provider name sent to the service</td>
-</tr>
-<tr>
-<td><code>JJI_AI_MODEL</code></td>
-<td>No</td>
-<td><code>claude-opus-4-6[1m]</code></td>
-<td>AI model name sent to the service</td>
-</tr>
-<tr>
-<td><code>JJI_TIMEOUT</code></td>
+<td><code>ROOTCOZ_TIMEOUT</code></td>
 <td>No</td>
 <td><code>600</code></td>
-<td>Request timeout in seconds</td>
+<td>Request timeout in seconds. Invalid values fall back to <code>600</code></td>
+</tr>
+<tr>
+<td><code>ROOTCOZ_AI_PROVIDER</code></td>
+<td>No</td>
+<td>None</td>
+<td>AI provider name sent to the service. When unset, the service applies its own default</td>
+</tr>
+<tr>
+<td><code>ROOTCOZ_AI_MODEL</code></td>
+<td>No</td>
+<td>None</td>
+<td>AI model name sent to the service. When unset, the service applies its own default</td>
 </tr>
 </tbody>
-</table>
+</table></div>
+<blockquote>
+<p><strong>Note:</strong> pytest does not hard-code a provider or model default. Those defaults live in <code>.rootcoz/settings.json</code>, which is owned by the rootcoz service.</p>
+</blockquote>
+<p>Request payload:</p>
+<div class="highlight"><pre><span></span><code><span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"raw_xml"</span><span class="p">:</span> <span class="n">raw_xml</span><span class="p">}</span>
+<span class="k">if</span> <span class="n">ai_provider</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_AI_PROVIDER"</span><span class="p">):</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s2">"ai_provider"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ai_provider</span>
+<span class="k">if</span> <span class="n">ai_model</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ROOTCOZ_AI_MODEL"</span><span class="p">):</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s2">"ai_model"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ai_model</span>
+</code></pre></div>
+
 <p>Important behavior to know:</p>
 <ul>
 <li>Successful runs skip AI enrichment.</li>
 <li><code>--collect-only</code> and <code>--setup-plan</code> disable AI analysis automatically.</li>
-<li>If the JUnit XML file is missing, enrichment is skipped.</li>
+<li>If the JUnit XML path is unset or the file is missing, enrichment is skipped.</li>
+<li>If enrichment fails, the original JUnit XML is preserved.</li>
 <li>The default JUnit XML path is already configured as <code>junit-report.xml</code> in <code>pytest.ini</code>.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>--analyze-with-ai</code> sends the raw JUnit XML content to an external HTTP service. Review what your report contains before enabling this in shared or external environments.</p>
+<p><strong>Warning:</strong> <code>--analyze-with-ai</code> sends the raw JUnit XML content to an external HTTP service. Review what your report contains before enabling this in shared or external
+environments.</p>
 <p><strong>Note:</strong> If enrichment succeeds, the original JUnit XML file is overwritten in place with the enriched version.</p>
 </blockquote>
 <h2 id="dry-run-modes">Dry-Run Modes</h2>
@@ -674,22 +708,22 @@
 <div class="highlight"><pre><span></span><code><span class="k">[env.pytest-check]</span>
 <span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--setup-plan&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--setup-plan"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--collect-only"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="p">]</span>
 </code></pre></div>
 
 <p>And the container image defaults to collection-only mode:</p>
-<div class="highlight"><pre><span></span><code><span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--collect-only"</span><span class="p">]</span>
 </code></pre></div>
 
 <p>In dry-run mode:</p>
@@ -699,7 +733,8 @@
 <li>Session-finish teardown and JUnit enrichment do not run.</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> If you start the published container image without overriding its command, it only performs test collection. To run real tests, supply your own <code>uv run pytest ...</code> command.</p>
+<p><strong>Tip:</strong> If you start the published container image without overriding its command, it only performs test collection. To run real tests, supply your own <code>uv run pytest ...</code>
+command.</p>
 </blockquote>
                 </div>
             </article>
@@ -732,6 +767,7 @@
 </li>
 <li><a href="#named-test-plans-in-tests_params">Named Test Plans In tests_params</a></li>
 <li><a href="#custom-pytest-options">Custom Pytest Options</a><ul>
+<li><a href="#provider-file-selection">Provider file selection</a></li>
 <li><a href="#data-collection">Data collection</a></li>
 <li><a href="#teardown-control">Teardown control</a></li>
 <li><a href="#debug-logging">Debug logging</a></li>
@@ -745,24 +781,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -808,5 +847,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

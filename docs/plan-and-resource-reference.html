@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Plan And Resource Reference - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -190,7 +191,7 @@
 
                     <li>
                         <a href="plan-and-resource-reference.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Plan And Resource Reference
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,12 +302,15 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="plan-and-resource-reference">Plan And Resource Reference</h1>
-<p>The suite builds the same MTV resource chain you would create by hand: <code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, and <code>Migration</code>. For specific scenarios it also creates <code>Hook</code>, <code>Secret</code>, <code>Namespace</code>, and <code>NetworkAttachmentDefinition</code> resources so the plan can run end to end.</p>
+<p>The suite builds the same MTV resource chain you would create by hand: <code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, and <code>Migration</code>. For specific scenarios it also creates
+<code>Hook</code>, <code>Secret</code>, <code>Namespace</code>, <code>Conversion</code>, and <code>NetworkAttachmentDefinition</code> resources so the plan can run end to end.</p>
 <blockquote>
-<p><strong>Note:</strong> The dictionaries in <code>tests/tests_config/config.py</code> are not raw CR YAML. Some keys become CR fields, while others only control setup or validation. For example, <code>clone</code>, <code>guest_agent</code>, and <code>source_vm_power</code> affect fixture behavior, not the final <code>Plan</code> spec.</p>
+<p><strong>Note:</strong> The dictionaries in <code>tests/tests_config/config.py</code> are not raw CR YAML. Some keys become CR fields, while others only control setup or validation. For example, <code>clone</code>,
+<code>guest_agent</code>, and <code>source_vm_power</code> affect fixture behavior, not the final <code>Plan</code> spec.</p>
 </blockquote>
+<p>Every CR shown below is rendered by <code>openshift-python-wrapper</code>, so the YAML field names are the ones the cluster actually receives.</p>
 <h2 id="lifecycle-overview">Lifecycle Overview</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Resource</th>
@@ -323,15 +328,15 @@
 </tr>
 <tr>
 <td><code>Secret</code></td>
-<td>Hold provider credentials, OCP token, and copy-offload storage credentials</td>
-<td>Usually the per-run <code>target_namespace</code></td>
+<td>Provider credentials, OCP token, copy-offload credentials</td>
+<td>Per-run <code>target_namespace</code>; AAP token secret in <code>mtv_namespace</code></td>
 <td>Created with deploy wait only</td>
 </tr>
 <tr>
 <td><code>Provider</code></td>
-<td>Represent source and destination endpoints for MTV</td>
+<td>Source and destination endpoints for MTV</td>
 <td>Per-run <code>target_namespace</code></td>
-<td>Source provider waits for <code>Ready</code>; VMware SSH copy-offload also waits for <code>Validated=True</code> after patching</td>
+<td>Waits for <code>Ready</code> within 600s; SSH copy-offload also waits for <code>Validated=True</code></td>
 </tr>
 <tr>
 <td><code>StorageMap</code></td>
@@ -347,7 +352,7 @@
 </tr>
 <tr>
 <td><code>Hook</code></td>
-<td>Run pre- or post-migration Ansible playbooks</td>
+<td>Run pre- or post-migration Ansible playbooks, or an AWX job template</td>
 <td>Per-run <code>target_namespace</code></td>
 <td>Config is validated before creation</td>
 </tr>
@@ -355,18 +360,30 @@
 <td><code>Plan</code></td>
 <td>Tie providers, mappings, VMs, and optional plan settings together</td>
 <td>Per-run <code>target_namespace</code></td>
-<td>Waits for <code>Ready=True</code></td>
+<td>Waits for <code>Plan</code> condition <code>Ready=True</code> within 360s</td>
 </tr>
 <tr>
 <td><code>Migration</code></td>
 <td>Execute a <code>Plan</code></td>
 <td>Per-run <code>target_namespace</code></td>
-<td>The suite watches the <code>Plan</code> until it becomes <code>Succeeded</code> or <code>Failed</code></td>
+<td>The suite watches the <code>Plan</code> until it reaches <code>Succeeded</code> or <code>Failed</code></td>
+</tr>
+<tr>
+<td><code>Conversion</code></td>
+<td>Deep Inspection (standalone or plan-driven) conversion jobs</td>
+<td>Per-run <code>target_namespace</code></td>
+<td>Polls <code>status.phase</code> until <code>Succeeded</code>, <code>Failed</code>, or <code>Canceled</code></td>
+</tr>
+<tr>
+<td><code>ForkliftController</code> (patch only)</td>
+<td>Precopy interval, and AAP hook settings</td>
+<td><code>mtv_namespace</code></td>
+<td>Waits for <code>Running=True</code>, then <code>Successful=True</code>, within 300s per wait</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="where-resources-live">Where Resources Live</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Namespace</th>
@@ -376,7 +393,7 @@
 <tbody>
 <tr>
 <td><code>target_namespace</code></td>
-<td><code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, <code>Migration</code>, <code>Hook</code>, provider <code>Secret</code>s, and copy-offload storage <code>Secret</code>s</td>
+<td><code>Provider</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, <code>Migration</code>, <code>Hook</code>, <code>Conversion</code>, provider <code>Secret</code>s, and copy-offload storage <code>Secret</code>s</td>
 </tr>
 <tr>
 <td><code>vm_target_namespace</code></td>
@@ -390,102 +407,247 @@
 <td><code>${session_uuid}-source-vms</code></td>
 <td>Temporary source CNV VMs for OpenShift source-provider tests</td>
 </tr>
+<tr>
+<td><code>mtv_namespace</code></td>
+<td>The AWX/AAP token <code>Secret</code> created for <code>aap</code> hook tests; operator objects such as <code>ForkliftController</code>, the <code>Subscription</code>, and the inventory route</td>
+</tr>
 </tbody>
-</table>
+</table></div>
 <blockquote>
-<p><strong>Note:</strong> The suite uses <code>mtv_namespace</code> for Forklift operator objects such as the inventory route and <code>ForkliftController</code>. By default that namespace is <code>openshift-mtv</code>. The test-owned migration CRs themselves are created in the per-run <code>target_namespace</code>.</p>
+<p><strong>Note:</strong> The test-owned migration CRs are created in the per-run <code>target_namespace</code>. <code>mtv_namespace</code> defaults to <code>openshift-mtv</code>; the suite only reads it, except for the
+AAP patch.</p>
 </blockquote>
 <h2 id="shared-naming-rules">Shared Naming Rules</h2>
 <p>Every test-owned OpenShift resource goes through <code>create_and_store_resource()</code> in <code>utilities/resources.py</code>. That helper is the source of most naming, waiting, and cleanup behavior.</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="ow">not</span> <span class="n">_resource_name</span><span class="p">:</span>
-    <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;base_resource_name&quot;</span><span class="p">])</span>
+    <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">"base_resource_name"</span><span class="p">])</span>
 
     <span class="k">if</span> <span class="n">resource</span><span class="o">.</span><span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Migration</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="n">Plan</span><span class="o">.</span><span class="n">kind</span><span class="p">):</span>
-        <span class="n">_resource_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="s1">&#39;warm&#39;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;warm_migration&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;cold&#39;</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">_resource_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="s1">'warm'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'warm_migration'</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">'cold'</span><span class="si">}</span><span class="s2">"</span>
 
 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">_resource_name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">63</span><span class="p">:</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">=}</span><span class="s2">&#39; is too long (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">_resource_name</span><span class="p">)</span><span class="si">}</span><span class="s2"> &gt; 63). Truncating.&quot;</span><span class="p">)</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">=}</span><span class="s2">' is too long (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">_resource_name</span><span class="p">)</span><span class="si">}</span><span class="s2"> &gt; 63). Truncating."</span><span class="p">)</span>
     <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">_resource_name</span><span class="p">[</span><span class="o">-</span><span class="mi">63</span><span class="p">:]</span>
 
-<span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_resource_name</span>
+<span class="n">kwargs</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_resource_name</span>
 
 <span class="n">_resource</span> <span class="o">=</span> <span class="n">resource</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="n">_resource</span><span class="o">.</span><span class="n">deploy</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">except</span> <span class="n">ConflictError</span><span class="p">:</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2"> already exists, reusing it.&quot;</span><span class="p">)</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2"> already exists, reusing it."</span><span class="p">)</span>
     <span class="n">_resource</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 
-<span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Storing </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> in fixture store&quot;</span><span class="p">)</span>
-<span class="n">_resource_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="vm">__module__</span><span class="p">}</span>
-<span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;teardown&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_resource_dict</span><span class="p">)</span>
+<span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Storing </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> in fixture store"</span><span class="p">)</span>
+<span class="n">_resource_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">"module"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="vm">__module__</span><span class="p">}</span>
+<span class="n">fixture_store</span><span class="p">[</span><span class="s2">"teardown"</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_resource_dict</span><span class="p">)</span>
 </code></pre></div>
 
 <p>A few practical rules fall out of that helper:</p>
 <ul>
-<li>Auto-generated names start from <code>base_resource_name</code>, which is built as <code>{session_uuid}-source-{provider_type}-{version}</code>.</li>
+<li>Auto-generated names start from <code>base_resource_name</code>, which is built as <code>{session_uuid}-source-{provider_type}-{version_with_dashes}</code>.</li>
 <li>Copy-offload source providers add <code>-xcopy</code> to that base name.</li>
 <li>Auto-generated <code>Plan</code> and <code>Migration</code> names also add <code>-warm</code> or <code>-cold</code>.</li>
 <li>If a name is longer than 63 characters, the helper keeps the last 63 characters so the unique suffix survives.</li>
 <li>If you pass an explicit <code>name</code>, or a <code>kind_dict</code>/<code>yaml_file</code> that already contains one, that name wins.</li>
-<li>Every created resource is tracked for teardown.</li>
+<li>Every created resource is tracked for teardown under its kind, and an optional <code>test_name</code> is stored with the entry.</li>
 </ul>
 <p>The suite also applies related naming rules outside CR creation:</p>
 <ul>
 <li><code>session_uuid</code> comes from <code>generate_name_with_uuid("auto")</code>, so generated run identifiers look like <code>auto-xxxx</code>.</li>
 <li><code>target_namespace_prefix</code> defaults to <code>auto</code>; the fixture strips the literal <code>auto</code> before appending it to <code>session_uuid</code> so default runs do not produce doubled prefixes.</li>
 <li>Destination VM lookups on OpenShift are sanitized to DNS-1123 format, so names with uppercase letters, <code>_</code>, or <code>.</code> are converted before lookup.</li>
+<li>Per-class resource names use a short hash: <code>sha256(f"{nodeid}\0{session_uuid}")[:6]</code>, rendered as <code>cb-&lt;6-char-hash&gt;</code>.</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> When you are debugging a run, search by the session UUID first. Even when names are truncated, the suite preserves the unique suffix rather than the human-friendly prefix.</p>
+<p><strong>Tip:</strong> When you are debugging a run, search by the session UUID first. Even after truncation, the suite keeps the unique suffix rather than the human-friendly prefix.</p>
 </blockquote>
 <h2 id="provider">Provider</h2>
-<p>Source provider definitions come from the repo-root <code>.providers.json</code>. The loader in <code>utilities/utils.py</code> reads that file, and the <code>source_provider</code> pytest config value chooses one top-level entry by name.</p>
+<p>Source provider definitions come from the repo-root <code>.providers.json</code>. The loader in <code>utilities/utils.py</code> reads that file, and the <code>source_provider</code> pytest config value chooses one
+top-level entry by name.</p>
 <p>From <code>.providers.json.example</code>:</p>
-<div class="highlight"><pre><span></span><code>&quot;vsphere&quot;: {
-  &quot;type&quot;: &quot;vsphere&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-  &quot;username&quot;: &quot;USERNAME&quot;,
-  &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-  &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
-  &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+<div class="highlight"><pre><span></span><code>"vsphere": {
+  "type": "vsphere",
+  "version": "&lt;SERVER VERSION&gt;",
+  "fqdn": "SERVER FQDN/IP",
+  "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+  "username": "USERNAME",
+  "password": "PASSWORD",  # pragma: allowlist secret
+  "guest_vm_linux_user": "LINUX VMS USERNAME",
+  "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+  "guest_vm_win_user": "WINDOWS VMS USERNAME",
+  "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+  "vddk_init_image": "&lt;PATH TO VDDK INIT IMAGE&gt;"
 },
 </code></pre></div>
 
-<p>The example file supports these provider types:</p>
-<ul>
-<li><code>vsphere</code></li>
-<li><code>ovirt</code></li>
-<li><code>openstack</code></li>
-<li><code>openshift</code></li>
-<li><code>ova</code></li>
-</ul>
+<p>The example file supports these provider types, and those strings are exactly the values that reach <code>spec.type</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>.providers.json</code> key</th>
+<th><code>Provider.ProviderType</code></th>
+<th><code>spec.type</code> value used in the CR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vsphere</code></td>
+<td><code>VSPHERE</code></td>
+<td><code>vsphere</code></td>
+</tr>
+<tr>
+<td><code>ovirt</code></td>
+<td><code>RHV</code></td>
+<td><code>ovirt</code></td>
+</tr>
+<tr>
+<td><code>openstack</code></td>
+<td><code>OPENSTACK</code></td>
+<td><code>openstack</code></td>
+</tr>
+<tr>
+<td><code>openshift</code></td>
+<td><code>OPENSHIFT</code></td>
+<td><code>openshift</code></td>
+</tr>
+<tr>
+<td><code>ova</code></td>
+<td><code>OVA</code></td>
+<td><code>ova</code></td>
+</tr>
+<tr>
+<td><code>hyperv</code></td>
+<td><code>HYPERV</code></td>
+<td><code>hyperv</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>The file is validated hard, so a malformed template fails immediately:</p>
 <blockquote>
-<p><strong>Note:</strong> <code>.providers.json.example</code> is a template, not literal JSON. It contains inline comments, so you need to clean those up before using it as a real <code>.providers.json</code>.</p>
-<p><strong>Warning:</strong> The suite fails early if <code>.providers.json</code> is missing, empty, or if <code>source_provider</code> does not exactly match one of the top-level keys in that file.</p>
+<p><strong>Warning:</strong> The suite fails early if the providers file is missing, empty, not a JSON mapping, or if <code>source_provider</code> does not match a top-level key exactly. The shipped
+<code>.providers.json.example</code> also needs its inline comments removed before you can use it as a real <code>.providers.json</code>.</p>
 </blockquote>
-<p>Provider creation behavior is slightly different depending on the role:</p>
+<h3 id="provider-cr-shape">Provider CR shape</h3>
+<p><code>create_source_provider()</code> creates a <code>Secret</code> first, then the <code>Provider</code> that references it. The rendered CR looks like this:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Provider</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">forklift.konveyor.io/empty-vddk-init-image</span><span class="p">:</span><span class="w"> </span><span class="s">"yes"</span><span class="w">   </span><span class="c1"># only for vSphere copy-offload providers</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vsphere</span>
+<span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://vcenter.example.com/sdk</span>
+<span class="w">  </span><span class="nt">secret</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-abc</span>
+<span class="w">    </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vddkInitImage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var/run/vddk</span><span class="w">      </span><span class="c1"># from vddk_init_image</span>
+<span class="w">    </span><span class="nt">sdkEndpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vcenter</span><span class="w">              </span><span class="c1"># from endpoint_type</span>
+</code></pre></div>
+
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>spec</code> field</th>
+<th>Source in the suite</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>The provider <code>type</code> from <code>.providers.json</code></td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td><code>api_url</code>; rewritten to the cluster host when the source provider is OpenShift</td>
+</tr>
+<tr>
+<td><code>secret.name</code>, <code>secret.namespace</code></td>
+<td>The test-created <code>Secret</code> in the same namespace</td>
+</tr>
+<tr>
+<td><code>settings.vddkInitImage</code></td>
+<td><code>vddk_init_image</code> when present</td>
+</tr>
+<tr>
+<td><code>settings.sdkEndpoint</code></td>
+<td><code>endpoint_type</code> when present</td>
+</tr>
+<tr>
+<td><code>metadata.annotations[forklift.konveyor.io/empty-vddk-init-image]</code></td>
+<td>Set to <code>"yes"</code> for vSphere providers that declare a <code>copyoffload</code> section</td>
+</tr>
+</tbody>
+</table></div>
+<p>Secret keys per provider type, all under <code>string_data</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Provider type</th>
+<th>Secret keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All</td>
+<td><code>url</code>, <code>insecureSkipVerify</code></td>
+</tr>
+<tr>
+<td><code>vsphere</code>, <code>ovirt</code></td>
+<td><code>user</code>, <code>password</code>, plus the CA certificate when SSL verification is on</td>
+</tr>
+<tr>
+<td><code>openstack</code></td>
+<td><code>username</code>, <code>password</code>, <code>regionName</code>, <code>projectName</code>, <code>domainName</code></td>
+</tr>
+<tr>
+<td><code>hyperv</code></td>
+<td><code>username</code>, <code>password</code>, <code>smbUrl</code>, and <code>smbUser</code> / <code>smbPassword</code> when configured</td>
+</tr>
+<tr>
+<td><code>openshift</code></td>
+<td>No new secret; the destination OCP token secret is reused</td>
+</tr>
+</tbody>
+</table></div>
+<p>The CA certificate is stored under the <code>cacert</code> key by default. The <code>ca_crt</code> tests pass <code>ca_cert_key="ca.crt"</code> instead and assert that Forklift accepts the standard Kubernetes
+field name (<code>tests/cold/conftest.py:18</code>, <code>tests/cold/test_ca_crt_migration.py:76</code>).</p>
+<h3 id="destination-providers">Destination providers</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Case</th>
+<th>How it is created</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local destination</td>
+<td><code>kind_dict</code> <code>Provider</code> <code>${session_uuid}-local-ocp-provider</code>, <code>spec.type: openshift</code>, empty <code>spec.secret</code> and <code>spec.url</code> (<code>conftest.py:675</code>)</td>
+</tr>
+<tr>
+<td>Remote destination</td>
+<td><code>Secret</code> with <code>token</code> and <code>insecureSkipVerify</code>, then <code>Provider</code> <code>${session_uuid}-destination-ocp-provider</code> of type <code>openshift</code> (<code>conftest.py:950</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="provider-readiness-rules">Provider readiness rules</h3>
+<p>Provider readiness is stricter than for most other resources:</p>
 <ul>
-<li>Source providers usually follow a two-step flow: create a <code>Secret</code>, then create a <code>Provider</code> CR that references it.</li>
-<li>The default destination provider is a local OpenShift provider named like <code>${session_uuid}-local-ocp-provider</code>.</li>
-<li>Remote-cluster tests create a destination OCP token <code>Secret</code> and a provider named like <code>${session_uuid}-destination-ocp-provider</code>.</li>
-</ul>
-<p>Provider readiness rules are stricter than most other resources:</p>
-<ul>
-<li>The source <code>Provider</code> must reach <code>Ready</code> within 600 seconds.</li>
-<li>The wait stops early if the provider reports <code>ConnectionFailed</code>.</li>
+<li>The source <code>Provider</code> must reach <code>Ready</code> within 600 seconds: <code>wait_for_status(Provider.Status.READY, timeout=600, stop_status="ConnectionFailed")</code>.</li>
+<li>OVA is the exception: NFS-backed OVA providers can report <code>ConnectionFailed</code> transiently, so <code>stop_status</code> is <code>None</code> for them and the suite retries until timeout.</li>
 <li>After the <code>Provider</code> exists, Forklift inventory must expose it before the suite can build storage and network mappings.</li>
-<li>For VMware copy-offload with <code>esxi_clone_method: "ssh"</code>, the suite patches the provider with <code>spec.settings.esxiCloneMethod: ssh</code> and then waits for <code>Validated=True</code>.</li>
+<li>For VMware copy-offload with <code>esxi_clone_method: "ssh"</code>, <code>libs/providers/vmware.py</code> patches <code>spec.settings.esxiCloneMethod: ssh</code> and then waits for <code>Validated=True</code> with a
+  180-second timeout.</li>
 </ul>
 <h2 id="mapping-source-identifiers">Mapping Source Identifiers</h2>
-<p>The suite does not hard-code one universal <code>source</code> shape for mappings. Instead, it asks provider-specific inventory adapters in <code>libs/forklift_inventory.py</code> for the right source identifiers.</p>
-<table>
+<p>The suite does not hard-code one universal <code>source</code> shape for mappings. Instead, it asks provider-specific inventory adapters in <code>libs/forklift_inventory.py</code> for the right source
+identifiers.</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Source provider type</th>
@@ -502,39 +664,51 @@
 <tr>
 <td><code>ovirt</code></td>
 <td>storage domain <code>name</code></td>
-<td>network <code>path</code></td>
+<td>network <code>name</code> (resolved from the NIC profile’s network <code>path</code>)</td>
 </tr>
 <tr>
 <td><code>openstack</code></td>
-<td>volume type <code>name</code></td>
+<td>volume type <code>name</code>, plus the synthetic <code>glance</code> entry for image-backed VMs</td>
 <td>network <code>id</code> and <code>name</code></td>
 </tr>
 <tr>
 <td><code>openshift</code></td>
 <td>storage class <code>name</code></td>
-<td><code>{"type": "pod"}</code> or Multus <code>networkName</code></td>
+<td><code>{"type": "pod"}</code> or the Multus <code>networkName</code></td>
 </tr>
 <tr>
 <td><code>ova</code></td>
 <td>storage <code>id</code></td>
 <td>network <code>name</code></td>
 </tr>
+<tr>
+<td><code>hyperv</code></td>
+<td>storage <code>name</code></td>
+<td>network <code>id</code> and <code>name</code></td>
+</tr>
 </tbody>
-</table>
+</table></div>
+<p>Every adapter fails fast rather than producing an empty map:</p>
 <blockquote>
-<p><strong>Note:</strong> OpenStack inventory is treated a little more carefully than the others. The suite waits not only for the VM to appear in Forklift inventory, but also for its attached volumes and networks to become queryable before it builds mappings.</p>
+<p><strong>Note:</strong> An adapter raises <code>ValueError</code> when no storage or no network is found for the requested VMs.</p>
+</blockquote>
+<p>One provider needs extra waiting before that is even possible:</p>
+<blockquote>
+<p><strong>Note:</strong> OpenStack inventory is treated a little more carefully than the others. The suite waits not only for the VM to appear in Forklift inventory, but also for its attached
+volumes and networks to become queryable before it builds mappings.</p>
 </blockquote>
 <h2 id="storagemap">StorageMap</h2>
 <p>A standard <code>StorageMap</code> is inventory-driven: the suite asks Forklift which source storages the chosen VMs use, then maps each one to the destination <code>storage_class</code>.</p>
 <blockquote>
-<p><strong>Warning:</strong> <code>storage_class</code> is not defined in <code>tests/tests_config/config.py</code>. The suite expects it from pytest config, and <code>get_storage_migration_map()</code> falls back to <code>py_config["storage_class"]</code>.</p>
+<p><strong>Warning:</strong> <code>storage_class</code> is not defined in <code>tests/tests_config/config.py</code>. The suite expects it from pytest config, and <code>get_storage_migration_map()</code> falls back to
+<code>py_config["storage_class"]</code>.</p>
 </blockquote>
 <p>For copy-offload scenarios, the <code>StorageMap</code> carries an offload plugin configuration instead of relying only on source inventory.</p>
-<p>From <code>tests/test_copyoffload_migration.py</code>:</p>
+<p>From <code>tests/copyoffload/test_copyoffload_migration.py:119</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="n">offload_plugin_config</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;vsphereXcopyConfig&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;secretRef&quot;</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;storageVendorProduct&quot;</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
+    <span class="s2">"vsphereXcopyConfig"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"secretRef"</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"storageVendorProduct"</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
     <span class="p">}</span>
 <span class="p">}</span>
 
@@ -549,21 +723,59 @@
     <span class="n">storage_class</span><span class="o">=</span><span class="n">storage_class</span><span class="p">,</span>
     <span class="n">datastore_id</span><span class="o">=</span><span class="n">datastore_id</span><span class="p">,</span>
     <span class="n">offload_plugin_config</span><span class="o">=</span><span class="n">offload_plugin_config</span><span class="p">,</span>
-    <span class="n">access_mode</span><span class="o">=</span><span class="s2">&quot;ReadWriteOnce&quot;</span><span class="p">,</span>
-    <span class="n">volume_mode</span><span class="o">=</span><span class="s2">&quot;Block&quot;</span><span class="p">,</span>
+    <span class="n">volume_mode</span><span class="o">=</span><span class="s2">"Block"</span><span class="p">,</span>
 <span class="p">)</span>
+</code></pre></div>
+
+<p>The rendered CR is always the same envelope, with only <code>spec.map</code> differing:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StorageMap</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-xcopy-abc</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">map</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-block-storageclass</span>
+<span class="w">        </span><span class="nt">accessMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ReadWriteOnce</span>
+<span class="w">        </span><span class="nt">volumeMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Block</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datastore-11</span>
+<span class="w">      </span><span class="nt">offloadPlugin</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">vsphereXcopyConfig</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">secretRef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-xcopy-abc</span>
+<span class="w">          </span><span class="nt">storageVendorProduct</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vSAN</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-block-storageclass</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MyDatastore</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">    </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-local-ocp-provider</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
 </code></pre></div>
 
 <p>In practice, that means:</p>
 <ul>
 <li>Standard mode maps each source storage to <code>{"destination": {"storageClass": &lt;storage_class&gt;}, "source": &lt;inventory value&gt;}</code>.</li>
-<li>Copy-offload mode maps datastores by ID and adds <code>offloadPlugin</code>, <code>accessMode</code>, and <code>volumeMode</code>.</li>
-<li>Mixed and multi-datastore copy-offload are supported through <code>secondary_datastore_id</code> and <code>non_xcopy_datastore_id</code>.</li>
+<li>
+<p>Copy-offload mode maps datastores by <code>id</code> and adds <code>offloadPlugin</code>, plus <code>accessMode</code> / <code>volumeMode</code> when the caller passes them. The copy-offload tests pass
+  <code>volume_mode="Block"</code> and leave <code>access_mode</code> unset, so <code>accessMode</code> only appears if a caller supplies it.</p>
+</li>
+<li>
+<p>Mixed and multi-datastore copy-offload are supported through <code>secondary_datastore_id</code> and <code>non_xcopy_datastore_id</code>. A non-XCOPY datastore still gets the
+  <code>offloadPlugin</code> block so Forklift can fall back from XCOPY.</p>
+</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>secondary_datastore_id</code> and <code>non_xcopy_datastore_id</code> are only valid when <code>datastore_id</code> is also set. The helper rejects those combinations otherwise.</p>
+<p><strong>Warning:</strong> <code>secondary_datastore_id</code> and <code>non_xcopy_datastore_id</code> are only valid when <code>datastore_id</code> is also set, and <code>datastore_id</code> requires <code>offload_plugin_config</code>. The
+helper raises <code>ValueError</code> for those combinations otherwise.</p>
 </blockquote>
-<p>The copy-offload storage secret is also test-owned. Its credentials can come from environment variables or from the provider’s <code>copyoffload</code> section in <code>.providers.json</code>, and vendor-specific keys are validated before the secret is created.</p>
+<p>The copy-offload storage secret is also test-owned. Its credentials can come from environment variables or from the provider’s <code>copyoffload</code> section in <code>.providers.json</code>, and
+vendor-specific keys are validated before the secret is created.</p>
 <h2 id="networkmap">NetworkMap</h2>
 <p><code>NetworkMap</code> creation is intentionally simple and predictable:</p>
 <ul>
@@ -571,31 +783,58 @@
 <li>Every additional source network maps to a Multus <code>NetworkAttachmentDefinition</code>.</li>
 <li>Extra NADs are named from a short class hash so parallel tests do not collide.</li>
 </ul>
-<p>From <code>utilities/utils.py</code>:</p>
+<p>From <code>utilities/utils.py:303</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="n">network_map_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="n">_destination_pod</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pod&quot;</span><span class="p">}</span>
+<span class="n">_destination_pod</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"pod"</span><span class="p">}</span>
 <span class="n">multus_counter</span> <span class="o">=</span> <span class="mi">1</span>
 
-<span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_networks_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)):</span>
+<span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">networks</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">pod_only</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">_destination</span> <span class="o">=</span> <span class="n">_destination_pod</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span>
+        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span>
 
-        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">"</span>
 
         <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
-            <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
-            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;multus&quot;</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
+            <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
+            <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"multus"</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">multus_counter</span> <span class="o">+=</span> <span class="mi">1</span>
 
     <span class="n">network_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-        <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">_destination</span><span class="p">,</span>
-        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
+        <span class="s2">"destination"</span><span class="p">:</span> <span class="n">_destination</span><span class="p">,</span>
+        <span class="s2">"source"</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
     <span class="p">})</span>
+</code></pre></div>
+
+<p>The rendered CR:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NetworkMap</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-abc</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">map</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pod</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VM Network</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cb-a1b2c3-1</span>
+<span class="w">        </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">multus</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VM Network 2</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">    </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-local-ocp-provider</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
 </code></pre></div>
 
 <p>That logic ties directly to the class-scoped NAD fixture in <code>conftest.py</code>:</p>
@@ -604,6 +843,7 @@
 <li>Additional NADs become <code>cb-&lt;hash&gt;-1</code>, <code>cb-&lt;hash&gt;-2</code>, and so on.</li>
 <li>The names are kept short to stay under Linux bridge interface limits.</li>
 <li>If you set <code>multus_namespace</code>, the suite creates or reuses that namespace and puts the NADs there. Otherwise they go into the main <code>target_namespace</code>.</li>
+<li><code>per_nic_network_map=True</code> switches the source list from deduplicated inventory mappings to one entry per NIC (<code>get_per_nic_networks()</code>).</li>
 </ul>
 <blockquote>
 <p><strong>Tip:</strong> A one-NIC VM still gets a <code>NetworkMap</code>, but it does not need any extra <code>NetworkAttachmentDefinition</code> objects because the first network always maps to the pod network.</p>
@@ -611,119 +851,355 @@
 <h2 id="hook">Hook</h2>
 <p>Hooks are optional, but when you configure them the suite creates real <code>Hook</code> CRs and wires their generated names into the <code>Plan</code>.</p>
 <p>From <code>tests/tests_config/config.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_post_hook_retain_failed_vm&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_post_hook_retain_failed_vm"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;pre_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;succeed&quot;</span><span class="p">},</span>
-    <span class="s2">&quot;post_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">},</span>
-    <span class="s2">&quot;expected_migration_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"off"</span><span class="p">,</span>
+    <span class="s2">"pre_hook"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"expected_result"</span><span class="p">:</span> <span class="s2">"succeed"</span><span class="p">},</span>
+    <span class="s2">"post_hook"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"expected_result"</span><span class="p">:</span> <span class="s2">"fail"</span><span class="p">},</span>
+    <span class="s2">"expected_migration_result"</span><span class="p">:</span> <span class="s2">"fail"</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
-<p>Hook configuration supports two modes:</p>
-<ul>
-<li>Predefined mode: set <code>expected_result</code> to <code>succeed</code> or <code>fail</code>, and the suite chooses one of the built-in base64-encoded Ansible playbooks from <code>utilities/hooks.py</code>.</li>
-<li>Custom mode: set <code>playbook_base64</code> to your own base64-encoded playbook.</li>
-</ul>
+<p>Hook configuration supports three mutually exclusive modes:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Hook config key</th>
+<th>Resulting <code>Hook</code> spec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Predefined playbook</td>
+<td><code>expected_result</code>: <code>succeed</code> or <code>fail</code></td>
+<td><code>image: quay.io/konveyor/hook-runner:latest</code> plus <code>playbook</code></td>
+</tr>
+<tr>
+<td>Custom playbook</td>
+<td><code>playbook_base64</code></td>
+<td><code>image: quay.io/konveyor/hook-runner:latest</code> plus your base64 <code>playbook</code></td>
+</tr>
+<tr>
+<td>AAP / AWX job template</td>
+<td><code>aap_job_template_id</code> (positive integer)</td>
+<td><code>aap.jobTemplateId</code> only; no image</td>
+</tr>
+</tbody>
+</table></div>
+<div class="highlight"><pre><span></span><code><span class="c1"># predefined or custom playbook</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hook</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-cold</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quay.io/konveyor/hook-runner:latest</span>
+<span class="w">  </span><span class="nt">playbook</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LS0tCi0gaG9zdHM6IGFsbAogIHRhc2tzOiBbXQo=</span>
+<span class="nn">---</span>
+<span class="c1"># AAP hook</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hook</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-cold</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">aap</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">jobTemplateId</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">42</span>
+</code></pre></div>
+
 <p>Validation rules are strict:</p>
 <ul>
-<li><code>expected_result</code> and <code>playbook_base64</code> are mutually exclusive.</li>
-<li>You must set one of them.</li>
+<li><code>expected_result</code>, <code>playbook_base64</code>, and <code>aap_job_template_id</code> are mutually exclusive; you must set exactly one of them.</li>
 <li>Empty strings are rejected.</li>
 <li>Custom playbooks must be valid base64, valid UTF-8, valid YAML, and a non-empty Ansible play list.</li>
 </ul>
+<p>For AAP hooks the suite also patches the operator, so Forklift can reach AWX. The patch is applied to <code>ForkliftController</code> in <code>mtv_namespace</code> and reverted afterwards:</p>
+<div class="highlight"><pre><span></span><code><span class="n">editor</span> <span class="o">=</span> <span class="n">ResourceEditor</span><span class="p">(</span>
+    <span class="n">patches</span><span class="o">=</span><span class="p">{</span>
+        <span class="n">forklift_controller</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"spec"</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">"aap_url"</span><span class="p">:</span> <span class="n">awx_deployment</span><span class="p">,</span>
+                <span class="s2">"aap_token_secret_name"</span><span class="p">:</span> <span class="n">token_secret_name</span><span class="p">,</span>
+                <span class="s2">"aap_insecure_skip_verify"</span><span class="p">:</span> <span class="s2">"true"</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">editor</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">backup_resources</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+<p><code>openshift-python-wrapper</code> applies a patch when the editor is entered as a context manager or when <code>update()</code> is called, so constructing the editor alone changes nothing. The fixture calls
+<code>update(backup_resources=True)</code> and then <code>editor.restore()</code> in its teardown.</p>
 <blockquote>
-<p><strong>Note:</strong> The suite reads detailed hook failure steps from the owned <code>Migration</code> CR, not from the <code>Plan</code>, because the VM pipeline status lives there. A failing <code>PostHook</code> still leads to VM validation, while a failing <code>PreHook</code> skips VM checks because the migration never reached the VM validation stage.</p>
+<p><strong>Note:</strong> Hook failure steps are read from the <code>Plan</code> CR status, not from the <code>Migration</code>: <code>status.migration.vms[].pipeline[]</code>. A failing <code>PostHook</code> still leads to VM validation,
+while a failing <code>PreHook</code> skips VM checks because the migration never reached the VM validation stage.</p>
 </blockquote>
 <h2 id="plan">Plan</h2>
-<p>The <code>Plan</code> is where all of the pieces come together. Before the suite creates it, <code>prepared_plan</code> may clone VMs, adjust source power state, wait for cloned VMs to appear in Forklift inventory, and call <code>populate_vm_ids()</code> so each VM entry has the inventory ID Forklift expects.</p>
+<p>The <code>Plan</code> is where all of the pieces come together. Before the suite creates it, <code>prepared_plan</code> may clone VMs, adjust source power state, wait for cloned VMs to appear in
+Forklift inventory, and call <code>populate_vm_ids()</code> so each VM entry has the inventory ID Forklift expects.</p>
 <p>The most feature-rich plan-style config in the repo looks like this.</p>
 <p>From <code>tests/tests_config/config.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_cold_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_cold_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2019-3disks&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2019-3disks"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>  <span class="c1"># VM must be on for guest tools to report static IP info</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s2">&quot;{{.VmName}}-disk-{{.DiskIndex}}&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;target_node_selector&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-node&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+    <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
+    <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"target_node_selector"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"mtv-comprehensive-node"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-label&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-        <span class="s2">&quot;test-type&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive&quot;</span><span class="p">,</span>  <span class="c1"># Static value</span>
+    <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"mtv-comprehensive-label"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+        <span class="s2">"test-type"</span><span class="p">:</span> <span class="s2">"comprehensive"</span><span class="p">,</span>  <span class="c1"># Static value</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;test&quot;</span><span class="p">}},</span>
-                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                    <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"test"</span><span class="p">}},</span>
+                        <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
                     <span class="p">},</span>
-                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
+                    <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="p">]</span>
         <span class="p">}</span>
     <span class="p">},</span>
-    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-comprehensive-vms&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+    <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-cold-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
 <span class="p">},</span>
 </code></pre></div>
 
-<p>Those settings break down into a few practical groups:</p>
+<h3 id="plan-spec-fields-the-suite-sets">Plan spec fields the suite sets</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Config key (<code>tests/tests_config/config.py</code>)</th>
+<th><code>Plan</code> <code>spec</code> field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>warm_migration</code></td>
+<td><code>spec.warm</code></td>
+<td>Also drives the <code>-warm</code> / <code>-cold</code> name suffix</td>
+</tr>
+<tr>
+<td><code>vm_target_namespace</code></td>
+<td><code>spec.targetNamespace</code></td>
+<td>Falls back to the run namespace when unset</td>
+</tr>
+<tr>
+<td><code>target_power_state</code></td>
+<td><code>spec.targetPowerState</code></td>
+<td><code>on</code> / <code>off</code></td>
+</tr>
+<tr>
+<td><code>preserve_static_ips</code></td>
+<td><code>spec.preserveStaticIPs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>pvc_name_template</code></td>
+<td><code>spec.pvcNameTemplate</code></td>
+<td>Can be a string or a provider-keyed dict with a <code>default</code> fallback</td>
+</tr>
+<tr>
+<td><code>pvc_name_template_use_generate_name</code></td>
+<td><code>spec.pvcNameTemplateUseGenerateName</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>target_node_selector</code></td>
+<td><code>spec.targetNodeSelector</code></td>
+<td><code>None</code> values are auto-generated per session</td>
+</tr>
+<tr>
+<td><code>target_labels</code></td>
+<td><code>spec.targetLabels</code></td>
+<td><code>None</code> values are auto-generated per session</td>
+</tr>
+<tr>
+<td><code>target_affinity</code></td>
+<td><code>spec.targetAffinity</code></td>
+<td>Passed through as-is</td>
+</tr>
+<tr>
+<td><code>migrate_shared_disks</code></td>
+<td><code>spec.migrateSharedDisks</code></td>
+<td>Plan-level default for all VMs</td>
+</tr>
+<tr>
+<td><code>enable_nested_virtualization</code></td>
+<td><code>spec.enableNestedVirtualization</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>xfs_compatibility</code></td>
+<td><code>spec.xfsCompatibility</code></td>
+<td>XFS v4 virt-v2v image</td>
+</tr>
+<tr>
+<td><code>run_preflight_inspection</code></td>
+<td><code>spec.runPreflightInspection</code></td>
+<td>Warm Deep Inspection gate</td>
+</tr>
+<tr>
+<td><code>rdm_as_lun</code></td>
+<td><code>spec.rdmAsLun</code></td>
+<td>vSphere only; RDM disks as <code>lun.bus: scsi</code></td>
+</tr>
+<tr>
+<td><code>copyoffload</code></td>
+<td><code>spec.pvcNameTemplate: "pvc"</code></td>
+<td>The volume populator framework requires this fixed template</td>
+</tr>
+<tr>
+<td><code>pre_hook</code> / <code>post_hook</code></td>
+<td><code>spec.vms[].hooks[]</code></td>
+<td>Rendered as <code>{"hook": {"name", "namespace"}, "step": "PreHook" or "PostHook"}</code></td>
+</tr>
+<tr>
+<td><code>multus_namespace</code></td>
+<td>not a <code>Plan</code> field</td>
+<td>Tells the NAD fixture where to create extra Multus networks</td>
+</tr>
+</tbody>
+</table></div>
+<p>The <code>Plan</code> spec always contains the provider, map, and VM references:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Plan</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-abc-cold</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">warm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">targetNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-vms-cold-comprehensive-ab12</span>
+<span class="w">  </span><span class="nt">map</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-abc</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">    </span><span class="nt">network</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-abc</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">    </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-local-ocp-provider</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">vms</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vm-101</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-win2019-3disks</span>
+<span class="w">      </span><span class="nt">migrateSharedDisks</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">hooks</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">hook</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-cold</span>
+<span class="w">            </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">          </span><span class="nt">step</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PreHook</span>
+<span class="w">  </span><span class="nt">pvcNameTemplateUseGenerateName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">pvcNameTemplate</span><span class="p">:</span><span class="w"> </span><span class="s">"{{.VmName}}-disk-{{.DiskIndex}}"</span>
+<span class="w">  </span><span class="nt">targetPowerState</span><span class="p">:</span><span class="w"> </span><span class="s">"on"</span>
+<span class="w">  </span><span class="nt">xfsCompatibility</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">migrateSharedDisks</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">preserveStaticIPs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">targetNodeSelector</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">mtv-comprehensive-node</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">targetLabels</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">mtv-comprehensive-label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">targetAffinity</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">podAffinity</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">preferredDuringSchedulingIgnoredDuringExecution</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">podAffinityTerm</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">labelSelector</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">matchLabels</span><span class="p">:</span>
+<span class="w">                </span><span class="nt">app</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test</span>
+<span class="w">            </span><span class="nt">topologyKey</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kubernetes.io/hostname</span>
+<span class="w">          </span><span class="nt">weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+<span class="w">  </span><span class="nt">enableNestedVirtualization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">runPreflightInspection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">rdmAsLun</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<p>Two VM-level details matter when reading <code>spec.vms</code>:</p>
 <ul>
-<li><code>warm_migration</code> controls whether the plan is warm or cold and also changes the auto-generated <code>Plan</code> and <code>Migration</code> name suffixes.</li>
-<li><code>target_power_state</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>, <code>pvc_name_template_use_generate_name</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>, and <code>vm_target_namespace</code> are passed into <code>create_plan_resource()</code>.</li>
-<li><code>multus_namespace</code> is not a <code>Plan</code> field. It tells the NAD fixture where to create extra Multus networks before the <code>Plan</code> is built.</li>
-<li><code>target_node_selector</code> and <code>target_labels</code> treat <code>None</code> specially. The fixtures replace <code>None</code> with the current <code>session_uuid</code>, which gives you unique labels and selectors without hard-coding a value.</li>
+<li>Per-VM <code>migrate_shared_disks</code> in the config is renamed to the camelCase API field <code>migrateSharedDisks</code> before the CR is built.</li>
+<li>Config-only VM keys never reach the CR. <code>add_nic</code>, <code>add_nic_start_connected</code>, <code>connected_nic_mac</code>, <code>disconnected_nic_mac</code>, and <code>snapshots_before_migration</code> are stripped in
+  <code>create_plan_resource()</code>.</li>
 </ul>
 <p><code>pvc_name_template</code> is especially useful when you want predictable PVC names:</p>
 <ul>
 <li>The validation helper supports <code>{{.VmName}}</code>, <code>{{.DiskIndex}}</code>, and VMware-only <code>{{.FileName}}</code>.</li>
-<li>It also supports Sprig functions, because validation uses a Go template renderer.</li>
-<li>Long generated names are truncated during validation to match Kubernetes limits.</li>
+<li>It also supports Sprig functions, because validation uses a Go template renderer (<code>py-go-template</code>).</li>
+<li><code>{{.FileName}}</code> is skipped with a warning unless the source provider is vSphere, since the filenames come from vSphere inventory.</li>
+<li>Long generated names are truncated during validation to match Kubernetes limits: the <code>generateName</code> prefix limit or the plain name limit, depending on the mode.</li>
 <li>When <code>pvc_name_template_use_generate_name</code> is <code>True</code>, the suite checks only the generated prefix because Kubernetes adds its own random suffix.</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> Use <code>None</code> in <code>target_node_selector</code> and <code>target_labels</code> when you want uniqueness without inventing a new value yourself. The suite will replace it with the run’s <code>session_uuid</code>.</p>
+<p><strong>Tip:</strong> Use <code>None</code> in <code>target_node_selector</code> and <code>target_labels</code> when you want uniqueness without inventing a new value yourself. The suite will replace it with the run’s
+<code>session_uuid</code>.</p>
 </blockquote>
 <p>After creation, the plan has its own readiness rules:</p>
 <ul>
-<li>The suite waits for <code>Plan.Condition.READY=True</code> with a 360-second timeout.</li>
+<li>The suite waits for <code>Plan.Condition.READY</code> with status <code>True</code> and a 360-second timeout.</li>
 <li>On timeout, it logs the <code>Plan</code> plus both source and destination provider objects to make provider-side issues easier to debug.</li>
-<li>For copy-offload plans, it also waits up to 60 seconds for Forklift to create a plan-specific secret whose name starts with <code>&lt;plan-name&gt;-</code>.</li>
+<li>For copy-offload plans, it also waits up to 60 seconds for Forklift to create a plan-specific secret. The match is either a secret whose name starts with
+  <code>&lt;plan-name&gt;-</code>, or one labeled <code>plan-name=&lt;plan&gt;</code> together with <code>isPopulator</code>.</li>
 </ul>
+<p>The migrated VMs and the <code>Plan</code> never share a namespace unless you ask for it:</p>
 <blockquote>
 <p><strong>Note:</strong> The <code>Plan</code> CR itself stays in the main <code>target_namespace</code> even when <code>vm_target_namespace</code> sends migrated VMs somewhere else. Only the migrated VMs move.</p>
-<p><strong>Note:</strong> The copy-offload secret wait is best-effort. If the <code>&lt;plan-name&gt;-*</code> secret is late, the suite continues anyway because the later migration failure is usually more actionable than a generic “secret missing” timeout.</p>
+</blockquote>
+<p>One copy-offload wait is stricter than the rest:</p>
+<blockquote>
+<p><strong>Warning:</strong> The copy-offload plan-secret wait is not best-effort. It raises <code>TimeoutError</code> after 60 seconds, listing the secrets it did find. The migration only starts waiting
+on <code>Plan</code> status once the secret appears.</p>
 </blockquote>
 <h2 id="migration">Migration</h2>
-<p><code>execute_migration()</code> creates a separate <code>Migration</code> CR that points at the <code>Plan</code>. For cold migrations it passes no cutover time. For warm migrations it computes one from the current UTC time and the configured offset.</p>
+<p><code>execute_migration()</code> creates a separate <code>Migration</code> CR that points at the <code>Plan</code>. For cold migrations it passes no cutover time. For warm migrations it computes one from
+the current UTC time and the configured offset.</p>
 <p>From <code>utilities/migration_utils.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cutover_value</span><span class="p">(</span><span class="n">current_cutover</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">datetime</span><span class="p">:</span>
     <span class="n">datetime_utc</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">pytz</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">current_cutover</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">datetime_utc</span>
 
-    <span class="k">return</span> <span class="n">datetime_utc</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;mins_before_cutover&quot;</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="n">datetime_utc</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">py_config</span><span class="p">[</span><span class="s2">"mins_before_cutover"</span><span class="p">]))</span>
+</code></pre></div>
+
+<p>The <code>Migration</code> CR is deliberately tiny:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Migration</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-abc-cold</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">plan</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-source-vsphere-8-0-3-abc-cold</span>
+<span class="w">    </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">cutover</span><span class="p">:</span><span class="w"> </span><span class="s">"2026-01-02T03:04:05Z"</span><span class="w">   </span><span class="c1"># warm migrations only, UTC, second precision</span>
 </code></pre></div>
 
 <p>The runtime settings that matter most for migration readiness come from <code>tests/tests_config/config.py</code>:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -758,18 +1234,97 @@
 <td>Prefix material for the per-run namespace name</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>A few implementation details are worth knowing when you debug a <code>Migration</code>:</p>
 <ul>
 <li>The suite creates the <code>Migration</code> with <code>plan_name</code>, <code>plan_namespace</code>, and optional <code>cut_over</code>.</li>
 <li>It does not use the <code>Migration</code> object alone for final success and failure. Instead, it watches the <code>Plan</code>.</li>
 <li>The helper treats a plan as <code>Executing</code> as soon as it finds an owned <code>Migration</code> CR for that <code>Plan</code>.</li>
-<li>Final <code>Succeeded</code> and <code>Failed</code> states come from advisory conditions on the <code>Plan</code>.</li>
-<li>Detailed per-VM failure steps such as <code>PreHook</code>, <code>PostHook</code>, or <code>DiskTransfer</code> come from <code>migration.status.vms[].pipeline[]</code>.</li>
+<li>
+<p>Final <code>Succeeded</code> and <code>Failed</code> states come from advisory conditions on the <code>Plan</code>: conditions with <code>category: Advisory</code> and <code>status: True</code>, matched against
+  <code>Plan.Status.SUCCEEDED</code> / <code>Plan.Status.FAILED</code>.</p>
+</li>
+<li>
+<p>Detailed per-VM failure steps such as <code>PreHook</code>, <code>PostHook</code>, or <code>DiskTransfer</code> come from the <code>Plan</code> CR, not the <code>Migration</code>: <code>status.migration.vms[].pipeline[]</code>, read from
+  <code>plan.instance.status.migration.vms</code> because the controller updates the <code>Plan</code> first.</p>
+</li>
+<li>
+<p>Dual and simultaneous migrations have dedicated helpers: <code>wait_for_dual_migration_completion()</code> waits for both plans and raises <code>MigrationPlanExecError</code> as soon as either one
+  reports <code>Failed</code>, while <code>wait_for_concurrent_migration_execution()</code> asserts that all listed plans are in <code>Executing</code> at the same time, within 120 seconds.</p>
+</li>
 </ul>
+<p>Two gating rules decide whether a warm migration can even be attempted. The first is cluster readiness:</p>
 <blockquote>
-<p><strong>Note:</strong> Before the suite starts creating plans and migrations, it waits up to five minutes for all <code>forklift-*</code> pods in <code>mtv_namespace</code> to be <code>Running</code> or <code>Succeeded</code>, and it requires a controller pod to exist.</p>
-<p><strong>Note:</strong> Warm migration coverage is not universal. <code>tests/test_mtv_warm_migration.py</code> explicitly skips warm tests for <code>openstack</code>, <code>openshift</code>, and <code>ova</code> source providers.</p>
+<p><strong>Note:</strong> Before the suite starts creating plans and migrations, it waits up to five minutes for all <code>forklift-*</code> pods in <code>mtv_namespace</code> to be <code>Running</code> or <code>Succeeded</code>, and it
+requires a controller pod to exist.</p>
+</blockquote>
+<p>The second is provider support, enforced at collection time:</p>
+<blockquote>
+<p><strong>Note:</strong> <code>pytest_collection_modifyitems</code> in <code>conftest.py</code> skips every <code>warm</code> test when the configured source provider is <code>openstack</code>, <code>openshift</code>, <code>ova</code>, or <code>hyperv</code>.</p>
+</blockquote>
+<h2 id="conversion">Conversion</h2>
+<p>Deep Inspection tests create a <code>Conversion</code> CR in addition to the usual chain. A standalone conversion is built from the provider connection secret, the source VM inventory ID, and
+optionally a snapshot MOREF:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forklift.konveyor.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Conversion</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-cold</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">connection</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">secret</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123-di-connection</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DeepInspection</span>
+<span class="w">  </span><span class="nt">vm</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vm-101</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtv-win2019-3disks</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VirtualMachine</span>
+<span class="w">  </span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">SNAPSHOT_MOREF</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datastore1:mtv-win2019-3disks/snap</span><span class="w">   </span><span class="c1"># only when reusing an existing snapshot</span>
+<span class="w">  </span><span class="nt">targetNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto-abc123</span>
+<span class="w">  </span><span class="nt">vddkImage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var/run/vddk</span>
+</code></pre></div>
+
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source in the suite</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Always <code>DeepInspection</code>; the wrapper has no constant for it, so the suite defines it locally</td>
+</tr>
+<tr>
+<td><code>connection.secret</code></td>
+<td>Connection secret built from the source provider secret plus the provider URL and SSL fingerprint</td>
+</tr>
+<tr>
+<td><code>vm.id</code>, <code>vm.name</code>, <code>vm.type</code></td>
+<td>Inventory VM data</td>
+</tr>
+<tr>
+<td><code>vddkImage</code></td>
+<td>Required for Deep Inspection. Omitting it is how the validation test triggers <code>VDDKImageNotSet</code></td>
+</tr>
+<tr>
+<td><code>settings.SNAPSHOT_MOREF</code></td>
+<td>Set only when the test reuses an existing snapshot, which skips the snapshot-creation stages</td>
+</tr>
+<tr>
+<td><code>targetNamespace</code></td>
+<td>Namespace where the conversion pod runs</td>
+</tr>
+</tbody>
+</table></div>
+<p>The suite polls <code>status.phase</code> and <code>status.stage</code>, and treats <code>Succeeded</code>, <code>Failed</code>, and <code>Canceled</code> as terminal. Failures read the <code>Critical</code> conditions’ messages from the same
+status object. Cancellation patches the status subresource directly to <code>phase: Canceled</code>, <code>stage: Finished</code>, mirroring the Forklift controller’s own cancel path.</p>
+<blockquote>
+<p><strong>Note:</strong> Plan-driven Deep Inspection uses the same <code>Conversion</code> machinery but runs it as part of a warm <code>Plan</code>, with <code>runPreflightInspection: false</code> asserting that no DI
+results were produced.</p>
 </blockquote>
 <h2 id="related-resources-and-cleanup">Related Resources and Cleanup</h2>
 <p>A few supporting resources show up often enough that they are worth calling out directly:</p>
@@ -778,15 +1333,24 @@
 <li>Custom namespaces created through <code>get_or_create_namespace()</code> are created with the same standard labels and waited to <code>Active</code>.</li>
 <li>OpenShift source-provider tests create a separate <code>${session_uuid}-source-vms</code> namespace for source-side CNV VMs.</li>
 <li>Copy-offload tests create a storage credential <code>Secret</code> in the run namespace and may also rely on the plan-specific secret Forklift creates later.</li>
-<li>Every object created through <code>create_and_store_resource()</code> is registered in <code>fixture_store["teardown"]</code>.</li>
+<li><code>aap</code> hook tests create an AWX token <code>Secret</code> in <code>mtv_namespace</code> named <code>${session_uuid}-awx-aap</code>.</li>
+<li>Every object created through <code>create_and_store_resource()</code> is registered in <code>fixture_store["teardown"]</code> under its kind.</li>
 </ul>
 <p>Cleanup happens in two layers:</p>
 <ul>
 <li><code>cleanup_migrated_vms</code> removes migrated VMs at class teardown, using <code>vm_target_namespace</code> when you set one.</li>
-<li>Session teardown removes <code>Migration</code>, <code>Plan</code>, <code>Provider</code>, <code>Secret</code>, <code>StorageMap</code>, <code>NetworkMap</code>, <code>NetworkAttachmentDefinition</code>, namespaces, migrated VMs, and even source-side cloned VMs for providers such as VMware, OpenStack, and RHV.</li>
+<li>
+<p>Session teardown first cancels every <code>Migration</code> and archives every <code>Plan</code>, then deletes what is left: <code>Provider</code>, <code>Secret</code>, <code>StorageMap</code>, <code>NetworkMap</code>,
+  <code>NetworkAttachmentDefinition</code>, <code>Conversion</code>, <code>Host</code>, <code>Namespace</code>, plus the <code>Pod</code> and <code>VirtualMachine</code> objects the migration itself created. It also deletes OpenStack
+  <code>VolumeSnapshot</code>s, waits for leftover session pods to disappear, and verifies that DataVolumes, PVCs, and PVs are gone from the run namespace.</p>
+</li>
+<li>
+<p>Source-side clones are removed through the provider APIs, not the cluster: vCenter or ESXi for VMware, OpenStack, RHV, and Hyper-V.</p>
+</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>--skip-teardown</code> leaves those resources behind on purpose. Use it only when you want leftover <code>Plan</code>, <code>Migration</code>, <code>Provider</code>, PVC, VM, and namespace objects for debugging.</p>
+<p><strong>Warning:</strong> <code>--skip-teardown</code> leaves those resources behind on purpose. Use it only when you want leftover <code>Plan</code>, <code>Migration</code>, <code>Provider</code>, PVC, VM, and namespace objects for
+debugging.</p>
 </blockquote>
                 </div>
             </article>
@@ -813,13 +1377,22 @@
 <li><a href="#lifecycle-overview">Lifecycle Overview</a></li>
 <li><a href="#where-resources-live">Where Resources Live</a></li>
 <li><a href="#shared-naming-rules">Shared Naming Rules</a></li>
-<li><a href="#provider">Provider</a></li>
+<li><a href="#provider">Provider</a><ul>
+<li><a href="#provider-cr-shape">Provider CR shape</a></li>
+<li><a href="#destination-providers">Destination providers</a></li>
+<li><a href="#provider-readiness-rules">Provider readiness rules</a></li>
+</ul>
+</li>
 <li><a href="#mapping-source-identifiers">Mapping Source Identifiers</a></li>
 <li><a href="#storagemap">StorageMap</a></li>
 <li><a href="#networkmap">NetworkMap</a></li>
 <li><a href="#hook">Hook</a></li>
-<li><a href="#plan">Plan</a></li>
+<li><a href="#plan">Plan</a><ul>
+<li><a href="#plan-spec-fields-the-suite-sets">Plan spec fields the suite sets</a></li>
+</ul>
+</li>
 <li><a href="#migration">Migration</a></li>
+<li><a href="#conversion">Conversion</a></li>
 <li><a href="#related-resources-and-cleanup">Related Resources and Cleanup</a></li>
 </ul>
 </div>
@@ -827,24 +1400,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -890,5 +1466,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

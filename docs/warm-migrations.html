@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Warm Migrations - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -141,7 +142,7 @@
 
                     <li>
                         <a href="warm-migrations.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Warm Migrations
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,7 +302,8 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="warm-migrations">Warm Migrations</h1>
-<p>Warm migrations in <code>mtv-api-tests</code> are the powered-on migration path. The suite starts from a running source VM, lets MTV perform one or more precopy rounds, and then completes the migration at a scheduled cutover time. If you are setting up or tuning warm coverage, the main knobs are <code>warm_migration</code>, <code>snapshots_interval</code>, and <code>mins_before_cutover</code>.</p>
+<p>Warm migrations in <code>mtv-api-tests</code> are the powered-on migration path. The suite starts from a running source VM, lets MTV perform one or more precopy rounds, and then completes
+the migration at a scheduled cutover time. If you are setting up or tuning warm coverage, the main knobs are <code>warm_migration</code>, <code>snapshots_interval</code>, and <code>mins_before_cutover</code>.</p>
 <h2 id="what-you-need-to-set">What You Need To Set</h2>
 <p>A warm scenario in this repository is driven by a small set of plan fields:</p>
 <ul>
@@ -310,33 +313,64 @@
 <li><code>target_power_state</code> lets you enforce the expected destination VM power state.</li>
 </ul>
 <p>Example from <code>tests/tests_config/config.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_sanity_warm_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_sanity_warm_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
-<p>In practice, warm tests in this repository also clone the source VM before migration. That makes repeated test runs safer and gives the suite a place to apply warm-specific preparation.</p>
+<p>In practice, warm tests in this repository also clone the source VM before migration. That makes repeated test runs safer and gives the suite a place to apply warm-specific
+preparation.</p>
+<h2 id="the-five-step-warm-pattern">The Five-Step Warm Pattern</h2>
+<p>Warm classes use the same five test methods as cold classes, with one behavioral difference in <code>test_migrate_vms</code>: it passes a computed <code>cut_over</code> timestamp.</p>
+<ol>
+<li><code>test_create_storagemap</code></li>
+<li><code>test_create_networkmap</code></li>
+<li><code>test_create_plan</code></li>
+<li><code>test_migrate_vms</code></li>
+<li><code>test_check_vms</code></li>
+</ol>
+<p>The ClusterRole warm classes are the exception to the five-step shape. <code>TestClusterroleWarmMtvMigration</code>
+(<code>tests/warm/test_mtv_warm_clusterrole_migration.py</code>) stops after <code>test_migrate_vms</code> and has no <code>test_check_vms</code>, because its subject is the
+ClusterRole binding rather than post-migration VM validation. <code>TestClusterroleWarmWithSccMigration</code> keeps the full five steps and does run
+<code>check_vms()</code>.</p>
+<p>Warm classes that exercise the precopy interval — the standard warm scenarios — also activate the session-scoped <code>precopy_interval_forkliftcontroller</code> fixture through
+<code>@pytest.mark.usefixtures</code>, which patches the live ForkliftController before any migration starts. The two ClusterRole warm classes
+(<code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code>) request only <code>cleanup_migrated_vms</code>, so they run without that patch.</p>
+<p>Two warm variants extend the five-step pattern:</p>
+<ul>
+<li>
+<p><strong>6-step XFS pattern</strong> in <code>tests/warm/test_warm_migration_xfs.py</code> (<code>TestWarmMigrationXfs</code>): storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_xfs_version</code> -&gt;
+  check_vms</p>
+</li>
+<li>
+<p><strong>6-step copy-offload pattern</strong> in <code>tests/copyoffload/test_copyoffload_migration.py</code> (<code>TestCopyoffloadWarmMigration</code>): storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt;
+  <code>test_check_xcopy_used</code> -&gt; check_vms</p>
+</li>
+</ul>
 <h2 id="how-warm-source-preparation-works">How Warm Source Preparation Works</h2>
-<p>For vSphere sources, the suite explicitly enables Change Block Tracking (CBT) on the cloned VM before warm migration starts:</p>
+<p>For vSphere sources, the suite explicitly enables Change Block Tracking (CBT) on the cloned VM before warm migration starts. <code>prepared_plan</code> passes <code>enable_ctk=warm_migration</code> in
+the clone options, and the vSphere provider applies it during clone:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Enable Change Block Tracking (CBT) only for warm migrations</span>
-<span class="n">enable_ctk</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;enable_ctk&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+<span class="n">enable_ctk</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"enable_ctk"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">enable_ctk</span><span class="p">:</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Enabling Change Block Tracking (CBT) for warm migration&quot;</span><span class="p">)</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Enabling Change Block Tracking (CBT) for warm migration"</span><span class="p">)</span>
     <span class="n">cbt_option</span> <span class="o">=</span> <span class="n">vim</span><span class="o">.</span><span class="n">option</span><span class="o">.</span><span class="n">OptionValue</span><span class="p">()</span>
-    <span class="n">cbt_option</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;ctkEnabled&quot;</span>
-    <span class="n">cbt_option</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>
+    <span class="n">cbt_option</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="s2">"ctkEnabled"</span>
+    <span class="n">cbt_option</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="s2">"true"</span>
 </code></pre></div>
 
-<p>That matters because warm migration depends on change tracking between precopy rounds.</p>
+<p>CBT is enabled at the VM level and then per-disk on each virtual disk's SCSI controller.</p>
 <blockquote>
-<p><strong>Tip:</strong> Auto-generated Plan and Migration names in this suite get a <code>-warm</code> suffix for warm runs, which makes cluster-side debugging easier when you inspect resources during a test session.</p>
+<p><strong>Tip:</strong> The VM name suffix generated by <code>get_vm_suffix()</code> embeds the migration type, so warm clones end in <code>-warm</code> and cold clones in <code>-cold</code>. That suffix is part of the VM
+name and is truncated to fit the 63-character DNS limit.</p>
 </blockquote>
 <h2 id="precopy-interval-tuning">Precopy Interval Tuning</h2>
 <p>Warm timing knobs live in <code>tests/tests_config/config.py</code>, which is the default test configuration file loaded by <code>pytest.ini</code>:</p>
@@ -345,29 +379,27 @@
 <span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
 </code></pre></div>
 
-<p>The <code>snapshots_interval</code> value is applied through the <code>precopy_interval_forkliftcontroller</code> fixture, which patches the live <code>ForkliftController</code> custom resource:</p>
-<div class="highlight"><pre><span></span><code><span class="n">snapshots_interval</span> <span class="o">=</span> <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;snapshots_interval&quot;</span><span class="p">]</span>
-<span class="n">forklift_controller</span><span class="o">.</span><span class="n">wait_for_condition</span><span class="p">(</span>
-    <span class="n">status</span><span class="o">=</span><span class="n">forklift_controller</span><span class="o">.</span><span class="n">Condition</span><span class="o">.</span><span class="n">Status</span><span class="o">.</span><span class="n">TRUE</span><span class="p">,</span>
-    <span class="n">condition</span><span class="o">=</span><span class="n">forklift_controller</span><span class="o">.</span><span class="n">Condition</span><span class="o">.</span><span class="n">Type</span><span class="o">.</span><span class="n">RUNNING</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>
-<span class="p">)</span>
+<p>The <code>snapshots_interval</code> value is applied through the <code>precopy_interval_forkliftcontroller</code> fixture, which patches the live <code>ForkliftController</code> custom resource in the MTV
+namespace:</p>
+<div class="highlight"><pre><span></span><code><span class="n">current_interval</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">forklift_controller</span><span class="o">.</span><span class="n">instance</span><span class="o">.</span><span class="n">spec</span><span class="p">,</span> <span class="s2">"controller_precopy_interval"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">current_interval</span><span class="p">)</span> <span class="o">==</span> <span class="nb">str</span><span class="p">(</span><span class="n">snapshots_interval</span><span class="p">):</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"ForkliftController controller_precopy_interval already set to </span><span class="si">{</span><span class="n">snapshots_interval</span><span class="si">}</span><span class="s2">, skipping update"</span>
+    <span class="p">)</span>
+    <span class="k">yield</span>
+    <span class="k">return</span>
 
 <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-    <span class="sa">f</span><span class="s2">&quot;Updating forklift-controller ForkliftController CR with snapshots interval=</span><span class="si">{</span><span class="n">snapshots_interval</span><span class="si">}</span><span class="s2"> seconds&quot;</span>
+    <span class="sa">f</span><span class="s2">"Setting ForkliftController controller_precopy_interval from </span><span class="si">{</span><span class="n">current_interval</span><span class="si">!r}</span><span class="s2"> to </span><span class="si">{</span><span class="n">snapshots_interval</span><span class="si">}</span><span class="s2">"</span>
 <span class="p">)</span>
-
-<span class="k">with</span> <span class="n">ResourceEditor</span><span class="p">(</span>
-    <span class="n">patches</span><span class="o">=</span><span class="p">{</span>
-        <span class="n">forklift_controller</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;spec&quot;</span><span class="p">:</span> <span class="p">{</span>
-                <span class="s2">&quot;controller_precopy_interval&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">snapshots_interval</span><span class="p">),</span>
-            <span class="p">}</span>
-        <span class="p">}</span>
-    <span class="p">}</span>
-<span class="p">):</span>
+<span class="n">ResourceEditor</span><span class="p">(</span><span class="n">patches</span><span class="o">=</span><span class="p">{</span><span class="n">forklift_controller</span><span class="p">:</span> <span class="p">{</span><span class="s2">"spec"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"controller_precopy_interval"</span><span class="p">:</span> <span class="n">snapshots_interval</span><span class="p">}}})</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+    <span class="n">backup_resources</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">)</span>
 </code></pre></div>
 
+<p>The fixture intentionally does not restore the previous interval. Its docstring (<code>conftest.py:627</code>) records why: with <code>ResourceEditor</code> restoring at teardown, one parallel worker
+ending its run would clobber the interval other workers are still migrating with. The patched value therefore stays on the controller for the rest of the session.</p>
 <p>What these values do:</p>
 <ul>
 <li><code>snapshots_interval</code> controls how often Forklift schedules warm precopy snapshots.</li>
@@ -376,7 +408,8 @@
 </ul>
 <p>The defaults in this repository are a fast <code>2</code> second precopy interval and a <code>5</code> minute cutover delay.</p>
 <blockquote>
-<p><strong>Warning:</strong> <code>snapshots_interval</code> is not treated as a per-plan setting in the test suite. Warm tests patch the live <code>forklift-controller</code> <code>ForkliftController</code> resource while the fixture is active.</p>
+<p><strong>Warning:</strong> <code>snapshots_interval</code> is not treated as a per-plan setting in the test suite. Warm tests patch the live <code>forklift-controller</code> <code>ForkliftController</code> resource while
+the fixture is active.</p>
 </blockquote>
 <h2 id="cutover-timing">Cutover Timing</h2>
 <p>Warm tests do not cut over immediately by default. They compute the cutover timestamp in UTC from <code>mins_before_cutover</code>:</p>
@@ -385,20 +418,27 @@
     <span class="k">if</span> <span class="n">current_cutover</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">datetime_utc</span>
 
-    <span class="k">return</span> <span class="n">datetime_utc</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;mins_before_cutover&quot;</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="n">datetime_utc</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">py_config</span><span class="p">[</span><span class="s2">"mins_before_cutover"</span><span class="p">]))</span>
 </code></pre></div>
 
 <p>That helper is passed into the migration execution step:</p>
-<div class="highlight"><pre><span></span><code><span class="n">execute_migration</span><span class="p">(</span>
+<div class="highlight"><pre><span></span><code><span class="n">di_callback</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">create_di_capture_callback</span><span class="p">(</span><span class="n">plan</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span> <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span>
+    <span class="k">else</span> <span class="kc">None</span>
+<span class="p">)</span>
+<span class="n">execute_migration</span><span class="p">(</span>
     <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
     <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
     <span class="n">plan</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span>
     <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
     <span class="n">cut_over</span><span class="o">=</span><span class="n">get_cutover_value</span><span class="p">(),</span>
+    <span class="n">on_status_poll</span><span class="o">=</span><span class="n">di_callback</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 
-<p>This gives the warm migration time to accumulate precopy work before the final switchover.</p>
+<p>This gives the warm migration time to accumulate precopy work before the final switchover. On vSphere the status-poll callback also captures Deep Inspection output during
+execution, and <code>check_vms()</code> verifies the captured DI results afterwards.</p>
 <p>Use these tuning rules:</p>
 <ul>
 <li>Increase <code>mins_before_cutover</code> if you want a longer warm phase before downtime.</li>
@@ -409,8 +449,23 @@
 <p><strong>Tip:</strong> The helper also supports immediate cutover with <code>current_cutover=True</code>, although the warm test classes in this repository use the delayed default.</p>
 </blockquote>
 <h2 id="supported-providers">Supported Providers</h2>
-<p>Warm provider support is enforced directly in the warm test modules.</p>
-<table>
+<p>Warm support is not expressed per test class. It is enforced at collection time by a <code>pytest_collection_modifyitems</code> hook in the root <code>conftest.py</code>, based on the source provider
+<code>type</code> in <code>.providers.json</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Skip warm migration tests for providers that do not support warm migration.</span>
+<span class="n">warm_unsupported</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">,</span>
+    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">,</span>
+    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">,</span>
+    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">if</span> <span class="n">source_provider_type</span> <span class="ow">in</span> <span class="n">warm_unsupported</span><span class="p">:</span>
+    <span class="n">warm_skip</span> <span class="o">=</span> <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">source_provider_type</span><span class="si">}</span><span class="s2"> warm migration is not supported."</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">"warm"</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
+            <span class="n">item</span><span class="o">.</span><span class="n">add_marker</span><span class="p">(</span><span class="n">warm_skip</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Source provider</th>
@@ -422,58 +477,73 @@
 <tr>
 <td>vSphere</td>
 <td>Supported</td>
-<td>Main warm path. Also used for warm copy-offload coverage.</td>
+<td>Main warm path. Also used for warm copy-offload and warm XFS coverage.</td>
 </tr>
 <tr>
 <td>RHV</td>
-<td>Implemented, but Jira-gated</td>
-<td>The warm tests add a Jira marker for <code>MTV-2846</code>.</td>
+<td>Supported</td>
+<td>Warm classes carry <code>@pytest.mark.rhv</code> alongside <code>@pytest.mark.vsphere</code>.</td>
 </tr>
 <tr>
 <td>OpenStack</td>
 <td>Not supported</td>
-<td>Explicitly skipped by the warm tests.</td>
+<td>Skipped by the collection hook.</td>
 </tr>
 <tr>
 <td>OpenShift</td>
 <td>Not supported as a warm source</td>
-<td>Explicitly skipped by the warm tests.</td>
+<td>Skipped by the collection hook.</td>
 </tr>
 <tr>
 <td>OVA</td>
 <td>Not supported</td>
-<td>Explicitly skipped by the warm tests.</td>
+<td>Skipped by the collection hook.</td>
+</tr>
+<tr>
+<td>Hyper-V</td>
+<td>Not supported</td>
+<td>Skipped by the collection hook.</td>
 </tr>
 </tbody>
-</table>
-<p>The repository also includes a remote-destination warm scenario:</p>
+</table></div>
+<p>Note that the class-level <code>@pytest.mark.vsphere</code> and <code>@pytest.mark.rhv</code> markers on warm classes are provider-selection markers for <code>-m</code> filtering. They do not by themselves skip
+a class; the collection hook is what actually gates execution.</p>
+<p>The repository also includes remote-destination warm scenarios:</p>
 <ul>
 <li><code>TestWarmRemoteOcp</code> runs a warm migration to a remote OpenShift provider.</li>
-<li>It requires <code>remote_ocp_cluster</code> to be configured.</li>
-<li>It uses the <code>remote</code> marker rather than the <code>warm</code> marker.</li>
+<li><code>TestClusterroleWarmMtvMigration</code> and <code>TestClusterroleWarmWithSccMigration</code> test the ClusterRole-based destination provider with and without an SCC binding.</li>
+<li>All three require <code>remote_ocp_cluster</code> to be configured and carry both <code>@pytest.mark.warm</code> and <code>@pytest.mark.remote</code>.</li>
 </ul>
+<p>Warm copy-offload coverage is vSphere-only, enforced separately by the <code>copyoffload_config</code> fixture in <code>tests/copyoffload/conftest.py</code>, which raises if the source provider is not
+vSphere.</p>
 <p>Marker definitions come from <code>pytest.ini</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="na">markers</span><span class="w"> </span><span class="o">=</span>
 <span class="w">    </span><span class="na">tier0</span><span class="o">:</span><span class="w"> </span><span class="s">Core functionality tests (smoke tests)</span>
+<span class="w">    </span><span class="na">tier1</span><span class="o">:</span><span class="w"> </span><span class="s">Extended functionality tests</span>
 <span class="w">    </span><span class="na">remote</span><span class="o">:</span><span class="w"> </span><span class="s">Remote cluster migration tests</span>
 <span class="w">    </span><span class="na">warm</span><span class="o">:</span><span class="w"> </span><span class="s">Warm migration tests</span>
 <span class="w">    </span><span class="na">copyoffload</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload (XCOPY) tests</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Note:</strong> Most warm suites are selected with the <code>warm</code> marker. The remote OpenShift warm scenario lives in <code>tests/test_mtv_warm_migration.py</code>, but it is selected through <code>remote</code>.</p>
+<p><strong>Note:</strong> Most warm suites are selected with the <code>warm</code> marker. The remote OpenShift warm scenarios live in <code>tests/warm/test_mtv_warm_migration.py</code> and
+<code>tests/warm/test_mtv_warm_clusterrole_migration.py</code>, and they are selected through <code>remote</code> in addition to <code>warm</code>.</p>
 </blockquote>
 <h2 id="warm-scenarios-included-in-the-repository">Warm Scenarios Included In The Repository</h2>
 <p>These are the main warm configurations currently defined in <code>tests/tests_config/config.py</code>:</p>
 <ul>
-<li><code>test_sanity_warm_mtv_migration</code>: basic warm migration of a powered-on RHEL VM</li>
-<li><code>test_mtv_migration_warm_2disks2nics</code>: warm migration with extra disk and NIC coverage</li>
+<li><code>test_sanity_warm_mtv_migration</code>: basic warm migration of a powered-on RHEL VM, with static IP preservation enabled</li>
+<li><code>test_mtv_migration_warm_2disks2nics</code>: warm migration of a multi-disk, multi-NIC VM</li>
 <li><code>test_warm_remote_ocp</code>: warm migration to a remote OpenShift destination</li>
+<li><code>test_mtv_clusterrole_warm_migration</code>: warm migration using the ClusterRole-based destination provider</li>
+<li><code>test_mtv_clusterrole_warm_migration_with_scc</code>: same, plus an SCC RoleBinding for the default ServiceAccount</li>
 <li><code>test_warm_migration_comprehensive</code>: warm migration with static IP, PVC naming, target labels, affinity, and custom VM namespace coverage</li>
+<li><code>test_warm_migration_xfs</code>: warm migration that verifies XFS v4 filesystem compatibility after cutover</li>
 <li><code>test_copyoffload_warm_migration</code>: warm migration through the vSphere copy-offload path</li>
 </ul>
 <h2 id="what-warm-tests-validate">What Warm Tests Validate</h2>
-<p>Warm tests use the standard post-migration validation path in <code>check_vms()</code>. That means a warm run is not only checking whether MTV finishes, but also whether the migrated VM looks correct afterward.</p>
+<p>Warm tests use the standard post-migration validation path in <code>check_vms()</code>. That means a warm run is not only checking whether MTV finishes, but also whether the migrated VM
+looks correct afterward.</p>
 <p>The standard validation path covers:</p>
 <ul>
 <li>VM power state, including <code>target_power_state</code> when it is set</li>
@@ -483,53 +553,64 @@
 <li>provider SSL configuration for VMware, RHV, and OpenStack providers</li>
 <li>guest agent availability when the plan expects it</li>
 <li>SSH connectivity when the destination VM is powered on</li>
-<li>VMware snapshot tracking when snapshot data exists</li>
-<li>VMware serial preservation on the destination VM</li>
+<li>static IP preservation and, for vSphere, NIC name preservation</li>
+<li>nested-virtualization CPU features when <code>enable_nested_virtualization</code> is <code>False</code></li>
+<li>plan-driven Deep Inspection results for warm vSphere migrations</li>
 </ul>
-<p>This is especially useful for warm migrations because the destination VM is usually powered on after cutover, which allows the suite to verify guest-agent and SSH behavior immediately.</p>
+<p>For vSphere sources the suite additionally checks snapshot tracking, serial preservation, and boot configuration.</p>
+<p>This is especially useful for warm migrations because the destination VM is usually powered on after cutover, which allows the suite to verify guest-agent and SSH behavior
+immediately.</p>
 <blockquote>
 <p><strong>Note:</strong> SSH-based checks run only when the destination VM is powered on. If you set a powered-off target state, those checks are skipped.</p>
 </blockquote>
 <h2 id="the-comprehensive-warm-validation-path">The Comprehensive Warm Validation Path</h2>
 <p>The most feature-rich warm scenario in the repository is <code>test_warm_migration_comprehensive</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_warm_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2022-ip-3disks"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+    <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-warm-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+    <span class="c1"># Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default".</span>
+    <span class="c1"># vsphere uses .FileName; default truncates VmName to stay within 63 chars.</span>
+    <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"vsphere"</span><span class="p">:</span> <span class="s1">'{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}'</span><span class="p">,</span>
+        <span class="s2">"default"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"mtv-comprehensive-test"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+        <span class="s2">"static-label"</span><span class="p">:</span> <span class="s2">"static-value"</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
-                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                    <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"comprehensive-test"</span><span class="p">}},</span>
+                        <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
                     <span class="p">},</span>
-                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
+                    <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="p">]</span>
         <span class="p">}</span>
     <span class="p">},</span>
+    <span class="s2">"guest_agent_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
 <p>This configuration adds several warm-specific checks on top of the baseline <code>check_vms()</code> flow:</p>
 <ul>
 <li><code>preserve_static_ips</code> triggers static IP validation after cutover</li>
+<li><code>enable_nested_virtualization: False</code> asserts that nested-virtualization CPU features are disabled</li>
 <li><code>vm_target_namespace</code> moves the migrated VM into a custom namespace</li>
 <li><code>pvc_name_template</code> enables PVC name verification against the rendered Forklift template</li>
 <li><code>pvc_name_template_use_generate_name</code> switches PVC validation to prefix matching, because Kubernetes adds a random suffix</li>
@@ -540,44 +621,73 @@
 <ul>
 <li>In <code>target_labels</code>, a value of <code>None</code> means the suite replaces that value with the session UUID at runtime.</li>
 <li>When <code>vm_target_namespace</code> is set, the fixture creates that namespace if needed before migration.</li>
+<li><code>pvc_name_template</code> may be a provider-keyed mapping. <code>prepared_plan</code> resolves it with <code>resolve_pvc_name_template()</code>, which falls back to the <code>"default"</code> key.</li>
 <li>PVC template rendering supports Go template syntax and Sprig functions in the validation path.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> Static IP preservation is currently validated only for Windows VMs migrated from vSphere.</p>
-<p><strong>Note:</strong> The <code>{{.FileName}}</code> and <code>{{.DiskIndex}}</code> PVC template verification path is VMware-specific in the current code.</p>
+<p><strong>Note:</strong> The <code>{{.FileName}}</code> template token is resolved from vSphere inventory disk paths only. For a non-vSphere source provider, <code>check_pvc_names()</code> logs a warning and skips
+PVC name verification entirely.</p>
 </blockquote>
+<h2 id="warm-xfs-the-extra-verification-step">Warm XFS: The Extra Verification Step</h2>
+<p><code>TestWarmMigrationXfs</code> in <code>tests/warm/test_warm_migration_xfs.py</code> is a warm vSphere class that inserts <code>test_verify_xfs_version</code> between migration and validation. It runs a
+configured command on the migrated VM and asserts on the output:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_warm_migration_xfs"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-feature-rhel7-xfs"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">],</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+    <span class="s2">"xfs_compatibility"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"xfs_check"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"command"</span><span class="p">:</span> <span class="s2">"/usr/sbin/xfs_info"</span><span class="p">,</span>
+        <span class="s2">"mount_point"</span><span class="p">:</span> <span class="s2">"/"</span><span class="p">,</span>
+        <span class="s2">"expected_output"</span><span class="p">:</span> <span class="s2">"crc=0"</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p><code>xfs_compatibility: True</code> makes the Plan request the XFS-compatible virt-v2v image. The <code>xfs_check</code> dict is required for these tests: <code>command</code>, <code>mount_point</code>, and
+<code>expected_output</code> are all read directly by <code>test_verify_xfs_version</code>.</p>
 <h2 id="warm-copy-offload-the-extra-validation-path">Warm Copy-Offload: The Extra Validation Path</h2>
-<p>The warm copy-offload scenario adds one more validation step after the standard warm checks. In <code>tests/test_copyoffload_migration.py</code>, the suite first runs the normal post-migration verification and then explicitly verifies disk count:</p>
-<div class="highlight"><pre><span></span><code><span class="n">check_vms</span><span class="p">(</span>
-    <span class="n">plan</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">,</span>
-    <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
-    <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span>
-    <span class="n">network_map_resource</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">network_map</span><span class="p">,</span>
-    <span class="n">storage_map_resource</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span>
-    <span class="n">source_provider_data</span><span class="o">=</span><span class="n">source_provider_data</span><span class="p">,</span>
-    <span class="n">source_vms_namespace</span><span class="o">=</span><span class="n">source_vms_namespace</span><span class="p">,</span>
-    <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span>
-    <span class="n">vm_ssh_connections</span><span class="o">=</span><span class="n">vm_ssh_connections</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">verify_vm_disk_count</span><span class="p">(</span>
-    <span class="n">destination_provider</span><span class="o">=</span><span class="n">destination_provider</span><span class="p">,</span> <span class="n">plan</span><span class="o">=</span><span class="n">prepared_plan</span><span class="p">,</span> <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span>
-<span class="p">)</span>
+<p>The warm copy-offload scenario adds one more validation step after the migration. In <code>tests/copyoffload/test_copyoffload_migration.py</code>, <code>test_check_xcopy_used</code> runs first to
+prove the accelerated transfer path was used, and <code>test_check_vms</code> then runs the standard verification followed by an explicit disk-count check:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">test_check_xcopy_used</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span> <span class="n">ocp_admin_client</span><span class="p">:</span> <span class="n">DynamicClient</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Verify XCOPY acceleration was used for all disks.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ocp_admin_client (DynamicClient): OpenShift admin client.</span>
+<span class="sd">        target_namespace (str): Namespace where populate pods exist.</span>
+<span class="sd">        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.</span>
+<span class="sd">    """</span>
+    <span class="n">verify_xcopy_used</span><span class="p">(</span>
+        <span class="n">ocp_admin_client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
+        <span class="n">plan</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">plan_resource</span><span class="p">,</span>
+        <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
+        <span class="n">expected_xcopy_used</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
+    <span class="p">)</span>
 </code></pre></div>
 
 <p>That extra assertion matters for the copy-offload path because it confirms that the migrated VM still has the expected disk inventory after the accelerated transfer flow.</p>
 <p>The corresponding warm test plan looks like this:</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_warm_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_copyoffload_warm_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
@@ -588,26 +698,30 @@
 <li>the storage credentials and required copy-offload fields must be present</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> Warm copy-offload is not a generic warm migration path. The fixture fails early unless the source provider is vSphere and the required <code>copyoffload</code> settings are configured.</p>
+<p><strong>Warning:</strong> Warm copy-offload is not a generic warm migration path. The fixture fails early unless the source provider is vSphere and the required <code>copyoffload</code> settings are
+configured.</p>
 </blockquote>
 <h2 id="provider-configuration-for-full-warm-validation">Provider Configuration For Full Warm Validation</h2>
-<p>If you want the full warm validation path, especially guest-agent and SSH-based checks, your provider entry needs guest VM credentials. The vSphere example in <code>.providers.json.example</code> includes them:</p>
-<div class="highlight"><pre><span></span><code>&quot;vsphere&quot;: {
-  &quot;type&quot;: &quot;vsphere&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-  &quot;username&quot;: &quot;USERNAME&quot;,
-  &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-  &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
-  &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+<p>If you want the full warm validation path, especially guest-agent and SSH-based checks, your provider entry needs guest VM credentials. The vSphere example in
+<code>.providers.json.example</code> includes them:</p>
+<div class="highlight"><pre><span></span><code>"vsphere": {
+    "type": "vsphere",
+    "version": "&lt;SERVER VERSION&gt;",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",  # pragma: allowlist secret
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+    "guest_vm_win_user": "WINDOWS VMS USERNAME",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+    "vddk_init_image": "&lt;PATH TO VDDK INIT IMAGE&gt;",
+    "endpoint_type": "vcenter"
 }
 </code></pre></div>
 
-<p>The warm copy-offload path expects a <code>copyoffload</code> subsection under the vSphere provider entry. The example file includes fields such as <code>storage_vendor_product</code>, <code>datastore_id</code>, <code>storage_hostname</code>, <code>storage_username</code>, and <code>storage_password</code>.</p>
+<p>The warm copy-offload path expects a <code>copyoffload</code> subsection under the vSphere provider entry. The example file includes fields such as <code>storage_vendor_product</code>, <code>datastore_id</code>,
+<code>storage_hostname</code>, <code>storage_username</code>, and <code>storage_password</code>.</p>
 <blockquote>
 <p><strong>Note:</strong> The example provider file uses comments for secret-scanning exceptions. Those comments are fine in the example file, but they are not valid in strict JSON.</p>
 </blockquote>
@@ -643,6 +757,7 @@
                     <div class="toc">
 <ul>
 <li><a href="#what-you-need-to-set">What You Need To Set</a></li>
+<li><a href="#the-five-step-warm-pattern">The Five-Step Warm Pattern</a></li>
 <li><a href="#how-warm-source-preparation-works">How Warm Source Preparation Works</a></li>
 <li><a href="#precopy-interval-tuning">Precopy Interval Tuning</a></li>
 <li><a href="#cutover-timing">Cutover Timing</a></li>
@@ -650,6 +765,7 @@
 <li><a href="#warm-scenarios-included-in-the-repository">Warm Scenarios Included In The Repository</a></li>
 <li><a href="#what-warm-tests-validate">What Warm Tests Validate</a></li>
 <li><a href="#the-comprehensive-warm-validation-path">The Comprehensive Warm Validation Path</a></li>
+<li><a href="#warm-xfs-the-extra-verification-step">Warm XFS: The Extra Verification Step</a></li>
 <li><a href="#warm-copy-offload-the-extra-validation-path">Warm Copy-Offload: The Extra Validation Path</a></li>
 <li><a href="#provider-configuration-for-full-warm-validation">Provider Configuration For Full Warm Validation</a></li>
 <li><a href="#practical-guidance">Practical Guidance</a></li>
@@ -659,24 +775,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -722,5 +841,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

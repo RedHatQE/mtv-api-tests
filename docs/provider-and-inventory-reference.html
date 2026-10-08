@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Provider And Inventory Reference - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -197,7 +198,7 @@
 
                     <li>
                         <a href="provider-and-inventory-reference.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Provider And Inventory Reference
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -305,70 +307,90 @@
 <li>direct provider classes for actions such as connect, clone, power control, snapshots, and VM inspection</li>
 <li>Forklift inventory adapters for the names, IDs, networks, and storages that MTV itself consumes</li>
 </ul>
-<p>That split explains most of the repository's behavior. If a problem is about cloning, power state, guest information, or direct SDK access, start with the provider class. If a problem is about <code>NetworkMap</code>, <code>StorageMap</code>, or a VM ID inside a <code>Plan</code>, start with Forklift inventory.</p>
+<p>That split explains most of the repository's behavior. If a problem is about cloning, power state, guest information, or direct SDK access, start with the provider class. If a
+problem is about <code>NetworkMap</code>, <code>StorageMap</code>, or a VM ID inside a <code>Plan</code>, start with Forklift inventory.</p>
 <h2 id="end-to-end-flow">End-To-End Flow</h2>
 <ol>
-<li>The suite loads <code>.providers.json</code> from the repository root.</li>
-<li><code>py_config["source_provider"]</code> selects one top-level provider entry from that file.</li>
-<li><code>create_source_provider()</code> creates the source <code>Secret</code> and source <code>Provider</code> CR, then instantiates the matching <code>BaseProvider</code> subclass.</li>
-<li><code>source_provider_inventory</code> chooses the matching <code>ForkliftInventory</code> adapter for that provider type.</li>
-<li><code>prepared_plan</code> clones or creates source VMs, normalizes them through <code>vm_dict()</code>, rewrites the VM name if needed, and waits for Forklift inventory to see the VM.</li>
-<li><code>get_network_migration_map()</code> and <code>get_storage_migration_map()</code> turn inventory data into <code>NetworkMap</code> and <code>StorageMap</code> CR payloads.</li>
-<li><code>populate_vm_ids()</code> copies Forklift VM IDs into the <code>Plan</code> payload just before <code>create_plan_resource()</code> runs.</li>
+<li>The suite loads <code>.providers.json</code> from the repository root through <code>resolve_providers_json_path()</code> and <code>load_source_providers()</code> (<code>utilities/utils.py:77</code>).</li>
+<li><code>py_config["source_provider"]</code> selects one top-level provider entry from that file (<code>conftest.py:718</code>).</li>
+<li>
+<p><code>create_source_provider()</code> creates the source <code>Secret</code> and source <code>Provider</code> CR, waits for <code>Provider.Status.READY</code>, then instantiates the matching <code>BaseProvider</code> subclass as a
+   context manager (<code>utilities/utils.py:371</code>).</p>
+</li>
+<li>
+<p>The <code>source_provider_inventory</code> fixture calls <code>create_forklift_inventory()</code>, which picks the adapter registered for <code>source_provider.type</code> (<code>conftest.py:1712</code>,
+   <code>libs/forklift_inventory.py:33</code>).</p>
+</li>
+<li>
+<p><code>prepared_plan</code> clones or creates source VMs, normalizes them through <code>vm_dict()</code>, and rewrites the VM name to the cloned name (<code>conftest.py:1310</code>).</p>
+</li>
+<li>After <strong>every</strong> clone finishes, the fixture waits for all cloned VMs to appear in Forklift inventory (<code>conftest.py:1367</code>).</li>
+<li>
+<p><code>get_network_migration_map()</code> and <code>get_storage_migration_map()</code> turn inventory data into <code>NetworkMap</code> and <code>StorageMap</code> CR payloads (<code>utilities/mtv_migration.py:687</code>,
+   <code>utilities/mtv_migration.py:548</code>).</p>
+</li>
+<li>
+<p><code>populate_vm_ids()</code> copies Forklift VM IDs into the <code>Plan</code> payload just before <code>create_plan_resource()</code> runs (<code>utilities/utils.py:894</code>).</p>
+</li>
 </ol>
-<p>The synchronization step is explicit in <code>conftest.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">virtual_machines</span><span class="p">:</span>
-    <span class="c1"># Get VM object first (without full vm_dict analysis)</span>
-    <span class="c1"># Add enable_ctk flag for warm migrations</span>
-    <span class="n">clone_options</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">vm</span><span class="p">,</span> <span class="s2">&quot;enable_ctk&quot;</span><span class="p">:</span> <span class="n">warm_migration</span><span class="p">}</span>
-    <span class="n">provider_vm_api</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">get_vm_by_name</span><span class="p">(</span>
-        <span class="n">query</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-        <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
-        <span class="n">clone_vm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;session_uuid&quot;</span><span class="p">],</span>
-        <span class="n">clone_options</span><span class="o">=</span><span class="n">clone_options</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">source_vm_details</span> <span class="o">=</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">vm_dict</span><span class="p">(</span>
-        <span class="n">provider_vm_api</span><span class="o">=</span><span class="n">provider_vm_api</span><span class="p">,</span>
-        <span class="n">name</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-        <span class="n">namespace</span><span class="o">=</span><span class="n">source_vms_namespace</span><span class="p">,</span>
-        <span class="n">clone</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Already cloned above</span>
-        <span class="n">vm_name_suffix</span><span class="o">=</span><span class="n">vm_name_suffix</span><span class="p">,</span>
-        <span class="n">session_uuid</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;session_uuid&quot;</span><span class="p">],</span>
-        <span class="n">clone_options</span><span class="o">=</span><span class="n">vm</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">source_vm_details</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-
-    <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">:</span>
-        <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">wait_for_vm</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+<p>The synchronization step is explicitly two-phase in <code>conftest.py</code>, because waiting per-VM inside the clone loop caused inventory sync failures on the second and later VMs:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.</span>
+<span class="c1"># Sequential per-VM wait during cloning causes inventory sync failures on VM2+.</span>
+<span class="n">inventory_timeout</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"inventory_timeout"</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
+<span class="n">wait_for_cloned_vms_in_forklift_inventory</span><span class="p">(</span>
+    <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
+    <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span>
+    <span class="n">cloned_vm_names</span><span class="o">=</span><span class="n">cloned_vm_names</span><span class="p">,</span>
+    <span class="n">inventory_timeout</span><span class="o">=</span><span class="n">inventory_timeout</span><span class="p">,</span>
+<span class="p">)</span>
 </code></pre></div>
 
+<p>Two extra waits sit next to that call:</p>
+<ul>
+<li>
+<p>When any VM uses <code>add_nic</code>, <code>wait_for_added_nics_in_forklift_inventory()</code> forces a provider refresh and blocks until inventory shows the new NIC count (<code>conftest.py:1379</code>,
+  <code>utilities/provider_inventory.py:44</code>).</p>
+</li>
+<li>
+<p>On vSphere, <code>wait_for_cloned_vms_in_forklift_inventory()</code> additionally waits for inventory MAC addresses to converge with live vCenter MACs, because vSphere clones regenerate
+  MACs (<code>utilities/provider_inventory.py:176</code>).</p>
+</li>
+</ul>
 <blockquote>
-<p><strong>Note:</strong> A map-generation failure often means Forklift inventory has not finished syncing the VM yet. The suite intentionally waits for inventory before creating maps, because MTV consumes inventory objects, not the provider SDK's in-memory objects.</p>
+<p><strong>Note:</strong> A map-generation failure often means Forklift inventory has not finished syncing the VM yet. The suite intentionally waits for inventory before creating maps, because
+MTV consumes inventory objects, not the provider SDK's in-memory objects.</p>
 </blockquote>
 <h2 id="provider-configuration-and-selection">Provider Configuration And Selection</h2>
-<p>The selection logic is intentionally simple: <code>.providers.json</code> is loaded, and <code>py_config["source_provider"]</code> picks one named entry.</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">source_provider_data</span><span class="p">(</span><span class="n">source_providers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve source provider configuration from .providers.json.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">source_providers</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">MissingProvidersFileError</span><span class="p">()</span>
+<p>The selection logic is intentionally simple: <code>.providers.json</code> is loaded, and <code>py_config["source_provider"]</code> picks one named entry. Each entry's <code>type</code> field is then compared
+against <code>Provider.ProviderType</code> by small predicate helpers in <code>utilities/utils.py</code>: <code>ocp_provider()</code>, <code>vmware_provider()</code>, <code>rhv_provider()</code>, <code>openstack_provider()</code>,
+<code>hyperv_provider()</code>, and <code>ova_provider()</code> (<code>utilities/utils.py:121-148</code>).</p>
+<div class="highlight"><pre><span></span><code><span class="n">requested_provider</span> <span class="o">=</span> <span class="n">py_config</span><span class="p">[</span><span class="s2">"source_provider"</span><span class="p">]</span>
+<span class="k">if</span> <span class="n">requested_provider</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">source_providers</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"Source provider '</span><span class="si">{</span><span class="n">requested_provider</span><span class="si">}</span><span class="s2">' not found in '</span><span class="si">{</span><span class="n">providers_path</span><span class="si">}</span><span class="s2">'. "</span>
+        <span class="sa">f</span><span class="s2">"Available providers: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">source_providers</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">)</span>
 
-    <span class="n">requested_provider</span> <span class="o">=</span> <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;source_provider&quot;</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">requested_provider</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">source_providers</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Source provider &#39;</span><span class="si">{</span><span class="n">requested_provider</span><span class="si">}</span><span class="s2">&#39; not found in &#39;.providers.json&#39;. &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;Available providers: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">source_providers</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">_source_provider</span> <span class="o">=</span> <span class="n">source_providers</span><span class="p">[</span><span class="n">requested_provider</span><span class="p">]</span>
-    <span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;source_provider_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_source_provider</span>
-    <span class="k">return</span> <span class="n">_source_provider</span>
+<span class="n">_source_provider</span> <span class="o">=</span> <span class="n">source_providers</span><span class="p">[</span><span class="n">requested_provider</span><span class="p">]</span>
+<span class="n">fixture_store</span><span class="p">[</span><span class="s2">"source_provider_data"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_source_provider</span>
+<span class="k">return</span> <span class="n">_source_provider</span>
 </code></pre></div>
 
-<p>The repository does not commit a sample <code>.providers.json</code>, so the code is the best reference for required fields.</p>
-<table>
+<p><code>providers_schema.json</code> is the machine-readable contract for every provider entry. It defines six <code>oneOf</code> provider definitions plus <code>guestCredentials</code> and <code>copyoffloadConfig</code>
+helper definitions.</p>
+<p>The factory in <code>utilities/utils.py</code> reads the common connection fields before it knows which provider type it is handling:</p>
+<div class="highlight"><pre><span></span><code><span class="n">secret_string_data</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"url"</span><span class="p">:</span> <span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s2">"api_url"</span><span class="p">],</span>
+    <span class="s2">"insecureSkipVerify"</span><span class="p">:</span> <span class="s2">"true"</span> <span class="k">if</span> <span class="n">insecure</span> <span class="k">else</span> <span class="s2">"false"</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">provider_args</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"username"</span><span class="p">:</span> <span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s2">"username"</span><span class="p">],</span>
+    <span class="s2">"password"</span><span class="p">:</span> <span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s2">"password"</span><span class="p">],</span>
+    <span class="s2">"fixture_store"</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Field</th>
@@ -378,7 +400,7 @@
 <tbody>
 <tr>
 <td><code>type</code></td>
-<td>Selects the provider class and the Forklift inventory adapter</td>
+<td>Selects the provider class, the secret keys, and the Forklift inventory adapter</td>
 </tr>
 <tr>
 <td><code>version</code></td>
@@ -394,70 +416,124 @@
 </tr>
 <tr>
 <td><code>fqdn</code></td>
-<td>Used by the CA certificate helper when certificate download is needed</td>
+<td>Used by the CA certificate helper, and as the SDK <code>host</code> for vSphere and Hyper-V</td>
+</tr>
+<tr>
+<td><code>storage_class</code></td>
+<td>Destination default for <code>get_storage_migration_map()</code>, OpenShift entries only</td>
 </tr>
 </tbody>
-</table>
-<p>The factory in <code>utilities/utils.py</code> reads the common connection fields before it knows which provider type it is handling:</p>
-<div class="highlight"><pre><span></span><code><span class="n">secret_string_data</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s2">&quot;api_url&quot;</span><span class="p">],</span>
-    <span class="s2">&quot;insecureSkipVerify&quot;</span><span class="p">:</span> <span class="s2">&quot;true&quot;</span> <span class="k">if</span> <span class="n">insecure</span> <span class="k">else</span> <span class="s2">&quot;false&quot;</span><span class="p">,</span>
-<span class="p">}</span>
-<span class="n">provider_args</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s2">&quot;username&quot;</span><span class="p">],</span>
-    <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="n">source_provider_data_copy</span><span class="p">[</span><span class="s2">&quot;password&quot;</span><span class="p">],</span>
-    <span class="s2">&quot;fixture_store&quot;</span><span class="p">:</span> <span class="n">fixture_store</span><span class="p">,</span>
-<span class="p">}</span>
-</code></pre></div>
-
-<p>Provider-specific extras are then added on top:</p>
-<table>
+</table></div>
+<p>The <code>Provider</code> CR always receives <code>vddk_init_image</code> and <code>sdk_endpoint</code> from the optional <code>vddk_init_image</code> and <code>endpoint_type</code> keys (<code>utilities/utils.py:544</code>).</p>
+<h3 id="per-provider-configuration-fields">Per-Provider Configuration Fields</h3>
+<p>Required fields come from <code>providers_schema.json</code>; the "extra fields read by code" column comes from <code>create_source_provider()</code>.</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
-<th>Source type</th>
+<th><code>type</code></th>
+<th>Required by schema</th>
 <th>Extra fields read by code</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>vsphere</code></td>
-<td>optional <code>copyoffload</code>, optional <code>vddk_init_image</code></td>
+<td><code>version</code>, <code>fqdn</code>, <code>api_url</code>, <code>username</code>, <code>password</code></td>
+<td><code>endpoint_type</code>, <code>vddk_init_image</code>, <code>clone_provider</code>, <code>luks_passphrase</code>, <code>copyoffload</code></td>
 </tr>
 <tr>
-<td><code>rhv</code></td>
-<td>no extra SDK login fields, but the current code still expects <code>fqdn</code> for CA cert download</td>
+<td><code>ovirt</code></td>
+<td><code>version</code>, <code>fqdn</code>, <code>api_url</code>, <code>username</code>, <code>password</code></td>
+<td>none; <code>ca_file</code> or <code>insecure</code> is derived instead</td>
 </tr>
 <tr>
 <td><code>openstack</code></td>
-<td><code>project_name</code>, <code>user_domain_name</code>, <code>region_name</code>, <code>user_domain_id</code>, <code>project_domain_id</code></td>
+<td>the common six plus <code>user_domain_name</code>, <code>region_name</code>, <code>project_name</code>, both domain IDs</td>
+<td>none</td>
 </tr>
 <tr>
 <td><code>openshift</code></td>
-<td>no extra provider-specific fields; the source uses the destination cluster secret</td>
+<td><code>version</code>, <code>host</code>, <code>api_url</code>, <code>username</code>, <code>password</code>, <code>storage_class</code></td>
+<td><code>verify_ssl</code>, <code>ca_bundle</code>; no <code>fqdn</code> in this definition</td>
 </tr>
 <tr>
 <td><code>ova</code></td>
-<td>no extra provider-specific fields; direct provider logic is intentionally minimal</td>
+<td><code>version</code>, <code>fqdn</code>, <code>api_url</code>, <code>username</code>, <code>password</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>hyperv</code></td>
+<td><code>version</code>, <code>fqdn</code>, <code>api_url</code>, <code>username</code>, <code>password</code>, <code>smb_url</code></td>
+<td><code>smb_user</code>, <code>smb_password</code></td>
 </tr>
 </tbody>
-</table>
+</table></div>
+<p>Provider-specific secret keys and SDK arguments are then added on top (<code>utilities/utils.py:426-511</code>):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Source type</th>
+<th>Secret <code>stringData</code> keys added</th>
+<th>SDK arguments added</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vsphere</code></td>
+<td><code>user</code>, <code>password</code>, <code>cacert</code></td>
+<td><code>host=fqdn</code>, <code>copyoffload</code></td>
+</tr>
+<tr>
+<td><code>ovirt</code></td>
+<td><code>user</code>, <code>password</code>, <code>cacert</code> (always fetched)</td>
+<td><code>host=api_url</code>, plus <code>ca_file</code> when secure or <code>insecure</code> when not</td>
+</tr>
+<tr>
+<td><code>openstack</code></td>
+<td><code>username</code>, <code>password</code>, <code>regionName</code>, <code>projectName</code>, <code>domainName</code>, <code>cacert</code></td>
+<td><code>host</code>, <code>auth_url</code>, <code>project_name</code>, <code>user_domain_name</code>, <code>region_name</code>, domain IDs</td>
+</tr>
+<tr>
+<td><code>openshift</code></td>
+<td>none; the destination cluster secret is reused</td>
+<td>none; <code>api_url</code> is replaced by the live cluster host</td>
+</tr>
+<tr>
+<td><code>ova</code></td>
+<td>none beyond <code>url</code> and <code>insecureSkipVerify</code></td>
+<td><code>host=api_url</code></td>
+</tr>
+<tr>
+<td><code>hyperv</code></td>
+<td><code>username</code>, <code>password</code>, <code>smbUrl</code>, <code>smbUser</code>, <code>smbPassword</code>, <code>cacert</code></td>
+<td><code>host=fqdn</code>, <code>cert_validation</code> set to the cert path or <code>False</code></td>
+</tr>
+</tbody>
+</table></div>
 <blockquote>
-<p><strong>Warning:</strong> <code>create_source_provider()</code> reads <code>api_url</code>, <code>username</code>, and <code>password</code> before provider-specific branching, so every provider entry needs those keys. <code>version</code> is also needed for generated resource names. When certificate download is involved, <code>fqdn</code> matters too, because the certificate helper always connects to <code>&lt;fqdn&gt;:443</code>.</p>
+<p><strong>Warning:</strong> <code>create_source_provider()</code> reads <code>api_url</code>, <code>username</code>, and <code>password</code> before provider-specific branching, so every provider entry needs those keys. <code>version</code> is
+also needed for generated resource names. When certificate download is involved, <code>fqdn</code> matters too, because the certificate helper always connects to <code>&lt;fqdn&gt;:&lt;port&gt;</code>
+(<code>utilities/utils.py:153</code>).</p>
+<p><strong>Note:</strong> Hyper-V fetches its CA certificate on port <strong>5986</strong>, not the default 443 used by every other provider (<code>utilities/utils.py:503</code>).</p>
+<p><strong>Note:</strong> <code>create_source_provider()</code> waits up to 600 seconds for the <code>Provider</code> CR to reach <code>READY</code>. OVA sources pass <code>stop_status=None</code> so a transient NFS <code>ConnectionFailed</code> is
+retried instead of aborting the run (<code>utilities/utils.py:550</code>).</p>
 </blockquote>
 <h2 id="the-baseprovider-contract">The BaseProvider Contract</h2>
-<p><code>BaseProvider</code> is the common surface that keeps the rest of the suite provider-agnostic. Each concrete provider can use its own SDK, but it must expose the same core operations to the test code.</p>
-<p>The normalized VM shape is defined in <code>libs/base_provider.py</code>:</p>
+<p><code>BaseProvider</code> is the common surface that keeps the rest of the suite provider-agnostic. Each concrete provider can use its own SDK, but it must expose the same core operations to
+the test code.</p>
+<p>The normalized VM shape is defined in <code>libs/base_provider.py:18</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="n">VIRTUAL_MACHINE_TEMPLATE</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;provider_type&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>  <span class="c1"># &quot;ovirt&quot; / &quot;vsphere&quot; / &quot;openstack&quot;</span>
-    <span class="s2">&quot;provider_vm_api&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="s2">&quot;network_interfaces&quot;</span><span class="p">:</span> <span class="p">[],</span>
-    <span class="s2">&quot;disks&quot;</span><span class="p">:</span> <span class="p">[],</span>
-    <span class="s2">&quot;cpu&quot;</span><span class="p">:</span> <span class="p">{},</span>
-    <span class="s2">&quot;memory_in_mb&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-    <span class="s2">&quot;snapshots_data&quot;</span><span class="p">:</span> <span class="p">[],</span>
-    <span class="s2">&quot;power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="s2">"id"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>
+    <span class="s2">"name"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>
+    <span class="s2">"provider_type"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>  <span class="c1"># "ovirt" / "vsphere" / "openstack"</span>
+    <span class="s2">"provider_vm_api"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="s2">"network_interfaces"</span><span class="p">:</span> <span class="p">[],</span>
+    <span class="s2">"disks"</span><span class="p">:</span> <span class="p">[],</span>
+    <span class="s2">"cpu"</span><span class="p">:</span> <span class="p">{},</span>
+    <span class="s2">"memory_in_mb"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="s2">"snapshots_data"</span><span class="p">:</span> <span class="p">[],</span>
+    <span class="s2">"power_state"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>
+    <span class="s2">"firmware"</span><span class="p">:</span> <span class="p">{},</span>
 <span class="p">}</span>
 </code></pre></div>
 
@@ -467,97 +543,178 @@
     <span class="n">names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
     <span class="n">inventory</span><span class="p">:</span> <span class="n">ForkliftInventory</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get network mappings for VMs or templates (before cloning).</span>
+<span class="w">    </span><span class="sd">"""Get network mappings for VMs or templates (before cloning).</span>
 
 <span class="sd">    This method handles provider-specific differences:</span>
-<span class="sd">    - RHV: Queries template networks directly (templates don&#39;t exist in inventory yet)</span>
+<span class="sd">    - RHV: Queries template networks directly (templates don't exist in inventory yet)</span>
 <span class="sd">    - VMware/OpenStack/OVA/OpenShift: Queries VM networks from Forklift inventory</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        names: List of VM or template names to query</span>
+<span class="sd">        inventory: Forklift inventory instance (required for all providers)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        List of network mappings in format [{"name": "network1"}, ...]</span>
+<span class="sd">    """</span>
 </code></pre></div>
 
-<p>In practice, <code>BaseProvider</code> gives the suite five important guarantees:</p>
+<p>In practice, <code>BaseProvider</code> gives the suite six important guarantees:</p>
 <ul>
 <li><code>connect()</code> and <code>disconnect()</code> manage the direct SDK session.</li>
-<li><code>test</code> is used immediately after provider creation to fail fast when the source is not reachable.</li>
+<li><code>test</code> is used immediately after provider creation to fail fast when the source is not reachable (<code>utilities/utils.py:555</code>).</li>
 <li><code>vm_dict()</code> returns a normalized view of the source or destination VM.</li>
 <li><code>clone_vm()</code> and <code>delete_vm()</code> let the suite prepare and clean up source-side test VMs without special-case code in every test.</li>
 <li><code>get_vm_or_template_networks()</code> lets the suite size destination networking even before cloned VMs have finished syncing into inventory.</li>
+<li><code>supports_skip_clone()</code> declares whether plan-readiness tests may use real VMs instead of clones. It defaults to <code>True</code>, and only <code>OvirtProvider</code> overrides it to <code>False</code> because
+  RHV plan names are templates (<code>libs/base_provider.py:126</code>, <code>libs/providers/rhv.py:381</code>).</li>
 </ul>
+<blockquote>
+<p><strong>Warning:</strong> <code>skip_clone=True</code> is incompatible with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>, <code>migrate_shared_disks</code>, <code>add_nic</code>, and — outside Hyper-V — <code>preserve_static_ips</code>,
+because all of those need the cloning phase (<code>conftest.py:1194</code>).</p>
+</blockquote>
 <h2 id="provider-specific-behavior">Provider-Specific Behavior</h2>
 <h3 id="vsphere">vSphere</h3>
 <p><code>VMWareProvider</code> in <code>libs/providers/vmware.py</code> is the most feature-rich source implementation in the repo.</p>
 <ul>
 <li>It uses <code>pyVmomi</code> for clone, power, disk, and guest-information operations.</li>
-<li>Clone-time options cover disk provisioning (<code>thin</code>, <code>thick-lazy</code>, <code>thick-eager</code>), extra disks, datastore overrides, ESXi host overrides, MAC regeneration, and Change Block Tracking for warm migrations.</li>
-<li>If <code>copyoffload.esxi_clone_method</code> is set to <code>ssh</code>, the provider patches the MTV <code>Provider</code> CR to set <code>esxiCloneMethod</code>.</li>
-<li>When copy-offload is configured, the source <code>Provider</code> CR also gets the annotation <code>forklift.konveyor.io/empty-vddk-init-image: yes</code>.</li>
+<li>
+<p>Clone-time options cover disk provisioning (<code>thin</code>, <code>thick-lazy</code>, <code>thick-eager</code>), extra disks, datastore overrides, ESXi host overrides, MAC regeneration, RDM disks, and Change
+  Block Tracking for warm migrations (<code>libs/providers/vmware.py:80</code>, <code>libs/providers/vmware.py:1602</code>).</p>
+</li>
+<li>
+<p><code>get_vm_or_template_networks()</code> queries Forklift inventory first and falls back to a direct vCenter query when the name is a template that inventory does not know yet
+  (<code>libs/providers/vmware.py:2046</code>).</p>
+</li>
+<li>
+<p>If <code>copyoffload.esxi_clone_method</code> is set to <code>ssh</code>, <code>update_provider_clone_method()</code> patches the MTV <code>Provider</code> CR to set <code>spec.settings.esxiCloneMethod</code> and waits up to 180
+  seconds for <code>Validated=True</code> (<code>libs/providers/vmware.py:109</code>).</p>
+</li>
+<li>
+<p>When copy-offload is configured, the source <code>Provider</code> CR also gets the annotation <code>forklift.konveyor.io/empty-vddk-init-image: yes</code> (<code>utilities/utils.py:533</code>).</p>
+</li>
 <li>Standard network and storage mappings come from <code>VsphereForkliftInventory</code>. Copy-offload storage mappings can bypass inventory and use explicit datastore IDs instead.</li>
+<li>It is the only provider that implements shared-disk handling: <code>relink_shared_disks()</code>, <code>find_shared_vmdk_paths()</code>, and <code>reattach_orphaned_vmdk()</code>. <code>prepared_plan</code> refuses
+  <code>migrate_shared_disks</code> for any other provider type (<code>conftest.py:1145</code>).</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> The test-side vSphere SDK connection uses <code>disableSslCertValidation=True</code>, while the Forklift <code>Provider</code> CR still honors <code>source_provider_insecure_skip_verify</code> and can include <code>cacert</code>. That means direct provider access and MTV-side validation are related, but not identical, code paths.</p>
+<p><strong>Note:</strong> The test-side vSphere SDK connection uses <code>disableSslCertValidation=True</code>, while the Forklift <code>Provider</code> CR still honors <code>source_provider_insecure_skip_verify</code> and can
+include <code>cacert</code>. That means direct provider access and MTV-side validation are related, but not identical, code paths.</p>
 </blockquote>
 <h3 id="rhv-ovirt">RHV / oVirt</h3>
-<p><code>OvirtProvider</code> in <code>libs/providers/rhv.py</code> has two important behaviors that are easy to miss.</p>
+<p><code>OvirtProvider</code> in <code>libs/providers/rhv.py</code> has three important behaviors that are easy to miss.</p>
 <ul>
-<li>It refuses to connect unless the RHV datacenter named <code>MTV-CNV</code> exists and is <code>up</code>.</li>
-<li><code>clone_vm()</code> clones from a template, not from a running VM. In other words, <code>source_vm_name</code> is treated as a template name in RHV flows.</li>
-<li><code>get_vm_or_template_networks()</code> ignores inventory during pre-clone network discovery and queries template NICs directly.</li>
+<li>It refuses to connect unless the RHV datacenter named <code>MTV-CNV</code> exists and its status is <code>up</code> (<code>libs/providers/rhv.py:268</code>).</li>
+<li>
+<p><code>clone_vm()</code> clones from a template, not from a running VM. In other words, <code>source_vm_name</code> is treated as a template name in RHV flows, and <code>supports_skip_clone()</code> returns
+  <code>False</code>.</p>
+</li>
+<li>
+<p><code>get_vm_or_template_networks()</code> ignores inventory during pre-clone network discovery and queries template NICs directly through <code>get_template_networks()</code>.</p>
+</li>
 <li>Later, once cloned VMs exist and Forklift has synced them, final <code>NetworkMap</code> and <code>StorageMap</code> generation still comes from inventory.</li>
-<li>RHV always fetches a CA certificate in <code>create_source_provider()</code>, even when insecure mode is enabled, because the code comments call out imageio as a dependency for that certificate.</li>
+<li>RHV always fetches a CA certificate in <code>create_source_provider()</code>, even when insecure mode is enabled, because the code comments call out imageio as a dependency for that
+  certificate (<code>utilities/utils.py:459</code>).</li>
 </ul>
 <h3 id="openstack">OpenStack</h3>
 <p><code>OpenStackProvider</code> in <code>libs/providers/openstack.py</code> clones more like an image pipeline than a simple VM copy.</p>
 <ul>
-<li>It snapshots the source server.</li>
+<li>It snapshots the source server with <code>create_server_image()</code>.</li>
 <li>It creates new volumes from the resulting snapshots.</li>
 <li>It preserves boot order across the recreated volumes.</li>
 <li>It boots the cloned server from those new volumes.</li>
 </ul>
-<p>OpenStack is also the strictest inventory-sync path. The suite does not treat “VM exists in inventory” as enough. It also waits for attached volumes and networks to become queryable:</p>
-<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">provider_type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">:</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_check_openstack_volumes_synced</span><span class="p">(</span><span class="n">vm</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_openstack_networks_synced</span><span class="p">(</span><span class="n">vm</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-    <span class="p">):</span>
+<p>OpenStack is also the strictest inventory-sync path. The suite does not treat "VM exists in inventory" as enough. <code>ForkliftInventory.wait_for_vm()</code> also waits for attached volumes
+and networks to become queryable (<code>libs/forklift_inventory.py:230</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># For OpenStack, verify volumes and networks are synced</span>
+<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">provider_type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_check_openstack_volumes_synced</span><span class="p">(</span><span class="n">vm</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_openstack_networks_synced</span><span class="p">(</span><span class="n">vm</span><span class="p">,</span> <span class="n">name</span><span class="p">)):</span>
         <span class="k">return</span> <span class="kc">None</span>
 </code></pre></div>
 
-<p>That matters because OpenStack storage mapping is based on volume type, and network mapping is based on inventory network objects matched against VM address data. If either side is late, map generation will be wrong.</p>
+<p>That matters because OpenStack storage mapping is based on volume type, and network mapping is based on inventory network objects matched against VM address data. If either side is
+late, map generation will be wrong.</p>
+<h3 id="hyper-v">Hyper-V</h3>
+<p><code>HyperVProvider</code> in <code>libs/providers/hyperv.py</code> drives Hyper-V over PowerShell Remoting Protocol using <code>pypsrp</code>, not over a vendor SDK.</p>
+<ul>
+<li><code>connect()</code> builds a <code>WSMan</code> session on port 5986 with NTLM auth plus an opened <code>RunspacePool</code>; <code>disconnect()</code> tears both down (<code>libs/providers/hyperv.py:364</code>).</li>
+<li>
+<p>VM queries return <code>pypsrp.complex_objects.GenericComplexObject</code> values rather than typed SDK models, and most data is read from embedded PowerShell scripts
+  (<code>_NIC_DETAILS_SCRIPT</code>, <code>_GUEST_OS_NAME_SCRIPT</code>).</p>
+</li>
+<li>
+<p><code>get_vm_or_template_networks()</code> delegates straight to <code>inventory.vms_networks_mappings()</code> (<code>libs/providers/hyperv.py:990</code>).</p>
+</li>
+<li>
+<p>It has <code>wait_for_guest_network_config()</code> for guest network readiness, which <code>prepared_plan</code> uses in place of the vSphere <code>wait_for_vmware_guest_info()</code> when <code>source_vm_power</code> is
+  <code>on</code> (<code>conftest.py:1293</code>).</p>
+</li>
+<li>
+<p><code>skip_clone=True</code> is allowed for Hyper-V, and <code>preserve_static_ips</code> stays compatible with it because guest tools are reachable without cloning (<code>conftest.py:1196</code>).</p>
+</li>
+<li>Windows detection uses the guest <code>OSName</code>/<code>Notes</code> KVP token <code>windows</code>, not the VM name, so names such as <code>twin-server</code> are classified correctly (<code>libs/providers/hyperv.py:29</code>,
+  <code>libs/providers/hyperv.py:737</code>).</li>
+</ul>
 <h3 id="openshift">OpenShift</h3>
 <p><code>OCPProvider</code> is both the destination provider for migrations and a supported source provider for source-side CNV test setups.</p>
 <ul>
-<li>If OpenShift is the source, <code>prepared_plan</code> creates source CNV VMs and a source-side <code>NetworkAttachmentDefinition</code> automatically.</li>
-<li><code>OpenshiftForkliftInventory</code> resolves storage by following the VM's data volumes to PVCs and then reading <code>storageClassName</code>.</li>
+<li>If OpenShift is the source, <code>prepared_plan</code> creates a source <code>NetworkAttachmentDefinition</code> plus source CNV VMs through <code>create_source_cnv_vms()</code> (<code>conftest.py:1122</code>).</li>
+<li><code>OpenshiftForkliftInventory</code> resolves storage by following the VM's data volumes to PVCs and then reading <code>storageClassName</code> from the live cluster.</li>
 <li>It resolves networks from the VM template: <code>multus.networkName</code> becomes a named source network, and a pod network becomes <code>{"type": "pod"}</code>.</li>
-<li>On destination lookups, <code>OCPProvider.vm_dict()</code> sanitizes VM names to Kubernetes-safe resource names before querying the cluster.</li>
+<li>
+<p><code>vm_dict()</code> waits for the CNV guest agent for up to 301 seconds and sanitizes VM names to Kubernetes-safe resource names before querying the cluster
+  (<code>libs/providers/openshift.py:155</code>).</p>
+</li>
+<li>
+<p>It exposes <code>create_ssh_connection_to_vm()</code>, which builds an <code>rrmngmnt</code> SSH connection against the destination VM (<code>libs/providers/openshift.py:392</code>).</p>
+</li>
 </ul>
 <h3 id="ova">OVA</h3>
 <p><code>OVAProvider</code> is intentionally thin.</p>
 <ul>
-<li><code>connect()</code> is effectively a no-op.</li>
-<li><code>clone_vm()</code> and <code>delete_vm()</code> are not implemented.</li>
-<li><code>vm_dict()</code> only fills the normalized template with the provider type and <code>power_state="off"</code>.</li>
-<li>In the current <code>prepared_plan</code> implementation, OVA sources are rewritten to the fixed VM name <code>1nisim-rhel9-efi</code>.</li>
-<li>In practice, OVA mapping behavior depends much more on Forklift inventory than on direct provider logic.</li>
+<li><code>connect()</code> returns <code>self</code> and <code>test</code> is always <code>True</code>; <code>disconnect()</code> only logs.</li>
+<li><code>clone_vm()</code> and <code>delete_vm()</code> are no-ops. OVA sources are never cloned by <code>prepared_plan</code>.</li>
+<li>
+<p><code>vm_dict()</code> fills the normalized template with the provider type, <code>power_state="off"</code>, and <code>win_os=False</code>, then upgrades <code>win_os</code> from Forklift inventory's OVF <code>osType</code> when an
+  inventory instance is passed (<code>libs/providers/ova.py:34</code>).</p>
+</li>
+<li>
+<p><code>get_vm_or_template_networks()</code> delegates to <code>inventory.vms_networks_mappings()</code>.</p>
+</li>
+<li>
+<p>In the current <code>prepared_plan</code> implementation, the source VM name stays unchanged; instead each VM gets a unique <code>targetName</code> derived from
+  <code>sanitize_kubernetes_name(f"{session_uuid}-{vm['name']}")</code> so parallel sessions do not collide (<code>conftest.py:1402</code>).</p>
+</li>
+<li>
+<p>In practice, OVA mapping behavior depends much more on Forklift inventory than on direct provider logic.</p>
+</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> The warm-migration test suites currently skip OpenStack, OpenShift, and OVA sources. RHV warm coverage is gated by a Jira marker. In this repository, vSphere is the fully exercised warm-migration source.</p>
+<p><strong>Note:</strong> Warm-migration coverage is marker-scoped rather than skipped in code. <code>tests/warm/test_mtv_warm_migration.py</code> carries <code>@pytest.mark.vsphere</code> and <code>@pytest.mark.rhv</code>, and
+<code>tests/warm/test_warm_migration_comprehensive.py</code> carries the same two. No OpenStack, OpenShift, or OVA warm tests exist.</p>
 </blockquote>
 <h2 id="forklift-inventory-adapters">Forklift Inventory Adapters</h2>
-<p>Forklift inventory lives behind the <code>forklift-inventory</code> route in the MTV namespace. Each adapter subclasses <code>ForkliftInventory</code> and knows how to translate that provider's inventory model into the source-side names and IDs that MTV map CRs expect.</p>
-<p>The adapter selection is defined in <code>conftest.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">providers</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">:</span> <span class="n">OvaForkliftInventory</span><span class="p">,</span>
-    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">RHV</span><span class="p">:</span> <span class="n">OvirtForkliftInventory</span><span class="p">,</span>
-    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span> <span class="n">VsphereForkliftInventory</span><span class="p">,</span>
-    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">:</span> <span class="n">OpenshiftForkliftInventory</span><span class="p">,</span>
-    <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">:</span> <span class="n">OpenstackForliftinventory</span><span class="p">,</span>
-<span class="p">}</span>
-<span class="n">provider_instance</span> <span class="o">=</span> <span class="n">providers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+<p>Forklift inventory lives behind the <code>forklift-inventory</code> <code>Route</code> in the MTV namespace. Each adapter subclasses <code>ForkliftInventory</code> and knows how to translate that provider's
+inventory model into the source-side names and IDs that MTV map CRs expect.</p>
+<p>The adapter selection is a registry in <code>libs/forklift_inventory.py</code>, not a literal dict in <code>conftest.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">PROVIDER_INVENTORY_MAP</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">type</span><span class="p">[</span><span class="n">ForkliftInventory</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_register_inventory_classes</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Populate PROVIDER_INVENTORY_MAP after all classes are defined."""</span>
+    <span class="n">PROVIDER_INVENTORY_MAP</span><span class="o">.</span><span class="n">update</span><span class="p">({</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">:</span> <span class="n">OvaForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">RHV</span><span class="p">:</span> <span class="n">OvirtForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span> <span class="n">VsphereForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">:</span> <span class="n">OpenshiftForkliftInventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">:</span> <span class="n">OpenstackForliftinventory</span><span class="p">,</span>
+        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">:</span> <span class="n">HypervForkliftInventory</span><span class="p">,</span>
+    <span class="p">})</span>
 </code></pre></div>
 
-<p>The adapters all use the same base route plumbing in <code>libs/forklift_inventory.py</code>: they discover the provider ID, build a provider-specific URL path, and then query VM, network, and storage endpoints through the inventory service.</p>
-<table>
+<p><code>create_forklift_inventory()</code> registers lazily on first use, raises <code>ValueError</code> when <code>provider.ocp_resource</code> is unset, and raises <code>ValueError</code> for an unregistered provider type.</p>
+<p>The adapters all use the same base route plumbing in <code>libs/forklift_inventory.py</code>: they discover the provider ID, build a provider-specific URL path, and then query VM, network,
+and storage endpoints through the inventory service. Provider ID discovery retries for up to 180 seconds with a 5 second sleep (<code>libs/forklift_inventory.py:93</code>).</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Source type</th>
@@ -570,64 +727,83 @@
 <tr>
 <td>vSphere</td>
 <td><code>VsphereForkliftInventory</code></td>
-<td>Each disk's <code>datastore.id</code> is matched to an inventory datastore name</td>
-<td>Each inventory VM network <code>id</code> is matched to an inventory network name</td>
+<td>Each disk's <code>datastore.id</code> matched to a datastore name</td>
+<td>Each VM network <code>id</code> matched to a network name</td>
 </tr>
 <tr>
 <td>RHV</td>
 <td><code>OvirtForkliftInventory</code></td>
-<td>Disk attachment -&gt; disk -&gt; <code>storageDomain</code> -&gt; storage domain name</td>
-<td>NIC profile -&gt; network ID -&gt; inventory network <code>path</code></td>
+<td>Disk attachment -&gt; <code>/disks/&lt;id&gt;</code> -&gt; <code>storageDomain</code> -&gt; domain name</td>
+<td>NIC profile -&gt; <code>/nicprofiles</code> -&gt; network ID -&gt; inventory <code>path</code></td>
 </tr>
 <tr>
 <td>OpenStack</td>
 <td><code>OpenstackForliftinventory</code></td>
-<td>Attached volume -&gt; volume details -&gt; <code>volumeType</code></td>
-<td>VM <code>addresses</code> keys are matched to inventory network names</td>
+<td>Attached volume -&gt; <code>/volumes/&lt;id&gt;</code> -&gt; <code>volumeType</code>, plus <code>glance</code></td>
+<td>VM <code>addresses</code> keys matched to inventory network names</td>
+</tr>
+<tr>
+<td>Hyper-V</td>
+<td><code>HypervForkliftInventory</code></td>
+<td>Each disk's <code>datastore.id</code> matched to a storage name</td>
+<td>Each NIC's <code>network.id</code> matched to a network name</td>
 </tr>
 <tr>
 <td>OpenShift</td>
 <td><code>OpenshiftForkliftInventory</code></td>
-<td>VM data volumes -&gt; PVC -&gt; <code>storageClassName</code></td>
-<td>VM template networks become either named multus networks or <code>{"type": "pod"}</code></td>
+<td>VM data volumes -&gt; PVC -&gt; live <code>storageClassName</code></td>
+<td>Template networks become named multus networks or <code>{"type": "pod"}</code></td>
 </tr>
 <tr>
 <td>OVA</td>
 <td><code>OvaForkliftInventory</code></td>
-<td>Inventory storage entries whose name contains the VM name; mapping returns storage <code>id</code></td>
-<td>Inventory VM network <code>ID</code> is matched to an inventory network name</td>
+<td>Storage entries whose name contains the VM name; returns storage <code>id</code></td>
+<td>VM network <code>ID</code> matched to an inventory network name</td>
 </tr>
 </tbody>
-</table>
-<p>Two adapter details are especially practical:</p>
+</table></div>
+<p>Three adapter details are especially practical:</p>
 <ul>
 <li>RHV uses provider-side template queries for pre-clone network discovery, but inventory for final map generation.</li>
-<li>OpenShift storage resolution is not just “whatever inventory says.” The adapter actually follows data volumes to PVCs and reads the live <code>storageClassName</code>.</li>
+<li>OpenShift storage resolution is not just "whatever inventory says." The adapter actually follows data volumes to PVCs and reads the live <code>storageClassName</code>.</li>
+<li>Only <code>VsphereForkliftInventory</code> exposes a <code>hosts</code> property, which is what the copy-offload host-concurrency tests use (<code>libs/forklift_inventory.py:438</code>).</li>
 </ul>
+<blockquote>
+<p><strong>Warning:</strong> <code>vms_networks_mappings()</code> deduplicates by default. Passing <code>deduplicate=False</code> returns one entry per NIC, which is what the <code>per_nic_network_map</code> plan option uses
+through <code>get_per_nic_networks()</code> (<code>libs/forklift_inventory.py:284</code>, <code>utilities/utils.py:257</code>).</p>
+</blockquote>
 <h2 id="how-source-network-mappings-are-resolved">How Source Network Mappings Are Resolved</h2>
 <p>Network mapping is a two-step process.</p>
-<p>First, the suite decides how many destination networks it needs. It does that in the <code>multus_network_name</code> fixture by calling <code>source_provider.get_vm_or_template_networks()</code>. This is why RHV can use template networks before clones exist.</p>
+<p>First, the suite decides how many destination networks it needs. It does that in the <code>multus_network_name</code> fixture by calling <code>source_provider.get_vm_or_template_networks()</code>
+(<code>conftest.py:869</code>). It creates <code>len(networks) - 1</code> NADs named <code>{base}-{i}</code>, where <code>base</code> is <code>cb-&lt;hash&gt;</code> derived from the node ID and <code>session_uuid</code> (<code>conftest.py:888</code>,
+<code>conftest.py:893</code>). This is why RHV can use template networks before clones exist.</p>
 <p>Second, once the cloned or prepared source VM has been synced into Forklift inventory, the actual <code>NetworkMap</code> payload is built from inventory data.</p>
 <p>The core rule lives in <code>utilities/utils.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_networks_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)):</span>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">per_nic_network_map</span><span class="p">:</span>
+    <span class="n">networks</span> <span class="o">=</span> <span class="n">get_per_nic_networks</span><span class="p">(</span>
+        <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span> <span class="n">source_provider_inventory</span><span class="o">=</span><span class="n">source_provider_inventory</span><span class="p">,</span> <span class="n">vms</span><span class="o">=</span><span class="n">vms</span>
+    <span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">networks</span> <span class="o">=</span> <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_networks_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">network</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">networks</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">pod_only</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># First network or pod_only mode → pod network</span>
         <span class="n">_destination</span> <span class="o">=</span> <span class="n">_destination_pod</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span>
-
-        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">&quot;</span>
-
+        <span class="n">multus_network_name_str</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+        <span class="n">multus_namespace</span> <span class="o">=</span> <span class="n">multus_network_name</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span>
+        <span class="n">nad_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">multus_network_name_str</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">multus_counter</span><span class="si">}</span><span class="s2">"</span>
         <span class="n">_destination</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
-            <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
-            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;multus&quot;</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="n">nad_name</span><span class="p">,</span>
+            <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">multus_namespace</span><span class="p">,</span>
+            <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"multus"</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">multus_counter</span> <span class="o">+=</span> <span class="mi">1</span>
 
     <span class="n">network_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-        <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">_destination</span><span class="p">,</span>
-        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
+        <span class="s2">"destination"</span><span class="p">:</span> <span class="n">_destination</span><span class="p">,</span>
+        <span class="s2">"source"</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
     <span class="p">})</span>
 </code></pre></div>
 
@@ -636,31 +812,39 @@
 <li>The first source network is always mapped to the destination pod network.</li>
 <li>Every additional source network is mapped to a generated Multus NAD.</li>
 <li>Those NADs are named from a base name plus a numeric suffix: <code>{base}-1</code>, <code>{base}-2</code>, and so on.</li>
-<li>If the plan config sets <code>multus_namespace</code>, the NADs are created there instead of in the main target namespace.</li>
+<li>If the plan config sets <code>multus_namespace</code>, the NADs are created there instead of in the main target namespace (<code>conftest.py:851</code>).</li>
 </ol>
 <blockquote>
 <p><strong>Warning:</strong> Network mapping is order-based. The first source network returned by inventory becomes the pod network, so inventory ordering matters for multi-NIC VMs.</p>
-<p><strong>Tip:</strong> If a source VM has <code>N</code> networks, the suite creates <code>N - 1</code> NADs, because the first network is reserved for the destination pod network.</p>
+<p><strong>Tip:</strong> If a source VM has <code>N</code> networks, the suite creates <code>N - 1</code> NADs, because the first network is reserved for the destination pod network. VMs configured with <code>add_nic</code> add
+one more NAD each (<code>conftest.py:875</code>).</p>
 </blockquote>
 <h2 id="how-source-storage-mappings-are-resolved">How Source Storage Mappings Are Resolved</h2>
-<p>The storage path is simpler than the network path in standard migrations: the helper trusts the selected inventory adapter to tell it which source storage objects matter, then it adds the destination storage class.</p>
+<p>The storage path is simpler than the network path in standard migrations: the helper trusts the selected inventory adapter to tell it which source storage objects matter, then it
+adds the destination storage class.</p>
 <p>The standard branch of <code>get_storage_migration_map()</code> looks like this:</p>
 <div class="highlight"><pre><span></span><code><span class="n">storage_migration_map</span> <span class="o">=</span> <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_storages_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storage_migration_map</span><span class="p">:</span>
     <span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-        <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">},</span>
-        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">storage</span><span class="p">,</span>
+        <span class="s2">"destination"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"storageClass"</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">},</span>
+        <span class="s2">"source"</span><span class="p">:</span> <span class="n">storage</span><span class="p">,</span>
     <span class="p">})</span>
 </code></pre></div>
 
 <p>A few practical consequences follow from that:</p>
 <ul>
-<li>The destination storage class is <code>py_config["storage_class"]</code> unless the caller passes an explicit <code>storage_class</code> argument.</li>
-<li>The meaning of the source side is provider-specific. On vSphere it is a datastore. On RHV it is a storage domain. On OpenStack it is a volume type. On OpenShift it is a storage class. On OVA it is a storage ID.</li>
-<li>If the adapter returns the wrong source identifier, the <code>StorageMap</code> will be wrong even if the direct provider SDK can see the disks just fine.</li>
+<li>The destination storage class is <code>py_config["storage_class"]</code> unless the caller passes an explicit <code>storage_class</code> argument (<code>utilities/mtv_migration.py:608</code>).</li>
+<li>
+<p>The meaning of the source side is provider-specific. On vSphere it is a datastore. On RHV it is a storage domain. On OpenStack it is a volume type or <code>glance</code>. On Hyper-V it is a
+  storage name. On OpenShift it is a storage class. On OVA it is a storage ID.</p>
+</li>
+<li>
+<p>If the adapter returns the wrong source identifier, the <code>StorageMap</code> will be wrong even if the direct provider SDK can see the disks just fine.</p>
+</li>
 </ul>
 <h3 id="vsphere-copy-offload">vSphere Copy-Offload</h3>
-<p>Copy-offload is the main exception to inventory-derived storage mapping. In copy-offload mode, <code>get_storage_migration_map()</code> can build the source side from explicit datastore IDs instead of asking inventory.</p>
+<p>Copy-offload is the main exception to inventory-derived storage mapping. In copy-offload mode, <code>get_storage_migration_map()</code> can build the source side from explicit datastore IDs
+instead of asking inventory.</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">datastore_id</span> <span class="ow">and</span> <span class="n">offload_plugin_config</span><span class="p">:</span>
     <span class="n">datastores_to_map</span> <span class="o">=</span> <span class="p">[</span><span class="n">datastore_id</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">secondary_datastore_id</span><span class="p">:</span>
@@ -668,36 +852,38 @@
 
     <span class="k">for</span> <span class="n">ds_id</span> <span class="ow">in</span> <span class="n">datastores_to_map</span><span class="p">:</span>
         <span class="n">destination_config</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">,</span>
+            <span class="s2">"storageClass"</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">,</span>
         <span class="p">}</span>
 
         <span class="k">if</span> <span class="n">access_mode</span><span class="p">:</span>
-            <span class="n">destination_config</span><span class="p">[</span><span class="s2">&quot;accessMode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">access_mode</span>
+            <span class="n">destination_config</span><span class="p">[</span><span class="s2">"accessMode"</span><span class="p">]</span> <span class="o">=</span> <span class="n">access_mode</span>
         <span class="k">if</span> <span class="n">volume_mode</span><span class="p">:</span>
-            <span class="n">destination_config</span><span class="p">[</span><span class="s2">&quot;volumeMode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">volume_mode</span>
+            <span class="n">destination_config</span><span class="p">[</span><span class="s2">"volumeMode"</span><span class="p">]</span> <span class="o">=</span> <span class="n">volume_mode</span>
 
         <span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-            <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
-            <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">ds_id</span><span class="p">},</span>
-            <span class="s2">&quot;offloadPlugin&quot;</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
+            <span class="s2">"destination"</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
+            <span class="s2">"source"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">ds_id</span><span class="p">},</span>
+            <span class="s2">"offloadPlugin"</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
         <span class="p">})</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="n">storage_migration_map</span> <span class="o">=</span> <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_storages_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storage_migration_map</span><span class="p">:</span>
         <span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-            <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">},</span>
-            <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">storage</span><span class="p">,</span>
+            <span class="s2">"destination"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"storageClass"</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">},</span>
+            <span class="s2">"source"</span><span class="p">:</span> <span class="n">storage</span><span class="p">,</span>
         <span class="p">})</span>
 </code></pre></div>
 
-<p>The repo validates copy-offload prerequisites in <code>conftest.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">required_credentials</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;storage_hostname&quot;</span><span class="p">,</span> <span class="s2">&quot;storage_username&quot;</span><span class="p">,</span> <span class="s2">&quot;storage_password&quot;</span><span class="p">]</span>
-<span class="n">required_params</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;storage_vendor_product&quot;</span><span class="p">,</span> <span class="s2">&quot;datastore_id&quot;</span><span class="p">]</span>
+<p><code>non_xcopy_datastore_id</code> is handled as its own branch after the XCOPY loop: it is still mapped, still with the offload plugin attached, so Forklift can fall back to non-XCOPY
+transfer.</p>
+<p>The repo validates copy-offload prerequisites in <code>tests/copyoffload/conftest.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">required_credentials</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"storage_hostname"</span><span class="p">,</span> <span class="s2">"storage_username"</span><span class="p">,</span> <span class="s2">"storage_password"</span><span class="p">]</span>
+<span class="n">required_params</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"storage_vendor_product"</span><span class="p">,</span> <span class="s2">"datastore_id"</span><span class="p">]</span>
 </code></pre></div>
 
 <p>In practice, the copy-offload flow expects:</p>
 <ul>
-<li><code>storage_vendor_product</code></li>
+<li><code>storage_vendor_product</code>, one of the nine values in <code>SUPPORTED_VENDORS</code></li>
 <li><code>datastore_id</code></li>
 <li><code>storage_hostname</code></li>
 <li><code>storage_username</code></li>
@@ -708,109 +894,162 @@
 <li><code>secondary_datastore_id</code></li>
 <li><code>non_xcopy_datastore_id</code></li>
 <li><code>esxi_clone_method</code></li>
-<li><code>esxi_host</code></li>
-<li><code>esxi_user</code></li>
-<li><code>esxi_password</code></li>
+<li><code>esxi_host</code>, <code>esxi_user</code>, <code>esxi_password</code></li>
+<li><code>default_vm_name</code>, <code>resource_pool</code>, <code>dedicated_migration_hosts</code>, <code>rdm_lun_uuid</code></li>
 </ul>
-<p>The storage secret builder also knows vendor-specific extras. Depending on <code>storage_vendor_product</code>, the repo may look for keys such as <code>ontap_svm</code>, <code>vantara_storage_id</code>, <code>vantara_storage_port</code>, <code>vantara_hostgroup_id_list</code>, <code>pure_cluster_prefix</code>, <code>powerflex_system_id</code>, or <code>powermax_symmetrix_id</code>.</p>
+<p>The copy-offload storage <code>Secret</code> is built in <code>tests/copyoffload/conftest.py:402</code> with the base keys <code>STORAGE_HOSTNAME</code>, <code>STORAGE_USERNAME</code>, and <code>STORAGE_PASSWORD</code>, plus a
+vendor-specific table:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>storage_vendor_product</code></th>
+<th>Additional secret keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ontap</code></td>
+<td><code>ONTAP_SVM</code> from <code>ontap_svm</code></td>
+</tr>
+<tr>
+<td><code>vantara</code></td>
+<td><code>STORAGE_ID</code>, <code>STORAGE_PORT</code>, <code>HOSTGROUP_ID_LIST</code> from the three <code>vantara_*</code> keys</td>
+</tr>
+<tr>
+<td><code>primera3par</code>, <code>powerstore</code>, <code>infinibox</code>, <code>flashsystem</code></td>
+<td>none beyond the base credentials</td>
+</tr>
+<tr>
+<td><code>pureFlashArray</code></td>
+<td><code>PURE_CLUSTER_PREFIX</code> from <code>pure_cluster_prefix</code></td>
+</tr>
+<tr>
+<td><code>powerflex</code></td>
+<td><code>POWERFLEX_SYSTEM_ID</code> from <code>powerflex_system_id</code></td>
+</tr>
+<tr>
+<td><code>powermax</code></td>
+<td><code>POWERMAX_SYMMETRIX_ID</code> from <code>powermax_symmetrix_id</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Arbitrary vendor keys go through <code>storage_secret_extra</code> in <code>.providers.json</code> or the <code>COPYOFFLOAD_STORAGE_SECRET_EXTRA</code> environment variable, which is merged last by
+<code>merge_storage_secret_extra()</code> (<code>utilities/copyoffload_migration.py:225</code>).</p>
 <p>The test suite builds the offload plugin config like this:</p>
 <div class="highlight"><pre><span></span><code><span class="n">offload_plugin_config</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;vsphereXcopyConfig&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;secretRef&quot;</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;storageVendorProduct&quot;</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
+    <span class="s2">"vsphereXcopyConfig"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"secretRef"</span><span class="p">:</span> <span class="n">copyoffload_storage_secret</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="s2">"storageVendorProduct"</span><span class="p">:</span> <span class="n">storage_vendor_product</span><span class="p">,</span>
     <span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
 
-<p>When <code>copyoffload=True</code>, <code>create_plan_resource()</code> also forces <code>pvc_name_template</code> to <code>"pvc"</code> because the volume-populator path expects predictable PVC naming.</p>
+<p>When <code>copyoffload=True</code>, <code>create_plan_resource()</code> also forces <code>pvc_name_template</code> to <code>"pvc"</code> because the volume-populator path expects predictable PVC naming
+(<code>utilities/mtv_migration.py:329</code>).</p>
 <blockquote>
-<p><strong>Warning:</strong> Copy-offload in this repository is a vSphere-specific path. The validation fixture explicitly fails if the selected source provider is not vSphere.</p>
-<p><strong>Tip:</strong> Copy-offload credentials can come from environment variables as well as <code>.providers.json</code>. The code looks for names such as <code>COPYOFFLOAD_STORAGE_HOSTNAME</code>, <code>COPYOFFLOAD_STORAGE_USERNAME</code>, and <code>COPYOFFLOAD_STORAGE_PASSWORD</code>, plus vendor-specific <code>COPYOFFLOAD_&lt;FIELD&gt;</code> overrides.</p>
+<p><strong>Warning:</strong> Copy-offload in this repository is a vSphere-specific path. The <code>copyoffload_config</code> fixture explicitly raises <code>ValueError</code> if the selected source provider is not
+vSphere (<code>tests/copyoffload/conftest.py:76</code>).</p>
+<p><strong>Tip:</strong> Copy-offload credentials can come from environment variables as well as <code>.providers.json</code>. <code>get_copyoffload_credential()</code> checks <code>COPYOFFLOAD_{FIELD_UPPER}</code> first and
+only then the config file, so environment variables win (<code>utilities/copyoffload_migration.py:98</code>).</p>
 </blockquote>
 <h2 id="inventory-ids-and-pvc-naming">Inventory IDs And PVC Naming</h2>
 <p>Forklift inventory does two more important jobs after maps are built.</p>
 <p>First, it provides the VM IDs that go into the migration <code>Plan</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">populate_vm_ids</span><span class="p">(</span><span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">inventory</span><span class="p">:</span> <span class="n">ForkliftInventory</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">),</span> <span class="nb">list</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;plan must contain &#39;virtual_machines&#39; list&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"virtual_machines"</span><span class="p">),</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"plan must contain 'virtual_machines' list"</span><span class="p">)</span>
 
-    <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">]:</span>
-        <span class="n">vm_name</span> <span class="o">=</span> <span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]:</span>
+        <span class="n">vm_name</span> <span class="o">=</span> <span class="n">vm</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
         <span class="n">vm_data</span> <span class="o">=</span> <span class="n">inventory</span><span class="o">.</span><span class="n">get_vm</span><span class="p">(</span><span class="n">vm_name</span><span class="p">)</span>
-        <span class="n">vm</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vm_data</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="n">vm</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span> <span class="o">=</span> <span class="n">vm_data</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span>
 </code></pre></div>
 
-<p>Second, it can supply disk filenames for PVC-template validation. In <code>utilities/post_migration.py</code>, the <code>{{.FileName}}</code> wildcard is resolved from Forklift inventory disk file paths, not from the direct provider SDK. That validation path is only enabled for vSphere sources.</p>
+<p>Second, it can supply disk filenames for PVC-template validation. In <code>utilities/post_migration.py</code>, the <code>{{.FileName}}</code> wildcard is resolved from Forklift inventory disk file
+paths, not from the direct provider SDK. That validation path is only enabled for vSphere sources, and it raises <code>ValueError</code> for any other provider type
+(<code>utilities/post_migration.py:1083</code>).</p>
 <blockquote>
-<p><strong>Tip:</strong> If you use <code>pvc_name_template</code> with <code>{{.FileName}}</code>, you are depending on inventory disk metadata. The suite sorts vSphere source disks by <code>(controller_key, unit_number)</code> before it renders expected PVC names.</p>
+<p><strong>Tip:</strong> If you use <code>pvc_name_template</code> with <code>{{.FileName}}</code>, you are depending on inventory disk metadata. The suite sorts vSphere source disks by <code>(controller_key,
+unit_number)</code> before it renders expected PVC names.</p>
+<p><strong>Note:</strong> <code>pvc_name_template</code> accepts either a string or a mapping keyed by <code>Provider.ProviderType</code> values plus <code>"default"</code>. <code>resolve_pvc_name_template()</code> rejects unknown keys
+and falls back to <code>"default"</code> when the source provider has no entry (<code>utilities/mtv_migration.py:131</code>).</p>
 </blockquote>
 <h2 id="real-test-config-examples">Real Test Config Examples</h2>
 <p>These are exact snippets from <code>tests/tests_config/config.py</code>. They are useful because they show the real shapes the repository already exercises.</p>
 <h3 id="comprehensive-warm-migration-example">Comprehensive Warm Migration Example</h3>
-<p>This example combines custom VM namespace placement, cross-namespace Multus, static IP preservation, and a PVC naming template based on inventory file names.</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<p>This example combines custom VM namespace placement, cross-namespace Multus, static IP preservation, and a per-provider PVC naming template.</p>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_warm_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2022-ip-3disks"</span><span class="p">,</span>
+            <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
-    <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-    <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-        <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+    <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-warm-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+    <span class="c1"># Keys must be Provider.ProviderType string values (e.g. "vsphere") or "default".</span>
+    <span class="c1"># vsphere uses .FileName; default truncates VmName to stay within 63 chars.</span>
+    <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"vsphere"</span><span class="p">:</span> <span class="s1">'{{ .FileName | trimSuffix ".vmdk" | replace "_" "-" }}-{{.DiskIndex}}'</span><span class="p">,</span>
+        <span class="s2">"default"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
     <span class="p">},</span>
-    <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"mtv-comprehensive-test"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+        <span class="s2">"static-label"</span><span class="p">:</span> <span class="s2">"static-value"</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
-                        <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                    <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"comprehensive-test"</span><span class="p">}},</span>
+                        <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
                     <span class="p">},</span>
-                    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
+                    <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="p">]</span>
         <span class="p">}</span>
     <span class="p">},</span>
+    <span class="s2">"guest_agent_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
 <h3 id="mixed-datastore-copy-offload-example">Mixed-Datastore Copy-Offload Example</h3>
 <p>This example shows a vSphere copy-offload plan where an added disk is intentionally placed on a non-XCOPY datastore.</p>
-<div class="highlight"><pre><span></span><code><span class="s2">&quot;test_copyoffload_mixed_datastore_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<div class="highlight"><pre><span></span><code><span class="s2">"test_copyoffload_mixed_datastore_migration"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;xcopy-template-test&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;clone&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="s2">&quot;disk_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;add_disks&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"xcopy-template-test"</span><span class="p">,</span>
+            <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"clone"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"disk_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+            <span class="s2">"add_disks"</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;size_gb&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
-                    <span class="s2">&quot;provision_type&quot;</span><span class="p">:</span> <span class="s2">&quot;thin&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;datastore_id&quot;</span><span class="p">:</span> <span class="s2">&quot;non_xcopy_datastore_id&quot;</span><span class="p">,</span>
+                    <span class="s2">"size_gb"</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
+                    <span class="s2">"provision_type"</span><span class="p">:</span> <span class="s2">"thin"</span><span class="p">,</span>
+                    <span class="s2">"datastore_id"</span><span class="p">:</span> <span class="s2">"non_xcopy_datastore_id"</span><span class="p">,</span>
                 <span class="p">},</span>
             <span class="p">],</span>
         <span class="p">},</span>
     <span class="p">],</span>
-    <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="s2">&quot;copyoffload&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"copyoffload"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">},</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> Symbolic datastore values such as <code>secondary_datastore_id</code> and <code>non_xcopy_datastore_id</code> are not global magic strings. The vSphere provider resolves them from the selected provider's <code>copyoffload</code> configuration.</p>
+<p><strong>Warning:</strong> Symbolic datastore values such as <code>secondary_datastore_id</code> and <code>non_xcopy_datastore_id</code> are not global magic strings. <code>resolve_datastore_moid_from_disk_config()</code>
+looks them up in the selected provider's <code>copyoffload</code> section and raises a clear error when the key is not configured (<code>utilities/copyoffload_datastore.py:53</code>).</p>
 </blockquote>
-<p>Once you know which data comes from the direct provider class and which data comes from Forklift inventory, the rest of the repository becomes much easier to predict. Provider classes explain how source VMs are created and inspected. Inventory adapters explain how MTV sees those VMs. The map helpers then turn that inventory view into the exact <code>StorageMap</code>, <code>NetworkMap</code>, and <code>Plan</code> payloads that the migration uses.</p>
+<p>Once you know which data comes from the direct provider class and which data comes from Forklift inventory, the rest of the repository becomes much easier to predict. Provider
+classes explain how source VMs are created and inspected. Inventory adapters explain how MTV sees those VMs. The map helpers then turn that inventory view into the exact
+<code>StorageMap</code>, <code>NetworkMap</code>, and <code>Plan</code> payloads that the migration uses.</p>
                 </div>
             </article>
             <nav class="page-nav">
@@ -834,12 +1073,16 @@
                     <div class="toc">
 <ul>
 <li><a href="#end-to-end-flow">End-To-End Flow</a></li>
-<li><a href="#provider-configuration-and-selection">Provider Configuration And Selection</a></li>
+<li><a href="#provider-configuration-and-selection">Provider Configuration And Selection</a><ul>
+<li><a href="#per-provider-configuration-fields">Per-Provider Configuration Fields</a></li>
+</ul>
+</li>
 <li><a href="#the-baseprovider-contract">The BaseProvider Contract</a></li>
 <li><a href="#provider-specific-behavior">Provider-Specific Behavior</a><ul>
 <li><a href="#vsphere">vSphere</a></li>
 <li><a href="#rhv-ovirt">RHV / oVirt</a></li>
 <li><a href="#openstack">OpenStack</a></li>
+<li><a href="#hyper-v">Hyper-V</a></li>
 <li><a href="#openshift">OpenShift</a></li>
 <li><a href="#ova">OVA</a></li>
 </ul>
@@ -862,24 +1105,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -925,5 +1171,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Installation And Local Setup - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -71,7 +72,7 @@
 
                     <li>
                         <a href="installation-and-local-setup.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Installation And Local Setup
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,24 +302,27 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="installation-and-local-setup">Installation And Local Setup</h1>
-<p><code>mtv-api-tests</code> is a live <code>pytest</code> suite for Migration Toolkit for Virtualization (MTV). A real local setup needs more than a virtual environment: you also need access to an OpenShift cluster, MTV and OpenShift Virtualization installed on that cluster, and at least one source provider defined in a local <code>.providers.json</code> file.</p>
+<p><code>mtv-api-tests</code> is a live <code>pytest</code> suite for Migration Toolkit for Virtualization (MTV). A real local setup needs more than a virtual environment: you also need access to an
+OpenShift cluster, MTV and OpenShift Virtualization installed on that cluster, and at least one source provider defined in a local <code>.providers.json</code> file.</p>
 <blockquote>
-<p><strong>Warning:</strong> A normal <code>pytest</code> run is not a mock or unit-test workflow. The suite talks to live providers and creates cluster resources such as namespaces, secrets, providers, plans, network maps, storage maps, and virtual machines.</p>
+<p><strong>Warning:</strong> A normal <code>pytest</code> run is not a mock or unit-test workflow.
+The suite talks to live providers and creates cluster resources such as namespaces, secrets, providers, plans, network maps, storage maps, and virtual machines.</p>
 </blockquote>
 <h2 id="python-and-uv">Python and <code>uv</code></h2>
-<p>The project metadata allows Python 3.12 through 3.13, and the project image pins Python 3.12. For the least surprising local experience, use Python 3.12 and install dependencies with <code>uv</code>.</p>
+<p>The project metadata allows Python 3.12 through 3.13, and the project image pins Python 3.12.
+For the least surprising local experience, use Python 3.12 and install dependencies with <code>uv</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="k">[project]</span>
-<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.12, &lt;3.14&quot;</span>
-<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;mtv-api-tests&quot;</span>
-<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2.8.3&quot;</span>
-<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;MTV API Tests&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&gt;=3.12, &lt;3.14"</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"mtv-api-tests"</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"5.0.0"</span>
+<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"MTV API Tests"</span>
 </code></pre></div>
 
 <p>The container build also makes the intended local setup clear:</p>
 <div class="highlight"><pre><span></span><code><span class="k">ENV</span><span class="w"> </span><span class="nv">UV_PYTHON</span><span class="o">=</span>python3.12
 <span class="k">ENV</span><span class="w"> </span><span class="nv">UV_COMPILE_BYTECODE</span><span class="o">=</span><span class="m">1</span>
 <span class="k">ENV</span><span class="w"> </span><span class="nv">UV_NO_SYNC</span><span class="o">=</span><span class="m">1</span>
-<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_CACHE_DIR</span><span class="o">=</span><span class="si">${</span><span class="nv">APP_DIR</span><span class="si">}</span>/.cache
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_NO_CACHE</span><span class="o">=</span><span class="m">1</span>
 </code></pre></div>
 
 <p>From the repository root, install the locked environment with:</p>
@@ -326,19 +331,21 @@
 
 <p><code>uv</code> is the source of truth here. The repository ships <code>pyproject.toml</code> and <code>uv.lock</code>; it does not use a <code>requirements.txt</code> workflow.</p>
 <blockquote>
-<p><strong>Note:</strong> If you plan to run the repository's pre-commit hooks as well, <code>.pre-commit-config.yaml</code> sets the hook interpreter to <code>python3.13</code>. The test environment itself still supports <code>&gt;=3.12, &lt;3.14</code>.</p>
+<p><strong>Note:</strong> If you plan to run the repository's pre-commit hooks as well, <code>.pre-commit-config.yaml</code> sets the hook interpreter to <code>python3.13</code>.
+The test environment itself still supports <code>&gt;=3.12, &lt;3.14</code>.</p>
 </blockquote>
 <h2 id="native-packages-on-linux">Native packages on Linux</h2>
-<p>If <code>uv sync</code> needs to build any dependencies locally, the container image shows the system packages the project expects on a Fedora-based system:</p>
-<div class="highlight"><pre><span></span><code><span class="k">RUN</span><span class="w"> </span>dnf<span class="w"> </span>-y<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<p>If <code>uv sync</code> needs to build any dependencies locally, the container image shows the system packages the project expects on a UBI 10 (Fedora-based) system:</p>
+<div class="highlight"><pre><span></span><code><span class="k">RUN</span><span class="w"> </span>microdnf<span class="w"> </span>-y<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>libxml2-devel<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>libcurl-devel<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>openssl<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>openssl-devel<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>libcurl-devel<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>gcc<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>clang<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>python3-devel<span class="w"> </span><span class="err">\</span>
+<span class="w">  </span>git<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python3-devel<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="o">&amp;&amp;</span><span class="w"> </span>microdnf<span class="w"> </span>clean<span class="w"> </span>all
 </code></pre></div>
 
 <p>On other distributions, install the equivalent SSL, XML, compiler, and Python development packages.</p>
@@ -346,19 +353,33 @@
 <p><strong>Tip:</strong> You may not need all of these locally if <code>uv</code> can use prebuilt wheels, but they are the best reference for what the project image installs.</p>
 </blockquote>
 <h2 id="run-from-the-repository-root">Run from the repository root</h2>
-<p>The provider loader looks for <code>.providers.json</code> as a relative path:</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_source_providers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load source providers from .providers.json.</span>
+<p>The provider loader resolves <code>.providers.json</code> from three places, in this order:
+the <code>--providers-json</code> pytest argument, the <code>PROVIDERS_JSON_PATH</code> environment variable, then <code>.providers.json</code> in the current working directory.</p>
+<div class="highlight"><pre><span></span><code><span class="n">DEFAULT_PROVIDERS_JSON_PATH</span> <span class="o">=</span> <span class="s2">".providers.json"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">resolve_providers_json_path</span><span class="p">(</span><span class="n">cli_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resolve providers JSON path with priority order.</span>
+
+<span class="sd">    Resolution order:</span>
+<span class="sd">        1. ``cli_path`` argument (e.g. from ``--providers-json`` pytest CLI arg).</span>
+<span class="sd">        2. ``PROVIDERS_JSON_PATH`` environment variable.</span>
+<span class="sd">        3. Default ``.providers.json`` in the current working directory.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cli_path (str | None): Explicit path from the CLI argument.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        dict[str, dict[str, Any]]: Provider configurations keyed by provider name.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">providers_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;.providers.json&quot;</span><span class="p">)</span>
+<span class="sd">        str: The resolved file path.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        FileNotFoundError: If the resolved file does not exist.</span>
+<span class="sd">    """</span>
 </code></pre></div>
 
-<p>That means your working directory matters.</p>
+<p>That means your working directory matters unless you set one of the overrides.</p>
 <blockquote>
-<p><strong>Warning:</strong> Run <code>uv</code> and <code>pytest</code> from the repository root. If you start from another directory, <code>.providers.json</code> can appear “missing” even when the file exists.</p>
+<p><strong>Warning:</strong> Run <code>uv</code> and <code>pytest</code> from the repository root. If you start from another directory, <code>.providers.json</code> can appear "missing" even when the file exists.</p>
 </blockquote>
 <h2 id="how-local-configuration-is-loaded">How local configuration is loaded</h2>
 <p><code>pytest</code> is already wired to <code>pytest-testconfig</code>, and the default config file is part of the repo:</p>
@@ -368,17 +389,24 @@
 <span class="w">  </span><span class="na">-p no</span><span class="o">:</span><span class="s">logging</span>
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
+<span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
+<span class="w">  </span><span class="na">--show-progress</span>
+<span class="w">  </span><span class="na">--strict-markers</span>
+<span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
 </code></pre></div>
 
+<p>Note what <code>addopts</code> does <em>not</em> contain: <code>-n</code> / <code>--numprocesses</code> is not set, so tests run serially unless you pass it yourself.
+<code>--dist=loadscope</code> only takes effect once parallel workers are enabled.</p>
 <p>The default values in <code>tests/tests_config/config.py</code> are a starting point, not a complete local setup:</p>
-<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;true&quot;</span>
-<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;false&quot;</span>
+<div class="highlight"><pre><span></span><code><span class="n">insecure_verify_skip</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"true"</span>
+<span class="n">source_provider_insecure_skip_verify</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"false"</span>
 <span class="n">number_of_vms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
 <span class="n">check_vms_signals</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
-<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openshift-mtv&quot;</span>
-<span class="n">vm_name_search_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">target_namespace_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"openshift-mtv"</span>
+<span class="n">vm_name_search_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+<span class="n">remote_ocp_cluster</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+<span class="n">plan_wait_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>
 </code></pre></div>
 
 <p>In practice, the most important runtime values are:</p>
@@ -389,53 +417,67 @@
 <li><code>mtv_namespace</code> if your MTV operator is not installed in <code>openshift-mtv</code></li>
 <li><code>remote_ocp_cluster</code> only if you plan to run tests marked for remote-cluster scenarios</li>
 </ul>
-<p>The repository’s own invocation examples pass those values with <code>--tc=</code> overrides:</p>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
+<p><code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code> fall back to the <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, and <code>CLUSTER_PASSWORD</code> environment variables when the matching
+<code>--tc</code> key is absent, so you can keep them out of your shell history:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CLUSTER_USERNAME</span><span class="o">=</span>kubeadmin
+<span class="nb">read</span><span class="w"> </span>-sp<span class="w"> </span><span class="s2">"Enter cluster password: "</span><span class="w"> </span>CLUSTER_PASSWORD<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span>
+<span class="nb">export</span><span class="w"> </span>CLUSTER_PASSWORD
+
+uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="p">:+--tc=cluster_host:</span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_USERNAME</span><span class="p">:+--tc=cluster_username:</span><span class="si">${</span><span class="nv">CLUSTER_USERNAME</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="p">:+--tc=cluster_password:</span><span class="si">${</span><span class="nv">CLUSTER_PASSWORD</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tc<span class="o">=</span>cluster_host:https://api.example.com:6443<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--tc<span class="o">=</span>source_provider:vsphere-8.0.3.00400<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--tc<span class="o">=</span>storage_class:my-block-storageclass
+<span class="nb">unset</span><span class="w"> </span>CLUSTER_PASSWORD
 </code></pre></div>
 
-<p>For local shell usage, pass the same <code>--tc=</code> keys directly or expand them from your shell environment.</p>
 <blockquote>
-<p><strong>Tip:</strong> The example above avoids typing the cluster password literally on the command line. Reusing that pattern is a good idea for local runs too.</p>
-<p><strong>Note:</strong> A <code>.env</code> file is only auto-loaded for the optional <code>--analyze-with-ai</code> path. Standard cluster and provider configuration still comes from <code>.providers.json</code> and <code>--tc=</code> values.</p>
+<p><strong>Tip:</strong> <code>CLUSTER_VERIFY_SSL</code> also works as an environment variable and overrides <code>insecure_verify_skip</code>, but with
+inverted meaning: <code>CLUSTER_VERIFY_SSL=true</code> verifies the cluster certificate.</p>
+<p><strong>Note:</strong> <code>--jira</code> is not in <code>addopts</code>. If you add it yourself, point it at a report file; the repo ships
+<code>jira.cfg.example</code> for that.</p>
 </blockquote>
 <h2 id="create-providersjson">Create <code>.providers.json</code></h2>
-<p>The suite expects a file named <code>.providers.json</code> in the repository root. Start from <code>.providers.json.example</code>, then replace the placeholders with real values.</p>
+<p>The suite expects a file named <code>.providers.json</code> in the repository root, unless you point <code>--providers-json</code> or <code>PROVIDERS_JSON_PATH</code> somewhere else.
+Start from <code>.providers.json.example</code>, then replace the placeholders with real values.</p>
 <p>A typical vSphere entry looks like this in the example file:</p>
-<div class="highlight"><pre><span></span><code>&quot;vsphere&quot;: {
-  &quot;type&quot;: &quot;vsphere&quot;,
-  &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-  &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-  &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-  &quot;username&quot;: &quot;USERNAME&quot;,
-  &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-  &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
-  &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
-  &quot;vddk_init_image&quot;: &quot;&lt;PATH TO VDDK INIT IMAGE&gt;&quot;
+<div class="highlight"><pre><span></span><code>"vsphere": {
+  "type": "vsphere",
+  "version": "&lt;SERVER VERSION&gt;",
+  "fqdn": "SERVER FQDN/IP",
+  "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+  "username": "USERNAME",
+  "password": "PASSWORD",  # pragma: allowlist secret
+  "guest_vm_linux_user": "LINUX VMS USERNAME",
+  "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+  "guest_vm_win_user": "WINDOWS VMS USERNAME",
+  "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+  "luks_passphrase": "LUKS DISK ENCRYPTION PASSPHRASE",  # pragma: allowlist secret
+  "vddk_init_image": "&lt;PATH TO VDDK INIT IMAGE&gt;",
+  "endpoint_type": "vcenter",
 },
 </code></pre></div>
 
-<p>The example file also includes provider templates for <code>ovirt</code>, <code>openstack</code>, <code>openshift</code>, and <code>ova</code>.</p>
+<p>The example file also includes provider templates for <code>ovirt</code>, <code>openstack</code>, <code>openshift</code>, <code>ova</code>, <code>hyperv</code>, and a vSphere direct-ESXi entry.</p>
 <p>A few important details matter here:</p>
 <ul>
-<li>The top-level key is what <code>source_provider</code> selects. If you run with <code>--tc=source_provider:vsphere-copy-offload</code>, your <code>.providers.json</code> file must contain a top-level key with that exact name.</li>
-<li>Guest OS credentials are not optional decoration. Post-migration checks read <code>guest_vm_linux_user</code> and <code>guest_vm_linux_password</code>, or the Windows equivalents, from the provider config.</li>
-<li>The OpenShift provider example intentionally leaves connection fields blank. When the provider type is <code>openshift</code>, the code reuses the current cluster connection and cluster secret instead of building a completely separate provider secret.</li>
+<li>The top-level key is what <code>source_provider</code> selects.</li>
+<li>If you run with <code>--tc=source_provider:vsphere-copy-offload</code>, your <code>.providers.json</code> file must contain a top-level key with that exact name.</li>
+<li>Guest OS credentials are not optional decoration.</li>
+<li>Post-migration checks read <code>guest_vm_linux_user</code> and <code>guest_vm_linux_password</code>, or the Windows equivalents, from the provider config.</li>
+<li>The OpenShift provider example intentionally leaves connection fields blank.</li>
+<li>When the provider type is <code>openshift</code>, the code reuses the current cluster connection and cluster secret instead of building a separate provider secret.</li>
+<li><code>providers_schema.json</code> in the repository root documents which fields are required per provider type.</li>
+<li>Adding a <code>"$schema"</code> key as the first entry in your <code>.providers.json</code> gives you IDE autocomplete against that schema.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> <code>.providers.json.example</code> contains comments such as <code># pragma: allowlist secret</code>. Those comments are useful in the example file, but they are not valid JSON. Your real <code>.providers.json</code> must be valid JSON.</p>
-<p><strong>Tip:</strong> <code>.providers.json</code> is already listed in <code>.gitignore</code>, so keep real credentials there instead of checking them into the repository.</p>
+<p><strong>Note:</strong> <code>.providers.json.example</code> contains comments such as <code># pragma: allowlist secret</code>. Those comments are useful in the example file, but they are not valid JSON.
+Your real <code>.providers.json</code> must be valid JSON.</p>
+<p><strong>Tip:</strong> <code>.providers.json</code> is already listed in <code>.gitignore</code>, so keep real credentials there instead of checking them into the repository. Set it to <code>chmod 600</code>.</p>
 </blockquote>
 <h3 id="copy-offload-overrides">Copy-offload overrides</h3>
 <p>If you plan to run copy-offload tests, the helper code checks environment variables before reading the <code>copyoffload</code> block from <code>.providers.json</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+<div class="highlight"><pre><span></span><code><span class="n">env_var_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"COPYOFFLOAD_</span><span class="si">{</span><span class="n">credential_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span>
 <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">env_var_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">copyoffload_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">credential_name</span><span class="p">)</span>
 </code></pre></div>
 
@@ -447,10 +489,22 @@
 <li><code>COPYOFFLOAD_ESXI_HOST</code></li>
 <li><code>COPYOFFLOAD_ESXI_USER</code></li>
 <li><code>COPYOFFLOAD_ESXI_PASSWORD</code></li>
+<li>vendor fields such as <code>COPYOFFLOAD_ONTAP_SVM</code> or <code>COPYOFFLOAD_VANTARA_HOSTGROUP_ID_LIST</code></li>
 </ul>
+<p><code>COPYOFFLOAD_STORAGE_SECRET_EXTRA</code> is a separate override:
+it holds a JSON object of extra Secret key/value pairs that are merged over whatever <code>storage_secret_extra</code> in the file specifies.</p>
 <blockquote>
 <p><strong>Tip:</strong> Using <code>COPYOFFLOAD_*</code> environment variables is a good way to keep storage-array and ESXi credentials out of <code>.providers.json</code>.</p>
 </blockquote>
+<h2 id="optional-the-mtv-api-tests-cli">Optional: the <code>mtv-api-tests</code> CLI</h2>
+<p>The repository ships a Typer CLI, installed as the <code>mtv-api-tests</code> console script, that replaces most of the manual steps above:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w"> </span>generate<span class="w">    </span><span class="c1"># interactive wizard: writes .providers.json and mtv-api-tests-manifests.yaml</span>
+uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w"> </span>run<span class="w"> </span>--mode<span class="w"> </span><span class="nb">local</span>
+uv<span class="w"> </span>run<span class="w"> </span>mtv-api-tests<span class="w"> </span>run<span class="w"> </span>--mode<span class="w"> </span>job
+</code></pre></div>
+
+<p><code>run --mode local</code> builds exactly the pytest invocation the suite expects, passing <code>CLUSTER_USERNAME</code> and <code>CLUSTER_PASSWORD</code> through the environment instead of the command line.
+Run <code>uv run mtv-api-tests generate --help</code> or <code>uv run mtv-api-tests run --help</code> for the full flag list.</p>
 <h2 id="prepare-the-cluster-and-source-vms">Prepare the cluster and source VMs</h2>
 <p>A working Python environment is only half of the setup. Before a real test run, your lab should also be ready:</p>
 <ul>
@@ -461,15 +515,16 @@
 </ul>
 <p>The test plans are data-driven. For example, one of the built-in sanity plans looks like this:</p>
 <div class="highlight"><pre><span></span><code><span class="n">tests_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;test_sanity_warm_mtv_migration&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s2">"test_sanity_warm_mtv_migration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-tests-rhel8"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">},</span>
 </code></pre></div>
 
@@ -490,12 +545,13 @@
 uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--collect-only
 </code></pre></div>
 
-<p>These are useful first checks after <code>uv sync --locked</code> because they validate importability and test collection without running the live migrations themselves.</p>
+<p>These are useful first checks after <code>uv sync --locked</code> because they validate importability and test collection without running the live migrations themselves.
+<code>is_dry_run()</code> treats both modes as dry, so the suite skips the <code>storage_class</code> / <code>source_provider</code> requirement and the provider-type gating during collection.</p>
 <blockquote>
 <p><strong>Warning:</strong> <code>uv run pytest</code> without a dry-run flag is a live infrastructure run.</p>
 </blockquote>
 <h2 id="how-virtctl-is-discovered-or-downloaded">How <code>virtctl</code> is discovered or downloaded</h2>
-<p>Most users do not need to install <code>virtctl</code> manually. The session-scoped setup code makes sure it is available.</p>
+<p>Most users do not need to install <code>virtctl</code> manually. The session-scoped <code>virtctl_binary</code> fixture makes sure it is available.</p>
 <p>The first step is to reuse an existing binary if one is already present:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Check if already available</span>
 <span class="n">existing</span> <span class="o">=</span> <span class="n">_check_existing_virtctl</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
@@ -503,12 +559,12 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
     <span class="n">add_to_path</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">existing</span><span class="o">.</span><span class="n">parent</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">existing</span>
 
-<span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;virtctl not found, downloading from cluster...&quot;</span><span class="p">)</span>
+<span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"virtctl not found, downloading from cluster..."</span><span class="p">)</span>
 
 <span class="c1"># Get ConsoleCLIDownload resource</span>
 <span class="n">console_cli_download</span> <span class="o">=</span> <span class="n">ConsoleCLIDownload</span><span class="p">(</span>
     <span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">,</span>
-    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;virtctl-clidownloads-kubevirt-hyperconverged&quot;</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"virtctl-clidownloads-kubevirt-hyperconverged"</span><span class="p">,</span>
     <span class="n">ensure_exists</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
@@ -516,13 +572,13 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
 <p><code>virtctl</code> is needed because VM SSH access is implemented through <code>virtctl port-forward</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="n">cmd</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">virtctl_path</span><span class="p">,</span>
-    <span class="s2">&quot;port-forward&quot;</span><span class="p">,</span>
-    <span class="sa">f</span><span class="s2">&quot;vm/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">local_port</span><span class="si">}</span><span class="s2">:22&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;--namespace&quot;</span><span class="p">,</span>
+    <span class="s2">"port-forward"</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s2">"vm/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">local_port</span><span class="si">}</span><span class="s2">:22"</span><span class="p">,</span>
+    <span class="s2">"--namespace"</span><span class="p">,</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="s2">&quot;--address&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;127.0.0.1&quot;</span><span class="p">,</span>
+    <span class="s2">"--address"</span><span class="p">,</span>
+    <span class="s2">"127.0.0.1"</span><span class="p">,</span>
 <span class="p">]</span>
 </code></pre></div>
 
@@ -539,15 +595,20 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
 <li>Linux and macOS hosts</li>
 <li><code>x86_64</code>, <code>aarch64</code>, and <code>arm64</code> architectures</li>
 </ul>
-<p>The session fixture also caches <code>virtctl</code> by cluster version and guards the download with a file lock so parallel <code>pytest-xdist</code> workers do not all fetch the same binary at once.</p>
+<p>The cache directory is keyed by cluster version, so switching clusters invalidates it automatically, and the download is guarded by a file lock with a 600 second timeout so
+parallel <code>pytest-xdist</code> workers do not all fetch the same binary at once.</p>
 <blockquote>
 <p><strong>Warning:</strong> Windows hosts are not covered by the current <code>virtctl</code> auto-detection logic. The downloader only maps <code>linux</code> and <code>darwin</code>.</p>
-<p><strong>Tip:</strong> If you want to force a fresh <code>virtctl</code> download, remove the cached <code>pytest-shared-virtctl/&lt;cluster-version&gt;</code> directory under your system temp directory, or place a different <code>virtctl</code> earlier in <code>PATH</code>.</p>
+<p><strong>Tip:</strong> If you want to force a fresh <code>virtctl</code> download, remove the <code>pytest-shared-virtctl/&lt;cluster-version&gt;</code> directory under your system temp directory, or place a different
+<code>virtctl</code> earlier in <code>PATH</code>.</p>
 </blockquote>
 <h2 id="optional-but-useful-local-tools">Optional but useful local tools</h2>
-<p><code>oc</code> is not how the suite discovers <code>virtctl</code>, and it is not required just to create the Python environment. It is still a good tool to have locally because the default failure-data path can run <code>oc adm must-gather</code> when tests fail.</p>
+<p><code>oc</code> is not how the suite discovers <code>virtctl</code>, and it is not required just to create the Python environment.
+It is still a good tool to have locally because the default failure-data path can run <code>oc adm must-gather</code> when tests fail.</p>
+<p><code>ROOTCOZ_SERVER_URL</code> enables the optional <code>--analyze-with-ai</code> flag. Without it, the suite logs a warning and disables AI analysis, so it is not a prerequisite for any test run.</p>
 <blockquote>
-<p><strong>Tip:</strong> If you do not want automatic failure data collection, start pytest with <code>--skip-data-collector</code>. Otherwise the default behavior may try to collect <code>.data-collector</code> output and run must-gather on failures.</p>
+<p><strong>Tip:</strong> If you do not want automatic failure data collection, start pytest with <code>--skip-data-collector</code>.
+Otherwise the default behavior may try to collect <code>.data-collector</code> output and run must-gather on failures.</p>
 </blockquote>
                 </div>
             </article>
@@ -579,6 +640,7 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
 <li><a href="#copy-offload-overrides">Copy-offload overrides</a></li>
 </ul>
 </li>
+<li><a href="#optional-the-mtv-api-tests-cli">Optional: the mtv-api-tests CLI</a></li>
 <li><a href="#prepare-the-cluster-and-source-vms">Prepare the cluster and source VMs</a></li>
 <li><a href="#validate-the-installation-safely">Validate the installation safely</a></li>
 <li><a href="#how-virtctl-is-discovered-or-downloaded">How virtctl is discovered or downloaded</a></li>
@@ -589,24 +651,27 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -652,5 +717,6 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

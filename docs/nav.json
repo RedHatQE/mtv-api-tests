@@ -1,0 +1,61 @@
+{
+  "groups": [
+    {
+      "name": "Overview",
+      "pages": [
+        "introduction",
+        "project-structure",
+        "architecture-and-workflow",
+        "supported-providers-and-scenarios"
+      ]
+    },
+    {
+      "name": "Getting Started",
+      "pages": [
+        "prerequisites",
+        "installation-and-local-setup",
+        "quickstart-first-run",
+        "container-and-openshift-job-execution"
+      ]
+    },
+    {
+      "name": "Configuration",
+      "pages": [
+        "runtime-configuration",
+        "provider-config-file",
+        "test-plan-configuration",
+        "optional-integrations-and-secrets"
+      ]
+    },
+    {
+      "name": "Guides",
+      "pages": [
+        "cold-migrations",
+        "warm-migrations",
+        "copy-offload-migrations",
+        "remote-openshift-migrations",
+        "hooks-and-expected-failures",
+        "advanced-plan-features"
+      ]
+    },
+    {
+      "name": "Reference",
+      "pages": [
+        "pytest-options-and-markers",
+        "plan-and-resource-reference",
+        "provider-and-inventory-reference",
+        "python-module-reference",
+        "troubleshooting-and-diagnostics"
+      ]
+    },
+    {
+      "name": "Maintenance",
+      "pages": [
+        "cleanup-and-teardown",
+        "extending-the-suite",
+        "development-workflow",
+        "automation-and-release"
+      ]
+    }
+  ]
+}

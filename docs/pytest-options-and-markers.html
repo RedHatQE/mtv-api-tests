@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pytest Options And Markers - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -183,7 +184,7 @@
 
                     <li>
                         <a href="pytest-options-and-markers.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Pytest Options And Markers
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,9 +302,11 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="pytest-options-and-markers">Pytest Options And Markers</h1>
-<p>This suite comes with an opinionated <code>pytest</code> setup. If you run <code>pytest</code> or <code>uv run pytest</code> from the repository root, it already knows where tests live, which config file to load, how to write JUnit XML, and how to behave when you enable xdist.</p>
+<p>This suite comes with an opinionated <code>pytest</code> setup. If you run <code>pytest</code> or <code>uv run pytest</code> from the repository root, it already knows where tests live, which config file to load,
+how to write JUnit XML, and how to behave when you enable xdist.</p>
 <blockquote>
-<p><strong>Warning:</strong> A real test run requires <code>source_provider</code> and <code>storage_class</code>. The session start hook exits early if either is missing. In practice, you usually pass them with <code>--tc=...</code>.</p>
+<p><strong>Warning:</strong> A real test run requires <code>source_provider</code> and <code>storage_class</code>. The session start hook exits early if either is missing. In practice, you usually pass them with
+<code>--tc=...</code>.</p>
 </blockquote>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
@@ -325,137 +329,379 @@
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
 <span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
-<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
 <span class="w">  </span><span class="na">--show-progress</span>
 <span class="w">  </span><span class="na">--strict-markers</span>
-<span class="w">  </span><span class="na">--jira</span>
 <span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
 
 <span class="na">markers</span><span class="w"> </span><span class="o">=</span>
 <span class="w">    </span><span class="na">tier0</span><span class="o">:</span><span class="w"> </span><span class="s">Core functionality tests (smoke tests)</span>
+<span class="w">    </span><span class="na">tier1</span><span class="o">:</span><span class="w"> </span><span class="s">Extended functionality tests</span>
 <span class="w">    </span><span class="na">remote</span><span class="o">:</span><span class="w"> </span><span class="s">Remote cluster migration tests</span>
 <span class="w">    </span><span class="na">warm</span><span class="o">:</span><span class="w"> </span><span class="s">Warm migration tests</span>
 <span class="w">    </span><span class="na">copyoffload</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload (XCOPY) tests</span>
+<span class="w">    </span><span class="na">copyoffload_sanity</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload sanity tests - core scenarios for quick validation</span>
+<span class="w">    </span><span class="na">copyoffload_snapshots</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload snapshot tests (vSphere only)</span>
+<span class="w">    </span><span class="na">shared_disk</span><span class="o">:</span><span class="w"> </span><span class="s">Shared disk migration tests (vSphere only)</span>
 <span class="w">    </span><span class="na">incremental</span><span class="o">:</span><span class="w"> </span><span class="s">marks tests as incremental (xfail on previous failure)</span>
-<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version(&quot;2.6.0&quot;))</span>
+<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version("2.6.0"))</span>
+<span class="w">    </span><span class="na">ova</span><span class="o">:</span><span class="w"> </span><span class="s">OVA provider-specific tests</span>
+<span class="w">    </span><span class="na">vsphere</span><span class="o">:</span><span class="w"> </span><span class="s">vSphere provider-specific tests</span>
+<span class="w">    </span><span class="na">esxi</span><span class="o">:</span><span class="w"> </span><span class="s">ESXi provider-specific tests</span>
+<span class="w">    </span><span class="na">rhv</span><span class="o">:</span><span class="w"> </span><span class="s">RHV provider-specific tests</span>
+<span class="w">    </span><span class="na">hyperv</span><span class="o">:</span><span class="w"> </span><span class="s">Hyper-V provider-specific tests</span>
+<span class="w">    </span><span class="na">openstack</span><span class="o">:</span><span class="w"> </span><span class="s">OpenStack provider-specific tests</span>
+<span class="w">    </span><span class="na">openshift</span><span class="o">:</span><span class="w"> </span><span class="s">OpenShift provider-specific tests</span>
+<span class="w">    </span><span class="na">deep_inspection</span><span class="o">:</span><span class="w"> </span><span class="s">Deep Inspection / Conversion CR tests (vSphere only)</span>
+<span class="w">    </span><span class="na">ca_crt</span><span class="o">:</span><span class="w"> </span><span class="s">CA certificate field (ca.crt) provider secret tests</span>
+<span class="w">    </span><span class="na">aap</span><span class="o">:</span><span class="w"> </span><span class="s">AAP (Ansible Automation Platform) hook integration tests (vSphere only)</span>
+<span class="w">    </span><span class="na">upgrade</span><span class="o">:</span><span class="w"> </span><span class="s">MTV operator upgrade tests</span>
 
 <span class="na">junit_logging</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
 
+<p>That is 21 registered markers. Because <code>--strict-markers</code> is on, any <code>@pytest.mark.&lt;name&gt;</code> that is not listed above is a collection-time error, not a warning.</p>
 <p>What that means in day-to-day use:</p>
 <ul>
 <li><code>testpaths = tests</code> limits default discovery to the <code>tests/</code> directory.</li>
 <li><code>-s</code> disables output capture, so test output is shown live.</li>
 <li><code>-p no:logging</code> disables pytest’s built-in logging plugin. The suite sets up its own console and file logging in <code>conftest.py</code>.</li>
-<li><code>--tc-file=tests/tests_config/config.py</code> and <code>--tc-format=python</code> load defaults through <code>pytest-testconfig</code>.</li>
-<li><code>--junit-xml=junit-report.xml</code> always writes a JUnit report in the repo working directory.</li>
+<li>
+<p><code>--tc-file=tests/tests_config/config.py</code> and <code>--tc-format=python</code> load defaults through <code>pytest-testconfig</code>. The same plugin provides the per-run <code>--tc=key:value</code>
+  overrides used above.</p>
+</li>
+<li>
+<p><code>--junit-xml=junit-report.xml</code> always writes a JUnit report in the repo working directory.</p>
+</li>
 <li><code>junit_logging = all</code> means logs are included in the JUnit output.</li>
-<li><code>--basetemp=/tmp/pytest</code> gives pytest a fixed temp root for the run.</li>
 <li><code>--show-progress</code> enables progress output from <code>pytest-progress</code>.</li>
 <li><code>--strict-markers</code> turns marker typos into immediate errors instead of silently ignoring them.</li>
-<li><code>--jira</code> enables <code>pytest-jira</code>.</li>
 <li><code>--dist=loadscope</code> preconfigures xdist scheduling, but it does not start parallel workers by itself. You still need to add <code>-n</code> if you want xdist.</li>
 </ul>
+<p><code>pytest_configure</code> also sets a unique <code>basetemp</code> per session when you did not pass one:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_configure</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Set a unique basetemp directory per session to prevent cross-session conflicts.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        config (pytest.Config): Pytest configuration object used to set basetemp.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="o">.</span><span class="n">basetemp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="o">.</span><span class="n">basetemp</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">())</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"pytest-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<p><code>--basetemp=/path</code> still wins. The auto-generated directory is removed again at session finish (<code>shutil.rmtree</code>) on real runs, so nothing is left behind in <code>/tmp</code>.</p>
 <p>The suite also rewrites collected item names so reports are easier to read:</p>
 <div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
-    <span class="n">item</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">item</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">py_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;source_provider&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">py_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;storage_class&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">item</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">item</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">py_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'source_provider'</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">py_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'storage_class'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Note:</strong> Because collected names are rewritten, terminal output and JUnit entries include the selected <code>source_provider</code> and <code>storage_class</code>, not just the raw test function name.</p>
+<p><strong>Note:</strong> Because collected names are rewritten, terminal output and JUnit entries include the selected <code>source_provider</code> and <code>storage_class</code>, not just the raw test function
+name. The rewrite runs <code>tryfirst</code> in <code>pytest_collection_modifyitems</code>, so it happens before pytest deselects by keyword or marker. <code>-k</code> still matches class names and parametrize
+ids because pytest matches against parent node names as well.</p>
 </blockquote>
 <h2 id="marker-reference">Marker reference</h2>
-<p>The suite registers these project markers:</p>
-<table>
+<p><code>pytest.ini</code> registers 21 markers. The descriptions below are taken verbatim from that file.</p>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Marker</th>
-<th>What it means</th>
-<th>Typical use in this repo</th>
+<th>Registered description</th>
+<th>Kind</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>tier0</code></td>
-<td>Core smoke and sanity coverage</td>
-<td>Basic cold/warm migration flows and comprehensive smoke-style scenarios</td>
+<td>Core functionality tests (smoke tests)</td>
+<td>Tier</td>
 </tr>
 <tr>
-<td><code>warm</code></td>
-<td>Warm migration scenarios</td>
-<td>Warm migration tests, including one copy-offload warm case</td>
+<td><code>tier1</code></td>
+<td>Extended functionality tests</td>
+<td>Tier</td>
 </tr>
 <tr>
 <td><code>remote</code></td>
-<td>Remote OpenShift destination scenarios</td>
-<td>Tests that require <code>remote_ocp_cluster</code> to be configured</td>
+<td>Remote cluster migration tests</td>
+<td>Scenario</td>
+</tr>
+<tr>
+<td><code>warm</code></td>
+<td>Warm migration tests</td>
+<td>Scenario</td>
 </tr>
 <tr>
 <td><code>copyoffload</code></td>
-<td>Copy-offload/XCOPY scenarios</td>
-<td>The large copy-offload suite in <code>tests/test_copyoffload_migration.py</code></td>
+<td>Copy-offload (XCOPY) tests</td>
+<td>Scenario</td>
+</tr>
+<tr>
+<td><code>copyoffload_sanity</code></td>
+<td>Copy-offload sanity tests - core scenarios for quick validation</td>
+<td>Scenario</td>
+</tr>
+<tr>
+<td><code>copyoffload_snapshots</code></td>
+<td>Copy-offload snapshot tests (vSphere only)</td>
+<td>Scenario</td>
+</tr>
+<tr>
+<td><code>shared_disk</code></td>
+<td>Shared disk migration tests (vSphere only)</td>
+<td>Scenario</td>
 </tr>
 <tr>
 <td><code>incremental</code></td>
-<td>Sequential class semantics</td>
-<td>Multi-step migration classes where later steps depend on earlier ones</td>
+<td>Marks tests as incremental (xfail on previous failure)</td>
+<td>Lifecycle</td>
 </tr>
 <tr>
 <td><code>min_mtv_version</code></td>
-<td>MTV version gate</td>
-<td>Used with <code>mtv_version_checker</code> to skip below a required MTV version</td>
+<td>Mark test to require minimum MTV version (e.g., <code>@pytest.mark.min_mtv_version("2.6.0")</code>)</td>
+<td>Lifecycle</td>
+</tr>
+<tr>
+<td><code>ova</code></td>
+<td>OVA provider-specific tests</td>
+<td>Provider</td>
+</tr>
+<tr>
+<td><code>vsphere</code></td>
+<td>vSphere provider-specific tests</td>
+<td>Provider</td>
+</tr>
+<tr>
+<td><code>esxi</code></td>
+<td>ESXi provider-specific tests</td>
+<td>Provider</td>
+</tr>
+<tr>
+<td><code>rhv</code></td>
+<td>RHV provider-specific tests</td>
+<td>Provider</td>
+</tr>
+<tr>
+<td><code>hyperv</code></td>
+<td>Hyper-V provider-specific tests</td>
+<td>Provider</td>
+</tr>
+<tr>
+<td><code>openstack</code></td>
+<td>OpenStack provider-specific tests</td>
+<td>Provider</td>
+</tr>
+<tr>
+<td><code>openshift</code></td>
+<td>OpenShift provider-specific tests</td>
+<td>Provider</td>
+</tr>
+<tr>
+<td><code>deep_inspection</code></td>
+<td>Deep Inspection / Conversion CR tests (vSphere only)</td>
+<td>Integration</td>
+</tr>
+<tr>
+<td><code>ca_crt</code></td>
+<td>CA certificate field (ca.crt) provider secret tests</td>
+<td>Integration</td>
+</tr>
+<tr>
+<td><code>aap</code></td>
+<td>AAP (Ansible Automation Platform) hook integration tests (vSphere only)</td>
+<td>Integration</td>
+</tr>
+<tr>
+<td><code>upgrade</code></td>
+<td>MTV operator upgrade tests</td>
+<td>Integration</td>
 </tr>
 </tbody>
-</table>
-<p>A typical class combines multiple markers and environment gates:</p>
-<div class="highlight"><pre><span></span><code><span class="n">pytestmark</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span>
-        <span class="n">_SOURCE_PROVIDER_TYPE</span>
-        <span class="ow">in</span> <span class="p">(</span><span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">,</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">,</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">),</span>
-        <span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_SOURCE_PROVIDER_TYPE</span><span class="si">}</span><span class="s2"> warm migration is not supported.&quot;</span><span class="p">,</span>
-    <span class="p">),</span>
-<span class="p">]</span>
-
-<span class="k">if</span> <span class="n">_SOURCE_PROVIDER_TYPE</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">RHV</span><span class="p">:</span>
-    <span class="n">pytestmark</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">jira</span><span class="p">(</span><span class="s2">&quot;MTV-2846&quot;</span><span class="p">,</span> <span class="n">run</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
-
+</table></div>
+<h3 id="which-files-apply-each-marker">Which files apply each marker</h3>
+<p>Paths are relative to <code>tests/</code>.</p>
+<p>Tier markers:</p>
+<ul>
+<li>
+<p><code>tier0</code>:
+  <code>cold/test_cold_migration_comprehensive.py</code>, <code>cold/test_mtv_cold_migration.py</code>, <code>cold/test_ova_cold_migration.py</code>,
+  <code>hooks/test_post_hook_retain_failed_vm.py</code>, <code>shared_disk/test_shared_disk_rhel_migration.py</code>,
+  <code>warm/test_mtv_warm_clusterrole_migration.py</code>, <code>warm/test_mtv_warm_migration.py</code>,
+  <code>warm/test_warm_migration_comprehensive.py</code></p>
+</li>
+<li>
+<p><code>tier1</code>:
+  <code>cold/test_ca_crt_migration.py</code>, <code>cold/test_cold_migration_xfs.py</code>, <code>cold/test_dual_nic_cold_migration.py</code>,
+  <code>cold/test_insecure_skip_verify_migration.py</code>, <code>deep_inspection/test_plan_driven_di.py</code>,
+  <code>deep_inspection/test_standalone_di.py</code>, <code>hooks/test_aap_hook_migration.py</code>, <code>luks/test_luks_cold_migration.py</code>,
+  <code>plan_lifecycle/test_plan_archive_pvc_cleanup.py</code>, <code>shared_disk/test_shared_disk_windows_migration.py</code>,
+  <code>warm/test_mtv_warm_clusterrole_migration.py</code>, <code>warm/test_warm_migration_xfs.py</code></p>
+</li>
+</ul>
+<p>Scenario markers:</p>
+<ul>
+<li>
+<p><code>remote</code>:
+  <code>cold/test_mtv_cold_migration.py</code>, <code>warm/test_mtv_warm_clusterrole_migration.py</code>, <code>warm/test_mtv_warm_migration.py</code></p>
+</li>
+<li>
+<p><code>warm</code>:
+  <code>copyoffload/test_copyoffload_migration.py</code>, <code>deep_inspection/test_plan_driven_di.py</code>,
+  <code>warm/test_mtv_warm_clusterrole_migration.py</code>, <code>warm/test_mtv_warm_migration.py</code>,
+  <code>warm/test_warm_migration_comprehensive.py</code>, <code>warm/test_warm_migration_xfs.py</code></p>
+</li>
+<li>
+<p><code>copyoffload</code>, <code>copyoffload_sanity</code>, <code>copyoffload_snapshots</code>:
+  <code>copyoffload/test_copyoffload_migration.py</code> only</p>
+</li>
+<li>
+<p><code>shared_disk</code>:
+  <code>shared_disk/test_shared_disk_rhel_migration.py</code>, <code>shared_disk/test_shared_disk_windows_migration.py</code></p>
+</li>
+</ul>
+<p>Lifecycle markers:</p>
+<ul>
+<li><code>incremental</code>: applied in all 21 test modules of the suite, in practice on every multi-step class</li>
+<li><code>min_mtv_version</code>: no test in the repo uses it yet; the <code>mtv_version_checker</code> fixture in <code>conftest.py</code> implements it</li>
+</ul>
+<p>Provider markers:</p>
+<ul>
+<li>
+<p><code>vsphere</code>:
+  every test module except <code>cold/test_ova_cold_migration.py</code></p>
+</li>
+<li>
+<p><code>esxi</code>: <code>cold/test_ca_crt_migration.py</code>, <code>cold/test_insecure_skip_verify_migration.py</code>, <code>cold/test_mtv_cold_migration.py</code></p>
+</li>
+<li>
+<p><code>rhv</code>:
+  <code>cold/test_ca_crt_migration.py</code>, <code>cold/test_cold_migration_comprehensive.py</code>, <code>cold/test_insecure_skip_verify_migration.py</code>,
+  <code>cold/test_mtv_cold_migration.py</code>, <code>hooks/test_post_hook_retain_failed_vm.py</code>,
+  <code>plan_lifecycle/test_plan_archive_pvc_cleanup.py</code>, <code>warm/test_mtv_warm_migration.py</code>,
+  <code>warm/test_warm_migration_comprehensive.py</code></p>
+</li>
+<li>
+<p><code>hyperv</code>: <code>cold/test_cold_migration_comprehensive.py</code>, <code>cold/test_mtv_cold_migration.py</code></p>
+</li>
+<li>
+<p><code>openstack</code>:
+  <code>cold/test_ca_crt_migration.py</code>, <code>cold/test_cold_migration_comprehensive.py</code>,
+  <code>cold/test_insecure_skip_verify_migration.py</code>, <code>cold/test_mtv_cold_migration.py</code>,
+  <code>hooks/test_post_hook_retain_failed_vm.py</code>, <code>plan_lifecycle/test_plan_archive_pvc_cleanup.py</code></p>
+</li>
+<li>
+<p><code>openshift</code>:
+  <code>cold/test_cold_migration_comprehensive.py</code>, <code>cold/test_mtv_cold_migration.py</code>,
+  <code>hooks/test_post_hook_retain_failed_vm.py</code>, <code>plan_lifecycle/test_plan_archive_pvc_cleanup.py</code></p>
+</li>
+<li>
+<p><code>ova</code>: <code>cold/test_ova_cold_migration.py</code></p>
+</li>
+</ul>
+<p>Integration markers:</p>
+<ul>
+<li><code>deep_inspection</code>: <code>deep_inspection/test_plan_driven_di.py</code>, <code>deep_inspection/test_standalone_di.py</code></li>
+<li><code>ca_crt</code>: <code>cold/test_ca_crt_migration.py</code></li>
+<li><code>aap</code>: <code>hooks/test_aap_hook_migration.py</code></li>
+<li><code>upgrade</code>: <code>upgrade/test_upgrade_migration.py</code>, <code>warm/test_mtv_warm_migration.py</code></li>
+</ul>
+<p>Provider markers are documentation, not enforcement: a class tagged <code>rhv</code> still runs if you point <code>source_provider</code> at something else. Only the collection-time rules further down
+actually skip anything.</p>
+<h3 id="copy-offload-sub-markers-in-detail">Copy-offload sub-markers in detail</h3>
+<p>Inside <code>tests/copyoffload/test_copyoffload_migration.py</code> the sub-markers select smaller slices of the same file:</p>
+<ul>
+<li>
+<p><code>copyoffload_sanity</code>:
+  <code>TestCopyoffloadThickEagerSnapshotsMigration</code>, <code>TestCopyoffloadRdmVirtualDiskMigration</code>,
+  <code>TestCopyoffloadMultiDatastoreMigration</code>, <code>TestCopyoffloadMixedDatastoreMigration</code>,
+  <code>TestCopyoffload10MixedDisksMigration</code>, <code>TestCopyoffloadWarmMigration</code>, <code>TestCopyoffloadScaleMigration</code></p>
+</li>
+<li>
+<p><code>copyoffload_snapshots</code>:
+  <code>TestCopyoffloadThickLazySnapshotsMigration</code>, <code>TestCopyoffloadThickEagerSnapshotsMigration</code>,
+  <code>TestCopyoffloadThinSnapshotsMigration</code>, <code>TestCopyoffload2TbVmSnapshotsMigration</code></p>
+</li>
+<li>
+<p><code>warm</code>: <code>TestCopyoffloadWarmRdmVirtualDiskMigration</code>, <code>TestCopyoffloadWarmMigration</code></p>
+</li>
+</ul>
+<h3 id="marker-combinations-in-real-classes">Marker combinations in real classes</h3>
+<p>A typical warm class stacks several markers at once:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">vsphere</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">rhv</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">tier0</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">warm</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">upgrade</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">incremental</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
-    <span class="s2">&quot;class_plan_config&quot;</span><span class="p">,</span>
+    <span class="s2">"class_plan_config"</span><span class="p">,</span>
     <span class="p">[</span>
         <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
-            <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;tests_params&quot;</span><span class="p">][</span><span class="s2">&quot;test_sanity_warm_mtv_migration&quot;</span><span class="p">],</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">"tests_params"</span><span class="p">][</span><span class="s2">"test_sanity_warm_mtv_migration"</span><span class="p">],</span>
         <span class="p">)</span>
     <span class="p">],</span>
     <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;rhel8&quot;</span><span class="p">],</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">"rhel8"</span><span class="p">],</span>
 <span class="p">)</span>
-<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">&quot;precopy_interval_forkliftcontroller&quot;</span><span class="p">,</span> <span class="s2">&quot;cleanup_migrated_vms&quot;</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">"precopy_interval_forkliftcontroller"</span><span class="p">,</span> <span class="s2">"cleanup_migrated_vms"</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TestSanityWarmMtvMigration</span><span class="p">:</span>
 </code></pre></div>
 
-<p>A remote-only class is gated explicitly:</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">remote</span>
+<p>A remote-only class adds <code>remote</code> plus an explicit config gate:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">vsphere</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">rhv</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">warm</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">remote</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">incremental</span>
-<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span><span class="ow">not</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">&quot;remote_ocp_cluster&quot;</span><span class="p">),</span> <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;No remote OCP cluster provided&quot;</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span><span class="ow">not</span> <span class="n">get_value_from_py_config</span><span class="p">(</span><span class="s2">"remote_ocp_cluster"</span><span class="p">),</span> <span class="n">reason</span><span class="o">=</span><span class="s2">"No remote OCP cluster provided"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>The repo also supports version-gated tests through <code>min_mtv_version</code>, but the marker only has effect when the checker fixture is active:</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">&quot;mtv_version_checker&quot;</span><span class="p">)</span>
-<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">min_mtv_version</span><span class="p">(</span><span class="s2">&quot;2.10.0&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">"mtv_version_checker"</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">min_mtv_version</span><span class="p">(</span><span class="s2">"2.10.0"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">test_something</span><span class="p">(</span><span class="o">...</span><span class="p">):</span>
     <span class="c1"># Test runs only if MTV &gt;= 2.10.0</span>
 </code></pre></div>
 
+<h2 id="collection-time-provider-skip-rules">Collection-time provider skip rules</h2>
+<p><code>pytest_collection_modifyitems</code> in <code>conftest.py</code> reads <code>.providers.json</code>, resolves the configured <code>source_provider</code>, and adds skip markers before any test runs. All of these rules
+are skipped entirely in dry-run mode.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Source provider type</th>
+<th>Markers that get skipped</th>
+<th>Skip reason emitted</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>openstack</code>, <code>openshift</code>, <code>ova</code>, <code>hyperv</code></td>
+<td><code>warm</code></td>
+<td><code>&lt;type&gt; warm migration is not supported.</code></td>
+</tr>
+<tr>
+<td>Anything other than <code>vsphere</code></td>
+<td><code>copyoffload</code>, <code>shared_disk</code>, <code>deep_inspection</code>, <code>aap</code>, and the <code>luks</code> keyword</td>
+<td><code>Test is only applicable to vSphere source providers</code></td>
+</tr>
+<tr>
+<td><code>openshift</code>, <code>ova</code></td>
+<td><code>ca_crt</code></td>
+<td><code>&lt;type&gt; does not use CA certificates in provider secret</code></td>
+</tr>
+</tbody>
+</table></div>
 <blockquote>
-<p><strong>Note:</strong> Some warm tests add <code>pytest.mark.jira("MTV-2846", run=False)</code> for RHV. That behavior comes from <code>pytest-jira</code>, which is enabled by default via <code>--jira</code>. The repo includes a <code>jira.cfg.example</code> template for that plugin.</p>
+<p><strong>Note:</strong> The <code>luks</code> keyword in that second rule is defensive only. No test in the repo registers a <code>luks</code> marker, and <code>luks</code> is not a registered marker in <code>pytest.ini</code>, so the
+keyword currently matches nothing.</p>
 </blockquote>
+<p>Because these rules live in a hook rather than in module-level <code>skipif</code> markers, <code>-m warm</code> on an unsupported provider still collects the tests and reports them as skipped
+instead of deselecting them.</p>
 <h2 id="selection-and-dry-run-modes">Selection and dry-run modes</h2>
 <p>This suite supports the standard pytest selection tools, and they map cleanly to how the tests are organized.</p>
 <h3 id="marker-selection-with-m">Marker selection with <code>-m</code></h3>
-<p>Use project markers to slice the suite by scenario type. The checked-in docs already use this pattern:</p>
+<p>Use project markers to slice the suite by scenario type. <code>--strict-markers</code> only validates marks applied to tests, not <code>-m</code> expressions; an unknown name in <code>-m</code> silently
+selects no tests, so double-check the spelling against the table above.</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-v<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="p">:+--tc=cluster_host:</span><span class="si">${</span><span class="nv">CLUSTER_HOST</span><span class="si">}}</span><span class="w"> </span><span class="se">\</span>
@@ -465,80 +711,128 @@
 <span class="w">  </span>--tc<span class="o">=</span>storage_class:my-block-storageclass
 </code></pre></div>
 
-<p>In the same way, you can select other registered markers such as <code>tier0</code>, <code>warm</code>, or <code>remote</code>.</p>
+<p>In the same way, you can select other registered markers such as <code>tier0</code>, <code>tier1</code>, <code>warm</code>, <code>remote</code>, <code>copyoffload_sanity</code>, <code>copyoffload_snapshots</code>, <code>shared_disk</code>, or <code>upgrade</code>, and
+combine them with pytest’s <code>or</code> / <code>and</code> syntax:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">"tier0 or warm"</span><span class="w"> </span>-v<span class="w"> </span>--tc<span class="o">=</span>source_provider:vsphere-8.0.3.00400<span class="w"> </span>--tc<span class="o">=</span>storage_class:my-block-storageclass
+</code></pre></div>
+
 <h3 id="keyword-selection-with-k">Keyword selection with <code>-k</code></h3>
-<p><code>-k</code> works well because test names are descriptive. The repository’s own docs call this out directly:</p>
-<ul>
-<li>Add <code>-k test_name</code> after <code>-m copyoffload</code>.</li>
-<li>Example: <code>-m copyoffload -k test_copyoffload_thin_migration</code></li>
-</ul>
-<p>The repo also lists concrete test names you can target with <code>-k</code>:</p>
-<ul>
-<li><code>test_copyoffload_thin_migration</code></li>
-<li><code>test_copyoffload_thick_lazy_migration</code></li>
-<li><code>test_copyoffload_multi_disk_migration</code></li>
-<li><code>test_copyoffload_multi_disk_different_path_migration</code></li>
-<li><code>test_copyoffload_rdm_virtual_disk_migration</code></li>
-</ul>
+<p>Copy-offload tests are class-based and parameterized with stable Jira-style ids, so <code>-k</code> works best on the class name or the id slug:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Whole class</span>
+uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span>-k<span class="w"> </span>TestCopyoffloadThinMigration<span class="w"> </span>...
+
+<span class="c1"># Slug from the parametrize id (ids=["MTV-559:copyoffload-thin"])</span>
+uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>copyoffload<span class="w"> </span>-k<span class="w"> </span><span class="s2">"copyoffload-thin"</span><span class="w"> </span>...
+</code></pre></div>
+
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Parametrize id</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TestCopyoffloadThinMigration</code></td>
+<td><code>MTV-559:copyoffload-thin</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadThickLazyMigration</code></td>
+<td><code>MTV-580:copyoffload-thick-lazy</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadThickEagerMigration</code></td>
+<td><code>MTV-582:copyoffload-thick-eager</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadMultiDiskMigration</code></td>
+<td><code>MTV-561:copyoffload-multi-disk</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadMultiDiskDifferentPathMigration</code></td>
+<td><code>MTV-563:copyoffload-multi-disk-different-path</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadRdmVirtualDiskMigration</code></td>
+<td><code>MTV-562:copyoffload-rdm-virtual</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadMultiDatastoreMigration</code></td>
+<td><code>MTV-564:copyoffload-multi-datastore</code></td>
+</tr>
+<tr>
+<td><code>TestCopyoffloadWarmMigration</code></td>
+<td><code>MTV-577:copyoffload-warm</code></td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Note:</strong> The keys in <code>tests/tests_config/config.py</code> (for example <code>test_copyoffload_thin_migration</code>) are pytest config keys, not test node names, so
+<code>-k test_copyoffload_thin_migration</code> matches nothing.</p>
+</blockquote>
 <h3 id="standard-pytest-path-and-node-selection">Standard pytest path and node selection</h3>
-<p>This repo does not replace pytest’s normal file, class, or node selection. If you prefer selecting by file or specific test node, standard pytest syntax still applies.</p>
+<p>This repo does not replace pytest’s normal file, class, or node selection. Tests live in one directory per scenario area, so selecting by file works as expected:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/copyoffload/test_copyoffload_migration.py<span class="w"> </span>-v<span class="w"> </span>--tc<span class="o">=</span>source_provider:vsphere-8.0.3.00400
+uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/warm/test_mtv_warm_migration.py::TestSanityWarmMtvMigration<span class="w"> </span>-v
+</code></pre></div>
+
 <h3 id="supported-dry-run-modes">Supported dry-run modes</h3>
 <p>The suite explicitly treats <code>--collect-only</code> and <code>--setup-plan</code> as dry-run modes:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">is_dry_run</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if pytest was invoked in dry-run mode (collectonly or setupplan).&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Check if pytest was invoked in dry-run mode (collectonly or setupplan)."""</span>
     <span class="k">return</span> <span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="o">.</span><span class="n">setupplan</span> <span class="ow">or</span> <span class="n">config</span><span class="o">.</span><span class="n">option</span><span class="o">.</span><span class="n">collectonly</span>
 </code></pre></div>
 
 <p>Those dry-run modes are used in repository automation too:</p>
 <div class="highlight"><pre><span></span><code><span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--setup-plan&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--setup-plan"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="w">  </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"pytest"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"--collect-only"</span><span class="p">,</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="p">]</span>
 </code></pre></div>
 
 <p>The container image also defaults to dry-run discovery:</p>
-<div class="highlight"><pre><span></span><code><span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uv&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--collect-only&quot;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">"uv"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"pytest"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--collect-only"</span><span class="p">]</span>
 </code></pre></div>
 
-<p><code>--collect-only</code> is the safest way to preview what your <code>-m</code> and <code>-k</code> expression will match. The checked-in copy-offload docs recommend it directly:</p>
+<p><code>--collect-only</code> is the safest way to preview what your <code>-m</code> and <code>-k</code> expression will match:</p>
 <div class="highlight"><pre><span></span><code>pytest<span class="w"> </span>--collect-only<span class="w"> </span>-m<span class="w"> </span>copyoffload
 </code></pre></div>
 
 <p><code>--setup-plan</code> is useful when you want pytest to show fixture setup planning without running the tests themselves.</p>
 <blockquote>
-<p><strong>Note:</strong> In this repository, dry-run mode is more than “just don’t execute tests.” When <code>--collect-only</code> or <code>--setup-plan</code> is active, the suite skips runtime-only validation, teardown, failure data collection, must-gather capture, and AI failure analysis.</p>
-<p><strong>Warning:</strong> Dry-run does not validate a migration path. It only validates collection and, for <code>--setup-plan</code>, setup planning. It does not exercise MTV, providers, or cluster-side migration behavior.</p>
+<p><strong>Note:</strong> In this repository, dry-run mode is more than “just don’t execute tests.” When <code>--collect-only</code> or <code>--setup-plan</code> is active, the suite skips runtime-only
+validation, teardown, failure data collection, must-gather capture, and AI failure analysis.</p>
+</blockquote>
+<p>Dry-run still validates that your selection expression and configuration are syntactically usable:</p>
+<blockquote>
+<p><strong>Warning:</strong> Dry-run does not validate a migration path. It only validates collection and, for <code>--setup-plan</code>, setup planning. It does not exercise MTV, providers, or
+cluster-side migration behavior.</p>
 </blockquote>
 <h2 id="incremental-semantics">Incremental semantics</h2>
-<p>Most test classes in this repository are structured as a five-step workflow:</p>
-<ol>
-<li>Create <code>StorageMap</code></li>
-<li>Create <code>NetworkMap</code></li>
-<li>Create <code>Plan</code></li>
-<li>Execute migration</li>
-<li>Validate migrated VMs</li>
-</ol>
+<p>Most test classes in this repository are structured as a multi-step workflow: create the <code>StorageMap</code>, create the <code>NetworkMap</code>, create the <code>Plan</code>, execute the migration, then
+validate the migrated VMs.</p>
 <p>That is why <code>incremental</code> matters so much here. The suite implements its own incremental behavior in <code>conftest.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Incremental test support - track failures for class-based tests</span>
-<span class="k">if</span> <span class="s2">&quot;incremental&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">when</span> <span class="o">==</span> <span class="s2">&quot;call&quot;</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">failed</span><span class="p">:</span>
+<span class="k">if</span> <span class="s2">"incremental"</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">when</span> <span class="o">==</span> <span class="s2">"call"</span> <span class="ow">and</span> <span class="n">rep</span><span class="o">.</span><span class="n">failed</span><span class="p">:</span>
     <span class="n">item</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">_previousfailed</span> <span class="o">=</span> <span class="n">item</span>
 </code></pre></div>
 
 <div class="highlight"><pre><span></span><code><span class="c1"># Incremental test support - xfail if previous test in class failed</span>
-<span class="k">if</span> <span class="s2">&quot;incremental&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
-    <span class="n">previousfailed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;_previousfailed&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="k">if</span> <span class="s2">"incremental"</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
+    <span class="n">previousfailed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="s2">"_previousfailed"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">previousfailed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">pytest</span><span class="o">.</span><span class="n">xfail</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;previous test failed (</span><span class="si">{</span><span class="n">previousfailed</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">xfail</span><span class="p">(</span><span class="sa">f</span><span class="s2">"previous test failed (</span><span class="si">{</span><span class="n">previousfailed</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>In practice, that means:</p>
@@ -547,85 +841,124 @@
 <li>Later tests in the same class are converted to <code>xfail</code> with a message like <code>previous test failed (...)</code>.</li>
 <li>This prevents a broken early step from creating a long tail of noisy follow-up failures.</li>
 </ul>
-<p>There is one important nuance: this implementation only records failures from the <code>call</code> phase. A setup or teardown error does not set <code>_previousfailed</code> the same way a call-phase failure does.</p>
+<p>There is one important nuance: this implementation only records failures from the <code>call</code> phase. A setup or teardown error does not set <code>_previousfailed</code> the same way a call-phase
+failure does.</p>
 <blockquote>
 <p><strong>Tip:</strong> When an incremental class fails, start with the earliest failing step in the class. Later <code>xfail</code> results are usually downstream effects, not new root causes.</p>
 </blockquote>
 <h2 id="xdist-behavior">xdist behavior</h2>
-<p><code>pytest-xdist</code> is installed and the suite is xdist-aware, but parallel execution is opt-in. Nothing in <code>pytest.ini</code> sets a worker count, so runs stay single-process until you add <code>-n</code>.</p>
+<p><code>pytest-xdist</code> is installed and the suite is xdist-aware, but parallel execution is opt-in. Nothing in <code>pytest.ini</code> sets a worker count, so runs stay single-process until you add
+<code>-n</code>.</p>
 <p>What is preconfigured is the distribution strategy:</p>
 <ul>
 <li><code>--dist=loadscope</code> is enabled by default.</li>
 <li>That is a good fit for this repository because tests are heavily class-based, use shared class attributes, and often rely on <code>incremental</code> semantics.</li>
 <li>Keeping related tests together on one worker reduces the chance of splitting a multi-step class across workers.</li>
 </ul>
-<p>The suite also includes explicit worker-side handling for <code>pytest-harvest</code> state:</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_harvest_xdist_worker_dump</span><span class="p">(</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">session_items</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">):</span>
+<p><code>pytest-harvest</code> needs explicit xdist plumbing, and the suite provides all four hooks. The worker-side dump persists each worker’s session state to disk:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_harvest_xdist_worker_dump</span><span class="p">(</span>
+    <span class="n">worker_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">session_items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Persist this xdist worker's harvested results so the controller can merge them.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        worker_id: Identifier of the xdist worker</span>
+<span class="sd">        session_items: Harvested test items collected on this worker</span>
+<span class="sd">        fixture_store: Fixture store captured on this worker</span>
+<span class="sd">    """</span>
     <span class="c1"># persist session_items and fixture_store in the file system</span>
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">RESULTS_PATH</span> <span class="o">/</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">.pkl&quot;</span><span class="p">),</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">RESULTS_PATH</span> <span class="o">/</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">.pkl"</span><span class="p">),</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">((</span><span class="n">session_items</span><span class="p">,</span> <span class="n">fixture_store</span><span class="p">),</span> <span class="n">f</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
-            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error while pickling worker </span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">&#39;s harvested results: [</span><span class="si">{</span><span class="n">exp</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">exp</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Error while pickling worker </span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">'s harvested results: [</span><span class="si">{</span><span class="n">exp</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">exp</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
 
+<p>Those pickles land in <code>./.xdist_results/</code> (<code>RESULTS_PATH</code>), which is wiped and recreated by <code>pytest_harvest_xdist_init</code> and removed again by <code>pytest_harvest_xdist_cleanup</code>.</p>
 <p>And it protects worker-shared setup where needed. For example, the <code>virtctl_binary</code> fixture uses a file lock and a shared cache directory specifically for xdist-safe downloads.</p>
 <blockquote>
 <p><strong>Tip:</strong> If you enable parallelism with <code>-n</code>, keep the default <code>--dist=loadscope</code>. It matches the suite’s class-based design much better than fine-grained distribution.</p>
 </blockquote>
 <h2 id="suite-specific-pytest-options">Suite-specific pytest options</h2>
-<p>Beyond standard pytest options, <code>conftest.py</code> adds a small set of suite-specific flags:</p>
-<div class="highlight"><pre><span></span><code><span class="n">analyze_with_ai_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span><span class="s2">&quot;--analyze-with-ai&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store_true&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Analyze test failures using AI&quot;</span><span class="p">)</span>
+<p><code>conftest.py</code> registers six custom options across five groups. All of them are real flags you can pass on any run.</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">pytest_addoption</span><span class="p">(</span><span class="n">parser</span><span class="p">:</span> <span class="n">pytest</span><span class="o">.</span><span class="n">Parser</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Register the suite's custom pytest options in their groups.</span>
 
-<span class="n">data_collector_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span><span class="s2">&quot;--skip-data-collector&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store_true&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Collect data for failed tests&quot;</span><span class="p">)</span>
-<span class="n">data_collector_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
-    <span class="s2">&quot;--data-collector-path&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Path to store collected data for failed tests&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;.data-collector&quot;</span>
-<span class="p">)</span>
+<span class="sd">    Args:</span>
+<span class="sd">        parser: Pytest command line parser</span>
+<span class="sd">    """</span>
+    <span class="n">data_collector_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"DataCollector"</span><span class="p">)</span>
+    <span class="n">teardown_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Teardown"</span><span class="p">)</span>
+    <span class="n">openshift_python_wrapper_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Openshift Python Wrapper"</span><span class="p">)</span>
+    <span class="n">analyze_with_ai_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Analyze with AI"</span><span class="p">)</span>
+    <span class="n">analyze_with_ai_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span><span class="s2">"--analyze-with-ai"</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"Analyze test failures using AI"</span><span class="p">)</span>
 
-<span class="n">teardown_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
-    <span class="s2">&quot;--skip-teardown&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store_true&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Do not teardown resource created by the tests&quot;</span>
-<span class="p">)</span>
+    <span class="n">providers_group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">getgroup</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Providers"</span><span class="p">)</span>
+    <span class="n">providers_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
+        <span class="s2">"--providers-json"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json"</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
 
-<span class="n">openshift_python_wrapper_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
-    <span class="s2">&quot;--openshift-python-wrapper-log-debug&quot;</span><span class="p">,</span>
-    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store_true&quot;</span><span class="p">,</span>
-    <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Enable debug logging in the openshift-python-wrapper module&quot;</span><span class="p">,</span>
-<span class="p">)</span>
+    <span class="n">data_collector_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span><span class="s2">"--skip-data-collector"</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"Collect data for failed tests"</span><span class="p">)</span>
+    <span class="n">data_collector_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
+        <span class="s2">"--data-collector-path"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"Path to store collected data for failed tests"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">".data-collector"</span>
+    <span class="p">)</span>
+    <span class="n">teardown_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
+        <span class="s2">"--skip-teardown"</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"Do not teardown resource created by the tests"</span>
+    <span class="p">)</span>
+    <span class="n">openshift_python_wrapper_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
+        <span class="s2">"--openshift-python-wrapper-log-debug"</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"Enable debug logging in the openshift-python-wrapper module"</span><span class="p">,</span>
+    <span class="p">)</span>
 </code></pre></div>
 
-<p>Here is what those flags actually do:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Option</th>
+<th>Group</th>
 <th>Behavior</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>--skip-teardown</code></td>
-<td>Preserves resources after the run instead of deleting them</td>
+<td><code>--analyze-with-ai</code></td>
+<td><code>Analyze with AI</code></td>
+<td>Enriches the JUnit XML after a failing run. Disabled automatically when <code>ROOTCOZ_SERVER_URL</code> is unset or in dry-run mode</td>
+</tr>
+<tr>
+<td><code>--providers-json PATH</code></td>
+<td><code>Providers</code></td>
+<td>Path to the providers file. Falls back to <code>PROVIDERS_JSON_PATH</code>, then <code>.providers.json</code>; a missing file raises <code>FileNotFoundError</code></td>
 </tr>
 <tr>
 <td><code>--skip-data-collector</code></td>
-<td>Disables failure data collection and must-gather capture</td>
+<td><code>DataCollector</code></td>
+<td>Skips failure data collection: no <code>resources.json</code> dump and no must-gather capture</td>
 </tr>
 <tr>
-<td><code>--data-collector-path</code></td>
-<td>Changes where collector output is written; default is <code>.data-collector</code></td>
+<td><code>--data-collector-path PATH</code></td>
+<td><code>DataCollector</code></td>
+<td>Output directory; default <code>.data-collector</code>. Wiped at session start, written at session finish</td>
 </tr>
 <tr>
-<td><code>--analyze-with-ai</code></td>
-<td>Enriches failure reporting through the JUnit XML path after the run</td>
+<td><code>--skip-teardown</code></td>
+<td><code>Teardown</code></td>
+<td>Preserves resources after the run instead of deleting them</td>
 </tr>
 <tr>
 <td><code>--openshift-python-wrapper-log-debug</code></td>
+<td><code>Openshift Python Wrapper</code></td>
 <td>Sets <code>OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG</code> during session startup</td>
 </tr>
 </tbody>
-</table>
-<p>The real-run guard for required config lives here too:</p>
-<div class="highlight"><pre><span></span><code><span class="n">required_config</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;storage_class&quot;</span><span class="p">,</span> <span class="s2">&quot;source_provider&quot;</span><span class="p">)</span>
+</table></div>
+<p>The real-run guard for required config lives in <code>pytest_sessionstart</code> too:</p>
+<div class="highlight"><pre><span></span><code><span class="n">required_config</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"storage_class"</span><span class="p">,</span> <span class="s2">"source_provider"</span><span class="p">)</span>
 
 <span class="k">if</span> <span class="ow">not</span> <span class="n">is_dry_run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="p">):</span>
     <span class="n">missing_configs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -635,23 +968,39 @@
             <span class="n">missing_configs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_req</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">missing_configs</span><span class="p">:</span>
-        <span class="n">pytest</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Some required config is missing </span><span class="si">{</span><span class="n">required_config</span><span class="si">=}</span><span class="s2"> - </span><span class="si">{</span><span class="n">missing_configs</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">returncode</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pytest</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Some required config is missing </span><span class="si">{</span><span class="n">required_config</span><span class="si">=}</span><span class="s2"> - </span><span class="si">{</span><span class="n">missing_configs</span><span class="si">=}</span><span class="s2">"</span><span class="p">,</span> <span class="n">returncode</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
 
-<p>And teardown/data collection behavior is handled here:</p>
-<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">&quot;skip_data_collector&quot;</span><span class="p">):</span>
+<p>And teardown/data collection behavior is handled in <code>pytest_sessionfinish</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_data_collector"</span><span class="p">):</span>
     <span class="n">collect_created_resources</span><span class="p">(</span><span class="n">session_store</span><span class="o">=</span><span class="n">_session_store</span><span class="p">,</span> <span class="n">data_collector_path</span><span class="o">=</span><span class="n">_data_collector_path</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">&quot;skip_teardown&quot;</span><span class="p">):</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;User requested to skip teardown of resources&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_teardown"</span><span class="p">):</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"User requested to skip teardown of resources"</span><span class="p">)</span>
+
 <span class="k">else</span><span class="p">:</span>
-    <span class="n">session_teardown</span><span class="p">(</span><span class="n">session_store</span><span class="o">=</span><span class="n">_session_store</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">session_teardown</span><span class="p">(</span><span class="n">session_store</span><span class="o">=</span><span class="n">_session_store</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the following resources was left after tests are finished: </span><span class="si">{</span><span class="n">exp</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_data_collector"</span><span class="p">):</span>
+            <span class="n">run_must_gather</span><span class="p">(</span><span class="n">data_collector_path</span><span class="o">=</span><span class="n">_data_collector_path</span><span class="p">)</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Warning:</strong> <code>--skip-teardown</code> is a debugging tool, not a normal operating mode. If you use it, expect to clean up VMs, Plans, Providers, namespaces, and any source-side cloned resources yourself.</p>
-<p><strong>Note:</strong> The current help text for <code>--skip-data-collector</code> is misleading. The implementation uses it as a true skip flag: when it is set, the suite does not collect resource metadata or run must-gather on failures.</p>
-<p><strong>Tip:</strong> If you are building a complex selection expression, use <code>--collect-only</code> first. Once the collected set looks right, rerun the same command without dry-run mode.</p>
+<p><strong>Warning:</strong> <code>--skip-teardown</code> is a debugging tool, not a normal operating mode. If you use it, expect to clean up VMs, Plans, Providers, namespaces, and any source-side cloned
+resources yourself.</p>
+</blockquote>
+<p>The <code>--skip-data-collector</code> help text is misleading. The implementation uses it as a true skip flag: when it is set, the suite neither writes <code>resources.json</code> nor runs
+must-gather on failures.</p>
+<p>One more dependency deserves a warning, since it is easy to assume otherwise from the old configuration files you may have seen:</p>
+<blockquote>
+<p><strong>Note:</strong> <code>pytest-jira</code> is installed as a dependency and the repo ships a <code>jira.cfg.example</code> template, but <code>--jira</code> is <strong>not</strong> part of <code>addopts</code> and no test uses
+<code>pytest.mark.jira</code>. If you want JIRA markers active, add <code>--jira</code> yourself and supply <code>jira.cfg</code>.</p>
+</blockquote>
+<p>Finally, when you are assembling a complex selection expression:</p>
+<blockquote>
+<p><strong>Tip:</strong> Use <code>--collect-only</code> first. Once the collected set looks right, rerun the same command without dry-run mode.</p>
 </blockquote>
                 </div>
             </article>
@@ -676,7 +1025,13 @@
                     <div class="toc">
 <ul>
 <li><a href="#default-pytest-behavior">Default pytest behavior</a></li>
-<li><a href="#marker-reference">Marker reference</a></li>
+<li><a href="#marker-reference">Marker reference</a><ul>
+<li><a href="#which-files-apply-each-marker">Which files apply each marker</a></li>
+<li><a href="#copy-offload-sub-markers-in-detail">Copy-offload sub-markers in detail</a></li>
+<li><a href="#marker-combinations-in-real-classes">Marker combinations in real classes</a></li>
+</ul>
+</li>
+<li><a href="#collection-time-provider-skip-rules">Collection-time provider skip rules</a></li>
 <li><a href="#selection-and-dry-run-modes">Selection and dry-run modes</a><ul>
 <li><a href="#marker-selection-with-m">Marker selection with -m</a></li>
 <li><a href="#keyword-selection-with-k">Keyword selection with -k</a></li>
@@ -693,24 +1048,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -756,5 +1114,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

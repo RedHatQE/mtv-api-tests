@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cleanup And Teardown - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -225,7 +226,7 @@
 
                     <li>
                         <a href="cleanup-and-teardown.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Cleanup And Teardown
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,7 +302,8 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="cleanup-and-teardown">Cleanup And Teardown</h1>
-<p><code>mtv-api-tests</code> cleans up automatically in normal runs. The project uses two cleanup layers: class-level cleanup for migrated VMs, and session-level cleanup for the rest of the resources the run created. If you need to stop that behavior for debugging, <code>--skip-teardown</code> preserves the environment so you can inspect it manually.</p>
+<p><code>mtv-api-tests</code> cleans up automatically in normal runs. The project uses two cleanup layers: class-level cleanup for migrated VMs, and session-level cleanup for the rest of the
+resources the run created. If you need to stop that behavior for debugging, <code>--skip-teardown</code> preserves the environment so you can inspect it manually.</p>
 <h2 id="default-behavior">Default Behavior</h2>
 <p>A standard run does all of the following:</p>
 <ul>
@@ -310,44 +313,48 @@
 <li>Writes a resource inventory to <code>.data-collector/resources.json</code> unless you disable the data collector.</li>
 </ul>
 <p>Resource tracking starts in <code>utilities/resources.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Storing </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> in fixture store&quot;</span><span class="p">)</span>
-<span class="n">_resource_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="vm">__module__</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Storing </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> in fixture store"</span><span class="p">)</span>
+<span class="n">_resource_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">"module"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="vm">__module__</span><span class="p">}</span>
 
 <span class="k">if</span> <span class="n">test_name</span><span class="p">:</span>
-    <span class="n">_resource_dict</span><span class="p">[</span><span class="s2">&quot;test_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">test_name</span>
+    <span class="n">_resource_dict</span><span class="p">[</span><span class="s2">"test_name"</span><span class="p">]</span> <span class="o">=</span> <span class="n">test_name</span>
 
-<span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;teardown&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_resource_dict</span><span class="p">)</span>
+<span class="n">fixture_store</span><span class="p">[</span><span class="s2">"teardown"</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_resource_dict</span><span class="p">)</span>
 </code></pre></div>
 
 <p>Anything created through <code>create_and_store_resource()</code> is registered automatically, which is why teardown can later find it again without guessing names or namespaces.</p>
-<p>Not all cleanup waits until session end. Some fixture-scoped helpers clean up immediately after use. For example, SSH test connections are closed with <code>cleanup_all()</code>, copy-offload SSH keys are removed after the fixture yields, and temporary cluster edits made with <code>ResourceEditor</code> are reverted automatically when their context exits.</p>
+<p>Not all cleanup waits until session end. Some fixture-scoped helpers clean up immediately after use. For example, SSH test connections are closed with <code>cleanup_all()</code>, copy-offload
+SSH keys are removed after the fixture yields, and temporary cluster edits made with <code>ResourceEditor</code> are reverted automatically when their context exits.</p>
 <h2 id="automatic-cleanup-flow">Automatic Cleanup Flow</h2>
 <h3 id="per-class-vm-cleanup">Per-class VM cleanup</h3>
-<p>The standard class-based tests opt into VM cleanup explicitly. From <code>tests/test_mtv_cold_migration.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">&quot;cleanup_migrated_vms&quot;</span><span class="p">)</span>
+<p>The standard class-based tests opt into VM cleanup explicitly. From <code>tests/cold/test_mtv_cold_migration.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">"cleanup_migrated_vms"</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TestSanityColdMtvMigration</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cold migration test - sanity check.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Cold migration test - sanity check."""</span>
 </code></pre></div>
 
 <p>That fixture runs after the class completes. From <code>conftest.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">yield</span>
 
-<span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">&quot;skip_teardown&quot;</span><span class="p">):</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Skipping VM cleanup due to --skip-teardown flag&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_teardown"</span><span class="p">):</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Skipping VM cleanup due to --skip-teardown flag"</span><span class="p">)</span>
     <span class="k">return</span>
 
-<span class="n">vm_namespace</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_vm_target_namespace&quot;</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
+<span class="c1"># Use custom namespace if configured, otherwise fall back to target_namespace</span>
+<span class="n">vm_namespace</span> <span class="o">=</span> <span class="n">prepared_plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"_vm_target_namespace"</span><span class="p">,</span> <span class="n">target_namespace</span><span class="p">)</span>
 
-<span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">]:</span>
-    <span class="n">vm_name</span> <span class="o">=</span> <span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+<span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]:</span>
+    <span class="n">vm_name</span> <span class="o">=</span> <span class="n">resolve_destination_vm_name</span><span class="p">(</span><span class="n">vm</span><span class="p">)</span>
     <span class="n">vm_obj</span> <span class="o">=</span> <span class="n">VirtualMachine</span><span class="p">(</span>
         <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
         <span class="n">name</span><span class="o">=</span><span class="n">vm_name</span><span class="p">,</span>
         <span class="n">namespace</span><span class="o">=</span><span class="n">vm_namespace</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">vm_obj</span><span class="o">.</span><span class="n">exists</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cleaning up migrated VM: </span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2"> from namespace: </span><span class="si">{</span><span class="n">vm_namespace</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Cleaning up migrated VM: </span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2"> from namespace: </span><span class="si">{</span><span class="n">vm_namespace</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="n">vm_obj</span><span class="o">.</span><span class="n">clean_up</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"VM </span><span class="si">{</span><span class="n">vm_name</span><span class="si">}</span><span class="s2"> already deleted from namespace: </span><span class="si">{</span><span class="n">vm_namespace</span><span class="si">}</span><span class="s2">, skipping cleanup"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>A few practical details come from that logic:</p>
@@ -355,51 +362,58 @@
 <li><code>cleanup_migrated_vms</code> is teardown-only. It does not set anything up; it just removes migrated VMs after the class.</li>
 <li>The same <code>--skip-teardown</code> flag disables this VM cleanup too.</li>
 <li>If the plan migrated into a custom <code>vm_target_namespace</code>, that namespace is used automatically.</li>
+<li>
+<p>The destination name comes from <code>resolve_destination_vm_name(vm)</code>, not from the raw config <code>vm["name"]</code>. When MTV renames a migrated VM, the raw config value is the wrong key to
+search on.</p>
+</li>
+<li>
+<p>An already-missing VM is logged and skipped, so a test that already deleted its own VM does not fail the class teardown.</p>
+</li>
 </ul>
 <h3 id="session-teardown">Session teardown</h3>
 <p>At the end of the session, <code>conftest.py</code> writes the resource inventory and then decides whether to run teardown:</p>
-<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">&quot;skip_data_collector&quot;</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_data_collector"</span><span class="p">):</span>
     <span class="n">collect_created_resources</span><span class="p">(</span><span class="n">session_store</span><span class="o">=</span><span class="n">_session_store</span><span class="p">,</span> <span class="n">data_collector_path</span><span class="o">=</span><span class="n">_data_collector_path</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">&quot;skip_teardown&quot;</span><span class="p">):</span>
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;User requested to skip teardown of resources&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_teardown"</span><span class="p">):</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"User requested to skip teardown of resources"</span><span class="p">)</span>
 
 <span class="k">else</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">session_teardown</span><span class="p">(</span><span class="n">session_store</span><span class="o">=</span><span class="n">_session_store</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exp</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;the following resources was left after tests are finished: </span><span class="si">{</span><span class="n">exp</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">&quot;skip_data_collector&quot;</span><span class="p">):</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the following resources was left after tests are finished: </span><span class="si">{</span><span class="n">exp</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">session</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getoption</span><span class="p">(</span><span class="s2">"skip_data_collector"</span><span class="p">):</span>
             <span class="n">run_must_gather</span><span class="p">(</span><span class="n">data_collector_path</span><span class="o">=</span><span class="n">_data_collector_path</span><span class="p">)</span>
 </code></pre></div>
 
 <p>The session teardown in <code>utilities/pytest_utils.py</code> starts by cancelling active migrations and archiving plans:</p>
-<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">session_teardown_resources</span> <span class="o">:=</span> <span class="n">session_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;teardown&quot;</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">session_teardown_resources</span> <span class="o">:=</span> <span class="n">session_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"teardown"</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">migration_name</span> <span class="ow">in</span> <span class="n">session_teardown_resources</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Migration</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[]):</span>
-        <span class="n">migration</span> <span class="o">=</span> <span class="n">Migration</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">migration_name</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">namespace</span><span class="o">=</span><span class="n">migration_name</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">],</span> <span class="n">client</span><span class="o">=</span><span class="n">ocp_client</span><span class="p">)</span>
+        <span class="n">migration</span> <span class="o">=</span> <span class="n">Migration</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">migration_name</span><span class="p">[</span><span class="s2">"name"</span><span class="p">],</span> <span class="n">namespace</span><span class="o">=</span><span class="n">migration_name</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">],</span> <span class="n">client</span><span class="o">=</span><span class="n">ocp_client</span><span class="p">)</span>
         <span class="n">cancel_migration</span><span class="p">(</span><span class="n">migration</span><span class="o">=</span><span class="n">migration</span><span class="p">)</span>
 
     <span class="k">for</span> <span class="n">plan_name</span> <span class="ow">in</span> <span class="n">session_teardown_resources</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Plan</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[]):</span>
-        <span class="n">plan</span> <span class="o">=</span> <span class="n">Plan</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">plan_name</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">namespace</span><span class="o">=</span><span class="n">plan_name</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">],</span> <span class="n">client</span><span class="o">=</span><span class="n">ocp_client</span><span class="p">)</span>
+        <span class="n">plan</span> <span class="o">=</span> <span class="n">Plan</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">plan_name</span><span class="p">[</span><span class="s2">"name"</span><span class="p">],</span> <span class="n">namespace</span><span class="o">=</span><span class="n">plan_name</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">],</span> <span class="n">client</span><span class="o">=</span><span class="n">ocp_client</span><span class="p">)</span>
         <span class="n">archive_plan</span><span class="p">(</span><span class="n">plan</span><span class="o">=</span><span class="n">plan</span><span class="p">)</span>
 
     <span class="n">leftovers</span> <span class="o">=</span> <span class="n">teardown_resources</span><span class="p">(</span>
         <span class="n">session_store</span><span class="o">=</span><span class="n">session_store</span><span class="p">,</span>
         <span class="n">ocp_client</span><span class="o">=</span><span class="n">ocp_client</span><span class="p">,</span>
-        <span class="n">target_namespace</span><span class="o">=</span><span class="n">session_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_namespace&quot;</span><span class="p">),</span>
+        <span class="n">target_namespace</span><span class="o">=</span><span class="n">session_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"target_namespace"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">leftovers</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">SessionTeardownError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to clean up the following resources: </span><span class="si">{</span><span class="n">leftovers</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">SessionTeardownError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed to clean up the following resources: </span><span class="si">{</span><span class="n">leftovers</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>From there, <code>teardown_resources()</code> works through the rest of the inventory. In practice, the session-level sweep covers:</p>
 <ul>
 <li><code>Migration</code> and <code>Plan</code> resources.</li>
 <li><code>Provider</code>, <code>Secret</code>, and <code>Host</code> resources.</li>
-<li><code>NetworkAttachmentDefinition</code>, <code>StorageMap</code>, and <code>NetworkMap</code> resources.</li>
+<li><code>NetworkAttachmentDefinition</code>, <code>StorageMap</code>, <code>NetworkMap</code>, and <code>Conversion</code> resources.</li>
 <li>Tracked <code>VirtualMachine</code> and <code>Pod</code> resources.</li>
 <li>Namespaces created during the run.</li>
-<li>Source-side cloned VMs for VMware, OpenStack, and RHV.</li>
+<li>Source-side cloned VMs for VMware, OpenStack, RHV, and Hyper-V.</li>
 <li>OpenStack volume snapshots that were recorded during clone preparation.</li>
 </ul>
 <p>It also performs extra cleanup and verification in the target namespace by:</p>
@@ -409,29 +423,36 @@
 <li>Waiting for matching <code>DataVolume</code>, <code>PersistentVolumeClaim</code>, and <code>PersistentVolume</code> objects to be deleted.</li>
 </ul>
 <blockquote>
-<p><strong>Note:</strong> <code>.data-collector/resources.json</code> is written before session teardown runs. That means the file is available both when you use <code>--skip-teardown</code> and when teardown later reports a problem.</p>
+<p><strong>Note:</strong> <code>.data-collector/resources.json</code> is written before session teardown runs. That means the file is available both when you use <code>--skip-teardown</code> and when teardown later
+reports a problem.</p>
 </blockquote>
 <h3 id="leftover-detection">Leftover detection</h3>
 <p>Teardown is more than a best-effort delete loop. The code explicitly tracks leftovers and raises <code>SessionTeardownError</code> if resources are still present after cleanup attempts.</p>
-<p>That leftover detection is especially important for migration side effects such as pods, PVCs, and PVs. The session code looks for objects tied to the current run’s session UUID and records anything that did not disappear cleanly.</p>
+<p>That leftover detection is especially important for migration side effects such as pods, PVCs, and PVs. The session code looks for objects tied to the current run’s session UUID
+and records anything that did not disappear cleanly.</p>
+<p><code>session_teardown()</code> still builds a cluster client before it checks the store, so an empty worker does not skip client setup — it only skips the cancel, archive and
+leftover-sweep loops. The code comments why the store can be empty: under parallel execution (<code>-n auto</code>) a worker store is legitimately empty.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>session_teardown()</code> cancels migrations first and archives plans before the generic sweep, because a Plan must be <code>Archived</code> before it can be deleted. Both loops are
+keyed off the tracked inventory, so a resource you never registered is never cleaned here.</p>
+</blockquote>
 <p>If the data collector is enabled and teardown hits a problem, the session then runs MTV <code>must-gather</code> to capture diagnostics in the same collector path.</p>
 <blockquote>
-<p><strong>Warning:</strong> Leftover teardown problems are currently surfaced through session-finish logging. <code>pytest_sessionfinish()</code> logs the teardown exception and can trigger <code>must-gather</code>, but it does not re-raise that exception after logging it. Always check the end-of-run output, not just the individual test results.</p>
+<p><strong>Warning:</strong> Leftover teardown problems are currently surfaced through session-finish logging. <code>pytest_sessionfinish()</code> logs the teardown exception and can trigger <code>must-gather</code>,
+but it does not re-raise that exception after logging it. Always check the end-of-run output, not just the individual test results.</p>
 </blockquote>
 <h2 id="debugging-with-skip-teardown">Debugging With <code>--skip-teardown</code></h2>
 <p>The user-facing flag lives in <code>conftest.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">teardown_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
-    <span class="s2">&quot;--skip-teardown&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store_true&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Do not teardown resource created by the tests&quot;</span>
-<span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">teardown_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span><span class="s2">"--skip-teardown"</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"Do not teardown resource created by the tests"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>The data-collector path is configurable too:</p>
 <div class="highlight"><pre><span></span><code><span class="n">data_collector_group</span><span class="o">.</span><span class="n">addoption</span><span class="p">(</span>
-    <span class="s2">&quot;--data-collector-path&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Path to store collected data for failed tests&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;.data-collector&quot;</span>
+    <span class="s2">"--data-collector-path"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"Path to store collected data for failed tests"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">".data-collector"</span>
 <span class="p">)</span>
 </code></pre></div>
 
-<p>A repository example from <code>docs/copyoffload/how-to-run-copyoffload-tests.md</code> shows the intended usage inside a job command:</p>
+<p>A repository example from <code>guides/copyoffload/how-to-run-copyoffload-tests.md</code> shows the intended usage inside a job command:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># In the Job command section, add --skip-teardown:</span>
 <span class="l l-Scalar l-Scalar-Plain">uv run pytest -m copyoffload --skip-teardown \</span>
 <span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">-v \</span>
@@ -445,65 +466,104 @@
 <li>The pods, PVCs, DataVolumes, and provider-side clones that would normally be removed automatically.</li>
 </ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>--skip-teardown</code> disables both cleanup layers. The class-level <code>cleanup_migrated_vms</code> fixture returns early, and the end-of-session <code>session_teardown()</code> call is skipped entirely.</p>
-<p><strong>Tip:</strong> If you keep resources for debugging, do not also use <code>--skip-data-collector</code> unless you truly want no tracking artifacts. Leaving the data collector enabled gives you <code>.data-collector/resources.json</code>, which is the easiest input for follow-up cleanup.</p>
+<p><strong>Warning:</strong> <code>--skip-teardown</code> disables both cleanup layers. The class-level <code>cleanup_migrated_vms</code> fixture returns early, and the end-of-session <code>session_teardown()</code> call is
+skipped entirely.</p>
+<p><strong>Tip:</strong> If you keep resources for debugging, do not also use <code>--skip-data-collector</code> unless you truly want no tracking artifacts. Leaving the data collector enabled gives you
+<code>.data-collector/resources.json</code>, which is the easiest input for follow-up cleanup.</p>
 </blockquote>
 <h2 id="manual-cleanup-helpers">Manual Cleanup Helpers</h2>
 <h3 id="use-the-recorded-resource-inventory">Use the recorded resource inventory</h3>
 <p>When the data collector is enabled, the run writes a JSON inventory of the resources it created. From <code>utilities/pytest_utils.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">resources</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Write created resources data to </span><span class="si">{</span><span class="n">data_collector_path</span><span class="si">}</span><span class="s2">/resources.json&quot;</span><span class="p">)</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">data_collector_path</span> <span class="o">/</span> <span class="s2">&quot;resources.json&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fd</span><span class="p">:</span>
-            <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">session_store</span><span class="p">[</span><span class="s2">&quot;teardown&quot;</span><span class="p">],</span> <span class="n">fd</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Write created resources data to </span><span class="si">{</span><span class="n">data_collector_path</span><span class="si">}</span><span class="s2">/resources.json"</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">data_collector_path</span> <span class="o">/</span> <span class="s2">"resources.json"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fd</span><span class="p">:</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">session_store</span><span class="p">[</span><span class="s2">"teardown"</span><span class="p">],</span> <span class="n">fd</span><span class="p">)</span>
 </code></pre></div>
 
 <p>The repository includes a standalone helper script for replaying that inventory. From <code>tools/clean_cluster.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">clean_cluster_by_resources_file</span><span class="p">(</span><span class="n">resources_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">resources_file</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fd</span><span class="p">:</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">resources_file</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fd</span><span class="p">:</span>
         <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">fd</span><span class="p">)</span>
 
     <span class="k">for</span> <span class="n">_resource_kind</span><span class="p">,</span> <span class="n">_resources_list</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">for</span> <span class="n">_resource</span> <span class="ow">in</span> <span class="n">_resources_list</span><span class="p">:</span>
-            <span class="n">_resource_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">_resource</span><span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">])</span>
+            <span class="n">_resource_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">_resource</span><span class="p">[</span><span class="s2">"module"</span><span class="p">])</span>
             <span class="n">_resource_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_resource_module</span><span class="p">,</span> <span class="n">_resource_kind</span><span class="p">)</span>
-            <span class="n">_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]}</span>
-            <span class="k">if</span> <span class="n">_resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;namespace&quot;</span><span class="p">):</span>
-                <span class="n">_kwargs</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_resource</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span>
+            <span class="n">_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">_resource</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]}</span>
+            <span class="k">if</span> <span class="n">_resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"namespace"</span><span class="p">):</span>
+                <span class="n">_kwargs</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_resource</span><span class="p">[</span><span class="s2">"namespace"</span><span class="p">]</span>
 
             <span class="n">_resource_class</span><span class="p">(</span><span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">clean_up</span><span class="p">()</span>
 </code></pre></div>
 
 <p>The CLI entrypoint shows the expected usage format:</p>
-<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Usage: python clean_cluster.py &lt;resources_file&gt;&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"Usage: python clean_cluster.py &lt;resources_file&gt;"</span><span class="p">)</span>
         <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
     <span class="n">clean_cluster_by_resources_file</span><span class="p">(</span><span class="n">resources_file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
 </code></pre></div>
 
-<p>With the default collector path, the input file is <code>.data-collector/resources.json</code>. If you used <code>--data-collector-path</code>, point the script at that directory’s <code>resources.json</code> instead. If you ran with <code>--skip-data-collector</code>, the helper has no inventory file to consume, and teardown failures will not trigger <code>must-gather</code>.</p>
+<p>The script lives at <code>tools/clean_cluster.py</code>, so a full manual cleanup after a debug run is:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>tools/clean_cluster.py<span class="w"> </span>.data-collector/resources.json
+</code></pre></div>
+
+<p>With the default collector path, the input file is <code>.data-collector/resources.json</code>. If you used <code>--data-collector-path</code>, point the script at that directory's <code>resources.json</code>
+instead. If you ran with <code>--skip-data-collector</code>, the helper has no inventory file to consume, and teardown failures will not trigger <code>must-gather</code>.</p>
 <blockquote>
-<p><strong>Note:</strong> <code>resources.json</code> is a record of what the session created, not a leftovers-only report. In a successful run, some or all of those resources may already be gone by the time you inspect the file.</p>
-<p><strong>Warning:</strong> <code>tools/clean_cluster.py</code> is best suited to OpenShift-side resources recorded through <code>create_and_store_resource()</code>, because it recreates objects from the stored <code>module</code> and resource kind. Provider-side clone cleanup for VMware/OpenStack/RHV and OpenStack volume snapshots is handled by the full session teardown logic in <code>utilities/pytest_utils.py</code>, not by this standalone helper.</p>
+<p><strong>Note:</strong> <code>resources.json</code> is a record of what the session created, not a leftovers-only report. In a successful run, some or all of those resources may already be gone by the
+time you inspect the file.</p>
+<p><strong>Warning:</strong> <code>tools/clean_cluster.py</code> is best suited to OpenShift-side resources recorded through <code>create_and_store_resource()</code>, because it recreates objects from the stored
+<code>module</code> and resource kind. Provider-side clone cleanup for VMware/OpenStack/RHV and OpenStack volume snapshots is handled by the full session teardown logic in
+<code>utilities/pytest_utils.py</code>, not by this standalone helper.</p>
+</blockquote>
+<h4 id="unregister-resources-you-deleted-yourself">Unregister Resources You Deleted Yourself</h4>
+<p>Session teardown deletes everything in <code>fixture_store["teardown"]</code> at the end of the run. When a test intentionally deletes a tracked resource mid-test, leaving it registered means
+teardown will later operate on an object that no longer exists.</p>
+<p><code>unregister_teardown_resource()</code> in <code>utilities/resources.py</code> removes those entries:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">utilities.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">unregister_teardown_resource</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">unregister_teardown_resource</span><span class="p">(</span>
+    <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">resource</span><span class="p">:</span> <span class="n">Resource</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</code></pre></div>
+
+<p>It matches on kind, name, and namespace, removes every match, and warns instead of raising when the entry is already gone. The plan-archive cleanup test is the real consumer of
+this:</p>
+<div class="highlight"><pre><span></span><code><span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">plan_resource</span>
+<span class="n">migration</span> <span class="o">=</span> <span class="n">get_migration_for_plan</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span>
+<span class="n">archive_plan</span><span class="p">(</span><span class="n">plan</span><span class="o">=</span><span class="n">plan</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">plan</span><span class="o">.</span><span class="n">clean_up</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="sa">f</span><span class="s2">"Failed to delete plan '</span><span class="si">{</span><span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' after archiving"</span>
+
+<span class="c1"># Plan is gone, but keep the Migration tracked until cascade deletion completes.</span>
+<span class="n">unregister_teardown_resource</span><span class="p">(</span><span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span> <span class="n">resource</span><span class="o">=</span><span class="n">plan</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">migration</span><span class="o">.</span><span class="n">wait_deleted</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+<span class="n">unregister_teardown_resource</span><span class="p">(</span><span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span> <span class="n">resource</span><span class="o">=</span><span class="n">migration</span><span class="p">)</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Tip:</strong> Unregister only after the object is really gone, and keep it registered until cascade deletion finishes. Unregistering early is what produces confusing "resource not
+found" noise at session end.</p>
 </blockquote>
 <h3 id="use-the-session-name-to-find-leftovers">Use the session name to find leftovers</h3>
 <p>When you need to clean up manually in OpenShift or in the source provider UI/CLI, the run-specific session UUID is your most useful search key.</p>
 <p>From <code>conftest.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">session_uuid</span><span class="p">(</span><span class="n">fixture_store</span><span class="p">):</span>
-    <span class="n">_session_uuid</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">)</span>
-    <span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;session_uuid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_session_uuid</span>
+    <span class="n">_session_uuid</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"auto"</span><span class="p">)</span>
+    <span class="n">fixture_store</span><span class="p">[</span><span class="s2">"session_uuid"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_session_uuid</span>
     <span class="k">return</span> <span class="n">_session_uuid</span>
 </code></pre></div>
 
 <p>The main target namespace is built from that same session value:</p>
-<div class="highlight"><pre><span></span><code><span class="n">unique_namespace_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}{</span><span class="n">_target_namespace</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">[:</span><span class="mi">63</span><span class="p">]</span>
-<span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;target_namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">unique_namespace_name</span>
+<div class="highlight"><pre><span></span><code><span class="n">unique_namespace_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}{</span><span class="n">_target_namespace</span><span class="si">}</span><span class="s2">"</span><span class="p">[:</span><span class="mi">63</span><span class="p">]</span>
+<span class="n">fixture_store</span><span class="p">[</span><span class="s2">"target_namespace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">unique_namespace_name</span>
 </code></pre></div>
 
-<p>Source-provider clones are named the same way. From <code>libs/base_provider.py</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="n">clone_vm_name</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">base_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<p>Source-provider clones are named the same way. From <code>libs/base_provider.py</code>, in <code>_generate_clone_vm_name()</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">clone_vm_name</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">session_uuid</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">base_name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
 
 <p>That means a single session prefix, typically something like <code>auto-ab12</code>, often shows up in all of these places:</p>
@@ -513,8 +573,11 @@
 <li>Source-provider clone names.</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> If you skipped teardown, start by finding the session prefix from the run logs or from <code>.data-collector/resources.json</code>, then search OpenShift and the source provider for that same prefix.</p>
-<p><strong>Note:</strong> Some tests use a custom <code>vm_target_namespace</code>. In those cases, manual cleanup needs to check that namespace too, because migrated VMs and their storage objects may live there instead of the default session target namespace. OpenShift-source runs can also create a <code>source_vms_namespace</code> named <code>&lt;session_uuid&gt;-source-vms</code>, so check that namespace as well when cleaning manually.</p>
+<p><strong>Tip:</strong> If you skipped teardown, start by finding the session prefix from the run logs or from <code>.data-collector/resources.json</code>, then search OpenShift and the source provider
+for that same prefix.</p>
+<p><strong>Note:</strong> Some tests use a custom <code>vm_target_namespace</code>. In those cases, manual cleanup needs to check that namespace too, because migrated VMs and their storage objects may live
+there instead of the default session target namespace. OpenShift-source runs can also create a <code>source_vms_namespace</code> named <code>&lt;session_uuid&gt;-source-vms</code>, so check that namespace
+as well when cleaning manually.</p>
 </blockquote>
                 </div>
             </article>
@@ -557,24 +620,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -620,5 +686,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

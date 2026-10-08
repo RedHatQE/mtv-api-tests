@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Project Structure - mtv-api-tests</title>
     <meta name="description" content="Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization.">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=66bf87bdd9">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
     <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
 </head>
@@ -36,7 +37,7 @@
 
                     <li>
                         <a href="project-structure.html"
-                           class="nav-link active">
+                           class="nav-link active" aria-current="page">
                             Project Structure
                         </a>
                     </li>
@@ -272,13 +273,13 @@
                 <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
                     <kbd>&#8984;K</kbd> Search
                 </button>
-                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
-                    ⚡ docs<span class="brand-accent">fy</span>
+                <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener" class="docsite-badge" title="documentation">
+                    ⚡ pi<span class="brand-accent">-docsite</span>
                 </a>
 
                 <a href="https://github.com/RedHatQE/mtv-api-tests" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/mtv-api-tests">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    <span class="github-stars" id="github-stars"></span>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
                 </a>
 
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -293,6 +294,7 @@
         </header>
 
         <main class="content">
+
             <article class="article">
                 <div class="article-body">
                     <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
@@ -300,35 +302,45 @@
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
                     <h1 id="project-structure">Project Structure</h1>
-<p><code>mtv-api-tests</code> is organized as an end-to-end <code>pytest</code> suite for Migration Toolkit for Virtualization (MTV). Instead of a conventional Python application layout such as <code>src/</code>, the repository is split into scenario files, shared fixtures, provider adapters, validation helpers, and repository automation/configuration files.</p>
+<p><code>mtv-api-tests</code> is organized as an end-to-end <code>pytest</code> suite for Migration Toolkit for Virtualization (MTV). Instead of a
+conventional Python application layout such as <code>src/</code>, the repository is split into scenario files, shared fixtures, provider
+adapters, validation helpers, and repository automation/configuration files.</p>
 <blockquote>
-<p><strong>Note:</strong> The main entrypoint is <code>pytest</code>, not a packaged application. Most of the reusable behavior lives in <code>conftest.py</code>, <code>utilities/</code>, and <code>libs/</code>, while the files under <code>tests/</code> mostly define scenarios and expectations.</p>
+<p><strong>Note:</strong> The main entrypoint is <code>pytest</code>, not a packaged application. Most of the reusable behavior lives in <code>conftest.py</code>,
+<code>utilities/</code>, and <code>libs/</code>, while the files under <code>tests/</code> mostly define scenarios and expectations. There is also a thin
+<code>mtv-api-tests</code> CLI (<code>cli/mtv_api_tests/</code>) that wraps setup and local/Job execution.</p>
 </blockquote>
 <h2 id="at-a-glance">At A Glance</h2>
 <div class="highlight"><pre><span></span><code>mtv-api-tests/
 ├── tests/
 │   ├── tests_config/config.py
-│   ├── test_mtv_cold_migration.py
-│   ├── test_mtv_warm_migration.py
-│   ├── test_copyoffload_migration.py
-│   ├── test_cold_migration_comprehensive.py
-│   ├── test_warm_migration_comprehensive.py
-│   └── test_post_hook_retain_failed_vm.py
+│   ├── cold/
+│   ├── copyoffload/
+│   ├── deep_inspection/
+│   ├── hooks/
+│   ├── luks/
+│   ├── plan_lifecycle/
+│   ├── shared_disk/
+│   ├── upgrade/
+│   └── warm/
+├── cli/mtv_api_tests/
 ├── utilities/
 ├── libs/
+│   ├── providers/
 │   ├── base_provider.py
-│   ├── forklift_inventory.py
-│   └── providers/
+│   └── forklift_inventory.py
 ├── exceptions/
-├── docs/
-│   └── copyoffload/
+├── scripts/hooks/
 ├── tools/
+├── guides/copyoffload/
+├── docs/
 ├── conftest.py
 ├── pyproject.toml
 ├── uv.lock
 ├── pytest.ini
 ├── tox.toml
 ├── Dockerfile
+├── providers_schema.json
 ├── .providers.json.example
 ├── .pre-commit-config.yaml
 ├── renovate.json
@@ -337,21 +349,46 @@
 ├── .pr_agent.toml
 ├── .flake8
 ├── .markdownlint.yaml
+├── .rootcoz/settings.json
+├── AGENTS.md
+├── test_plan_schema.md
+├── README.md
 ├── jira.cfg.example
 ├── OWNERS
 └── junit_report_example.xml
 </code></pre></div>
 
+<p>Test files do <strong>not</strong> live directly under <code>tests/</code>. Every scenario sits in a feature subdirectory (<code>tests/&lt;feature&gt;/</code>), and the
+<code>check-test-file-location</code> pre-commit hook enforces that placement:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_is_tests_root_test_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return True if ``path`` is repo-root ``tests/test_*.py`` (no subdirectory).</span>
+
+<span class="sd">    Only ``tests/`` at the repository root is considered. Nested trees such as</span>
+<span class="sd">    ``plugins/.../tests/test_*.py`` are not flagged.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path (Path): Candidate file path.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: Whether the file is a disallowed root-level test module.</span>
+<span class="sd">    """</span>
+    <span class="n">rel</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">repo_relative_posix</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">rel</span><span class="o">.</span><span class="n">parent</span> <span class="o">==</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"tests"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">rel</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"test_"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">rel</span><span class="o">.</span><span class="n">suffix</span> <span class="o">==</span> <span class="s2">".py"</span>
+</code></pre></div>
+
+<p><code>AGENTS.md</code> states the same rule as a MUST: put all test files under <code>tests/&lt;feature&gt;/</code>, and never add <code>unit_tests/</code> or
+standalone test scripts, because these are live end-to-end tests against MTV.</p>
 <p>A useful way to read the repository is:</p>
 <ol>
 <li><code>pytest.ini</code> tells you how the suite is launched.</li>
 <li><code>tests/tests_config/config.py</code> tells you what each scenario wants to do.</li>
-<li><code>tests/*.py</code> tells you which migration flow is being exercised.</li>
+<li><code>tests/&lt;feature&gt;/test_*.py</code> tells you which migration flow is being exercised.</li>
 <li><code>conftest.py</code> shows how providers, namespaces, networks, hooks, and cleanup are prepared.</li>
 <li><code>libs/</code> shows how the suite talks to source and destination platforms.</li>
 <li><code>utilities/</code> shows how MTV resources are created and how migrated VMs are validated.</li>
 </ol>
-<p><code>pytest.ini</code> makes that structure explicit by wiring <code>pytest</code> to the scenario config file, JUnit output, strict markers, Jira integration, and <code>xdist</code> distribution:</p>
+<p><code>pytest.ini</code> makes that structure explicit by wiring <code>pytest</code> to the scenario config file, JUnit output, strict markers, and
+<code>xdist</code> distribution:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[pytest]</span>
 <span class="na">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">tests</span>
 
@@ -362,50 +399,90 @@
 <span class="w">  </span><span class="na">--tc-file</span><span class="o">=</span><span class="s">tests/tests_config/config.py</span>
 <span class="w">  </span><span class="na">--tc-format</span><span class="o">=</span><span class="s">python</span>
 <span class="w">  </span><span class="na">--junit-xml</span><span class="o">=</span><span class="s">junit-report.xml</span>
-<span class="w">  </span><span class="na">--basetemp</span><span class="o">=</span><span class="s">/tmp/pytest</span>
 <span class="w">  </span><span class="na">--show-progress</span>
 <span class="w">  </span><span class="na">--strict-markers</span>
-<span class="w">  </span><span class="na">--jira</span>
 <span class="w">  </span><span class="na">--dist</span><span class="o">=</span><span class="s">loadscope</span>
 
 <span class="na">markers</span><span class="w"> </span><span class="o">=</span>
 <span class="w">    </span><span class="na">tier0</span><span class="o">:</span><span class="w"> </span><span class="s">Core functionality tests (smoke tests)</span>
+<span class="w">    </span><span class="na">tier1</span><span class="o">:</span><span class="w"> </span><span class="s">Extended functionality tests</span>
 <span class="w">    </span><span class="na">remote</span><span class="o">:</span><span class="w"> </span><span class="s">Remote cluster migration tests</span>
 <span class="w">    </span><span class="na">warm</span><span class="o">:</span><span class="w"> </span><span class="s">Warm migration tests</span>
 <span class="w">    </span><span class="na">copyoffload</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload (XCOPY) tests</span>
+<span class="w">    </span><span class="na">copyoffload_sanity</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload sanity tests - core scenarios for quick validation</span>
+<span class="w">    </span><span class="na">copyoffload_snapshots</span><span class="o">:</span><span class="w"> </span><span class="s">Copy-offload snapshot tests (vSphere only)</span>
+<span class="w">    </span><span class="na">shared_disk</span><span class="o">:</span><span class="w"> </span><span class="s">Shared disk migration tests (vSphere only)</span>
 <span class="w">    </span><span class="na">incremental</span><span class="o">:</span><span class="w"> </span><span class="s">marks tests as incremental (xfail on previous failure)</span>
-<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version(&quot;2.6.0&quot;))</span>
+<span class="w">    </span><span class="na">min_mtv_version</span><span class="o">:</span><span class="w"> </span><span class="s">mark test to require minimum MTV version (e.g., @pytest.mark.min_mtv_version("2.6.0"))</span>
+<span class="w">    </span><span class="na">ova</span><span class="o">:</span><span class="w"> </span><span class="s">OVA provider-specific tests</span>
+<span class="w">    </span><span class="na">vsphere</span><span class="o">:</span><span class="w"> </span><span class="s">vSphere provider-specific tests</span>
+<span class="w">    </span><span class="na">esxi</span><span class="o">:</span><span class="w"> </span><span class="s">ESXi provider-specific tests</span>
+<span class="w">    </span><span class="na">rhv</span><span class="o">:</span><span class="w"> </span><span class="s">RHV provider-specific tests</span>
+<span class="w">    </span><span class="na">hyperv</span><span class="o">:</span><span class="w"> </span><span class="s">Hyper-V provider-specific tests</span>
+<span class="w">    </span><span class="na">openstack</span><span class="o">:</span><span class="w"> </span><span class="s">OpenStack provider-specific tests</span>
+<span class="w">    </span><span class="na">openshift</span><span class="o">:</span><span class="w"> </span><span class="s">OpenShift provider-specific tests</span>
+<span class="w">    </span><span class="na">deep_inspection</span><span class="o">:</span><span class="w"> </span><span class="s">Deep Inspection / Conversion CR tests (vSphere only)</span>
+<span class="w">    </span><span class="na">ca_crt</span><span class="o">:</span><span class="w"> </span><span class="s">CA certificate field (ca.crt) provider secret tests</span>
+<span class="w">    </span><span class="na">aap</span><span class="o">:</span><span class="w"> </span><span class="s">AAP (Ansible Automation Platform) hook integration tests (vSphere only)</span>
+<span class="w">    </span><span class="na">upgrade</span><span class="o">:</span><span class="w"> </span><span class="s">MTV operator upgrade tests</span>
 
 <span class="na">junit_logging</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
 
-<h2 id="tests-scenario-suites"><code>tests/</code>: Scenario Suites</h2>
-<p>The <code>tests/</code> directory contains the scenario definitions. These are mostly thin wrappers around shared fixtures and helpers. That keeps each suite readable while still allowing the repository to cover many migration variations.</p>
-<p>The main suites are:</p>
-<ul>
-<li><code>tests/test_mtv_cold_migration.py</code> covers the core cold migration path and remote OpenShift cold migration.</li>
-<li><code>tests/test_mtv_warm_migration.py</code> covers warm migration, cutover handling, and remote warm migration.</li>
-<li><code>tests/test_copyoffload_migration.py</code> is the largest suite and covers copy-offload/XCOPY behavior such as thin and thick disks, snapshots, multi-datastore scenarios, scale tests, naming edge cases, simultaneous plans, and mixed XCOPY/VDDK behavior.</li>
-<li><code>tests/test_cold_migration_comprehensive.py</code> covers higher-level cold migration features such as static IP preservation, PVC naming templates, node selection, labels, affinity, and custom target namespaces.</li>
-<li><code>tests/test_warm_migration_comprehensive.py</code> does the same for warm migration.</li>
-<li><code>tests/test_post_hook_retain_failed_vm.py</code> verifies hook-aware behavior when a migration is expected to fail after a post-hook but the migrated VM should still be retained.</li>
-</ul>
-<p>A representative test class from <code>tests/test_mtv_cold_migration.py</code> shows the standard pattern used across the suite:</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">tier0</span>
+<blockquote>
+<p><strong>Note:</strong> <code>pytest.ini</code> does not pass <code>--jira</code>, even though <code>pytest-jira</code> is still a dependency in <code>pyproject.toml</code> and
+<code>jira.cfg.example</code> still exists. Treat Jira as an opt-in extra you enable yourself.</p>
+</blockquote>
+<h2 id="tests-feature-suites"><code>tests/</code>: Feature Suites</h2>
+<p>The <code>tests/</code> directory contains the scenario definitions, grouped by feature. Each feature directory has its own <code>conftest.py</code>
+when the feature needs extra fixtures. These are mostly thin wrappers around shared fixtures and helpers, which keeps each suite
+readable while still allowing the repository to cover many migration variations.</p>
+<p><strong><code>tests/cold/</code></strong> covers the core cold migration path, the comprehensive cold scenario, XFS compatibility, dual-NIC plan
+validation, <code>ca.crt</code> secret handling, <code>insecureSkipVerify</code> handling, and OVA cold migration. Its <code>conftest.py</code> provides
+alternative <code>source_provider</code> fixtures (<code>ca_crt_source_provider</code>, <code>insecure_source_provider</code>) plus matching inventory fixtures,
+because those scenarios need a provider registered differently from the session default.</p>
+<p><strong><code>tests/warm/</code></strong> covers sanity warm migration, the comprehensive warm scenario, warm XFS, and warm migration with a
+ClusterRole-based destination provider and an SCC binding. Its <code>conftest.py</code> provides <code>clusterrole_destination_ocp_provider</code>
+and <code>forklift_scc_binding</code>.</p>
+<p><strong><code>tests/copyoffload/</code></strong> is by far the largest suite (~228 KB) and covers copy-offload/XCOPY behavior: thin and thick disks,
+snapshots, multi-datastore and mixed-datastore scenarios, scale tests, RDM, populator and VM in-flight throttling, dedicated
+migration hosts, naming edge cases, simultaneous plans, and mixed XCOPY/VDDK behavior. Its <code>conftest.py</code> validates the copy-offload
+configuration and patches ForkliftController limits.</p>
+<p><strong><code>tests/shared_disk/</code></strong> covers shared-disk migration for Linux and Windows guests, including relink verification and Windows
+volume labeling.</p>
+<p><strong><code>tests/hooks/</code></strong> covers post-hook expected-failure behavior and AAP/AWX-backed hook integration. Its <code>conftest.py</code> deploys AWX
+via Helm, creates an API token and job templates, and wires MTV to use it.</p>
+<p><strong><code>tests/luks/</code></strong> covers LUKS-encrypted disk migration, including a wrong-passphrase failure case. Its <code>conftest.py</code> provides
+<code>luks_vm_specs</code>.</p>
+<p><strong><code>tests/deep_inspection/</code></strong> covers plan-driven warm Deep Inspection and standalone <code>Conversion</code> CR Deep Inspection, including
+cancel and rerun coverage.</p>
+<p><strong><code>tests/plan_lifecycle/</code></strong> covers Plan archive and delete after a failed migration, followed by PVC/DataVolume cleanup
+verification.</p>
+<p><strong><code>tests/upgrade/</code></strong> covers migration across an MTV operator upgrade: maps and Plan are created pre-upgrade by fixtures, the
+operator is upgraded, then the migration runs.</p>
+<p><strong><code>tests/tests_config/</code></strong> contains only <code>config.py</code>, the shared Python-based scenario configuration loaded by <code>pytest-testconfig</code>.</p>
+<p>A representative test class from <code>tests/cold/test_mtv_cold_migration.py</code> shows the standard pattern used across the suite:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">vsphere</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">rhv</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">openstack</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">openshift</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">esxi</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">hyperv</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">tier0</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">incremental</span>
 <span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span>
-    <span class="s2">&quot;class_plan_config&quot;</span><span class="p">,</span>
+    <span class="s2">"class_plan_config"</span><span class="p">,</span>
     <span class="p">[</span>
         <span class="n">pytest</span><span class="o">.</span><span class="n">param</span><span class="p">(</span>
-            <span class="n">py_config</span><span class="p">[</span><span class="s2">&quot;tests_params&quot;</span><span class="p">][</span><span class="s2">&quot;test_sanity_cold_mtv_migration&quot;</span><span class="p">],</span>
+            <span class="n">py_config</span><span class="p">[</span><span class="s2">"tests_params"</span><span class="p">][</span><span class="s2">"test_sanity_cold_mtv_migration"</span><span class="p">],</span>
         <span class="p">)</span>
     <span class="p">],</span>
     <span class="n">indirect</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;rhel8&quot;</span><span class="p">],</span>
+    <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="s2">"rhel8"</span><span class="p">],</span>
 <span class="p">)</span>
-<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">&quot;cleanup_migrated_vms&quot;</span><span class="p">)</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">usefixtures</span><span class="p">(</span><span class="s2">"cleanup_migrated_vms"</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TestSanityColdMtvMigration</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cold migration test - sanity check.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Cold migration test - sanity check."""</span>
 
     <span class="n">storage_map</span><span class="p">:</span> <span class="n">StorageMap</span>
     <span class="n">network_map</span><span class="p">:</span> <span class="n">NetworkMap</span>
@@ -421,8 +498,8 @@
         <span class="n">source_provider_inventory</span><span class="p">,</span>
         <span class="n">target_namespace</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create StorageMap resource for migration.&quot;&quot;&quot;</span>
-        <span class="n">vms</span> <span class="o">=</span> <span class="p">[</span><span class="n">vm</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">&quot;virtual_machines&quot;</span><span class="p">]]</span>
+<span class="w">        </span><span class="sd">"""Create StorageMap resource for migration."""</span>
+        <span class="n">vms</span> <span class="o">=</span> <span class="p">[</span><span class="n">vm</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">prepared_plan</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]]</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">storage_map</span> <span class="o">=</span> <span class="n">get_storage_migration_map</span><span class="p">(</span>
             <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
             <span class="n">source_provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">,</span>
@@ -432,165 +509,198 @@
             <span class="n">target_namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
             <span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span> <span class="s2">&quot;StorageMap creation failed&quot;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage_map</span><span class="p">,</span> <span class="s2">"StorageMap creation failed"</span>
 </code></pre></div>
 
 <p>That five-step flow repeats throughout the repository:</p>
 <ol>
-<li>Create <code>StorageMap</code></li>
-<li>Create <code>NetworkMap</code></li>
-<li>Create <code>Plan</code></li>
-<li>Execute migration</li>
-<li>Validate migrated VMs</li>
+<li>Create <code>StorageMap</code> (<code>test_create_storagemap</code>)</li>
+<li>Create <code>NetworkMap</code> (<code>test_create_networkmap</code>)</li>
+<li>Create <code>Plan</code> (<code>test_create_plan</code>)</li>
+<li>Execute migration (<code>test_migrate_vms</code>)</li>
+<li>Validate migrated VMs (<code>test_check_vms</code>)</li>
 </ol>
-<p>Scenario data lives in <code>tests/tests_config/config.py</code>. This file does much more than list VM names: it carries migration mode, target power state, hook behavior, PVC naming templates, labels, affinity rules, copy-offload flags, timeouts, and other per-scenario settings.</p>
-<p>For example, the comprehensive warm and cold scenarios define advanced feature coverage directly in configuration:</p>
-<div class="highlight"><pre><span></span><code>    <span class="s2">&quot;test_warm_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
+<p>Feature suites insert or replace steps. The verified variants, all defined in <code>AGENTS.md</code> under "Key Patterns" and present in
+<code>tests/</code>, are: the 4-step plan-readiness pattern, the 6-step plan-archive PVC cleanup pattern, the 6-step shared-disk (Linux)
+pattern, the 7-step shared-disk (Windows) pattern, the 6/7/8-step copy-offload patterns, the 6-step LUKS pattern, and the 6-step
+XFS pattern. <code>AGENTS.md</code> names the exact test method for each step, so the authoritative naming list lives there rather than
+being duplicated here.</p>
+<p>Scenario data lives in <code>tests/tests_config/config.py</code>. This file does much more than list VM names: it carries migration mode,
+target power state, hook behavior, PVC naming templates, labels, affinity rules, copy-offload flags, timeouts, and other
+per-scenario settings.</p>
+<p>For example, the comprehensive cold scenario defines advanced feature coverage directly in configuration:</p>
+<div class="highlight"><pre><span></span><code>    <span class="s2">"test_cold_migration_comprehensive"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"virtual_machines"</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2022-ip-3disks&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"mtv-win2019-3disks"</span><span class="p">,</span>
+                <span class="s2">"source_vm_power"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>  <span class="c1"># VM must be on for guest tools to report static IP info</span>
+                <span class="s2">"guest_agent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;custom-vm-namespace&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
-        <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s1">&#39;{{ .FileName | trimSuffix &quot;.vmdk&quot; | replace &quot;_&quot; &quot;-&quot; }}-{{.DiskIndex}}&#39;</span><span class="p">,</span>
-        <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;mtv-comprehensive-test&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-            <span class="s2">&quot;static-label&quot;</span><span class="p">:</span> <span class="s2">&quot;static-value&quot;</span><span class="p">,</span>
+        <span class="s2">"warm_migration"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"target_power_state"</span><span class="p">:</span> <span class="s2">"on"</span><span class="p">,</span>
+        <span class="s2">"preserve_static_ips"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"enable_nested_virtualization"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"pvc_name_template"</span><span class="p">:</span> <span class="s1">'{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}'</span><span class="p">,</span>
+        <span class="s2">"pvc_name_template_use_generate_name"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"target_node_selector"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"mtv-comprehensive-node"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
         <span class="p">},</span>
-        <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-                <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="s2">"target_labels"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"mtv-comprehensive-label"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
+            <span class="s2">"test-type"</span><span class="p">:</span> <span class="s2">"comprehensive"</span><span class="p">,</span>  <span class="c1"># Static value</span>
+        <span class="p">},</span>
+        <span class="s2">"target_affinity"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"podAffinity"</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">"preferredDuringSchedulingIgnoredDuringExecution"</span><span class="p">:</span> <span class="p">[</span>
                     <span class="p">{</span>
-                        <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                            <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive-test&quot;</span><span class="p">}},</span>
-                            <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
+                        <span class="s2">"podAffinityTerm"</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s2">"labelSelector"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"matchLabels"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"app"</span><span class="p">:</span> <span class="s2">"test"</span><span class="p">}},</span>
+                            <span class="s2">"topologyKey"</span><span class="p">:</span> <span class="s2">"kubernetes.io/hostname"</span><span class="p">,</span>
                         <span class="p">},</span>
-                        <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">75</span><span class="p">,</span>
+                        <span class="s2">"weight"</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
                     <span class="p">}</span>
                 <span class="p">]</span>
             <span class="p">}</span>
         <span class="p">},</span>
-    <span class="p">},</span>
-    <span class="s2">&quot;test_cold_migration_comprehensive&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-            <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-win2019-3disks&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="p">},</span>
-        <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;preserve_static_ips&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="s2">&quot;pvc_name_template&quot;</span><span class="p">:</span> <span class="s2">&quot;{{.VmName}}-disk-{{.DiskIndex}}&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;pvc_name_template_use_generate_name&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="s2">&quot;target_node_selector&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;mtv-comprehensive-node&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-        <span class="p">},</span>
-        <span class="s2">&quot;target_labels&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;mtv-comprehensive-label&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># None = auto-generate with session_uuid</span>
-            <span class="s2">&quot;test-type&quot;</span><span class="p">:</span> <span class="s2">&quot;comprehensive&quot;</span><span class="p">,</span>  <span class="c1"># Static value</span>
-        <span class="p">},</span>
-        <span class="s2">&quot;target_affinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;podAffinity&quot;</span><span class="p">:</span> <span class="p">{</span>
-                <span class="s2">&quot;preferredDuringSchedulingIgnoredDuringExecution&quot;</span><span class="p">:</span> <span class="p">[</span>
-                    <span class="p">{</span>
-                        <span class="s2">&quot;podAffinityTerm&quot;</span><span class="p">:</span> <span class="p">{</span>
-                            <span class="s2">&quot;labelSelector&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;matchLabels&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;app&quot;</span><span class="p">:</span> <span class="s2">&quot;test&quot;</span><span class="p">}},</span>
-                            <span class="s2">&quot;topologyKey&quot;</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span><span class="p">,</span>
-                        <span class="p">},</span>
-                        <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
-                    <span class="p">}</span>
-                <span class="p">]</span>
-            <span class="p">}</span>
-        <span class="p">},</span>
-        <span class="s2">&quot;vm_target_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-comprehensive-vms&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;multus_namespace&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
-    <span class="p">},</span>
-    <span class="s2">&quot;test_post_hook_retain_failed_vm&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;virtual_machines&quot;</span><span class="p">:</span> <span class="p">[</span>
-            <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;mtv-tests-rhel8&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;source_vm_power&quot;</span><span class="p">:</span> <span class="s2">&quot;on&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;guest_agent&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-            <span class="p">},</span>
-        <span class="p">],</span>
-        <span class="s2">&quot;warm_migration&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="s2">&quot;target_power_state&quot;</span><span class="p">:</span> <span class="s2">&quot;off&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;pre_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;succeed&quot;</span><span class="p">},</span>
-        <span class="s2">&quot;post_hook&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;expected_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">},</span>
-        <span class="s2">&quot;expected_migration_result&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">,</span>
+        <span class="s2">"vm_target_namespace"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"mtv-vms-cold-comprehensive-</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="s2">"multus_namespace"</span><span class="p">:</span> <span class="s2">"default"</span><span class="p">,</span>  <span class="c1"># Cross-namespace NAD access</span>
+        <span class="s2">"guest_agent_timeout"</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
     <span class="p">},</span>
 </code></pre></div>
 
+<p>The complete plan-option vocabulary is documented in <code>AGENTS.md</code> under "Plan Configuration Options". It covers <code>warm_migration</code>,
+<code>preserve_static_ips</code>, <code>copyoffload</code>, <code>xfs_compatibility</code>, <code>migrate_shared_disks</code>, <code>inventory_timeout</code>, <code>clone_to_same_host</code>,
+<code>pin_to_non_dedicated_host</code>, <code>disable_drs_for_vms</code>, <code>per_nic_network_map</code>, <code>skip_clone</code>, and <code>rdm_as_lun</code>.</p>
 <blockquote>
-<p><strong>Tip:</strong> When you want to understand a scenario quickly, start with its entry in <code>tests/tests_config/config.py</code>, then read the matching class in <code>tests/</code>, and only then follow the shared helpers it imports.</p>
+<p><strong>Tip:</strong> When you want to understand a scenario quickly, start with its entry in <code>tests/tests_config/config.py</code>, then read the
+matching class in <code>tests/&lt;feature&gt;/</code>, and only then follow the shared helpers it imports.</p>
 </blockquote>
 <h2 id="conftestpy-shared-fixtures-and-runtime-orchestration"><code>conftest.py</code>: Shared Fixtures And Runtime Orchestration</h2>
-<p><code>conftest.py</code> is the operational heart of the repository. It is where session-wide and class-wide fixtures build the real test environment.</p>
-<p>Key responsibilities in <code>conftest.py</code> include:</p>
+<p><code>conftest.py</code> is the operational heart of the repository. It is where session-wide and class-wide fixtures build the real test
+environment, and where the <code>pytest</code> hooks that gate the run live.</p>
+<p>Key fixtures in <code>conftest.py</code> include:</p>
 <ul>
-<li>Creating the target namespace with the right labels in <code>target_namespace</code></li>
-<li>Loading the requested provider entry from <code>.providers.json</code> in <code>source_provider_data</code></li>
-<li>Creating source and destination <code>Provider</code> CRs in <code>source_provider</code> and <code>destination_provider</code></li>
-<li>Resolving the right Forklift inventory implementation in <code>source_provider_inventory</code></li>
-<li>Downloading and caching <code>virtctl</code> for the current cluster in <code>virtctl_binary</code></li>
-<li>Creating class-scoped Multus <code>NetworkAttachmentDefinition</code> resources in <code>multus_network_name</code></li>
-<li>Preparing cloned VMs, custom namespaces, and optional hooks in <code>prepared_plan</code></li>
-<li>Managing post-migration SSH sessions in <code>vm_ssh_connections</code></li>
-<li>Cleaning up migrated VMs after each class in <code>cleanup_migrated_vms</code></li>
+<li>
+<p><code>autouse_fixtures</code> (session, autouse) pulls in <code>source_provider_data</code>, <code>nfs_storage_profile</code>, <code>base_resource_name</code>,
+  <code>forklift_pods_state</code>, and <code>virtctl_binary</code> for every run.</p>
+</li>
+<li>
+<p><code>target_namespace</code> creates a unique OpenShift namespace for the run, labeled for restricted pod security.</p>
+</li>
+<li><code>nfs_storage_profile</code> patches the NFS <code>StorageProfile</code> access modes and volume mode when the configured storage class is NFS.</li>
+<li><code>source_providers</code> and <code>source_provider_data</code> load the providers JSON and resolve the entry named by <code>source_provider</code>.</li>
+<li>
+<p><code>source_provider</code> creates the source <code>Secret</code> and <code>Provider</code> CR and yields the provider SDK wrapper; <code>destination_provider</code>
+  creates the local OpenShift destination <code>Provider</code>.</p>
+</li>
+<li>
+<p><code>source_provider_inventory</code> resolves the right Forklift inventory implementation.</p>
+</li>
+<li><code>virtctl_binary</code> downloads and caches <code>virtctl</code> for the current cluster.</li>
+<li><code>precopy_interval_forkliftcontroller</code> patches the <code>ForkliftController</code> precopy interval from <code>snapshots_interval</code>.</li>
+<li>
+<p><code>vcenter_clone_provider</code> builds a second vCenter-backed provider for ESXi sources that declare <code>clone_provider</code>, because ESXi
+  cannot run <code>CloneVM_Task</code> itself.</p>
+</li>
+<li>
+<p><code>multus_network_name</code> creates the class-scoped Multus <code>NetworkAttachmentDefinition</code> resources needed for secondary NICs.</p>
+</li>
+<li><code>validated_source_vms</code> fails fast when configured source VMs or templates do not exist, before any cloning happens.</li>
+<li>
+<p><code>prepared_plan</code> clones source VMs, adjusts power state, and creates hooks; <code>prepared_plan_1</code> and <code>prepared_plan_2</code> split it
+  for simultaneous-migration scenarios.</p>
+</li>
+<li>
+<p><code>mtv_version_checker</code> skips tests whose <code>min_mtv_version</code> marker is not satisfied.</p>
+</li>
+<li><code>labeled_worker_node</code> and <code>target_vm_labels</code> implement the <code>target_node_selector</code> and <code>target_labels</code> plan features.</li>
+<li><code>vm_ssh_connections</code> manages post-migration SSH sessions to migrated VMs.</li>
+<li><code>cleanup_migrated_vms</code> deletes migrated VMs after each test class.</li>
 </ul>
 <p>A few practical details are worth calling out:</p>
 <ul>
-<li><code>prepared_plan</code> is where source VMs are cloned or otherwise prepared before the MTV <code>Plan</code> is created.</li>
-<li>The fixture stores detailed source VM facts separately in <code>plan["source_vms_data"]</code>, so the serialized <code>virtual_machines</code> list stays clean for MTV resource creation.</li>
-<li>Hook resources are created from plan configuration before the test methods start running.</li>
-<li><code>virtctl_binary</code> is cached by cluster version and protected by file locking, which makes parallel <code>pytest-xdist</code> runs safer.</li>
+<li>
+<p><code>prepared_plan</code> deep-copies the plan config, so the <code>tests/tests_config/config.py</code> entry is never mutated. It stores detailed
+  source VM facts in <code>plan["source_vms_data"]</code>, so the serialized <code>virtual_machines</code> list stays clean for MTV resource creation.</p>
+</li>
+<li>
+<p>Cloning uses a <strong>two-phase</strong> pattern: every VM is cloned first, then <code>wait_for_cloned_vms_in_forklift_inventory()</code> waits for
+  all of them. Cloning VM2+ while VM1 inventory sync is still pending is what used to break inventory sync.</p>
+</li>
+<li>
+<p>For vSphere the inventory wait also blocks until inventory NIC MACs converge with live vCenter MACs, so the destination never
+  gets a stale NIC MAC.</p>
+</li>
+<li>
+<p><code>add_nic</code> reconfigures hardware <em>after</em> the clone was synced, so <code>wait_for_added_nics_in_forklift_inventory()</code> forces a
+  provider refresh and blocks until each VM's inventory NIC count matches. Otherwise the added NIC is missing from the
+  <code>NetworkMap</code> and Forklift drops it.</p>
+</li>
+<li>
+<p>Hook resources are created from plan configuration before the test methods start running.</p>
+</li>
+<li><code>virtctl_binary</code> is cached in a cluster-version-scoped shared directory under the system temp dir, guarded by a file lock, an
+  ownership check, and a symlink check, which makes parallel <code>pytest-xdist</code> runs safer.</li>
 </ul>
+<p><code>pytest_collection_modifyitems</code> in <code>conftest.py</code> is where provider-type gating happens at collection time: warm tests are skipped
+for OpenStack, OpenShift, OVA, and Hyper-V; <code>copyoffload</code>, <code>shared_disk</code>, <code>deep_inspection</code>, <code>aap</code>, and <code>luks</code> marked tests are
+skipped for non-vSphere sources; and <code>ca_crt</code> tests are skipped for OpenShift and OVA sources.</p>
 <blockquote>
-<p><strong>Note:</strong> Reusable logic is intentionally centralized here. If a test file looks surprisingly small, that is usually by design.</p>
+<p><strong>Note:</strong> Reusable logic is intentionally centralized here, and the <code>check-autouse-fixtures</code> pre-commit hook enforces that
+<code>autouse_fixtures</code> is the only fixture allowed to use <code>autouse=True</code>. If a test file looks surprisingly small, that is usually
+by design.</p>
 </blockquote>
 <h2 id="libs-provider-adapters-and-inventory-clients"><code>libs/</code>: Provider Adapters And Inventory Clients</h2>
 <p>The <code>libs/</code> directory is the platform abstraction layer.</p>
-<p><code>libs/base_provider.py</code> defines the common interface the rest of the suite expects. Each provider implementation can connect, test availability, return a normalized VM description via <code>vm_dict()</code>, clone VMs where needed, delete VMs, and expose provider-specific network information through a shared contract.</p>
+<p><code>libs/base_provider.py</code> defines <code>BaseProvider</code>, the common interface the rest of the suite expects. Each provider implementation
+can connect, test availability, return a normalized VM description via <code>vm_dict()</code>, clone VMs where needed, delete VMs, and
+expose provider-specific network information through a shared contract.</p>
 <p>The provider implementations are:</p>
 <ul>
-<li><code>libs/providers/vmware.py</code> for VMware vSphere; this is the most feature-heavy adapter and includes cloning, guest info handling, datastore logic, snapshot handling, copy-offload support, and ESXi-related behavior.</li>
-<li><code>libs/providers/rhv.py</code> for RHV/oVirt.</li>
+<li>
+<p><code>libs/providers/vmware.py</code> for VMware vSphere; this is by far the largest adapter and includes cloning, guest info handling,
+  datastore logic, snapshot handling, shared-disk relinking, copy-offload support, NIC addition, and ESXi-related behavior.</p>
+</li>
+<li>
+<p><code>libs/providers/rhv.py</code> for RHV/oVirt; clones from templates rather than VMs.</p>
+</li>
+<li><code>libs/providers/hyperv.py</code> for Microsoft Hyper-V.</li>
 <li><code>libs/providers/openstack.py</code> for OpenStack.</li>
-<li><code>libs/providers/openshift.py</code> for OpenShift Virtualization/KubeVirt; this adapter is especially important on the destination side because it inspects migrated <code>VirtualMachine</code> resources.</li>
-<li><code>libs/providers/ova.py</code> for OVA-based scenarios.</li>
+<li>
+<p><code>libs/providers/openshift.py</code> for OpenShift Virtualization/KubeVirt; this adapter is especially important on the destination
+  side because it inspects migrated <code>VirtualMachine</code> resources.</p>
+</li>
+<li>
+<p><code>libs/providers/ova.py</code> for OVA-based scenarios.</p>
+</li>
 </ul>
-<p><code>libs/forklift_inventory.py</code> is the second half of the abstraction. Instead of talking to source providers directly, some mapping logic needs the Forklift inventory service. This file wraps the <code>forklift-inventory</code> API and provides provider-specific inventory classes such as <code>VsphereForkliftInventory</code>, <code>OvirtForkliftInventory</code>, <code>OpenstackForliftinventory</code>, <code>OpenshiftForkliftInventory</code>, and <code>OvaForkliftInventory</code>.</p>
-<p>The fixture below shows how the right inventory client is selected at runtime:</p>
-<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
+<p><code>libs/forklift_inventory.py</code> is the second half of the abstraction. Instead of talking to source providers directly, some mapping
+logic needs the Forklift inventory service. This file wraps the <code>forklift-inventory</code> route and provides the abstract
+<code>ForkliftInventory</code> base plus provider-specific subclasses: <code>OvirtForkliftInventory</code>, <code>OpenstackForliftinventory</code>,
+<code>VsphereForkliftInventory</code>, <code>OvaForkliftInventory</code>, <code>OpenshiftForkliftInventory</code>, and <code>HypervForkliftInventory</code>.</p>
+<p>The fixture and the factory behind it select the right inventory client at runtime:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">"session"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">source_provider_inventory</span><span class="p">(</span>
     <span class="n">ocp_admin_client</span><span class="p">:</span> <span class="n">DynamicClient</span><span class="p">,</span> <span class="n">mtv_namespace</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">source_provider</span><span class="p">:</span> <span class="n">BaseProvider</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ForkliftInventory</span><span class="p">:</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;source_provider.ocp_resource is not set&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">create_forklift_inventory</span><span class="p">(</span><span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">mtv_namespace</span><span class="o">=</span><span class="n">mtv_namespace</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="n">source_provider</span><span class="p">)</span>
+</code></pre></div>
 
-    <span class="n">providers</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OVA</span><span class="p">:</span> <span class="n">OvaForkliftInventory</span><span class="p">,</span>
-        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">RHV</span><span class="p">:</span> <span class="n">OvirtForkliftInventory</span><span class="p">,</span>
-        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span><span class="p">:</span> <span class="n">VsphereForkliftInventory</span><span class="p">,</span>
-        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSHIFT</span><span class="p">:</span> <span class="n">OpenshiftForkliftInventory</span><span class="p">,</span>
-        <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">OPENSTACK</span><span class="p">:</span> <span class="n">OpenstackForliftinventory</span><span class="p">,</span>
-    <span class="p">}</span>
-    <span class="n">provider_instance</span> <span class="o">=</span> <span class="n">providers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code>    <span class="k">if</span> <span class="ow">not</span> <span class="n">PROVIDER_INVENTORY_MAP</span><span class="p">:</span>
+        <span class="n">_register_inventory_classes</span><span class="p">()</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">provider_instance</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Provider </span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> not implemented&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">provider</span><span class="o">.</span><span class="n">ocp_resource</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> provider ocp_resource is not set"</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">provider_instance</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
-        <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="n">mtv_namespace</span><span class="p">,</span> <span class="n">provider_name</span><span class="o">=</span><span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span>
+    <span class="n">provider_class</span> <span class="o">=</span> <span class="n">PROVIDER_INVENTORY_MAP</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">provider</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">provider_class</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Provider </span><span class="si">{</span><span class="n">provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> not implemented"</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">provider_class</span><span class="p">(</span>  <span class="c1"># type: ignore[call-arg]  # Subclasses use 'namespace' param while base class uses 'mtv_namespace'</span>
+        <span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">,</span>
+        <span class="n">namespace</span><span class="o">=</span><span class="n">mtv_namespace</span><span class="p">,</span>
+        <span class="n">provider_name</span><span class="o">=</span><span class="n">provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
     <span class="p">)</span>
 </code></pre></div>
 
@@ -600,232 +710,366 @@
 <li><code>libs/forklift_inventory.py</code> talks to the MTV/Forklift inventory API that MTV uses for discovery and mapping.</li>
 </ul>
 <h2 id="utilities-shared-orchestration-validation-and-diagnostics"><code>utilities/</code>: Shared Orchestration, Validation, And Diagnostics</h2>
-<p>The <code>utilities/</code> directory is where most of the suite’s real work happens. If <code>tests/</code> describes <em>what</em> to migrate, <code>utilities/</code> contains most of the code for <em>how</em> to set up, execute, verify, and clean up the migration.</p>
+<p>The <code>utilities/</code> directory is where most of the suite's real work happens. If <code>tests/</code> describes <em>what</em> to migrate, <code>utilities/</code>
+contains most of the code for <em>how</em> to set up, execute, verify, and clean up the migration.</p>
 <p>The major modules are:</p>
 <ul>
-<li><code>utilities/mtv_migration.py</code> builds <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, and <code>Migration</code> resources and waits for migration completion.</li>
-<li><code>utilities/post_migration.py</code> performs post-migration validation for CPU, memory, storage, networking, guest agent state, SSH, snapshots, static IP preservation, node placement, labels, and affinity.</li>
-<li><code>utilities/resources.py</code> centralizes resource creation and teardown tracking.</li>
-<li><code>utilities/utils.py</code> loads provider configuration, creates provider secrets and <code>Provider</code> CRs, fetches CA certificates, and contains general cluster helpers.</li>
-<li><code>utilities/hooks.py</code> creates MTV hook resources and validates expected hook-related failure behavior.</li>
-<li><code>utilities/migration_utils.py</code> handles cutover timing, plan archiving, migration cancelation, and cleanup checks for DVs, PVCs, and PVs.</li>
-<li><code>utilities/ssh_utils.py</code> provides post-migration SSH access to VMs through <code>virtctl port-forward</code>.</li>
+<li>
+<p><code>utilities/mtv_migration.py</code> builds <code>StorageMap</code>, <code>NetworkMap</code>, <code>Plan</code>, and <code>Migration</code> resources, waits for migration
+  completion, and resolves dual/simultaneous migration completion.</p>
+</li>
+<li>
+<p><code>utilities/post_migration.py</code> performs post-migration validation for CPU and CPU features, VBS status, memory, storage,
+  networking, guest agent state, SSH, snapshots, static IP preservation, node placement, labels, affinity, PVC names, data
+  integrity, and LUKS encryption.</p>
+</li>
+<li>
+<p><code>utilities/resources.py</code> centralizes resource creation (<code>create_and_store_resource</code>, <code>unregister_teardown_resource</code>,
+  <code>get_or_create_namespace</code>) and teardown tracking.</p>
+</li>
+<li>
+<p><code>utilities/utils.py</code> loads provider configuration, creates provider secrets and <code>Provider</code> CRs, fetches CA certificates,
+  generates network map lists, populates inventory VM IDs, and contains general cluster helpers.</p>
+</li>
+<li>
+<p><code>utilities/provider_inventory.py</code> owns Forklift inventory synchronization: forced provider refresh, added-NIC convergence,
+  MAC convergence, cloned-VM waits, and pre-clone source VM validation.</p>
+</li>
+<li>
+<p><code>utilities/hooks.py</code> creates MTV hook resources and validates expected hook-related failure behavior.</p>
+</li>
+<li>
+<p><code>utilities/migration_utils.py</code> handles cutover timing, plan archiving, migration cancelation, and cleanup checks for DVs,
+  PVCs, and PVs.</p>
+</li>
+<li>
+<p><code>utilities/ssh_utils.py</code> provides post-migration SSH access to VMs through <code>virtctl</code> port-forward plus the <code>python-rrmngmnt</code> library.</p>
+</li>
 <li><code>utilities/virtctl.py</code> downloads the correct <code>virtctl</code> binary from the cluster for the current OS and architecture.</li>
-<li><code>utilities/worker_node_selection.py</code> picks worker nodes for placement-sensitive tests, using Prometheus metrics when available.</li>
-<li><code>utilities/copyoffload_migration.py</code>, <code>utilities/copyoffload_constants.py</code>, and <code>utilities/esxi.py</code> contain copy-offload-specific behavior and credentials handling.</li>
+<li>
+<p><code>utilities/vmware_guest_operations.py</code> runs guest commands over the VMware Guest Operations API, used to detect guest NIC
+  names and IP origins.</p>
+</li>
+<li>
+<p><code>utilities/worker_node_selection.py</code> picks worker nodes for placement-sensitive tests, using Prometheus metrics when
+  available.</p>
+</li>
+<li>
+<p><code>utilities/shared_disk.py</code> mounts, labels, writes, and reads shared disks on both migrated guests for Linux and Windows.</p>
+</li>
+<li>
+<p><code>utilities/deep_inspection.py</code> manages the Deep Inspection <code>Conversion</code> CR lifecycle: connection secrets, creation, phase
+  waiting, cancel, snapshot handling, result verification, and concern capture.</p>
+</li>
+<li>
+<p><code>utilities/aap.py</code> supports Ansible Automation Platform hook integration.</p>
+</li>
+<li><code>utilities/copyoffload_migration.py</code> holds copy-offload orchestration and XCOPY verification.</li>
+<li><code>utilities/copyoffload_constants.py</code> holds the supported storage vendors and the Forklift in-flight limits.</li>
+<li><code>utilities/copyoffload_datastore.py</code> resolves per-disk datastore IDs and formats the related error messages.</li>
+<li><code>utilities/copyoffload_plan_secret.py</code> polls for the Forklift-created plan secret.</li>
+<li><code>utilities/forklift_controller_populator.py</code> patches ForkliftController populator in-flight limits.</li>
+<li><code>utilities/esxi.py</code> contains ESXi SSH credential handling for SSH-based ESXi cloning.</li>
+<li><code>utilities/upgrade.py</code> runs the MTV operator upgrade script for the upgrade suite.</li>
 <li><code>utilities/must_gather.py</code> collects diagnostics with <code>oc adm must-gather</code>.</li>
-<li><code>utilities/pytest_utils.py</code> handles dry-run behavior, resource collection, session teardown, and optional AI analysis wiring.</li>
+<li><code>utilities/pytest_utils.py</code> handles dry-run detection, resource collection, session teardown, and optional AI analysis wiring.</li>
 <li><code>utilities/naming.py</code> generates short unique resource names and sanitizes VM names for Kubernetes.</li>
 <li><code>utilities/logger.py</code> configures queue-based logging so parallel workers can write to a single stream cleanly.</li>
+<li><code>utilities/constants.py</code> holds <code>MTV_OPERATOR_NAME</code>.</li>
 </ul>
 <p>The shared resource creation helper is one of the simplest and most important building blocks in the repository:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">create_and_store_resource</span><span class="p">(</span>
-    <span class="n">client</span><span class="p">:</span> <span class="s2">&quot;DynamicClient&quot;</span><span class="p">,</span>
+    <span class="n">client</span><span class="p">:</span> <span class="s2">"DynamicClient"</span><span class="p">,</span>
     <span class="n">fixture_store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">resource</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">Resource</span><span class="p">],</span>
     <span class="n">test_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-    <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">client</span>
+    <span class="n">kwargs</span><span class="p">[</span><span class="s2">"client"</span><span class="p">]</span> <span class="o">=</span> <span class="n">client</span>
 
-    <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
-    <span class="n">_resource_dict</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kind_dict&quot;</span><span class="p">,</span> <span class="p">{})</span>
-    <span class="n">_resource_yaml</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;yaml_file&quot;</span><span class="p">)</span>
+    <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"name"</span><span class="p">)</span>
+    <span class="n">_resource_dict</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"kind_dict"</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">_resource_yaml</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"yaml_file"</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">_resource_yaml</span> <span class="ow">and</span> <span class="n">_resource_dict</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both yaml_file and kind_dict&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Cannot specify both yaml_file and kind_dict"</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_resource_name</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">_resource_yaml</span><span class="p">:</span>
             <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">_resource_yaml</span><span class="p">)</span> <span class="k">as</span> <span class="n">fd</span><span class="p">:</span>
                 <span class="n">_resource_dict</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">fd</span><span class="p">)</span>
 
-        <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">_resource_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+        <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">_resource_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"metadata"</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"name"</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_resource_name</span><span class="p">:</span>
-        <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;base_resource_name&quot;</span><span class="p">])</span>
+        <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">generate_name_with_uuid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">[</span><span class="s2">"base_resource_name"</span><span class="p">])</span>
 
         <span class="k">if</span> <span class="n">resource</span><span class="o">.</span><span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Migration</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="n">Plan</span><span class="o">.</span><span class="n">kind</span><span class="p">):</span>
-            <span class="n">_resource_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="s1">&#39;warm&#39;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;warm_migration&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;cold&#39;</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">_resource_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="s1">'warm'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'warm_migration'</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">'cold'</span><span class="si">}</span><span class="s2">"</span>
 
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">_resource_name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">63</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">=}</span><span class="s2">&#39; is too long (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">_resource_name</span><span class="p">)</span><span class="si">}</span><span class="s2"> &gt; 63). Truncating.&quot;</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">_resource_name</span><span class="si">=}</span><span class="s2">' is too long (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">_resource_name</span><span class="p">)</span><span class="si">}</span><span class="s2"> &gt; 63). Truncating."</span><span class="p">)</span>
         <span class="n">_resource_name</span> <span class="o">=</span> <span class="n">_resource_name</span><span class="p">[</span><span class="o">-</span><span class="mi">63</span><span class="p">:]</span>
 
-    <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_resource_name</span>
+    <span class="n">kwargs</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_resource_name</span>
 
     <span class="n">_resource</span> <span class="o">=</span> <span class="n">resource</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">_resource</span><span class="o">.</span><span class="n">deploy</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">except</span> <span class="n">ConflictError</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2"> already exists, reusing it.&quot;</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource_name</span><span class="si">}</span><span class="s2"> already exists, reusing it."</span><span class="p">)</span>
         <span class="n">_resource</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Storing </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> in fixture store&quot;</span><span class="p">)</span>
-    <span class="n">_resource_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="vm">__module__</span><span class="p">}</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Storing </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> in fixture store"</span><span class="p">)</span>
+    <span class="n">_resource_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"namespace"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">"module"</span><span class="p">:</span> <span class="n">_resource</span><span class="o">.</span><span class="vm">__module__</span><span class="p">}</span>
 
     <span class="k">if</span> <span class="n">test_name</span><span class="p">:</span>
-        <span class="n">_resource_dict</span><span class="p">[</span><span class="s2">&quot;test_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">test_name</span>
+        <span class="n">_resource_dict</span><span class="p">[</span><span class="s2">"test_name"</span><span class="p">]</span> <span class="o">=</span> <span class="n">test_name</span>
 
-    <span class="n">fixture_store</span><span class="p">[</span><span class="s2">&quot;teardown&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_resource_dict</span><span class="p">)</span>
+    <span class="n">fixture_store</span><span class="p">[</span><span class="s2">"teardown"</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">_resource</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_resource_dict</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">_resource</span>
 </code></pre></div>
 
-<p>That helper is used by higher-level orchestration code in <code>utilities/mtv_migration.py</code>. One good example is storage mapping, where the code branches between standard inventory-based mapping and copy-offload-specific mapping:</p>
-<div class="highlight"><pre><span></span><code>    <span class="k">if</span> <span class="n">datastore_id</span> <span class="ow">and</span> <span class="n">offload_plugin_config</span><span class="p">:</span>
-        <span class="c1"># Copy-offload migration mode</span>
-        <span class="n">datastores_to_map</span> <span class="o">=</span> <span class="p">[</span><span class="n">datastore_id</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">secondary_datastore_id</span><span class="p">:</span>
-            <span class="n">datastores_to_map</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">secondary_datastore_id</span><span class="p">)</span>
-            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating copy-offload storage map for primary and secondary datastores: </span><span class="si">{</span><span class="n">datastores_to_map</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating copy-offload storage map for primary datastore: </span><span class="si">{</span><span class="n">datastore_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="c1"># Create a storage map entry for each XCOPY-capable datastore</span>
-        <span class="k">for</span> <span class="n">ds_id</span> <span class="ow">in</span> <span class="n">datastores_to_map</span><span class="p">:</span>
-            <span class="n">destination_config</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">,</span>
-            <span class="p">}</span>
-
-            <span class="c1"># Add copy-offload specific destination settings</span>
-            <span class="k">if</span> <span class="n">access_mode</span><span class="p">:</span>
-                <span class="n">destination_config</span><span class="p">[</span><span class="s2">&quot;accessMode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">access_mode</span>
-            <span class="k">if</span> <span class="n">volume_mode</span><span class="p">:</span>
-                <span class="n">destination_config</span><span class="p">[</span><span class="s2">&quot;volumeMode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">volume_mode</span>
-
-            <span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-                <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
-                <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">ds_id</span><span class="p">},</span>
-                <span class="s2">&quot;offloadPlugin&quot;</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
-            <span class="p">})</span>
-            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Added storage map entry for datastore: </span><span class="si">{</span><span class="n">ds_id</span><span class="si">}</span><span class="s2"> with copy-offload&quot;</span><span class="p">)</span>
-
-        <span class="c1"># Add non-XCOPY datastore mapping (with offload plugin for fallback)</span>
-        <span class="k">if</span> <span class="n">non_xcopy_datastore_id</span><span class="p">:</span>
-            <span class="n">destination_config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">}</span>
-            <span class="k">if</span> <span class="n">access_mode</span><span class="p">:</span>
-                <span class="n">destination_config</span><span class="p">[</span><span class="s2">&quot;accessMode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">access_mode</span>
-            <span class="k">if</span> <span class="n">volume_mode</span><span class="p">:</span>
-                <span class="n">destination_config</span><span class="p">[</span><span class="s2">&quot;volumeMode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">volume_mode</span>
-            <span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-                <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">destination_config</span><span class="p">,</span>
-                <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">non_xcopy_datastore_id</span><span class="p">},</span>
-                <span class="s2">&quot;offloadPlugin&quot;</span><span class="p">:</span> <span class="n">offload_plugin_config</span><span class="p">,</span>
-            <span class="p">})</span>
-            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Added non-XCOPY datastore mapping for: </span><span class="si">{</span><span class="n">non_xcopy_datastore_id</span><span class="si">}</span><span class="s2"> (with xcopy fallback)&quot;</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating standard storage map for VMs: </span><span class="si">{</span><span class="n">vms</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">storage_migration_map</span> <span class="o">=</span> <span class="n">source_provider_inventory</span><span class="o">.</span><span class="n">vms_storages_mappings</span><span class="p">(</span><span class="n">vms</span><span class="o">=</span><span class="n">vms</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storage_migration_map</span><span class="p">:</span>
-            <span class="n">storage_map_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-                <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;storageClass&quot;</span><span class="p">:</span> <span class="n">target_storage_class</span><span class="p">},</span>
-                <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">storage</span><span class="p">,</span>
-            <span class="p">})</span>
-
-    <span class="n">storage_map</span> <span class="o">=</span> <span class="n">create_and_store_resource</span><span class="p">(</span>
-        <span class="n">fixture_store</span><span class="o">=</span><span class="n">fixture_store</span><span class="p">,</span>
-        <span class="n">resource</span><span class="o">=</span><span class="n">StorageMap</span><span class="p">,</span>
-        <span class="n">client</span><span class="o">=</span><span class="n">ocp_admin_client</span><span class="p">,</span>
-        <span class="n">namespace</span><span class="o">=</span><span class="n">target_namespace</span><span class="p">,</span>
-        <span class="n">mapping</span><span class="o">=</span><span class="n">storage_map_list</span><span class="p">,</span>
-        <span class="n">source_provider_name</span><span class="o">=</span><span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="n">source_provider_namespace</span><span class="o">=</span><span class="n">source_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-        <span class="n">destination_provider_name</span><span class="o">=</span><span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="n">destination_provider_namespace</span><span class="o">=</span><span class="n">destination_provider</span><span class="o">.</span><span class="n">ocp_resource</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
-    <span class="p">)</span>
-</code></pre></div>
-
+<p>That helper is used by higher-level orchestration code in <code>utilities/mtv_migration.py</code>. One good example is storage mapping,
+where the code branches between standard inventory-based mapping and copy-offload-specific mapping driven by datastore IDs and
+<code>offloadPlugin</code> entries. The same module also validates that the configured <code>pvc_name_template</code> is compatible with the source
+provider before the <code>Plan</code> is built.</p>
 <p>A few utility modules are especially helpful to know by name:</p>
 <ul>
-<li><code>utilities/post_migration.py</code> is where the deep VM checks happen. If a migrated VM has the wrong CPU, memory, disks, networks, PVC names, serial number, labels, or affinity, the logic is usually here.</li>
-<li><code>utilities/ssh_utils.py</code> reaches migrated VMs through <code>virtctl port-forward</code>, so validation does not depend on cluster nodes exposing guest SSH directly.</li>
-<li><code>utilities/hooks.py</code> supports both predefined success/failure hook playbooks and custom base64-encoded playbooks.</li>
+<li>
+<p><code>utilities/post_migration.py</code> is where the deep VM checks happen. If a migrated VM has the wrong CPU, memory, disks, networks,
+  PVC names, serial number, labels, or affinity, the logic is usually here.</p>
+</li>
+<li>
+<p><code>utilities/ssh_utils.py</code> reaches migrated VMs through <code>virtctl</code> port-forward plus the <code>python-rrmngmnt</code> library, so validation does not depend on cluster
+  nodes exposing guest SSH directly.</p>
+</li>
+<li>
+<p><code>utilities/hooks.py</code> supports both predefined success/failure hook playbooks and custom base64-encoded playbooks.</p>
+</li>
 <li><code>utilities/must_gather.py</code> is what the suite uses when it needs richer failure diagnostics.</li>
-<li><code>utilities/worker_node_selection.py</code> exists because some scenarios validate placement-sensitive features rather than only migration success.</li>
+<li>
+<p><code>utilities/worker_node_selection.py</code> exists because some scenarios validate placement-sensitive features rather than only
+  migration success.</p>
+</li>
+<li>
+<p><code>utilities/provider_inventory.py</code> is the place to look when a migration fails because Forklift had not caught up with the
+  source VM yet.</p>
+</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> If you are tracing a failure after the MTV <code>Plan</code> is created, <code>utilities/mtv_migration.py</code> and <code>utilities/post_migration.py</code> are usually the next files to read.</p>
+<p><strong>Tip:</strong> If you are tracing a failure after the MTV <code>Plan</code> is created, <code>utilities/mtv_migration.py</code> and
+<code>utilities/post_migration.py</code> are usually the next files to read.</p>
 </blockquote>
 <h2 id="exceptions-centralized-domain-errors"><code>exceptions/</code>: Centralized Domain Errors</h2>
-<p>Custom exceptions are centralized in <code>exceptions/exceptions.py</code>. This keeps migration-specific failures easy to recognize and avoids scattering project-specific error types across multiple modules.</p>
+<p>Custom exceptions are centralized in <code>exceptions/exceptions.py</code>. This keeps migration-specific failures easy to recognize and
+avoids scattering project-specific error types across multiple modules. The <code>check-exceptions-location</code> pre-commit hook enforces
+the placement.</p>
 <p>Representative exceptions include:</p>
 <ul>
 <li><code>MigrationPlanExecError</code> for plan execution failure or timeout</li>
 <li><code>MigrationNotFoundError</code> and <code>MigrationStatusError</code> for missing or incomplete migration CR state</li>
 <li><code>VmPipelineError</code> and <code>VmMigrationStepMismatchError</code> for hook or pipeline analysis problems</li>
-<li><code>MissingProvidersFileError</code> for missing or empty <code>.providers.json</code></li>
-<li><code>InvalidVMNameError</code>, <code>VmCloneError</code>, <code>VmBadDatastoreError</code>, and <code>VmNotFoundError</code> for provider-side and VM-side failures</li>
-<li><code>SessionTeardownError</code> for cleanup problems after the run</li>
+<li><code>MissingProvidersFileError</code> and <code>ProviderEmptyContentError</code> for missing or empty providers JSON</li>
+<li>
+<p><code>InvalidVMNameError</code>, <code>VmCloneError</code>, <code>VmBadDatastoreError</code>, <code>VmMissingVmxError</code>, and <code>VmNotFoundError</code> for provider-side and
+  VM-side failures</p>
+</li>
+<li>
+<p><code>SessionTeardownError</code> for cleanup problems after the run</p>
+</li>
+<li>
+<p><code>ForkliftPodsNotRunningError</code>, <code>MtvOperatorNotInstalledError</code>, and <code>RemoteClusterAndLocalCluterNamesError</code> for cluster and
+  operator readiness</p>
+</li>
+<li>
+<p><code>MtvUpgradeError</code>, <code>GuestCommandError</code>, <code>SSHConnectionSetupError</code>, <code>PowerShellCommandError</code>, and <code>ConversionError</code> for the
+  upgrade, guest-operations, SSH, and Deep Inspection paths</p>
+</li>
 </ul>
-<p>This file is small, but it matters because the rest of the repository uses these names to make failures easier to understand during investigation.</p>
-<h2 id="docs-and-tools-user-docs-and-recovery-helpers"><code>docs/</code> And <code>tools/</code>: User Docs And Recovery Helpers</h2>
-<p>The checked-in <code>docs/</code> tree is currently small and focused. Right now it contains <code>docs/copyoffload/how-to-run-copyoffload-tests.md</code>, which is a user-facing guide for setting up and running copy-offload scenarios.</p>
-<p>The <code>tools/</code> directory currently contains <code>tools/clean_cluster.py</code>, a recovery helper that reads a recorded resource list and calls <code>.clean_up()</code> on the matching objects. This is useful when a test run was interrupted and left resources behind.</p>
+<p>This file is small, but it matters because the rest of the repository uses these names to make failures easier to understand
+during investigation.</p>
+<h2 id="cli-scripts-and-tools"><code>cli/</code>, <code>scripts/</code>, And <code>tools/</code></h2>
+<p><code>cli/mtv_api_tests/</code> is a Typer application exposed as the <code>mtv-api-tests</code> console script (<code>cli.mtv_api_tests:app</code> in
+<code>pyproject.toml</code>). It has two subcommands:</p>
+<ul>
+<li>
+<p><code>mtv-api-tests generate</code> walks through an interactive wizard that writes <code>.providers.json</code> and <code>mtv-api-tests-manifests.yaml</code>,
+  with a <code>--category</code> option drawn from <code>TEST_CATEGORIES</code> (<code>all</code>, <code>copyoffload</code>, <code>tier0</code>, <code>tier1</code>, <code>warm</code>, <code>remote</code>).</p>
+</li>
+<li>
+<p><code>mtv-api-tests run</code> runs the suite either locally (<code>uv run pytest</code>) or as an OpenShift Job (<code>oc apply</code>), with options for
+  category, source and destination provider keys, storage class, a <code>-k</code> test filter, and a Job YAML path.</p>
+</li>
+</ul>
+<p><code>scripts/hooks/</code> holds local AST-based pre-commit hooks that enforce selected <code>AGENTS.md</code> rules. They run from the <code>repo: local</code>
+block of <code>.pre-commit-config.yaml</code>:</p>
+<ul>
+<li><code>check-no-kubernetes-runtime</code>: no <code>kubernetes.*</code> imports at runtime outside the allowed exceptions import.</li>
+<li><code>check-no-dynamicclient-construct</code>: no <code>DynamicClient()</code> construction; use <code>get_cluster_client()</code>.</li>
+<li><code>check-no-except-exception</code>: no <code>except Exception</code> outside <code>pytest_*</code> hooks in <code>conftest.py</code>.</li>
+<li><code>check-no-module-load-source-providers</code>: no module-level <code>load_source_providers</code> under <code>tests/</code>.</li>
+<li><code>check-exceptions-location</code>: <code>Exception</code> subclasses live in <code>exceptions/exceptions.py</code>.</li>
+<li><code>check-test-file-location</code>: no <code>test_*.py</code> directly under <code>tests/</code>.</li>
+<li><code>check-autouse-fixtures</code>: only <code>autouse_fixtures</code> may use <code>autouse=True</code>.</li>
+<li><code>check-no-runtimeerror</code>: no <code>raise RuntimeError</code> outside <code>pytest_*</code> hooks in <code>conftest.py</code>.</li>
+</ul>
+<p>Legacy violations are grandfathered through a baseline ratchet: <code>scripts/hooks/baselines/&lt;hook_id&gt;.txt</code> holds
+<code>path:sha256-prefix</code> fingerprints, currently for <code>check_exceptions_location</code>, <code>check_no_except_exception</code>,
+<code>check_no_kubernetes_runtime</code>, and <code>check_no_runtimeerror</code>. <code>scripts/hooks/README.md</code> documents the matching rules, including
+that each row grants exactly one suppression.</p>
+<p><code>tools/</code> holds operational helpers:</p>
+<ul>
+<li>
+<p><code>tools/clean_cluster.py</code> reads a recorded resource list (the <code>resources.json</code> written by the data collector) and calls
+  <code>.clean_up()</code> on the matching objects. This is useful when a test run was interrupted and left resources behind.</p>
+</li>
+<li>
+<p><code>tools/bm-dns-setup.sh</code> configures DNS for bare-metal environments.</p>
+</li>
+<li><code>tools/update-branches.sh</code> updates local branches.</li>
+</ul>
+<p><code>guides/copyoffload/how-to-run-copyoffload-tests.md</code> is the long-form user guide for setting up and running copy-offload
+scenarios. It lives in <code>guides/</code>, not in <code>docs/</code>.</p>
 <p>A few other support files are worth knowing about:</p>
 <ul>
-<li><code>junit_report_example.xml</code> shows the JUnit-style output shape emitted by <code>pytest</code></li>
-<li><code>JOB_INSIGHT_PROMPT.md</code> contains instructions for automated job/failure analysis tooling</li>
-<li><code>OWNERS</code> lists repository approvers and reviewers</li>
+<li>
+<p><code>AGENTS.md</code> is the authoritative rules document for this repository: commands, code standards, architecture patterns, test
+  structure, markers, and fixture rules.</p>
+</li>
+<li>
+<p><code>test_plan_schema.md</code> defines the required class docstring (a manual product test plan) that every new test class must carry.</p>
+</li>
+<li><code>JOB_INSIGHT_PROMPT.md</code> contains instructions for automated job/failure analysis tooling.</li>
+<li><code>OWNERS</code> lists repository approvers and reviewers.</li>
+<li>
+<p><code>.rootcoz/settings.json</code> configures the rootcoz analysis server, including the additional repositories it reads for this
+  project: the <code>forklift</code> product repo, the <code>mtv-autodeploy</code> deployment repo, and the MTV Jenkins job repo.</p>
+</li>
+<li>
+<p><code>junit_report_example.xml</code> shows the JUnit-style output shape emitted by <code>pytest</code>.</p>
+</li>
 </ul>
 <blockquote>
-<p><strong>Tip:</strong> <code>tools/clean_cluster.py</code> pairs naturally with the resource tracking written by <code>utilities/pytest_utils.py</code>, which stores created resources in a JSON file when data collection is enabled.</p>
+<p><strong>Tip:</strong> <code>tools/clean_cluster.py</code> pairs naturally with the resource tracking written by <code>utilities/pytest_utils.py</code>, which
+stores created resources in a JSON file when data collection is enabled.</p>
 </blockquote>
 <h2 id="configuration-tooling-and-automation-files">Configuration, Tooling, And Automation Files</h2>
 <p>The repository root also contains the files that make the suite installable, configurable, lintable, and reviewable.</p>
 <p>The most important ones are:</p>
 <ul>
-<li><code>pyproject.toml</code> defines the Python project metadata and dependencies. It requires Python <code>&gt;=3.12, &lt;3.14</code> and includes <code>pytest</code>, <code>pytest-xdist</code>, <code>pytest-testconfig</code>, provider SDKs, <code>openshift-python-wrapper</code>, <code>openshift-python-utilities</code>, and other supporting libraries.</li>
-<li><code>uv.lock</code> locks the exact dependency set used by the repository.</li>
+<li>
+<p><code>pyproject.toml</code> defines the Python project metadata and dependencies. It requires Python <code>&gt;=3.12, &lt;3.14</code> and includes
+  <code>pytest</code>, <code>pytest-xdist</code>, <code>pytest-testconfig</code>, <code>pytest-harvest</code>, provider SDKs (<code>pyvmomi</code>, <code>ovirt-python-sdk</code>, <code>openstacksdk</code>),
+  <code>openshift-python-wrapper</code>, <code>openshift-python-utilities</code>, <code>typer</code>, <code>python-rrmngmnt</code>, <code>pyhelper-utils</code>, and <code>py-go-template</code>.</p>
+</li>
+<li>
+<p><code>uv.lock</code> locks the exact dependency set used by the repository.</p>
+</li>
 <li><code>pytest.ini</code> configures test discovery, runtime options, markers, JUnit output, and <code>pytest-testconfig</code>.</li>
-<li><code>tests/tests_config/config.py</code> is the suite’s shared Python-based scenario configuration file.</li>
-<li><code>.providers.json.example</code> shows the structure expected by <code>load_source_providers()</code> and <code>source_provider_data()</code> for source providers and copy-offload settings.</li>
-<li><code>jira.cfg.example</code> shows the minimal format expected by the Jira integration enabled in <code>pytest.ini</code>.</li>
-<li><code>tox.toml</code> defines lightweight local automation tasks such as <code>pytest --setup-plan</code>, <code>pytest --collect-only</code>, and unused-code scanning.</li>
-<li><code>.pre-commit-config.yaml</code> configures local quality gates including <code>flake8</code>, <code>ruff</code>, <code>ruff-format</code>, <code>mypy</code>, <code>detect-secrets</code>, <code>gitleaks</code>, and <code>markdownlint-cli2</code>.</li>
-<li><code>Dockerfile</code> builds a Fedora-based test image, copies <code>utilities/</code>, <code>tests/</code>, <code>libs/</code>, and <code>exceptions/</code>, runs <code>uv sync --locked</code>, and defaults to <code>uv run pytest --collect-only</code>.</li>
-<li><code>.release-it.json</code> handles version bumping, tagging, pushing, and GitHub release creation.</li>
-<li><code>renovate.json</code> handles automated dependency update PRs and weekly lock file maintenance.</li>
+<li><code>tests/tests_config/config.py</code> is the suite's shared Python-based scenario configuration file.</li>
+<li>
+<p><code>providers_schema.json</code> is the JSON Schema that <code>.providers.json</code> is validated against; <code>.providers.json.example</code> is the
+  commented field reference.</p>
+</li>
+<li>
+<p><code>.providers.json</code> is the real providers file. It is <strong>gitignored</strong>, so every developer supplies their own.</p>
+</li>
+<li><code>jira.cfg.example</code> shows the minimal format expected by the <code>pytest-jira</code> integration.</li>
+<li>
+<p><code>tox.toml</code> defines lightweight local automation: <code>pytest --setup-plan</code>, <code>pytest --collect-only</code>, and unused-code scanning via
+  <code>pyutils-unusedcode</code>.</p>
+</li>
+<li>
+<p><code>.pre-commit-config.yaml</code> configures local quality gates including <code>flake8</code>, <code>ruff</code>, <code>ruff-format</code>, <code>mypy</code>, <code>detect-secrets</code>,
+  <code>gitleaks</code>, <code>markdownlint-cli2</code>, and the eight <code>scripts/hooks/</code> AGENTS-rules hooks.</p>
+</li>
+<li>
+<p><code>Dockerfile</code> is a two-stage UBI 10 build: a builder stage that copies <code>cli</code>, <code>docs</code>, <code>utilities</code>, <code>tests</code>, <code>libs</code>, and
+  <code>exceptions</code> and runs <code>uv sync --locked</code>, and a minimal runtime stage that defaults to <code>uv run pytest --collect-only</code>. It can
+  optionally install pinned <code>openshift-python-wrapper</code> / <code>openshift-python-utilities</code> commits via build args.</p>
+</li>
+<li>
+<p><code>.release-it.json</code> handles version bumping, tagging, pushing, and GitHub release creation.</p>
+</li>
+<li><code>renovate.json</code> handles automated dependency update PRs.</li>
 <li><code>.coderabbit.yaml</code> and <code>.pr_agent.toml</code> configure automated review behavior.</li>
-<li><code>.flake8</code> and <code>.markdownlint.yaml</code> hold narrower lint settings for Python and Markdown.</li>
+<li>
+<p><code>.flake8</code> and <code>.markdownlint.yaml</code> hold narrower lint settings for Python and Markdown. The Markdown config sets a
+  180-character line limit and allows only <code>details</code>, <code>summary</code>, and <code>strong</code> as inline HTML.</p>
+</li>
+<li>
+<p><code>MTV-VERSION</code> records the pinned MTV version (<code>2.12</code>). No script in the repository currently reads it.</p>
+</li>
 </ul>
 <p>The provider configuration example is especially important because most real test runs depend on it:</p>
-<div class="highlight"><pre><span></span><code>  &quot;vsphere-copy-offload&quot;: {
-    &quot;type&quot;: &quot;vsphere&quot;,
-    &quot;version&quot;: &quot;&lt;SERVER VERSION&gt;&quot;,
-    &quot;fqdn&quot;: &quot;SERVER FQDN/IP&quot;,
-    &quot;api_url&quot;: &quot;&lt;SERVER FQDN/IP&gt;/sdk&quot;,
-    &quot;username&quot;: &quot;USERNAME&quot;,
-    &quot;password&quot;: &quot;PASSWORD&quot;,  # pragma: allowlist secret
-    &quot;guest_vm_linux_user&quot;: &quot;LINUX VMS USERNAME&quot;,
-    &quot;guest_vm_linux_password&quot;: &quot;LINUX VMS PASSWORD&quot;,  # pragma: allowlist secret
-    &quot;guest_vm_win_user&quot;: &quot;WINDOWS VMS USERNAME&quot;,
-    &quot;guest_vm_win_password&quot;: &quot;WINDOWS VMS PASSWORD&quot;,  # pragma: allowlist secret
-    &quot;copyoffload&quot;: {
+<div class="highlight"><pre><span></span><code>  "vsphere-copy-offload": {
+    "type": "vsphere",
+    "version": "&lt;SERVER VERSION&gt;",
+    "fqdn": "SERVER FQDN/IP",
+    "api_url": "&lt;SERVER FQDN/IP&gt;/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",  # pragma: allowlist secret
+    "guest_vm_linux_user": "LINUX VMS USERNAME",
+    "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
+    "guest_vm_win_user": "WINDOWS VMS USERNAME",
+    "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
+    "copyoffload": {
       # Supported storage_vendor_product values:
-      # - &quot;ontap&quot;           (NetApp ONTAP)
-      # - &quot;vantara&quot;         (Hitachi Vantara)
-      # - &quot;primera3par&quot;     (HPE Primera/3PAR)
-      # - &quot;pureFlashArray&quot;  (Pure Storage FlashArray)
-      # - &quot;powerflex&quot;       (Dell PowerFlex)
-      # - &quot;powermax&quot;        (Dell PowerMax)
-      # - &quot;powerstore&quot;      (Dell PowerStore)
-      # - &quot;infinibox&quot;       (Infinidat InfiniBox)
-      # - &quot;flashsystem&quot;     (IBM FlashSystem)
-      &quot;storage_vendor_product&quot;: &quot;ontap&quot;,
-
-      # Primary datastore for copy-offload operations (required)
-      # This is the vSphere datastore ID (e.g., &quot;datastore-12345&quot;) where VMs reside
-      # Get via vSphere: Datacenter → Storage → Datastore → Summary → More Objects ID
-      &quot;datastore_id&quot;: &quot;datastore-12345&quot;,
+      # - "ontap"           (NetApp ONTAP)
+      # - "vantara"         (Hitachi Vantara)
+      # - "primera3par"     (HPE Primera/3PAR)
+      # - "pureFlashArray"  (Pure Storage FlashArray)
+      # - "powerflex"       (Dell PowerFlex)
+      # - "powermax"        (Dell PowerMax)
+      # - "powerstore"      (Dell PowerStore)
+      # - "infinibox"       (Infinidat InfiniBox)
+      # - "flashsystem"     (IBM FlashSystem)
+      "storage_vendor_product": "ontap",
 </code></pre></div>
 
+<p>The same example also shows the ESXi profile, which is the shape most often missed:</p>
+<div class="highlight"><pre><span></span><code>  "vsphere-esxi": {
+    "type": "vsphere",
+    "version": "&lt;SERVER VERSION&gt;",
+    "fqdn": "ESXI HOST FQDN/IP",
+    "api_url": "&lt;ESXI HOST FQDN/IP&gt;/sdk",
+    "username": "USERNAME",
+    "password": "PASSWORD",  # pragma: allowlist secret
+    "endpoint_type": "esxi",
+    "vddk_init_image": "&lt;PATH TO VDDK INIT IMAGE&gt;",
+    "clone_provider": "vsphere"  # Name of vCenter provider to use for VM cloning operations
+  },
+</code></pre></div>
+
+<ul>
+<li><code>endpoint_type</code> selects <code>"vcenter"</code> or <code>"esxi"</code>. It maps to the MTV <code>Provider</code> <code>sdkEndpoint</code> field.</li>
+<li>
+<p><code>clone_provider</code> names another entry in the same file (a vCenter) that performs <code>CloneVM_Task</code>, because a bare ESXi host
+  cannot. The <code>vcenter_clone_provider</code> fixture in <code>conftest.py</code> builds it.</p>
+</li>
+<li>
+<p><code>luks_passphrase</code> at provider level is the fallback for the per-VM <code>luks_passphrase</code> override used by <code>tests/luks/</code>.</p>
+</li>
+</ul>
 <blockquote>
-<p><strong>Warning:</strong> <code>.providers.json.example</code> contains placeholder values and inline comments such as <code># pragma: allowlist secret</code>. Those comments are useful inside this repository, but they are not valid JSON. Remove them when creating your real <code>.providers.json</code>.</p>
-<p><strong>Warning:</strong> This repository is code-complete, but many scenarios only make sense with live OpenShift, MTV, and source-provider environments. A local checkout without cluster access and provider credentials will let you read the structure, but not exercise the full migration stack.</p>
-<p><strong>Note:</strong> In this repository snapshot, there is no checked-in <code>.github/workflows</code> directory. CI/CD-adjacent behavior is expressed mostly through local tooling and repository-bot configuration files such as <code>tox.toml</code>, <code>.pre-commit-config.yaml</code>, <code>Dockerfile</code>, <code>.release-it.json</code>, <code>renovate.json</code>, <code>.coderabbit.yaml</code>, and <code>.pr_agent.toml</code>.</p>
-<p><strong>Tip:</strong> For the fastest mental model of the repository, read <code>pytest.ini</code>, then the matching scenario in <code>tests/tests_config/config.py</code>, then the test module in <code>tests/</code>, then <code>conftest.py</code>, and finally the helper modules imported from <code>utilities/</code> and <code>libs/</code>.</p>
+<p><strong>Warning:</strong> <code>.providers.json.example</code> contains placeholder values and inline comments such as <code># pragma: allowlist secret</code>.
+Those comments are useful inside this repository, but they are not valid JSON, so the file does not parse with a standard JSON
+reader. Remove them when creating your real <code>.providers.json</code>.
+</p>
+<p><strong>Warning:</strong> This repository is code-complete, but many scenarios only make sense with live OpenShift, MTV, and
+source-provider environments. A local checkout without cluster access and provider credentials will let you read the
+structure, but not exercise the full migration stack.
+</p>
+<p><strong>Note:</strong> In this repository snapshot, there is no checked-in <code>.github/workflows</code> directory. CI-adjacent behavior is expressed
+mostly through local tooling and repository-bot configuration files such as <code>tox.toml</code>, <code>.pre-commit-config.yaml</code>, <code>Dockerfile</code>,
+<code>.release-it.json</code>, <code>renovate.json</code>, <code>.coderabbit.yaml</code>, <code>.pr_agent.toml</code>, and <code>.rootcoz/settings.json</code>.
+</p>
+<p><strong>Tip:</strong> For the fastest mental model of the repository, read <code>pytest.ini</code>, then the matching scenario in
+<code>tests/tests_config/config.py</code>, then the test module in <code>tests/&lt;feature&gt;/</code>, then <code>conftest.py</code>, and finally the helper modules
+imported from <code>utilities/</code> and <code>libs/</code>.</p>
 </blockquote>
                 </div>
             </article>
@@ -850,12 +1094,12 @@
                     <div class="toc">
 <ul>
 <li><a href="#at-a-glance">At A Glance</a></li>
-<li><a href="#tests-scenario-suites">tests/: Scenario Suites</a></li>
+<li><a href="#tests-feature-suites">tests/: Feature Suites</a></li>
 <li><a href="#conftestpy-shared-fixtures-and-runtime-orchestration">conftest.py: Shared Fixtures And Runtime Orchestration</a></li>
 <li><a href="#libs-provider-adapters-and-inventory-clients">libs/: Provider Adapters And Inventory Clients</a></li>
 <li><a href="#utilities-shared-orchestration-validation-and-diagnostics">utilities/: Shared Orchestration, Validation, And Diagnostics</a></li>
 <li><a href="#exceptions-centralized-domain-errors">exceptions/: Centralized Domain Errors</a></li>
-<li><a href="#docs-and-tools-user-docs-and-recovery-helpers">docs/ And tools/: User Docs And Recovery Helpers</a></li>
+<li><a href="#cli-scripts-and-tools">cli/, scripts/, And tools/</a></li>
 <li><a href="#configuration-tooling-and-automation-files">Configuration, Tooling, And Automation Files</a></li>
 </ul>
 </div>
@@ -863,24 +1107,27 @@
                 </div>
             </aside>
 
+
         </main>
 
         <footer class="page-footer">
-            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
-            <span class="footer-sep">·</span>
-            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">llms-full.txt</a></span>
+
+            Built from <code>docs/*.md</code> by <code>pi-docsite</code>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
         </footer>
     </div>
 
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <script src="assets/theme.js"></script>
-    <script src="assets/search.js"></script>
-    <script src="assets/copy.js"></script>
-    <script src="assets/callouts.js"></script>
-    <script src="assets/scrollspy.js"></script>
-    <script src="assets/codelabels.js"></script>
-    <script src="assets/github.js"></script>
+    <script src="assets/theme.js?v=66bf87bdd9"></script>
+
+    <script src="assets/search.js?v=66bf87bdd9"></script>
+    <script src="assets/copy.js?v=66bf87bdd9"></script>
+    <script src="assets/callouts.js?v=66bf87bdd9"></script>
+    <script src="assets/scrollspy.js?v=66bf87bdd9"></script>
+    <script src="assets/codelabels.js?v=66bf87bdd9"></script>
+    <script src="assets/github.js?v=66bf87bdd9"></script>
     <script>
 (function() {
     var toggle = document.getElementById('sidebar-toggle');
@@ -926,5 +1173,6 @@
     }
 })();
 </script>
+<!-- generated by pi-docsite -->
 </body>
 </html>

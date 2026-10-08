@@ -6,7 +6,20 @@
 2. Pass the environment-specific runtime values with `--tc=...`.
 3. Start with `--collect-only` or `--setup-plan`, then run one small sanity class.
 
-This page assumes you are running from the repository root with project dependencies already available.
+This page assumes you are running from the repository root. If dependencies are not installed yet, do that first:
+
+```bash
+uv sync --locked
+```
+
+There is also a supported shortcut that does steps 1 and 2 for you:
+
+```bash
+uv run mtv-api-tests generate
+uv run mtv-api-tests run --mode local
+```
+
+The rest of this page covers the manual path, because it is the one you need when you are debugging a specific test.
 
 ## How Configuration Works
 
@@ -25,9 +38,11 @@ addopts =
   --junit-xml=junit-report.xml
   --show-progress
   --strict-markers
-  --jira
   --dist=loadscope
 ```
+
+> **Note:** `addopts` does not include `-n`, so the default is a serial run. Add `-n auto` yourself when you
+> want `pytest-xdist` parallelism; `--dist=loadscope` is already set for that case.
 
 For real test execution, the suite requires two runtime keys:
 
@@ -36,23 +51,28 @@ def pytest_sessionstart(session):
     required_config = ("storage_class", "source_provider")
 ```
 
-> **Note:** You normally do not need to pass `--tc-file` yourself. The repo already points pytest at `tests/tests_config/config.py`, so the usual workflow is to add runtime overrides with `--tc=key:value`.
+> **Note:** You normally do not need to pass `--tc-file` yourself.
+> The repo already points pytest at `tests/tests_config/config.py`, so the usual workflow is to add runtime overrides with `--tc=key:value`.
 
 ## Create `.providers.json`
 
-The provider loader looks for `.providers.json` in the current working directory and parses it as JSON:
+The provider loader resolves the path from `--providers-json`, then `PROVIDERS_JSON_PATH`, then `.providers.json` in the current working directory, and parses it as JSON:
 
 ```python
-def load_source_providers() -> dict[str, dict[str, Any]]:
-    providers_file = Path(".providers.json")
-    if not providers_file.exists():
-        return {}
+def load_source_providers(providers_json_path: str | None = None) -> dict[str, dict[str, Any]]:
+    resolved_path = resolve_providers_json_path(cli_path=providers_json_path)
 
-    with open(providers_file) as fd:
+    with open(resolved_path) as fd:
         content = fd.read()
         if not content.strip():
-            return {}
-        return json.loads(content)
+            raise ProviderEmptyContentError(path=resolved_path)
+        providers = json.loads(content)
+        if not isinstance(providers, dict):
+            raise ValueError(
+                f"Providers JSON must be a mapping of provider names to configurations, "
+                f"got {type(providers).__name__}: '{resolved_path}'"
+            )
+        return providers
 ```
 
 Create `.providers.json` in the repository root. Use `.providers.json.example` as the starting template. This is the vSphere block from that file:
@@ -69,17 +89,21 @@ Create `.providers.json` in the repository root. Use `.providers.json.example` a
   "guest_vm_linux_password": "LINUX VMS PASSWORD",  # pragma: allowlist secret
   "guest_vm_win_user": "WINDOWS VMS USERNAME",
   "guest_vm_win_password": "WINDOWS VMS PASSWORD",  # pragma: allowlist secret
-  "vddk_init_image": "<PATH TO VDDK INIT IMAGE>"
+  "luks_passphrase": "LUKS DISK ENCRYPTION PASSPHRASE",  # pragma: allowlist secret
+  "vddk_init_image": "<PATH TO VDDK INIT IMAGE>",
+  "endpoint_type": "vcenter"
 }
 ```
 
-The same example file also includes templates for `ovirt`, `openstack`, `openshift`, and `ova`.
+The same example file also includes templates for `ovirt`, `openstack`, `openshift`, `ova`, `hyperv`, and a vSphere direct-ESXi entry.
 
-> **Warning:** `.providers.json.example` is not valid JSON as-is. It contains comments and placeholder values. Your real `.providers.json` must be valid JSON, because the loader uses `json.loads(...)`.
+> **Warning:** `.providers.json.example` is not valid JSON as-is. It contains comments and placeholder values.
+> Your real `.providers.json` must be valid JSON, because the loader uses `json.loads(...)`.
 
-> **Note:** The top-level provider key is what you pass later as `--tc=source_provider:<key>`. If your file uses `"vsphere"`, then your runtime flag must use `--tc=source_provider:vsphere`.
+> **Note:** The top-level provider key is what you pass later as `--tc=source_provider:<key>`.
+> If your file uses `"vsphere"`, then your runtime flag must use `--tc=source_provider:vsphere`.
 
-> **Warning:** `.providers.json` contains credentials. Keep it local and treat it as sensitive.
+> **Warning:** `.providers.json` contains credentials. Keep it local, `chmod 600` it, and treat it as sensitive.
 
 ## Know What the Built-In Plans Expect
 
@@ -99,11 +123,14 @@ For a first targeted migration, the smallest built-in cold plan is:
 ```python
 "test_sanity_cold_mtv_migration": {
     "virtual_machines": [
-        {"name": "mtv-tests-rhel8", "guest_agent": True},
+        {"name": "mtv-tests-rhel8", "guest_agent": True, "add_nic": True, "add_nic_start_connected": False},
     ],
     "warm_migration": False,
+    "per_nic_network_map": True,
 },
 ```
+
+Note that this plan adds a second NIC. It therefore also exercises the `Multus` network mapping path, so multi-NIC setup is a prerequisite even for the sanity cold plan.
 
 The warm equivalent is:
 
@@ -117,10 +144,12 @@ The warm equivalent is:
         },
     ],
     "warm_migration": True,
+    "preserve_static_ips": True,
 },
 ```
 
-> **Tip:** If you want the smoothest first run, prepare a source VM named `mtv-tests-rhel8` and start with the cold sanity plan. If your lab uses different VM names, update the matching entry in `tests/tests_config/config.py` before your first real run.
+> **Tip:** If you want the smoothest first run, prepare a source VM named `mtv-tests-rhel8` and start with the cold sanity plan.
+> If your lab uses different VM names, update the matching entry in `tests/tests_config/config.py` before your first real run.
 
 ## Pass Runtime Settings With `pytest-testconfig`
 
@@ -137,7 +166,7 @@ For a first run, these are the settings you will usually care about:
 A typical first-run command shape is:
 
 ```bash
-uv run pytest -v tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
+uv run pytest -v tests/cold/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
   --tc=source_provider:vsphere \
   --tc=storage_class:<storage-class> \
   --tc=cluster_host:https://api.<cluster>:6443 \
@@ -146,6 +175,12 @@ uv run pytest -v tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
 ```
 
 If your provider key is not `vsphere`, replace it with the top-level key you actually used in `.providers.json`.
+
+If you keep `.providers.json` outside the repository root, pass its location explicitly:
+
+```bash
+uv run pytest -v --providers-json /path/to/.providers.json ...
+```
 
 If you need to relax source-provider TLS verification in a lab environment, add:
 
@@ -161,28 +196,31 @@ If your MTV operator is not installed in `openshift-mtv`, add:
 
 ## Start With `--collect-only` Or `--setup-plan`
 
-This repo treats both `--collect-only` and `--setup-plan` as normal dry-run entry points. In fact, `tox.toml` uses both as a basic pytest check, and the container image in `Dockerfile` defaults to `uv run pytest --collect-only`.
+This repo treats both `--collect-only` and `--setup-plan` as normal dry-run entry points.
+In fact, `tox.toml` uses both as a basic pytest check, and the container image in `Dockerfile` defaults to `uv run pytest --collect-only`.
 
 Use `--collect-only` when you want to confirm what pytest will select:
 
 ```bash
-uv run pytest --collect-only -q tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration
+uv run pytest --collect-only -q tests/cold/test_mtv_cold_migration.py::TestSanityColdMtvMigration
 ```
 
 Use `--setup-plan` when you want to see fixture/setup planning for the same target before a real run:
 
 ```bash
-uv run pytest --setup-plan tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
+uv run pytest --setup-plan tests/cold/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
   --tc=source_provider:vsphere \
   --tc=storage_class:<storage-class>
 ```
 
-If you want to browse by marker first, the built-in markers are:
+If you want to browse by marker first, the full list registered in `pytest.ini` is:
 
-- `tier0`
-- `warm`
-- `remote`
-- `copyoffload`
+- `tier0`, `tier1`
+- `remote`, `warm`
+- `copyoffload`, `copyoffload_sanity`, `copyoffload_snapshots`
+- `shared_disk`, `deep_inspection`, `ca_crt`, `aap`, `upgrade`
+- `ova`, `vsphere`, `esxi`, `rhv`, `hyperv`, `openstack`, `openshift`
+- `incremental`, `min_mtv_version`
 
 For example, to list the smoke-suite tests:
 
@@ -190,13 +228,21 @@ For example, to list the smoke-suite tests:
 uv run pytest --collect-only -q -m tier0
 ```
 
-> **Tip:** `--collect-only` is the safest place to start when you want to confirm test names, markers, and node IDs before wiring in all runtime values.
+> **Tip:** `--collect-only` is the safest place to start when you want to confirm test names, markers, and node IDs
+> before wiring in all runtime values. Note that the data collector appends
+> `<source_provider>-<storage_class>` to every test name, so node IDs differ from the plain function names.
 
 ## Run The First Targeted Test Class
 
-The cold sanity test is defined in `tests/test_mtv_cold_migration.py` like this:
+The cold sanity test is defined in `tests/cold/test_mtv_cold_migration.py` like this:
 
 ```python
+@pytest.mark.vsphere
+@pytest.mark.rhv
+@pytest.mark.openstack
+@pytest.mark.openshift
+@pytest.mark.esxi
+@pytest.mark.hyperv
 @pytest.mark.tier0
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -222,10 +268,12 @@ That class runs the migration as five dependent steps:
 - `test_migrate_vms`
 - `test_check_vms`
 
+The `incremental` marker is what chains them: if any earlier method fails, every later method reports as xfailed rather than failing with a confusing follow-on error.
+
 Run the whole class, not a single method:
 
 ```bash
-uv run pytest -v tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
+uv run pytest -v tests/cold/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
   --tc=source_provider:vsphere \
   --tc=storage_class:<storage-class> \
   --tc=cluster_host:https://api.<cluster>:6443 \
@@ -236,7 +284,7 @@ uv run pytest -v tests/test_mtv_cold_migration.py::TestSanityColdMtvMigration \
 If you specifically want to try the warm sanity path afterward, use:
 
 ```bash
-uv run pytest -v tests/test_mtv_warm_migration.py::TestSanityWarmMtvMigration \
+uv run pytest -v tests/warm/test_mtv_warm_migration.py::TestSanityWarmMtvMigration \
   --tc=source_provider:vsphere \
   --tc=storage_class:<storage-class> \
   --tc=cluster_host:https://api.<cluster>:6443 \
@@ -244,17 +292,20 @@ uv run pytest -v tests/test_mtv_warm_migration.py::TestSanityWarmMtvMigration \
   --tc=cluster_password:${CLUSTER_PASSWORD}
 ```
 
-> **Warning:** Warm tests are explicitly skipped in this repo for `openstack`, `openshift`, and `ova` providers. For a first run, the cold sanity class is the safer starting point.
+> **Warning:** Warm tests are skipped at collection time for `openstack`, `openshift`, `ova`, and `hyperv`
+> providers. For a first run, the cold sanity class is the safer starting point.
 
 ## Common First-Run Problems
 
 If the run fails early, check these first:
 
-- `.providers.json` is missing or empty.
+- `.providers.json` is missing or empty. An empty file raises `ProviderEmptyContentError`.
 - The value passed in `--tc=source_provider:...` does not exactly match a top-level key in `.providers.json`.
 - `.providers.json` was copied from `.providers.json.example` without removing comments.
 - The built-in sanity plan expects a source VM named `mtv-tests-rhel8`, but that VM does not exist in your provider.
+- You started pytest from a directory other than the repository root, so `.providers.json` was not found.
 - You targeted a single method such as `::test_create_plan` instead of the full class.
-- You chose a warm test on a provider type that the repo skips for warm migration.
+- You chose a warm test on a provider type that the suite skips for warm migration.
 
-> **Tip:** By default, the suite writes `junit-report.xml` and tears down created resources after the run. If you need to inspect what was created after a failure, rerun with `--skip-teardown`.
+> **Tip:** By default, the suite writes `junit-report.xml` and tears down created resources after the run.
+> If you need to inspect what was created after a failure, rerun with `--skip-teardown`.

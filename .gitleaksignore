@@ -1,7 +1,34 @@
-docs/container-and-openshift-job-execution.md:generic-api-key:53
-docs/prerequisites.md:generic-api-key:47
-docs/remote-openshift-migrations.md:generic-api-key:142
+# Generated documentation pages: the flagged lines are code examples
+# (e.g. `get_client(host=..., password=password)`), not real credentials.
+# Regenerate these fingerprints after rebuilding the site with pi-docsite.
+docs/container-and-openshift-job-execution.md:generic-api-key:72
+docs/prerequisites.md:generic-api-key:75
+docs/remote-openshift-migrations.md:generic-api-key:232
 docs/search-index.json:generic-api-key:1
-docs/llms-full.txt:generic-api-key:1698
-docs/llms-full.txt:generic-api-key:2640
-docs/llms-full.txt:generic-api-key:5604
+docs/llms-full.txt:generic-api-key:2303
+docs/llms-full.txt:generic-api-key:2304
+docs/llms-full.txt:generic-api-key:2305
+docs/llms-full.txt:generic-api-key:2307
+docs/llms-full.txt:generic-api-key:2316
+docs/llms-full.txt:generic-api-key:2332
+docs/llms-full.txt:generic-api-key:2333
+docs/llms-full.txt:generic-api-key:2341
+docs/llms-full.txt:generic-api-key:3412
+docs/llms-full.txt:generic-api-key:3507
+docs/llms-full.txt:generic-api-key:3508
+docs/llms-full.txt:generic-api-key:3511
+docs/llms-full.txt:generic-api-key:3520
+docs/llms-full.txt:generic-api-key:3546
+docs/llms-full.txt:generic-api-key:3547
+docs/llms-full.txt:generic-api-key:3555
+docs/llms-full.txt:generic-api-key:7410
+docs/llms-full.txt:generic-api-key:7499
+docs/llms-full.txt:generic-api-key:7503
+docs/llms-full.txt:generic-api-key:7508
+docs/llms-full.txt:generic-api-key:7529
+docs/llms-full.txt:generic-api-key:7555
+docs/llms-full.txt:generic-api-key:7556
+docs/llms-full.txt:generic-api-key:7557
+docs/llms-full.txt:generic-api-key:7571
+docs/llms-full.txt:generic-api-key:7574
+docs/llms-full.txt:generic-api-key:7575
