@@ -693,6 +693,13 @@ that just failed cannot race into a "no error found" result.</p>
 <span class="sd">    Validate the actual failed step matches expected (predefined mode only).</span>
 
 <span class="sd">    For custom playbook mode (no expected_result set), this is a no-op.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        actual_failed_step: The actual failed step from validate_all_vms_same_step()</span>
+<span class="sd">        plan_config: Plan configuration dict with hook settings</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        AssertionError: If actual step doesn't match expected (predefined mode)</span>
 <span class="sd">    """</span>
     <span class="c1"># Extract hook configs with type validation</span>
     <span class="n">pre_hook_config</span> <span class="o">=</span> <span class="n">plan_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"pre_hook"</span><span class="p">)</span>
@@ -719,7 +726,7 @@ that just failed cannot race into a "no error found" result.</p>
             <span class="sa">f</span><span class="s2">"Migration failed at step '</span><span class="si">{</span><span class="n">actual_failed_step</span><span class="si">}</span><span class="s2">' but expected to fail at '</span><span class="si">{</span><span class="n">expected_step</span><span class="si">}</span><span class="s2">'"</span>
         <span class="p">)</span>
 
-    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Migration correctly failed at expected step '</span><span class="si">%s</span><span class="s2">'"</span><span class="p">,</span> <span class="n">expected_step</span><span class="p">)</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Migration correctly failed at expected step '</span><span class="si">{</span><span class="n">expected_step</span><span class="si">}</span><span class="s2">'"</span><span class="p">)</span>
 </code></pre></div>
 
 <div class="highlight"><pre><span></span><code>    <span class="k">if</span> <span class="n">actual_failed_step</span> <span class="o">==</span> <span class="s2">"PostHook"</span><span class="p">:</span>

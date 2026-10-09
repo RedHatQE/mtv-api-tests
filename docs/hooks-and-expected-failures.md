@@ -390,6 +390,13 @@ def validate_expected_hook_failure(
     Validate the actual failed step matches expected (predefined mode only).
 
     For custom playbook mode (no expected_result set), this is a no-op.
+
+    Args:
+        actual_failed_step: The actual failed step from validate_all_vms_same_step()
+        plan_config: Plan configuration dict with hook settings
+
+    Raises:
+        AssertionError: If actual step doesn't match expected (predefined mode)
     """
     # Extract hook configs with type validation
     pre_hook_config = plan_config.get("pre_hook")
@@ -416,7 +423,7 @@ def validate_expected_hook_failure(
             f"Migration failed at step '{actual_failed_step}' but expected to fail at '{expected_step}'"
         )
 
-    LOGGER.info("Migration correctly failed at expected step '%s'", expected_step)
+    LOGGER.info(f"Migration correctly failed at expected step '{expected_step}'")
 ```
 
 ```322:333:utilities/hooks.py
