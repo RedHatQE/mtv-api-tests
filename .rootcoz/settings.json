@@ -1,16 +1,16 @@
 {
   "ai_provider": "EnMaaS",
-  "ai_model": "glm-5-3-enmaas",
+  "ai_model": "rits/zai-org/glm-5-3",
   "ai_call_timeout": 90,
   "max_concurrent_ai_calls": 3,
   "peer_ai_configs": [
     {
       "ai_provider": "EnMaaS",
-      "ai_model": "glm-5-3-enmaas"
+      "ai_model": "rits/zai-org/glm-5-3"
     },
     {
       "ai_provider": "EnMaaS",
-      "ai_model": "glm-5-3-enmaas"
+      "ai_model": "rits/zai-org/glm-5-3"
     }
   ],
   "peer_analysis_max_rounds": 2,
