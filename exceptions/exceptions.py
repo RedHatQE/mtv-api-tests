@@ -127,7 +127,7 @@ class GuestCommandError(Exception):
     """Raised when a command executed via VMware Guest Operations exits with non-zero code."""
 
 
-class MustGatherImageError(Exception):
+class MustGatherImageError(ValueError):
     """Raised when installed MTV image metadata cannot resolve a must-gather image."""
 
 

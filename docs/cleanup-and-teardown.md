@@ -97,7 +97,7 @@ else:
         raise
 ```
 
-The modern `wrapper=True` session-finish hook yields to pytest's session hooks in `finally`, even when a pending-gather flush raises. Independent `finally` blocks then attempt the inventory write, configured teardown, temporary-directory removal, summary and enabled AI enrichment before errors propagate. Later session-hook or cleanup errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.
+The modern `wrapper=True` session-finish hook runs the pending-gather flush, inventory write, configured teardown and temporary-directory removal before it yields to pytest's session hooks in `finally`: the xdist worker reports completion from its own session-finish wrapper, and cleanup after that yield could be interrupted by worker shutdown mid-deletion. Work that needs other plugins' session-finish output — the extra summary and enabled AI enrichment — runs after the yield. A cleanup error raised before the yield is stashed and re-raised after it, so the inner session hooks still run and later errors take precedence with earlier errors chained. This guarantees attempts, not successful cleanup. The existing inventory helper logs write failures, and writes nothing when no resources are tracked. Dry-run and skip flags keep their existing behavior.
 
 The session teardown in `utilities/pytest_utils.py` starts by cancelling active migrations and archiving plans:
 

@@ -107,6 +107,7 @@ RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 _STANDALONE_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
+_CLASS_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 
 
 # Pytest start
@@ -218,6 +219,9 @@ def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
 
     Args:
         item (pytest.Item): Item whose setup/call/teardown protocol is starting.
+
+    Returns:
+        None: Hook wrapper — the yield passes control to the inner runtest protocol hooks.
     """
     if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
         initialize_class_plan_context(item)
@@ -246,6 +250,9 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
     Args:
         item (pytest.Item): Item about to tear down.
         nextitem (pytest.Item | None): Next worker item, or None when execution stops.
+
+    Returns:
+        object: The result of the inner pytest_runtest_teardown hooks, forwarded unchanged.
     """
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='TEARDOWN')}")
     try:
@@ -253,7 +260,15 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         if collector_error is not None:
             raise collector_error.with_traceback(collector_error.__traceback__)
         if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
-            collect_class_must_gather(item, nextitem)
+            try:
+                collect_class_must_gather(item, nextitem)
+            except Exception as exp:
+                # Report the collector error once as this item's teardown error. The stash keeps
+                # pytest_exception_interact from retrying the same gather inside its hook (a second
+                # raise there becomes an INTERNALERROR); the identity stays pending for the
+                # session-end flush.
+                item.stash[_CLASS_MUST_GATHER_ERROR] = exp
+                raise
     finally:
         result = yield
     return result
@@ -282,9 +297,18 @@ def pytest_report_teststatus(report, config):
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[None, object, object]:
     """Flush diagnostics and finish cleanup without suppressing collector programming errors.
 
+    Diagnostics flush, resource inventory, and configured teardown run before the yield: the xdist
+    worker reports completion from its own sessionfinish wrapper, so cleanup placed after that
+    yield could be interrupted by worker shutdown mid-deletion. Work that needs other plugins'
+    sessionfinish output (JUnit enrichment, terminal summary) runs after the yield. A cleanup
+    error is stashed and re-raised after the yield so the inner hooks still run.
+
     Args:
         session (pytest.Session): Worker-local session holding pending diagnostics and resources.
         exitstatus (int): Pytest exit status before session cleanup.
+
+    Returns:
+        object: The result of the inner pytest_sessionfinish hooks, forwarded unchanged.
     """
     if is_dry_run(session.config):
         return (yield)
@@ -295,14 +319,13 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
 
     _data_collector_path = Path(session.config.getoption("data_collector_path"))
 
+    cleanup_error: Exception | None = None
     try:
-        if not session.config.getoption("skip_data_collector"):
-            flush_pending_class_must_gathers(session)
-    finally:
+        # Each independent action runs even if an earlier one raises; errors stay chained.
         try:
-            result = yield
+            if not session.config.getoption("skip_data_collector"):
+                flush_pending_class_must_gathers(session)
         finally:
-            # Each independent action runs even if an earlier action raises; errors stay chained.
             try:
                 if not session.config.getoption("skip_data_collector"):
                     collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
@@ -319,21 +342,28 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
                                 run_must_gather(data_collector_path=_data_collector_path)
                             raise
                 finally:
-                    try:
-                        shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
-                    finally:
-                        try:
-                            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-                            reporter.summary_stats()
-                        finally:
-                            if session.config.getoption("analyze_with_ai"):
-                                if exitstatus == 0:
-                                    LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
-                                else:
-                                    try:
-                                        enrich_junit_xml(session)
-                                    except Exception:
-                                        LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+                    shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
+    except Exception as exp:
+        cleanup_error = exp
+    finally:
+        result = yield
+
+    try:
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        reporter.summary_stats()
+    finally:
+        if session.config.getoption("analyze_with_ai"):
+            if exitstatus == 0:
+                LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
+            else:
+                try:
+                    enrich_junit_xml(session)
+                except Exception:
+                    LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+                    raise
+
+    if cleanup_error is not None:
+        raise cleanup_error
     return result
 
 
@@ -448,6 +478,9 @@ def pytest_exception_interact(node, call, report):
         node (pytest.Item): The test item reporting the exception.
         call (pytest.CallInfo[BaseException]): The call info of the failing phase.
         report (pytest.TestReport): The report of the failing phase.
+
+    Returns:
+        None: The hook only records or collects diagnostics.
     """
     if is_dry_run(node.session.config) or node.session.config.getoption("skip_data_collector"):
         return
@@ -474,6 +507,13 @@ def pytest_exception_interact(node, call, report):
         return
 
     if call.when == "teardown":
+        class_collector_error = node.stash.get(_CLASS_MUST_GATHER_ERROR, None)
+        if class_collector_error is not None:
+            # The teardown wrapper already reported this collector error; retrying the gather here
+            # would raise inside the hook and abort the worker with an INTERNALERROR. The identity
+            # stays pending for the session-end flush.
+            del node.stash[_CLASS_MUST_GATHER_ERROR]
+            return
         collect_class_teardown_must_gather(node)
         return
 
