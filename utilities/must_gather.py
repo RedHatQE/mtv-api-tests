@@ -3,7 +3,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 import pytest
@@ -62,6 +62,35 @@ def _get_idms_name(channel: str) -> str:
     return f"devel-testing-for-{stripped.replace('.', '-')}"
 
 
+def _entry_to_dict(entry: object, resource_description: str, entry_description: str) -> dict[str, Any]:
+    """Normalize a provider-controlled metadata entry to a native dict for validation.
+
+    Kubernetes dynamic API objects expose nested mappings as ``ResourceField`` objects that
+    support ``.get()`` but are not ``dict`` instances, so valid live-cluster data fails an
+    ``isinstance(entry, dict)`` check. ``ResourceField.to_dict()`` converts them. Importing
+    ``ResourceField`` for an ``isinstance`` check is forbidden (no runtime ``kubernetes.*``
+    imports beyond ``kubernetes.dynamic.exceptions``), so the conversion is detected duck-typed
+    and the result is still type-checked.
+
+    Args:
+        entry (object): A metadata entry read from a provider-controlled resource.
+        resource_description (str): Resource name and kind for error messages.
+        entry_description (str): Short description of the entry kind for error messages.
+
+    Returns:
+        dict[str, Any]: The entry converted to a native dict.
+
+    Raises:
+        MustGatherImageError: If the entry cannot be converted to a mapping.
+    """
+    to_dict = getattr(entry, "to_dict", None)
+    if callable(to_dict):
+        entry = to_dict()
+    if not isinstance(entry, dict):
+        raise MustGatherImageError(f"{resource_description} has {entry_description} that is not a mapping: {entry!r}")
+    return entry
+
+
 def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
     """Extract the must-gather mirror URL from an ImageDigestMirrorSet.
 
@@ -84,13 +113,12 @@ def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
     if not isinstance(mirror_entries, list) or not mirror_entries:
         raise MustGatherImageError(f"IDMS '{idms.name}' has no imageDigestMirrors")
     for mirror_entry in mirror_entries:
-        if not isinstance(mirror_entry, dict):
-            raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry that is not a mapping: {mirror_entry!r}")
-        source = mirror_entry.get("source")
+        entry = _entry_to_dict(mirror_entry, f"IDMS '{idms.name}'", "a mirror entry")
+        source = entry.get("source")
         if not isinstance(source, str) or not source:
             raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry with an invalid source: {source!r}")
         if "must-gather" in source:
-            mirrors = mirror_entry.get("mirrors", [])
+            mirrors = entry.get("mirrors", [])
             if not isinstance(mirrors, list) or not mirrors:
                 raise MustGatherImageError(f"IDMS '{idms.name}' has must-gather entry with no mirrors")
             invalid_mirrors = [mirror for mirror in mirrors if not isinstance(mirror, str) or not mirror]
@@ -126,19 +154,16 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
     envs = containers[0].env
     if not isinstance(envs, list) or not envs:
         raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no container env list")
-    must_gather_envs: list[dict] = []
+    must_gather_envs: list[dict[str, str]] = []
     for env in envs:
-        if not isinstance(env, dict):
-            raise MustGatherImageError(
-                f"MTV ClusterServiceVersion '{mtv_csv.name}' has an env entry that is not a mapping: {env!r}"
-            )
-        name = env.get("name")
+        entry = _entry_to_dict(env, f"MTV ClusterServiceVersion '{mtv_csv.name}'", "an env entry")
+        name = entry.get("name")
         if not isinstance(name, str) or not name:
             raise MustGatherImageError(
                 f"MTV ClusterServiceVersion '{mtv_csv.name}' has an env entry with an invalid name: {name!r}"
             )
         if name == "MUST_GATHER_IMAGE":
-            must_gather_envs.append(env)
+            must_gather_envs.append(entry)
     if not must_gather_envs:
         raise MustGatherImageError(f"No MUST_GATHER_IMAGE value found in MTV ClusterServiceVersion '{mtv_csv.name}'")
     image = must_gather_envs[0].get("value")
