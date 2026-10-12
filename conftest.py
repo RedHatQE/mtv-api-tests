@@ -270,8 +270,8 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
                 item.stash[_CLASS_MUST_GATHER_ERROR] = exp
                 raise
     finally:
-        result = yield
-    return result
+        teardown_outcome = yield
+    return teardown_outcome
 
 
 def pytest_report_teststatus(report, config):
@@ -346,7 +346,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     except Exception as exp:
         cleanup_error = exp
     finally:
-        result = yield
+        session_outcome = yield
 
     try:
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -354,7 +354,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     finally:
         if session.config.getoption("analyze_with_ai"):
             if exitstatus == 0:
-                LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
+                LOGGER.info(f"No test failures (exit code {exitstatus}), skipping AI analysis")
             else:
                 try:
                     enrich_junit_xml(session)
@@ -364,7 +364,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
 
     if cleanup_error is not None:
         raise cleanup_error
-    return result
+    return session_outcome
 
 
 @pytest.hookimpl(tryfirst=True)

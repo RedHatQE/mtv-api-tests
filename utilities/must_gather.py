@@ -77,21 +77,26 @@ def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
             quay mirror exists.
 
     Raises:
-        MustGatherImageError: If mirror entries or sources are missing, no entry contains
-            ``must-gather`` in its source, or the matching entry has an empty mirrors list.
+        MustGatherImageError: If mirror entries or sources are missing or malformed, no entry contains
+            ``must-gather`` in its source, or the matching entry has an empty or invalid mirrors list.
     """
     mirror_entries = idms.instance.spec.imageDigestMirrors
     if not mirror_entries:
         raise MustGatherImageError(f"IDMS '{idms.name}' has no imageDigestMirrors")
     for mirror_entry in mirror_entries:
         source = mirror_entry.get("source")
-        if not source:
-            raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry without a source")
+        if not isinstance(source, str) or not source:
+            raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry with an invalid source: {source!r}")
         if "must-gather" in source:
             mirrors = mirror_entry.get("mirrors", [])
-            if not mirrors:
+            if not isinstance(mirrors, list) or not mirrors:
                 raise MustGatherImageError(f"IDMS '{idms.name}' has must-gather entry with no mirrors")
-            quay_mirrors = [m for m in mirrors if "quay" in m]
+            invalid_mirrors = [mirror for mirror in mirrors if not isinstance(mirror, str) or not mirror]
+            if invalid_mirrors:
+                raise MustGatherImageError(
+                    f"IDMS '{idms.name}' has mirror entries that are not non-empty strings: {invalid_mirrors!r}"
+                )
+            quay_mirrors = [mirror for mirror in mirrors if "quay" in mirror]
             return quay_mirrors[0] if quay_mirrors else mirrors[0]
 
     raise MustGatherImageError(f"No must-gather entry found in IDMS '{idms.name}'")
@@ -108,7 +113,7 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
 
     Raises:
         MustGatherImageError: If deployments, containers, environment variables or the
-            MUST_GATHER_IMAGE value are missing from the CSV.
+            MUST_GATHER_IMAGE value are missing or malformed in the CSV.
     """
     deployments = mtv_csv.instance.spec.install.spec.deployments
     if not deployments:
@@ -119,10 +124,15 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
     envs = containers[0].env
     if not envs:
         raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no container env list")
-    images = [env.get("value") for env in envs if env.get("name") == "MUST_GATHER_IMAGE"]
-    if not images or not images[0]:
+    must_gather_envs = [env for env in envs if env.get("name") == "MUST_GATHER_IMAGE"]
+    if not must_gather_envs:
         raise MustGatherImageError(f"No MUST_GATHER_IMAGE value found in MTV ClusterServiceVersion '{mtv_csv.name}'")
-    return images[0]
+    image = must_gather_envs[0].get("value")
+    if not isinstance(image, str) or not image:
+        raise MustGatherImageError(
+            f"MUST_GATHER_IMAGE in MTV ClusterServiceVersion '{mtv_csv.name}' is not a non-empty string: {image!r}"
+        )
+    return image
 
 
 def _resolve_must_gather_image(
