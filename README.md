@@ -328,10 +328,15 @@ OpenShift Job pod, the pod must run with `MTV_REMOTE_PDB=1` — the Job manifest
 (or prefix the pytest command in the manifest with `MTV_REMOTE_PDB=1`) before creating the Job. Then forward
 the port:
 
+`oc port-forward` must stay alive while the client connects — run it in the background (or a
+separate terminal) as shown, and stop it when the session ends:
+
 ```bash
-port=<listener port, from the run's "RemotePdb session open at" line>
-oc port-forward -n "$job_namespace" "pod/$pod_name" "$port:$port"
+port=4444  # replace with the numeric listener port from the run's "RemotePdb session open at" line
+oc port-forward -n "$job_namespace" "pod/$pod_name" "$port:$port" &
+forward_pid=$!
 nc localhost "$port"
+kill "$forward_pid"
 ```
 
 `$job_namespace` is the generated UUID-suffixed namespace shown by the CLI at manifest generation

@@ -52,7 +52,8 @@ Resolve the listener port before attaching, in this order:
 2. **The user's configuration**: ask which `REMOTE_PDB_PORT` was set and which pytest-xdist
    worker hit the breakpoint/failure (worker `gwN` listens on `base + N`).
 3. **Probe listening sockets**: `ss -ltn | grep -E ':44[0-9]{2}'` shows debugger listeners in
-   the default range.
+   the default range. With a custom `REMOTE_PDB_PORT`, probe that exact port instead
+   (`ss -ltn | grep ":$REMOTE_PDB_PORT"`), including its xdist worker offsets (`base + N`).
 4. Otherwise assume the default: `4444`.
 
 ## Attaching (AI agent client pattern)
@@ -67,8 +68,9 @@ FIFO="/tmp/remote-pdb-${port}-in"
 OUT="/tmp/remote-pdb-${port}-out"
 umask 077 && rm -f "$FIFO" "$OUT" && mkfifo -m 600 "$FIFO" && touch "$OUT"
 
-# Attach to the listener (default 127.0.0.1):
+# Attach to the listener (default 127.0.0.1). Record the wrapper PID — cleanup needs it:
 nohup bash -c "exec tail -f $FIFO | exec nc 127.0.0.1 $port > $OUT 2>&1" < /dev/null > /dev/null 2>&1 &
+CLIENT_PID=$!
 
 # Send a command, wait ~1-2s, read the output:
 echo "bt" > "$FIFO"; sleep 1.5; cat "$OUT"
@@ -96,7 +98,9 @@ End the session:
 
 ## Cleanup
 
-Track the client PIDs and signal only those PIDs when done. Never use `pkill` in any form: broad
+Terminate the attach pipeline by PID when the session ends — the wrapper and both its children
+(`tail`, `nc`): `kill $CLIENT_PID $(pgrep -P $CLIENT_PID)`. Killing only `nc` leaves `tail`
+blocked reading the FIFO, and removing the FIFO path does not stop it. Never use `pkill` in any form: broad
 `-f` patterns containing the FIFO path or `nc 127.0.0.1 4444` match your own shell's command line
 and kill your own session (exit 143), and even exact-name matching (`pkill -x nc`) signals every
 matching process, not just this client. Remove the port-scoped FIFO and output files afterwards.
