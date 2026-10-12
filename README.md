@@ -344,8 +344,8 @@ exposed on the cluster network.
 ### AI agents
 
 The repo ships an agent skill for driving debugger sessions — see [`skills/`](skills/). It is not
-auto-discovered: symlink `skills/remote-debugging` into your agent harness's skills location manually
-(see `skills/README.md`), and restart the session so the harness picks it up.
+auto-discovered: symlink it into the project-local `.pi/skills/` directory manually (see
+`skills/README.md`), and restart the session so the harness picks it up.
 
 > **Note:** while a debugger session is attached, the test process is frozen but the cluster keeps moving —
 > migrations and reconciliation continue server-side. Use the debugger for inspection; avoid long pauses inside
