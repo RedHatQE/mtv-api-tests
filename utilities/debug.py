@@ -1,5 +1,4 @@
 import bdb
-import logging
 import os
 import sys
 
@@ -9,8 +8,6 @@ from remote_pdb import RemotePdb
 # simultaneous debugger sessions in parallel workers do not collide on the same port.
 _DEFAULT_REMOTE_DEBUGGER_PORT = 4444
 _DEFAULT_REMOTE_DEBUGGER_HOST = "127.0.0.1"
-
-LOGGER = logging.getLogger(__name__)
 
 
 def remote_debugger_enabled() -> bool:
@@ -61,14 +58,13 @@ def remote_breakpoint() -> None:
     the call when done.
 
     Raises:
+        bdb.BdbQuit: If the debugger client quits the session; the failure
+            propagates and the current test fails while the run continues.
         ValueError: If the debugger host/port configuration is malformed.
     """
     if not remote_debugger_enabled():
         return
-    try:
-        _remote_debugger().set_trace(frame=sys._getframe().f_back)
-    except bdb.BdbQuit:
-        LOGGER.warning("Remote debugger session quit; continuing execution.")
+    _remote_debugger().set_trace(frame=sys._getframe().f_back)
 
 
 def remote_post_mortem(exception: BaseException) -> None:
@@ -82,13 +78,14 @@ def remote_post_mortem(exception: BaseException) -> None:
         exception (BaseException): The raised exception to debug.
 
     Raises:
+        bdb.BdbQuit: If the debugger client quits the session or disconnects; the
+            caller decides how to handle it (the conftest hook ends the test session).
         ValueError: If the debugger host/port configuration is malformed.
     """
     if not remote_debugger_enabled():
         return
-    try:
-        debugger = _remote_debugger()
-        debugger.reset()
-        debugger.interaction(None, exception.__traceback__)
-    except bdb.BdbQuit:
-        LOGGER.warning("Remote debugger session quit; continuing test run.")
+    debugger = _remote_debugger()
+    debugger.reset()
+    debugger.interaction(None, exception.__traceback__)
+    if debugger.quitting:
+        raise bdb.BdbQuit("Remote debugger session was quit or disconnected")

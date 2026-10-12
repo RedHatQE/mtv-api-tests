@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import bdb
 import logging
 import os
 import pickle
@@ -394,9 +395,13 @@ def pytest_exception_interact(node, call, report):
 
     # Remote post-mortem debugger (MTV_REMOTE_PDB). Runs after must-gather so diagnostics
     # are collected before the session blocks waiting for a debugger connection. Skipped
-    # when --pdb is active so the local terminal debugger takes precedence.
+    # when --pdb is active so the local terminal debugger takes precedence. A debugger
+    # quit ends the test session, matching pytest's native --pdb behavior.
     if remote_debugger_enabled() and not node.config.getoption("usepdb") and call.excinfo is not None:
-        remote_post_mortem(exception=call.excinfo.value)
+        try:
+            remote_post_mortem(exception=call.excinfo.value)
+        except bdb.BdbQuit:
+            pytest.exit("Quitting remote debugger")
 
 
 # https://smarie.github.io/python-pytest-harvest/#pytest-x-dist
