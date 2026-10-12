@@ -1115,7 +1115,9 @@ using a percent-encoded class node ID, class parameter indices and worker ID und
 It binds the current Plan or explicit None at the class-plan boundary before default fixture finalization,
 including early exits, and retains that context for retries. Standalone tests gather immediately.
 Known operational class-plan collection failures remain pending for the session-finish retry; artifacts are not guaranteed if it fails.
-Standalone tests attempt collection on each failing phase until one succeeds, but failed attempts are not queued for session-finish retry.
+Standalone tests retry failed operational collections on a later failing phase until one succeeds.
+Collector exceptions during setup or call are retained for teardown and are not retried there.
+Standalone failures are not queued for session-finish retry.
 Unexpected standalone setup/call collector errors are retained on the item until pytest fixture finalization.
 Session-flush errors wait for pytest session hooks, resource inventory writing and configured cleanup attempts.
 Invalid image metadata and other configuration/programming errors propagate instead of returning `False`. A pending class-plan gather

@@ -417,6 +417,9 @@ def pytest_collection_modifyitems(session, config, items):
     #        @pytest.mark.my_new_marker
     #        class TestMyFeature: ...
     # -------------------------------------------------------------------
+    # Resolve each item's plan config once: the skip loops and the later rename loop share
+    # the same resolution (parametrization fields or item.originalname).
+    resolved_plan_configs = [(item, resolve_item_plan_config(item)) for item in items]
     if not is_dry_run(config):
         providers_json_path = config.getoption("providers_json", default=None)
         providers = load_source_providers(providers_json_path=providers_json_path)
@@ -466,8 +469,7 @@ def pytest_collection_modifyitems(session, config, items):
                 add_nic_skip = pytest.mark.skip(
                     reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                 )
-                for item in items:
-                    test_config = resolve_item_plan_config(item)
+                for item, test_config in resolved_plan_configs:
                     if test_config is None:
                         continue
                     # `virtual_machines` is a required plan-config field: direct access fails the
@@ -478,11 +480,8 @@ def pytest_collection_modifyitems(session, config, items):
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
 
-    for item in items:
+    for item, test_config in resolved_plan_configs:
         item.name = f"{item.name}-{py_config.get('source_provider')}-{py_config.get('storage_class')}"
-
-        # Get test config from parametrization or tests_params
-        test_config = resolve_item_plan_config(item)
 
         if test_config and "virtual_machines" in test_config:
             for _vm in test_config["virtual_machines"]:
