@@ -358,8 +358,10 @@ A builder stage installs the toolchain and runs <code>uv sync --locked</code>, a
 <p>Each credential is resolved by <code>_resolve_cluster_credential()</code>: the <code>--tc</code> value first, then the matching <code>CLUSTER_*</code> environment variable. <code>_validate_cluster_credentials()</code>
 requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment. Otherwise, it fails fast with a <code>ValueError</code>
 naming each absent, empty, or whitespace-only value, for example <code>Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME</code>.
-Omitting all three is legitimate: <code>mtv-api-tests run</code> takes that path when it authenticates with an existing <code>oc</code> token, and the client library then uses the ambient kubeconfig.
-That kubeconfig must be available to the test process; containers do not automatically inherit the host's kubeconfig.</p>
+Omitting all three is legitimate: the client library then authenticates from the ambient kubeconfig, which must be available to the test process; containers do not
+automatically inherit the host's kubeconfig. A direct <code>pytest</code> run takes this path whenever a kubeconfig is available to the test process. <code>mtv-api-tests run</code> takes it only
+when no OpenShift provider is selected from <code>.providers.json</code>: the CLI checks for an existing <code>oc</code> token (<code>oc whoami -t</code>) only then, and with an OpenShift provider entry
+present — as in the example configuration — it instead uses that provider's <code>host</code>, <code>username</code>, and <code>password</code>.</p>
 <p>Every real run needs:</p>
 <ul>
 <li><code>.providers.json</code></li>
@@ -367,7 +369,8 @@ That kubeconfig must be available to the test process; containers do not automat
 <li><code>storage_class</code></li>
 </ul>
 <p>The explicit-credential container and generated <code>Job</code> examples below also require nonblank <code>cluster_host</code>, <code>cluster_username</code>, and <code>cluster_password</code> values.
-Runs using an existing <code>oc</code> token and a kubeconfig available to the test process may omit all three keys from both pytest config and the environment.</p>
+Direct <code>pytest</code> runs using a kubeconfig available to the test process may omit all three keys from both pytest config and the environment; <code>mtv-api-tests run</code> omits them
+only when it finds no OpenShift provider in <code>.providers.json</code> to supply cluster credentials and an existing <code>oc</code> token is available.</p>
 <p><code>cluster_username</code> and <code>cluster_password</code> can come from the environment instead of the command line.
 That is why the generated <code>Job</code> manifest wires <code>CLUSTER_HOST</code>, <code>CLUSTER_USERNAME</code>, <code>CLUSTER_PASSWORD</code>, and <code>CLUSTER_VERIFY_SSL</code> in from a <code>Secret</code>.</p>
 <blockquote>

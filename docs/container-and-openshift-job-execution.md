@@ -68,8 +68,10 @@ def get_cluster_client() -> DynamicClient:
 Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. `_validate_cluster_credentials()`
 requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment. Otherwise, it fails fast with a `ValueError`
 naming each absent, empty, or whitespace-only value, for example `Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME`.
-Omitting all three is legitimate: `mtv-api-tests run` takes that path when it authenticates with an existing `oc` token, and the client library then uses the ambient kubeconfig.
-That kubeconfig must be available to the test process; containers do not automatically inherit the host's kubeconfig.
+Omitting all three is legitimate: the client library then authenticates from the ambient kubeconfig, which must be available to the test process; containers do not
+automatically inherit the host's kubeconfig. A direct `pytest` run takes this path whenever a kubeconfig is available to the test process. `mtv-api-tests run` takes it only
+when no OpenShift provider is selected from `.providers.json`: the CLI checks for an existing `oc` token (`oc whoami -t`) only then, and with an OpenShift provider entry
+present — as in the example configuration — it instead uses that provider's `host`, `username`, and `password`.
 
 Every real run needs:
 
@@ -78,7 +80,8 @@ Every real run needs:
 - `storage_class`
 
 The explicit-credential container and generated `Job` examples below also require nonblank `cluster_host`, `cluster_username`, and `cluster_password` values.
-Runs using an existing `oc` token and a kubeconfig available to the test process may omit all three keys from both pytest config and the environment.
+Direct `pytest` runs using a kubeconfig available to the test process may omit all three keys from both pytest config and the environment; `mtv-api-tests run` omits them
+only when it finds no OpenShift provider in `.providers.json` to supply cluster credentials and an existing `oc` token is available.
 
 `cluster_username` and `cluster_password` can come from the environment instead of the command line.
 That is why the generated `Job` manifest wires `CLUSTER_HOST`, `CLUSTER_USERNAME`, `CLUSTER_PASSWORD`, and `CLUSTER_VERIFY_SSL` in from a `Secret`.
