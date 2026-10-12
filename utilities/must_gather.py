@@ -81,9 +81,11 @@ def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
             ``must-gather`` in its source, or the matching entry has an empty or invalid mirrors list.
     """
     mirror_entries = idms.instance.spec.imageDigestMirrors
-    if not mirror_entries:
+    if not isinstance(mirror_entries, list) or not mirror_entries:
         raise MustGatherImageError(f"IDMS '{idms.name}' has no imageDigestMirrors")
     for mirror_entry in mirror_entries:
+        if not isinstance(mirror_entry, dict):
+            raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry that is not a mapping: {mirror_entry!r}")
         source = mirror_entry.get("source")
         if not isinstance(source, str) or not source:
             raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry with an invalid source: {source!r}")
@@ -122,9 +124,21 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
     if not containers:
         raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no containers")
     envs = containers[0].env
-    if not envs:
+    if not isinstance(envs, list) or not envs:
         raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no container env list")
-    must_gather_envs = [env for env in envs if env.get("name") == "MUST_GATHER_IMAGE"]
+    must_gather_envs: list[dict] = []
+    for env in envs:
+        if not isinstance(env, dict):
+            raise MustGatherImageError(
+                f"MTV ClusterServiceVersion '{mtv_csv.name}' has an env entry that is not a mapping: {env!r}"
+            )
+        name = env.get("name")
+        if not isinstance(name, str) or not name:
+            raise MustGatherImageError(
+                f"MTV ClusterServiceVersion '{mtv_csv.name}' has an env entry with an invalid name: {name!r}"
+            )
+        if name == "MUST_GATHER_IMAGE":
+            must_gather_envs.append(env)
     if not must_gather_envs:
         raise MustGatherImageError(f"No MUST_GATHER_IMAGE value found in MTV ClusterServiceVersion '{mtv_csv.name}'")
     image = must_gather_envs[0].get("value")
