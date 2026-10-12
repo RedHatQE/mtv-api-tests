@@ -280,6 +280,9 @@ path only when no OpenShift provider is selected from `.providers.json` — the 
 then and does not pass a standalone token to the client. See
 [runtime configuration](docs/runtime-configuration.html) for details.
 
+**VM naming**: the OpenShift version segment of generated source VM names is read from the target cluster
+automatically — do not pass `--tc=target_ocp_version`.
+
 ---
 
 ## Running Different Test Categories

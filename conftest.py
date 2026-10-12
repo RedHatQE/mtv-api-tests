@@ -1053,7 +1053,6 @@ def prepared_plan(
     target_namespace: str,
     vcenter_clone_provider: VMWareProvider | None,
     source_provider_data: dict[str, Any],
-    target_ocp_version: str,
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -1078,7 +1077,6 @@ def prepared_plan(
         target_namespace (str): Default target namespace for VMs
         vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
         source_provider_data (dict[str, Any]): Source provider configuration data
-        target_ocp_version (str): Target OpenShift cluster version ("major.minor"), used for the VM name suffix
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1125,7 +1123,12 @@ def prepared_plan(
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
-        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration, ocp_version=target_ocp_version)
+        # Resolved lazily via request so OVA plans (which skip VM-name suffix generation)
+        # never parse the cluster version.
+        vm_name_suffix = get_vm_suffix(
+            warm_migration=warm_migration,
+            ocp_version=request.getfixturevalue("target_ocp_version"),
+        )
 
         if openshift_source_provider:
             # Generate unique network name for class-based tests
@@ -1329,6 +1332,7 @@ def prepared_plan(
                     vm_name_suffix=vm_name_suffix,
                     session_uuid=fixture_store["session_uuid"],
                     clone_options=vm,
+                    source=True,
                 )
                 vm["name"] = source_vm_details["name"]
                 cloned_vm_names.append(vm["name"])

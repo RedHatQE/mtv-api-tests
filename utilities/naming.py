@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Any
 
@@ -5,9 +6,35 @@ import shortuuid
 
 from exceptions.exceptions import InvalidVMNameError
 
+LOGGER = logging.getLogger(__name__)
+
 # Compiled regex patterns for performance (reused in sanitize_kubernetes_name)
 _INVALID_CHARS_PATTERN = re.compile(r"[^a-z0-9-]+")
 _LEADING_TRAILING_PATTERN = re.compile(r"^[^a-z0-9]+|[^a-z0-9]+$")
+
+# Kubernetes resource name limit
+_K8S_NAME_MAX_LENGTH = 63
+
+
+def truncate_resource_name(name: str, max_length: int = _K8S_NAME_MAX_LENGTH) -> str:
+    """Truncate a resource name to the Kubernetes limit, keeping the trailing characters.
+
+    Keeps the last ``max_length`` characters so uniqueness suffixes (session UUID,
+    VM name suffix) survive truncation. This is the single truncation rule for names
+    that are both created and looked up (e.g. OpenShift source VMs created via
+    ``create_and_store_resource()`` and looked up via ``OCPProvider.vm_dict()``).
+
+    Args:
+        name (str): The resource name to truncate.
+        max_length (int): Maximum allowed length. Defaults to the Kubernetes limit (63).
+
+    Returns:
+        str: The truncated name, or the original name when already within the limit.
+    """
+    if len(name) <= max_length:
+        return name
+    LOGGER.warning(f"Resource name '{name}' is too long ({len(name)} > {max_length}). Truncating.")
+    return name[-max_length:]
 
 
 def generate_name_with_uuid(name: str) -> str:
