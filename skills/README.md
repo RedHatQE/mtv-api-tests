@@ -17,8 +17,9 @@ harness's skills directory — its location is harness-specific, so create it fi
 exist:
 
 ```bash
-mkdir -p <harness-skills-dir>
-ln -s /path/to/mtv-api-tests/skills/remote-debugging <harness-skills-dir>/remote-debugging
+harness_skills_dir=<your harness skills directory>
+mkdir -p "$harness_skills_dir"
+ln -s /path/to/mtv-api-tests/skills/remote-debugging "$harness_skills_dir/remote-debugging"
 ```
 
 A project-local skills directory is preferred over a user-level one.

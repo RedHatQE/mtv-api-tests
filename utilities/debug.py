@@ -42,11 +42,20 @@ def _remote_debugger() -> RemotePdb:
     if not host:
         raise ValueError("REMOTE_PDB_HOST must not be empty")
     try:
-        resolved_hosts = {sockaddr[0] for (_, _, _, _, sockaddr) in socket.getaddrinfo(host, None)}
+        addrinfos = socket.getaddrinfo(host, None, family=socket.AF_INET)
     except socket.gaierror as err:
         raise ValueError(f"REMOTE_PDB_HOST '{host}' does not resolve: {err}") from err
-    if not all(ipaddress.ip_address(resolved).is_loopback for resolved in resolved_hosts):
-        raise ValueError(f"REMOTE_PDB_HOST must be a loopback address, got '{host}'")
+    # Bind a validated numeric loopback address, not the hostname: RemotePdb would
+    # re-resolve a hostname at bind time (second resolution may differ), and its
+    # socket is IPv4-only.
+    loopback_addresses: list[str] = []
+    for _, _, _, _, sockaddr in addrinfos:
+        address = sockaddr[0]
+        if isinstance(address, str) and ipaddress.ip_address(address).is_loopback:
+            loopback_addresses.append(address)
+    if not loopback_addresses:
+        raise ValueError(f"REMOTE_PDB_HOST must resolve to a loopback address, got '{host}'")
+    host = loopback_addresses[0]
 
     port_str = os.environ.get("REMOTE_PDB_PORT", str(_DEFAULT_REMOTE_DEBUGGER_PORT))
     try:
@@ -75,7 +84,10 @@ def remote_breakpoint() -> None:
     """
     if not remote_debugger_enabled():
         return
-    _remote_debugger().set_trace(frame=sys._getframe().f_back)
+    try:
+        _remote_debugger().set_trace(frame=sys._getframe().f_back)
+    except (ConnectionResetError, BrokenPipeError) as err:
+        raise bdb.BdbQuit(f"Remote debugger connection lost: {err}") from err
 
 
 def remote_post_mortem(exception: BaseException) -> None:
@@ -97,6 +109,9 @@ def remote_post_mortem(exception: BaseException) -> None:
         return
     debugger = _remote_debugger()
     debugger.reset()
-    debugger.interaction(None, exception.__traceback__)
+    try:
+        debugger.interaction(None, exception.__traceback__)
+    except (ConnectionResetError, BrokenPipeError) as err:
+        raise bdb.BdbQuit(f"Remote debugger connection lost: {err}") from err
     if debugger.quitting:
         raise bdb.BdbQuit("Remote debugger session was quit or disconnected")

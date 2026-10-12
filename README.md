@@ -329,11 +329,11 @@ OpenShift Job pod, the pod must run with `MTV_REMOTE_PDB=1` — the Job manifest
 the port:
 
 ```bash
-oc port-forward -n <job-namespace> pod/<pod-name> 4444:4444
+oc port-forward -n "$job_namespace" "pod/$pod_name" 4444:4444
 nc localhost 4444
 ```
 
-`<job-namespace>` is the generated UUID-suffixed namespace shown by the CLI at manifest generation
+`$job_namespace` is the generated UUID-suffixed namespace shown by the CLI at manifest generation
 (and present in the manifest) — `oc port-forward` without `-n` searches only your current namespace
 and will not find the pod.
 

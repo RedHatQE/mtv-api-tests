@@ -41,8 +41,13 @@ nohup bash -c "exec tail -f $FIFO | exec nc 127.0.0.1 4444 > $OUT 2>&1" < /dev/n
 echo "bt" > "$FIFO"; sleep 1.5; cat "$OUT"
 ```
 
-For pod runs, forward the port first: `oc port-forward pod/<pod-name> 4444:4444`, then attach
-to `localhost 4444`.
+For pod runs, forward the port first — pass the Job's generated namespace, or `oc port-forward`
+searches only your current namespace and will not find the pod:
+
+```bash
+oc port-forward -n "$job_namespace" "pod/$pod_name" 4444:4444
+nc localhost 4444
+```
 
 ## Driving the session
 
@@ -58,9 +63,10 @@ End the session:
 
 ## Cleanup
 
-Track PIDs and kill the nc/tail processes by PID when done. Do NOT use broad `pkill -f`
-patterns containing the FIFO path or `nc 127.0.0.1 4444` — they match your own shell's command
-line and kill your own session (exit 143). `pkill -x nc` is safe. Remove the FIFO afterwards.
+Track the client PIDs and signal only those PIDs when done. Never use `pkill` in any form: broad
+`-f` patterns containing the FIFO path or `nc 127.0.0.1 4444` match your own shell's command line
+and kill your own session (exit 143), and even exact-name matching (`pkill -x nc`) signals every
+matching process, not just this client. Remove the FIFO afterwards.
 
 ## Gotchas learned the hard way
 
