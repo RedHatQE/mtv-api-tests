@@ -5,12 +5,12 @@ import sys
 
 from remote_pdb import RemotePdb
 
-LOGGER = logging.getLogger(__name__)
-
 # Default debugger listening port; pytest-xdist workers get an offset (gw1 -> +1) so
 # simultaneous debugger sessions in parallel workers do not collide on the same port.
 _DEFAULT_REMOTE_DEBUGGER_PORT = 4444
 _DEFAULT_REMOTE_DEBUGGER_HOST = "127.0.0.1"
+
+LOGGER = logging.getLogger(__name__)
 
 
 def remote_debugger_enabled() -> bool:
@@ -22,27 +22,33 @@ def remote_debugger_enabled() -> bool:
     return bool(os.environ.get("MTV_REMOTE_PDB"))
 
 
-def _remote_debugger_host() -> str:
-    """Resolve the debugger listening host.
+def _remote_debugger() -> RemotePdb:
+    """Create a remote debugger listener and wait for a client connection.
+
+    Blocks until a debugger client (nc/telnet) connects. The listener binds loopback
+    by default so the debugger is never exposed on the cluster network; pod runs
+    attach via oc port-forward. The port is offset per pytest-xdist worker so
+    parallel workers listen on distinct ports.
 
     Returns:
-        str: REMOTE_PDB_HOST value, defaulting to loopback so the debugger is never
-            exposed on the cluster network (pod runs attach via oc port-forward).
+        RemotePdb: Debugger instance connected to a client.
+
+    Raises:
+        ValueError: If REMOTE_PDB_HOST is empty or REMOTE_PDB_PORT is not an integer.
     """
-    return os.environ.get("REMOTE_PDB_HOST", _DEFAULT_REMOTE_DEBUGGER_HOST)
+    host = os.environ.get("REMOTE_PDB_HOST", _DEFAULT_REMOTE_DEBUGGER_HOST)
+    if not host:
+        raise ValueError("REMOTE_PDB_HOST must not be empty")
 
+    port_str = os.environ.get("REMOTE_PDB_PORT", str(_DEFAULT_REMOTE_DEBUGGER_PORT))
+    try:
+        base_port = int(port_str)
+    except ValueError as err:
+        raise ValueError(f"REMOTE_PDB_PORT must be an integer, got '{port_str}'") from err
 
-def _remote_debugger_port() -> int:
-    """Resolve the debugger listening port, offset per pytest-xdist worker.
-
-    Returns:
-        int: REMOTE_PDB_PORT value (default 4444) plus the numeric part of the
-            PYTEST_XDIST_WORKER id, so parallel workers listen on distinct ports.
-    """
-    base_port = int(os.environ.get("REMOTE_PDB_PORT", str(_DEFAULT_REMOTE_DEBUGGER_PORT)))
     worker = os.environ.get("PYTEST_XDIST_WORKER", "")
     worker_index = int(worker[2:]) if worker.startswith("gw") and worker[2:].isdigit() else 0
-    return base_port + worker_index
+    return RemotePdb(host=host, port=base_port + worker_index)
 
 
 def remote_breakpoint() -> None:
@@ -55,12 +61,12 @@ def remote_breakpoint() -> None:
     the call when done.
 
     Raises:
-        None: BdbQuit from a quitting debugger session is caught and logged.
+        ValueError: If the debugger host/port configuration is malformed.
     """
     if not remote_debugger_enabled():
         return
     try:
-        RemotePdb(host=_remote_debugger_host(), port=_remote_debugger_port()).set_trace(frame=sys._getframe().f_back)
+        _remote_debugger().set_trace(frame=sys._getframe().f_back)
     except bdb.BdbQuit:
         LOGGER.warning("Remote debugger session quit; continuing execution.")
 
@@ -69,19 +75,20 @@ def remote_post_mortem(exception: BaseException) -> None:
     """Open a remote post-mortem debugger session on a raised exception.
 
     No-op unless MTV_REMOTE_PDB is set. Blocks until a client connects
-    (`nc <host> <port>`), then drops into a post-mortem pdb on the exception.
+    (`nc <host> <port>`), then drops into a post-mortem pdb on the exception's
+    traceback.
 
     Args:
         exception (BaseException): The raised exception to debug.
 
     Raises:
-        None: BdbQuit from a quitting debugger session is caught and logged.
+        ValueError: If the debugger host/port configuration is malformed.
     """
     if not remote_debugger_enabled():
         return
     try:
-        debugger = RemotePdb(host=_remote_debugger_host(), port=_remote_debugger_port())
+        debugger = _remote_debugger()
         debugger.reset()
-        debugger.interaction(None, exception)
+        debugger.interaction(None, exception.__traceback__)
     except bdb.BdbQuit:
         LOGGER.warning("Remote debugger session quit; continuing test run.")
