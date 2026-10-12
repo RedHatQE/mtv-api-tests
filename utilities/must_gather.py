@@ -62,6 +62,8 @@ def _get_idms_name(channel: str) -> str:
     return f"devel-testing-for-{stripped.replace('.', '-')}"
 
 
+# The dict value type below is `Any` on purpose: provider-controlled metadata entries carry
+# arbitrary value types until each caller validates the specific fields it reads.
 def _entry_to_dict(entry: object, resource_description: str, entry_description: str) -> dict[str, Any]:
     """Normalize a provider-controlled metadata entry to a native dict for validation.
 
@@ -83,8 +85,6 @@ def _entry_to_dict(entry: object, resource_description: str, entry_description: 
     Raises:
         MustGatherImageError: If the entry cannot be converted to a mapping.
     """
-    # The dict value type is `Any` on purpose: provider-controlled metadata entries carry
-    # arbitrary value types until each caller validates the specific fields it reads.
     to_dict = getattr(entry, "to_dict", None)
     if callable(to_dict):
         entry = to_dict()
