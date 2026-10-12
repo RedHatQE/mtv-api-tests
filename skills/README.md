@@ -12,19 +12,16 @@ AI agents working on this repo.
 
 ## Installation (manual — each user)
 
-Skills are not auto-discovered from this folder. Symlink the skill you want into the project-local
-skills directory (`.pi/` is gitignored, so the symlink is local-only):
+Skills are not auto-discovered from this folder. Symlink the skill you want into your agent
+harness's skills directory — its location is harness-specific, so create it first if it does not
+exist:
 
 ```bash
-# pi (project-local — recommended):
-ln -s ../../skills/remote-debugging .pi/skills/remote-debugging
-
-# pi (user-level, if you want the skill in every project):
-ln -s /path/to/mtv-api-tests/skills/remote-debugging ~/.pi/agent/skills/remote-debugging
+mkdir -p <harness-skills-dir>
+ln -s /path/to/mtv-api-tests/skills/remote-debugging <harness-skills-dir>/remote-debugging
 ```
 
-Other harnesses (Claude Code, Cursor, ...) have equivalent skill directories — symlink into whichever
-you use, project-local preferred.
+A project-local skills directory is preferred over a user-level one.
 
 **Note:** most harnesses discover skills at session start, so a freshly created symlink
 only takes effect after restarting the session.

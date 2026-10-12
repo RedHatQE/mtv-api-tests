@@ -30,8 +30,8 @@ The debugger speaks plain pdb over a TCP socket. Drive it with `nc` fed through 
 commands can be sent programmatically:
 
 ```bash
-FIFO=.pi/tmp/remote-pdb-in
-OUT=.pi/tmp/remote-pdb-out
+FIFO=/tmp/remote-pdb-in
+OUT=/tmp/remote-pdb-out
 rm -f "$FIFO" "$OUT" && mkfifo "$FIFO"
 
 # Attach to the listener (host/port from the run; default 127.0.0.1 4444):
@@ -63,6 +63,9 @@ patterns containing the FIFO path or `nc 127.0.0.1 4444` — they match your own
 line and kill your own session (exit 143). `pkill -x nc` is safe. Remove the FIFO afterwards.
 
 ## Gotchas learned the hard way
+
+- The FIFO and output files live under `/tmp`, outside any repository — debugger output can
+  never be committed by accident.
 
 - Killing the shell that spawned `tail | nc` orphans both children — the socket stays open and
   the debugger looks hung. Kill `nc` itself to simulate a real disconnect.
