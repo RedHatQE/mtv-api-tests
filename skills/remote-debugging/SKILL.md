@@ -13,8 +13,9 @@ hit, or a test failed with post-mortem debugging enabled.
 
 - Enabled per run with `MTV_REMOTE_PDB=1` (plus `-s` so the listening message is not captured,
   `-n 0` for a single worker). Without the env var everything is a no-op.
-- Listener binds `127.0.0.1:4444` by default. Overrides: `REMOTE_PDB_HOST`, `REMOTE_PDB_PORT`.
-  With pytest-xdist, worker `gwN` listens on `base + N` (gw1 → 4445).
+- Listener binds `127.0.0.1:4444` by default. Overrides: `REMOTE_PDB_PORT`; `REMOTE_PDB_HOST`
+  must resolve to loopback (non-loopback is rejected). With pytest-xdist, worker `gwN` listens on
+  `base + N` (gw1 → 4445).
 - Two triggers, same attach mechanism:
   1. **Code breakpoint** — `remote_breakpoint()` (from `utilities/debug.py`) placed temporarily in
      test/utility code. Run blocks at the call site.

@@ -1,5 +1,7 @@
 import bdb
+import ipaddress
 import os
+import socket
 import sys
 
 from remote_pdb import RemotePdb
@@ -31,11 +33,20 @@ def _remote_debugger() -> RemotePdb:
         RemotePdb: Debugger instance connected to a client.
 
     Raises:
-        ValueError: If REMOTE_PDB_HOST is empty or REMOTE_PDB_PORT is not an integer.
+        ValueError: If REMOTE_PDB_HOST is empty, unresolvable, or not a loopback
+            address, or REMOTE_PDB_PORT is not an integer. Loopback-only binding is
+            enforced so the unauthenticated debugger is never exposed on the cluster
+            network.
     """
     host = os.environ.get("REMOTE_PDB_HOST", _DEFAULT_REMOTE_DEBUGGER_HOST)
     if not host:
         raise ValueError("REMOTE_PDB_HOST must not be empty")
+    try:
+        resolved_hosts = {sockaddr[0] for (_, _, _, _, sockaddr) in socket.getaddrinfo(host, None)}
+    except socket.gaierror as err:
+        raise ValueError(f"REMOTE_PDB_HOST '{host}' does not resolve: {err}") from err
+    if not all(ipaddress.ip_address(resolved).is_loopback for resolved in resolved_hosts):
+        raise ValueError(f"REMOTE_PDB_HOST must be a loopback address, got '{host}'")
 
     port_str = os.environ.get("REMOTE_PDB_PORT", str(_DEFAULT_REMOTE_DEBUGGER_PORT))
     try:

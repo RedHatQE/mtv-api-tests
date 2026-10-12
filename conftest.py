@@ -395,9 +395,16 @@ def pytest_exception_interact(node, call, report):
 
     # Remote post-mortem debugger (MTV_REMOTE_PDB). Runs after must-gather so diagnostics
     # are collected before the session blocks waiting for a debugger connection. Skipped
-    # when --pdb is active so the local terminal debugger takes precedence. A debugger
-    # quit ends the test session, matching pytest's native --pdb behavior.
-    if remote_debugger_enabled() and not node.config.getoption("usepdb") and call.excinfo is not None:
+    # when --pdb is active so the local terminal debugger takes precedence, and skipped
+    # for BdbQuit so quitting a code breakpoint fails that test without opening another
+    # listener. A debugger quit ends the test session, matching pytest's native --pdb
+    # behavior. usepdb has a default because -p no:pdb removes the option.
+    if (
+        remote_debugger_enabled()
+        and not node.config.getoption("usepdb", default=False)
+        and call.excinfo is not None
+        and not isinstance(call.excinfo.value, bdb.BdbQuit)
+    ):
         try:
             remote_post_mortem(exception=call.excinfo.value)
         except bdb.BdbQuit:
