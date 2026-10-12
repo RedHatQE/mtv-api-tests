@@ -285,6 +285,57 @@ automatically — do not pass `--tc=target_ocp_version`.
 
 ---
 
+## Remote Debugging
+
+Set `MTV_REMOTE_PDB=1` to enable a remote [pdb](https://docs.python.org/3/library/pdb.html) debugger reachable over a socket,
+for interactive debugging of test runs by humans or AI agents. Without the variable, debugging is completely disabled
+and the helpers below are no-ops.
+
+Run with `-s` so the listening message is not swallowed by pytest output capture, and use a single worker (`-n 0`)
+when debugging — parallel xdist workers listen on distinct ports (`4444 +` worker index), but a debugger session per
+worker is rarely what you want.
+
+### Trigger 1 — breakpoint in code
+
+Temporarily insert a call where you want to stop (remove it when done):
+
+```python
+from utilities.debug import remote_breakpoint
+
+remote_breakpoint()
+```
+
+Run the test; the process blocks at the call and waits for a debugger connection.
+
+### Trigger 2 — post-mortem on failure
+
+With `MTV_REMOTE_PDB=1` set, any test failure automatically opens a remote post-mortem session on the failing
+traceback (no `--pdb` needed). If you pass `--pdb`, the local terminal debugger takes precedence.
+
+### Attaching
+
+```bash
+nc 127.0.0.1 4444        # or: rlwrap nc 127.0.0.1 4444 / telnet 127.0.0.1 4444
+```
+
+Send `c` to continue the run, `q` to quit the debugger session (the run continues).
+
+The debugger binds to `127.0.0.1` only — it is never exposed on the cluster network. To debug a run inside an
+OpenShift Job pod, forward the port first:
+
+```bash
+oc port-forward pod/<pod-name> 4444:4444
+nc localhost 4444
+```
+
+Host and port can be overridden with `REMOTE_PDB_HOST` / `REMOTE_PDB_PORT`.
+
+> **Note:** while a debugger session is attached, the test process is frozen but the cluster keeps moving —
+> migrations and reconciliation continue server-side. Use the debugger for inspection; avoid long pauses inside
+> migration polling loops.
+
+---
+
 ## Running Different Test Categories
 
 The Quick Start runs **tier0** tests (smoke tests). You can run other test categories by changing the `-m` marker:
