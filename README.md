@@ -275,8 +275,9 @@ pytest config value first (`--tc=cluster_host:...`) and then from the matching `
 or `CLUSTER_PASSWORD` environment variable. Runs that provide any of the three must provide all three as nonblank
 values; partial, empty, or whitespace-only sets fail fast with a named error such as
 `Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME`. Omitting all three is
-valid only for ambient authentication: a kubeconfig or `oc` token available to the test process (the path
-`mtv-api-tests run` takes). See [runtime configuration](docs/runtime-configuration.html) for details.
+valid only for ambient authentication from a kubeconfig available to the test process. The `oc` token check used by
+`mtv-api-tests run` does not pass a standalone token to the client. See
+[runtime configuration](docs/runtime-configuration.html) for details.
 
 ---
 
