@@ -5,9 +5,27 @@ description: "Attach to the mtv-api-tests remote debugger (remote-pdb) when a te
 
 # Remote Debugger Client (mtv-api-tests)
 
-Use this skill when a test run is blocked in the remote debugger — the user says a run is
-"waiting for a debugger connection", mentions `MTV_REMOTE_PDB`, remote pdb, a breakpoint was
-hit, or a test failed with post-mortem debugging enabled.
+Use this skill when the user asks to debug a test run — from placing the breakpoint to
+attaching and driving the session — as well as when a run is already blocked in the remote
+debugger ("waiting for a debugger connection", `MTV_REMOTE_PDB`, remote pdb, a breakpoint was
+hit, or a test failed with post-mortem debugging enabled).
+
+## Workflow (the agent drives the whole lifecycle)
+
+1. **Place the breakpoint**: add `remote_breakpoint()` (from `utilities/debug.py`) at the line
+   of interest in test/utility/conftest code. It is temporary, uncommitted code — remove it
+   when the debugging session is done.
+2. **Tell the user to run**: `MTV_REMOTE_PDB=1 uv run pytest <args> -s -n 0`.
+3. **Watch for the hit**: poll the run's output for the line
+   `RemotePdb session open at 127.0.0.1:<port>, waiting for connection ...` — it means the
+   breakpoint was reached and the process is blocked. Its port is the attach port (step 1 of
+   "Finding the port" below).
+4. **Attach and debug** (see "Attaching"), end with `c` (continue the run) or `q` (quit —
+   at a breakpoint the current test fails, at a post-mortem the session exits).
+5. **Remove the breakpoint** from the code afterwards.
+
+For failure post-mortem there is no code change: with `MTV_REMOTE_PDB=1` set, any test failure
+blocks after must-gather collection — go straight to watching for the session-open line.
 
 ## How the debugger works
 
