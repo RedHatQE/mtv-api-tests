@@ -51,7 +51,6 @@ For a normal run, the suite expects two runtime values even though they are not 
 | `cluster_host` | Optional | Cluster API URL. Falls back to the `CLUSTER_HOST` environment variable |
 | `cluster_username` | Optional | Cluster user. Falls back to the `CLUSTER_USERNAME` environment variable |
 | `cluster_password` | Optional | Cluster password. Falls back to the `CLUSTER_PASSWORD` environment variable |
-| `target_ocp_version` | Optional | Used only for the generated VM name suffix, where dots are replaced with dashes |
 
 If either required key is missing, the session aborts with `pytest.exit(...)` and return code `1` before any fixture runs.
 

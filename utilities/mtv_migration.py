@@ -392,12 +392,22 @@ def execute_migration(
     wait_for_migration_complate(plan=plan, on_status_poll=on_status_poll)
 
 
-def get_vm_suffix(warm_migration: bool) -> str:
+def get_vm_suffix(warm_migration: bool, ocp_version: str) -> str:
+    """Generate the VM name suffix for cloned source VMs.
+
+    Args:
+        warm_migration (bool): Whether the plan is a warm migration.
+        ocp_version (str): Target OpenShift cluster version as "major.minor"
+            (e.g. "4.22"), derived from the target cluster.
+
+    Returns:
+        str: Suffix encoding storage class, target OCP version and migration
+            type (e.g. "-ceph-rbd-4-22-cold"), truncated to 63 characters.
+    """
     migration_type = "warm" if warm_migration else "cold"
     storage_class = py_config.get("storage_class", "")
     storage_class_name = "-".join(storage_class.split("-")[-2:])
-    ocp_version = py_config.get("target_ocp_version", "").replace(".", "-")
-    vm_suffix = f"-{storage_class_name}-{ocp_version}-{migration_type}"
+    vm_suffix = f"-{storage_class_name}-{ocp_version.replace('.', '-')}-{migration_type}"
 
     if len(vm_suffix) > 63:
         LOGGER.warning(f"VM suffix '{vm_suffix}' is too long ({len(vm_suffix)} > 63). Truncating.")

@@ -81,6 +81,7 @@ from utilities.utils import (
     extract_vm_from_plan,
     generate_class_hash_prefix,
     get_cluster_client,
+    get_cluster_version,
     get_cluster_version_str,
     get_per_nic_networks,
     get_value_from_py_config,
@@ -543,6 +544,26 @@ def ocp_admin_client():
             raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
 
     yield _client
+
+
+@pytest.fixture(scope="session")
+def target_ocp_version(ocp_admin_client: DynamicClient) -> str:
+    """Target (destination) OpenShift cluster version as "major.minor".
+
+    Derived from the cluster the run targets, so generated VM names always
+    match the actual target cluster version.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for the target cluster.
+
+    Returns:
+        str: Cluster version formatted as "major.minor" (e.g. "4.22").
+
+    Raises:
+        ValueError: If the cluster version cannot be determined or parsed.
+    """
+    version = get_cluster_version(client=ocp_admin_client)
+    return f"{version.major}.{version.minor}"
 
 
 @pytest.fixture(scope="session")
@@ -1032,6 +1053,7 @@ def prepared_plan(
     target_namespace: str,
     vcenter_clone_provider: VMWareProvider | None,
     source_provider_data: dict[str, Any],
+    target_ocp_version: str,
 ) -> Generator[dict[str, Any], None, None]:
     """Prepare plan with cloned VMs for class-based tests.
 
@@ -1056,6 +1078,7 @@ def prepared_plan(
         target_namespace (str): Default target namespace for VMs
         vcenter_clone_provider (VMWareProvider | None): vCenter provider for cloning, or None
         source_provider_data (dict[str, Any]): Source provider configuration data
+        target_ocp_version (str): Target OpenShift cluster version ("major.minor"), used for the VM name suffix
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
@@ -1102,7 +1125,7 @@ def prepared_plan(
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
-        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration)
+        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration, ocp_version=target_ocp_version)
 
         if openshift_source_provider:
             # Generate unique network name for class-based tests
