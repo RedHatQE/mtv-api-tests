@@ -270,6 +270,7 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         bool: True when the gather command ran. False when it did not.
     """
     try:
+        # Resource discovery: cluster client, MTV Subscription, and its installed CSV.
         # https://github.com/kubev2v/forklift-must-gather
         ocp_admin_client = get_cluster_client()
         mtv_namespace = py_config["mtv_namespace"]
@@ -282,20 +283,23 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
             client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
         )
 
-        # Invalid image metadata is configuration, not a retryable resource failure.
+        # Image resolution: derive the gather image from operator state. Invalid image metadata
+        # is configuration, not a retryable resource failure.
         must_gather_image = _resolve_must_gather_image(
             ocp_admin_client=ocp_admin_client,
             mtv_subs=mtv_subs,
             mtv_csv=mtv_csv,
         )
 
+        # Command execution: run `oc adm must-gather` with the resolved image and arguments.
         command = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
         if target_args:
             command = f"{command} -- {target_args}"
         success, _, _ = run_command(shlex.split(command), verify_stderr=False)
         return success
     except NotImplementedError as ex:
-        # The wrapper has no dedicated missing-API exception; match its discovery origin and message.
+        # API unavailability: the wrapper has no dedicated missing-API exception, so match its
+        # discovery origin and message before treating it as a gather that cannot run.
         origin = ex.__traceback__
         while origin is not None and origin.tb_next is not None:
             origin = origin.tb_next
@@ -329,6 +333,8 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         HTTPTimeoutError,
         TimeoutExpiredError,
     ) as ex:
+        # Retryable operational failures: log and report the gather as not run; the caller keeps
+        # the class-plan identity pending for the session-end retry.
         LOGGER.exception(f"Failed to run must-gather. {ex}")
         return False
 
@@ -388,6 +394,11 @@ def class_plan_identity(item: pytest.Item | None) -> str | None:
 def initialize_class_plan_context(item: pytest.Item) -> None:
     """Clear stale Plan state on entry, without resetting consecutive methods of the same plan.
 
+    A re-entered class-plan instance (xdist load/loadgroup/worksteal scheduling can split one
+    class across non-contiguous batches) also drops its stored Plan context unless that instance
+    already completed a successful gather, so a second-run failure cannot gather against the
+    first run's deleted Plan.
+
     Args:
         item (pytest.Item): Item whose protocol is starting, before any setup hooks run.
     """
@@ -397,6 +408,10 @@ def initialize_class_plan_context(item: pytest.Item) -> None:
         if identity is not None:
             node_cls: type = getattr(item, "cls")
             setattr(node_cls, "plan_resource", None)
+            if not class_must_gather_collected(item.session, identity):
+                contexts: dict[str, Plan | None] = getattr(item.session, "_must_gather_plan_contexts", {})
+                contexts.pop(identity, None)
+                setattr(item.session, "_must_gather_plan_contexts", contexts)
         setattr(item.session, "_must_gather_active_class_identity", identity)
 
 

@@ -517,13 +517,16 @@ def pytest_exception_interact(node, call, report):
     if is_dry_run(node.session.config) or node.session.config.getoption("skip_data_collector"):
         return
 
+    if call.when == "collect":
+        # Collection failures from collectors (a Module that fails to import, or a Class collector
+        # whose collection failed) have no test context; pytest reports them itself. This check runs
+        # before the class/standalone split because a pytest.Class collector reports `cls` as set.
+        # Attempting a gather here would re-raise inside this hook and turn a reportable collection
+        # error into an INTERNALERROR.
+        return
+
     node_cls: type | None = getattr(node, "cls", None)
     if node_cls is None:
-        if call.when == "collect":
-            # Collection failures from collectors (e.g. a Module that fails to import) have no test
-            # context; pytest reports them itself. Attempting a gather here would re-raise inside
-            # this hook and turn a reportable collection error into an INTERNALERROR.
-            return
         collected: set[str] = getattr(node.session, "_must_gather_collected_tests", set())
         worker: str = getattr(node.config, "workerinput", {}).get("workerid", "master")
         identity = f"{node.nodeid}::worker={worker}"
