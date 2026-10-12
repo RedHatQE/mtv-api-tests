@@ -300,9 +300,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     Diagnostics flush, resource inventory, and configured teardown run before the yield: the xdist
     worker reports completion from its own sessionfinish wrapper, so cleanup placed after that
     yield could be interrupted by worker shutdown mid-deletion. Work that needs other plugins'
-    sessionfinish output (JUnit enrichment, terminal summary) runs after the yield. A cleanup
-    error is stashed and re-raised after the yield so the inner hooks still run; a post-yield
-    failure is chained from the stashed cleanup error so both stay visible.
+    sessionfinish output (JUnit enrichment, terminal summary) runs after the yield, even when an
+    inner session-finish hook raises. An inner-hook, cleanup, or post-yield failure is re-raised
+    after that processing, chained from the earliest earlier error so all of them stay visible.
 
     Args:
         session (pytest.Session): Worker-local session holding pending diagnostics and resources.
@@ -320,7 +320,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
 
     _data_collector_path = Path(session.config.getoption("data_collector_path"))
 
+    # --- Pre-yield cleanup: must finish before the xdist worker reports completion ---
     cleanup_error: Exception | None = None
+    inner_error: Exception | None = None
     try:
         # Each independent action runs even if an earlier one raises; errors stay chained.
         try:
@@ -346,9 +348,15 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
                     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
     except Exception as exp:
         cleanup_error = exp
-    finally:
-        session_outcome = yield
 
+    # --- Inner session hooks: retain a raised exception so reporting still runs ---
+    session_outcome: object = None
+    try:
+        session_outcome = yield
+    except Exception as exp:
+        inner_error = exp
+
+    # --- Post-yield reporting: needs other plugins' session-finish output ---
     try:
         try:
             reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -364,12 +372,17 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
                         LOGGER.exception("Failed to enrich JUnit XML, original preserved")
                         raise
     except Exception as post_yield_error:
-        # A post-yield failure must not swallow a stashed cleanup error: chain the later
-        # exception from it so both remain visible.
-        if cleanup_error is not None:
-            raise post_yield_error from cleanup_error
+        # A post-yield failure must not swallow an earlier error: chain it from the earliest.
+        earlier_error = cleanup_error or inner_error
+        if earlier_error is not None:
+            raise post_yield_error from earlier_error
         raise
 
+    # --- Error propagation: the earliest failure wins, later ones chain from it ---
+    if inner_error is not None:
+        if cleanup_error is not None:
+            raise inner_error from cleanup_error
+        raise inner_error
     if cleanup_error is not None:
         raise cleanup_error
     return session_outcome
