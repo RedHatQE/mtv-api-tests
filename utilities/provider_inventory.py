@@ -1,5 +1,6 @@
 import os
 import time
+from typing import Any
 
 from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
@@ -26,18 +27,34 @@ _MAC_CONVERGENCE_SLEEP = 5
 def wait_for_inventory_guest_networks(
     source_provider_inventory: ForkliftInventory,
     vm_names: list[str],
+    source_vms_data: dict[str, dict[str, Any]],
 ) -> None:
-    """Wait until Forklift inventory guestNetworks has IPv4 ip and gateway.
+    """Wait for each VM to have an inventory IPv4 entry and any required gateway.
+
+    Require a gateway if the saved source snapshot reports one or has incomplete
+    network metadata. Waive it only when interfaces and their IP entries are all
+    present and every IP entry explicitly reports a falsy gateway. This check does
+    not establish source snapshot freshness or verify every expected address.
 
     Args:
         source_provider_inventory (ForkliftInventory): Source provider inventory.
         vm_names (list[str]): VM names to poll.
+        source_vms_data (dict[str, dict[str, Any]]): Saved normalized provider VM
+            snapshots keyed by VM name (plan["source_vms_data"]), containing
+            heterogeneous provider fields. Incomplete network metadata keeps the
+            gateway requirement; explicit gatewayless metadata waives it.
 
     Raises:
-        TimeoutExpiredError: If guestNetworks is missing IPv4 ip and gateway after the timeout.
+        TimeoutExpiredError: If a VM lacks an inventory IPv4 entry, or a gateway on
+            that entry when the source reports one or its network metadata is
+            incomplete, after the timeout.
         ValueError: If HYPERV_REFRESH_INTERVAL is not a positive integer.
     """
-    interval = int(os.environ.get("HYPERV_REFRESH_INTERVAL", "10"))
+    interval_raw = os.environ.get("HYPERV_REFRESH_INTERVAL", "10")
+    try:
+        interval = int(interval_raw)
+    except ValueError:
+        raise ValueError(f"HYPERV_REFRESH_INTERVAL must be a positive integer, got '{interval_raw}'") from None
     if interval <= 0:
         raise ValueError(f"HYPERV_REFRESH_INTERVAL must be a positive integer, got {interval}")
     timeout = 10 * (interval + 30) + 300
@@ -48,8 +65,12 @@ def wait_for_inventory_guest_networks(
                 networks = source_provider_inventory.get_vm(name=name).get("guestNetworks") or []
             except ValueError:
                 return False
+            require_gateway = _source_vm_requires_gateway(source_vm_data=source_vms_data[name])
             if not any(
-                isinstance(entry, dict) and entry.get("ip") and ":" not in str(entry["ip"]) and entry.get("gateway")
+                isinstance(entry, dict)
+                and entry.get("ip")
+                and ":" not in str(entry["ip"])
+                and (entry.get("gateway") or not require_gateway)
                 for entry in networks
             ):
                 return False
@@ -58,6 +79,33 @@ def wait_for_inventory_guest_networks(
     for ready in TimeoutSampler(wait_timeout=timeout, sleep=10, func=_ready):
         if ready:
             return
+
+
+def _source_vm_requires_gateway(source_vm_data: dict[str, Any]) -> bool:
+    """Keep the inventory gateway requirement unless the source is explicitly gatewayless.
+
+    Missing or empty interfaces or IP entries, omitted gateway keys, and truthy
+    gateways all require an inventory gateway.
+
+    Args:
+        source_vm_data (dict[str, Any]): Saved normalized provider VM snapshot
+            (plan["source_vms_data"] entry), containing heterogeneous provider fields.
+
+    Returns:
+        bool: False only for non-empty source interfaces whose IP entries are all
+            present and explicitly report falsy gateways; True otherwise.
+    """
+    interfaces: list[dict[str, Any]] = source_vm_data.get("network_interfaces") or []
+    if not interfaces:
+        return True
+    for interface in interfaces:
+        ip_addresses: list[dict[str, Any]] = interface.get("ip_addresses") or []
+        if not ip_addresses:
+            return True
+        for ip_config in ip_addresses:
+            if "gateway" not in ip_config or ip_config["gateway"]:
+                return True
+    return False
 
 
 def force_inventory_refresh(provider: Provider) -> None:

@@ -151,6 +151,8 @@ def hyperv_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.HYPERV
 
 
+# provider_data is .providers.json config whose value types vary across provider types,
+# so dict[str, Any] is required (same as the sibling provider type checks above).
 def hyperv_smb_max_channels(provider_data: dict[str, Any]) -> str | None:
     """SMB max_channels for Provider.smb_max_channels when two-phase Hyper-V is configured.
 
@@ -163,7 +165,7 @@ def hyperv_smb_max_channels(provider_data: dict[str, Any]) -> str | None:
     """
     if not hyperv_provider(provider_data=provider_data):
         return None
-    if not any(plan.get("pre_copy_source_disks") for plan in py_config["tests_params"].values()):
+    if not any(plan.get("pre_copy_source_disks", False) for plan in py_config["tests_params"].values()):
         return None
     return str(py_config["smb_max_channels"])
 

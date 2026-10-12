@@ -215,8 +215,10 @@ plan config sets `pre_copy_source_disks: True`. Other Hyper-V tests keep MTV def
 unset; `smbMaxChannels` omitted unless that plan flag is present).
 
 **Hyper-V `preserve_static_ips`:** Before creating the Plan, the suite waits until Forklift inventory has
-`guestNetworks` with both IPv4 `ip` and `gateway` (host KVP is not sufficient on cluster). Timeout scales
-with `HYPERV_REFRESH_INTERVAL` (default ~700s).
+`guestNetworks` with the VM's IPv4 `ip` (host KVP is not sufficient on cluster). A `gateway` is also
+required when the source reports one or its network metadata is incomplete. The gateway requirement is
+waived only when every source NIC has IP entries that explicitly report no gateway; missing metadata is
+not treated as gatewayless. Timeout scales with `HYPERV_REFRESH_INTERVAL` (default ~700s).
 
 > **Schema & IDE support:** `providers_schema.json` documents which fields are required vs optional
 > per provider type. Add `"$schema"` as the first key in your `.providers.json` for IDE autocomplete:
