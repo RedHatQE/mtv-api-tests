@@ -58,6 +58,7 @@ from utilities.must_gather import (
     collect_class_must_gather,
     collect_class_teardown_must_gather,
     collect_must_gather_for_item,
+    collect_pending_class_must_gather_now,
     flush_pending_class_must_gathers,
     initialize_class_plan_context,
     mark_class_pending_must_gather,
@@ -493,8 +494,62 @@ def pytest_collection_modifyitems(session, config, items):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
+def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseException]) -> None:
+    """Collect or defer a must-gather for a failing test item.
+
+    Standalone tests gather immediately, once per worker-qualified identity. Their setup/call
+    collector errors propagate to the caller, which stashes them on the item for teardown.
+    Class setup/call failures are marked pending for the class-plan boundary; when the remote
+    debugger is enabled the owed gather runs immediately against the still-alive class Plan so
+    diagnostics precede the blocking post-mortem session. Class teardown failures gather through
+    the boundary-aware teardown path.
+
+    Args:
+        node (pytest.Item): The test item reporting the exception.
+        call (pytest.CallInfo[BaseException]): The call info of the failing phase.
+
+    Raises:
+        Exception: Whatever the attempted collection raises, for the caller to defer or re-raise.
+
+    Returns:
+        None: The helper only records or collects diagnostics.
+    """
+    node_cls: type | None = getattr(node, "cls", None)
+    if node_cls is None:
+        collected: set[str] = getattr(node.session, "_must_gather_collected_tests", set())
+        worker: str = getattr(node.config, "workerinput", {}).get("workerid", "master")
+        identity = f"{node.nodeid}::worker={worker}"
+        collector_error = node.stash.get(_STANDALONE_MUST_GATHER_ERROR, None)
+        if call.when == "teardown" and collector_error is not None:
+            del node.stash[_STANDALONE_MUST_GATHER_ERROR]
+            return
+        if identity not in collected and collect_must_gather_for_item(node, identity, plan_obj=None):
+            collected.add(identity)
+            setattr(node.session, "_must_gather_collected_tests", collected)
+        return
+
+    if call.when == "teardown":
+        class_collector_error = node.stash.get(_CLASS_MUST_GATHER_ERROR, None)
+        if class_collector_error is not None:
+            # The teardown wrapper already reported this collector error; retrying the gather here
+            # would raise inside the hook and abort the worker with an INTERNALERROR. The identity
+            # stays pending for the session-end flush.
+            del node.stash[_CLASS_MUST_GATHER_ERROR]
+            return
+        collect_class_teardown_must_gather(node)
+        return
+
+    mark_class_pending_must_gather(node)
+    if remote_debugger_enabled():
+        # The post-mortem debugger blocks the process until a client detaches, so the owed gather
+        # runs now, against the still-alive class Plan, instead of waiting for the class-plan
+        # boundary. Success marks the identity collected and the boundary skips it; a failed
+        # attempt stays pending for the boundary retry and the session-end flush.
+        collect_pending_class_must_gather_now(node)
+
+
 def pytest_exception_interact(node, call, report):
-    """Defer or collect a must-gather for a failing test.
+    """Defer or collect a must-gather for a failing test, then open the remote post-mortem debugger.
 
     Setup/call failures record the failing item by class-plan identity. The tryfirst teardown hook
     binds Plan context at the nextitem boundary before default fixture finalization for all retries.
@@ -513,7 +568,7 @@ def pytest_exception_interact(node, call, report):
     Returns:
         None: The hook only records or collects diagnostics.
     """
-    if is_dry_run(node.session.config) or node.session.config.getoption("skip_data_collector"):
+    if is_dry_run(node.session.config):
         return
 
     if call.when == "collect":
@@ -524,46 +579,25 @@ def pytest_exception_interact(node, call, report):
         # error into an INTERNALERROR.
         return
 
-    node_cls: type | None = getattr(node, "cls", None)
-    if node_cls is None:
-        collected: set[str] = getattr(node.session, "_must_gather_collected_tests", set())
-        worker: str = getattr(node.config, "workerinput", {}).get("workerid", "master")
-        identity = f"{node.nodeid}::worker={worker}"
-        collector_error = node.stash.get(_STANDALONE_MUST_GATHER_ERROR, None)
-        if call.when == "teardown" and collector_error is not None:
-            del node.stash[_STANDALONE_MUST_GATHER_ERROR]
-            return
-        if identity not in collected:
-            try:
-                if collect_must_gather_for_item(node, identity, plan_obj=None):
-                    collected.add(identity)
-                    setattr(node.session, "_must_gather_collected_tests", collected)
-            except Exception as exp:
-                if call.when not in ("setup", "call"):
-                    raise
-                # Retain the error on this item so setup/call reporting can reach fixture teardown.
+    if not node.session.config.getoption("skip_data_collector"):
+        try:
+            _handle_failure_must_gather(node=node, call=call)
+        except Exception as exp:
+            if getattr(node, "cls", None) is None and call.when in ("setup", "call"):
+                # Retain a standalone collector error on this item so setup/call reporting can
+                # reach fixture teardown; the teardown wrapper re-raises it as the item's error.
                 node.stash[_STANDALONE_MUST_GATHER_ERROR] = exp
-        return
+            else:
+                raise
 
-    if call.when == "teardown":
-        class_collector_error = node.stash.get(_CLASS_MUST_GATHER_ERROR, None)
-        if class_collector_error is not None:
-            # The teardown wrapper already reported this collector error; retrying the gather here
-            # would raise inside the hook and abort the worker with an INTERNALERROR. The identity
-            # stays pending for the session-end flush.
-            del node.stash[_CLASS_MUST_GATHER_ERROR]
-            return
-        collect_class_teardown_must_gather(node)
-        return
-
-    mark_class_pending_must_gather(node)
-
-    # Remote post-mortem debugger (MTV_REMOTE_PDB). Runs after must-gather so diagnostics
-    # are collected before the session blocks waiting for a debugger connection. Skipped
-    # when --pdb is active so the local terminal debugger takes precedence, and skipped
-    # for BdbQuit so quitting a code breakpoint fails that test without opening another
-    # listener. A debugger quit ends the test session, matching pytest's native --pdb
-    # behavior. usepdb has a default because -p no:pdb removes the option.
+    # Remote post-mortem debugger (MTV_REMOTE_PDB). Reached by every non-dry-run, non-collect
+    # failure regardless of --skip-data-collector, after must-gather handling so diagnostics
+    # precede the blocking debugger session: standalone gathers already ran, and class gathers
+    # ran immediately above when the debugger is enabled (otherwise they are deferred to the
+    # class-plan boundary). Skipped when --pdb is active so the local terminal debugger takes
+    # precedence, and skipped for BdbQuit so quitting a code breakpoint fails that test without
+    # opening another listener. A debugger quit ends the test session, matching pytest's native
+    # --pdb behavior. usepdb has a default because -p no:pdb removes the option.
     if (
         remote_debugger_enabled()
         and not node.config.getoption("usepdb", default=False)

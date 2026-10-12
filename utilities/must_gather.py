@@ -511,6 +511,27 @@ def _collect_pending_class_must_gather(session: pytest.Session, identity: str, i
     return False
 
 
+def collect_pending_class_must_gather_now(item: pytest.Item) -> None:
+    """Collect a pending class-plan gather immediately instead of at the class-plan boundary.
+
+    Used before a blocking post-mortem debugger session so diagnostics are gathered while the
+    class Plan is still alive. Success marks the identity collected and the boundary skips it;
+    a failed attempt stays pending for the boundary retry and the session-end flush.
+
+    Args:
+        item (pytest.Item): Failing item whose class-plan identity may owe a gather.
+    """
+    identity = class_plan_identity(item)
+    if identity is None:
+        return
+    try:
+        _collect_pending_class_must_gather(item.session, identity, item)
+    except MustGatherImageError:
+        # Keep the identity pending: the session-end flush reports the configuration error
+        # without turning the calling hook into an INTERNALERROR.
+        LOGGER.exception(f"Must-gather for class-plan '{identity}' failed before the remote debugger session")
+
+
 def collect_class_must_gather(item: pytest.Item, nextitem: pytest.Item | None) -> None:
     """Gather pending diagnostics at a worker's class-plan boundary before fixture cleanup.
 

@@ -612,7 +612,9 @@ volume on the source through the VMware Guest Operations API before migration, a
 <p><code>run_must_gather()</code> runs the full diagnostic collection and <code>run_plan_must_gather()</code> the plan-targeted one; both report whether they succeeded and
 share image resolution. Missing resources and the wrapper's specific resource API discovery failure return <code>False</code>; missing or invalid image metadata and other configuration/programming errors propagate.
 Standalone setup/call collector errors stay in the failing item's typed stash until the teardown wrapper yields to fixture finalizers.
-Session-flush errors are retained until pytest session hooks finish, then resource inventory writing and configured cleanup are attempted in nested <code>finally</code> blocks.
+The pending-gather flush, resource inventory writing and configured cleanup run before the inner session-finish hooks yield,
+so xdist worker shutdown cannot interrupt them; the summary and enabled AI enrichment run after those hooks, and errors are
+re-raised at the end with earlier errors chained.
 Independent <code>finally</code> blocks also attempt temporary-directory removal, the summary and enabled AI enrichment despite inventory or teardown errors. Cleanup errors propagate with earlier errors chained. Both teardown and session-finish use modern <code>wrapper=True</code> hooks so ordinary fixture exceptions do not emit old-style pluggy teardown warnings. Inventory write failures are logged by the existing inventory helper.
 <code>collect_must_gather_for_item()</code>, <code>collect_class_must_gather()</code>, <code>collect_class_teardown_must_gather()</code>, <code>flush_pending_class_must_gathers()</code> and the
 <code>mark_class_pending_must_gather()</code> / <code>class_must_gather_collected()</code> / <code>mark_class_must_gather_collected()</code> documented state API attempt at most one successful gather per failing
