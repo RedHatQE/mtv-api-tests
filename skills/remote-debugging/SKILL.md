@@ -24,6 +24,19 @@ hit, or a test failed with post-mortem debugging enabled.
 - The test process is frozen while attached; the cluster keeps moving server-side. Inspect, do
   not idle inside migration polling loops.
 
+## Finding the port
+
+Resolve the listener port before attaching, in this order:
+
+1. **The run's own output** (authoritative, requires `-s`): the line
+   `RemotePdb session open at 127.0.0.1:<port>, waiting for connection ...` — grep the run's
+   output or ask the user to paste it.
+2. **The user's configuration**: ask which `REMOTE_PDB_PORT` was set and which pytest-xdist
+   worker hit the breakpoint/failure (worker `gwN` listens on `base + N`).
+3. **Probe listening sockets**: `ss -ltn | grep -E ':44[0-9]{2}'` shows debugger listeners in
+   the default range.
+4. Otherwise assume the default: `4444`.
+
 ## Attaching (AI agent client pattern)
 
 The debugger speaks plain pdb over a TCP socket. Drive it with `nc` fed through a FIFO so
@@ -34,8 +47,9 @@ FIFO=/tmp/remote-pdb-in
 OUT=/tmp/remote-pdb-out
 rm -f "$FIFO" "$OUT" && mkfifo "$FIFO"
 
-# Attach to the listener (host/port from the run; default 127.0.0.1 4444):
-nohup bash -c "exec tail -f $FIFO | exec nc 127.0.0.1 4444 > $OUT 2>&1" < /dev/null > /dev/null 2>&1 &
+# Attach to the listener (port resolved per "Finding the port"; default 4444):
+port=4444
+nohup bash -c "exec tail -f $FIFO | exec nc 127.0.0.1 $port > $OUT 2>&1" < /dev/null > /dev/null 2>&1 &
 
 # Send a command, wait ~1-2s, read the output:
 echo "bt" > "$FIFO"; sleep 1.5; cat "$OUT"
@@ -45,8 +59,8 @@ For pod runs, forward the port first — pass the Job's generated namespace, or 
 searches only your current namespace and will not find the pod:
 
 ```bash
-oc port-forward -n "$job_namespace" "pod/$pod_name" 4444:4444
-nc localhost 4444
+oc port-forward -n "$job_namespace" "pod/$pod_name" "$port:$port"
+nc localhost "$port"
 ```
 
 ## Driving the session
