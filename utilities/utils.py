@@ -816,6 +816,9 @@ def _validate_cluster_credentials() -> None:
     Raises:
         ValueError: If at least one credential is set and any of them is absent,
             empty or whitespace-only.
+
+    Returns:
+        None: Validation passed; the resolved credentials are usable as-is.
     """
     resolved_credentials = {key: _resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
     unusable = [key for key, credential in resolved_credentials.items() if not credential or not credential.strip()]
