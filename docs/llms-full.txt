@@ -11531,7 +11531,7 @@ failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` sh
 The suite has built-in must-gather support. `run_plan_must_gather()` matches a failure to a specific plan and runs a targeted gather; `run_must_gather()`
 runs the full, cluster-wide gather. Both share image resolution and differ only in the arguments passed to the collector script.
 
-```232:242:utilities/must_gather.py
+```284:294:utilities/must_gather.py
             must_gather_image = _resolve_must_gather_image(
                 ocp_admin_client=ocp_admin_client,
                 mtv_subs=mtv_subs,

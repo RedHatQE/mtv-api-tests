@@ -212,6 +212,8 @@ def _resolve_must_gather_image(
     if "@" not in csv_image:
         raise MustGatherImageError(f"CSV image '{csv_image}' does not contain a digest separator '@'")
     sha = csv_image.split("@")[1]
+    if not sha:
+        raise MustGatherImageError(f"CSV image '{csv_image}' has an empty digest after '@'")
     resolved_image = f"{must_gather_mirror_url}@{sha}"
     LOGGER.info(f"Resolved must-gather image from IDMS: {resolved_image}")
     return resolved_image
