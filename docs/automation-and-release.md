@@ -71,7 +71,7 @@ repos:
         exclude: ^docs/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.9
+    rev: v0.16.10
     hooks:
       - id: ruff
       - id: ruff-format
@@ -83,7 +83,7 @@ repos:
         exclude: ^docs/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.1
+    rev: v2.4.0
     hooks:
       - id: mypy
         additional_dependencies:

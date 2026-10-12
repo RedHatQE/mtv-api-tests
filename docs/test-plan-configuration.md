@@ -435,7 +435,7 @@ There is one more important implementation detail: when the helper creates an MT
 
 > **Warning:** Do not expect a custom `pvc_name_template` in `tests_params` to survive copy-offload plan creation. The helper overwrites it with `"pvc"`.
 
-Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.md#vsphere-copy-offload).
+Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.html#vsphere-copy-offload).
 
 ## How Raw Config Becomes `prepared_plan`
 
