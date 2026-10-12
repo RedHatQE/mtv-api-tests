@@ -1,6 +1,6 @@
 ---
 name: remote-debugging
-description: "Attach to the mtv-api-tests remote debugger (remote-pdb) when a test run is blocked waiting for a debugger connection. Covers the FIFO-piped nc client pattern for AI agents, pdb session commands, and quit/continue semantics."
+description: "Debug mtv-api-tests test runs end to end. Triggers: debug, debug the code, debug a test, debugger, pdb, remote pdb, remote-pdb, breakpoint, remote_breakpoint, MTV_REMOTE_PDB, test run blocked, waiting for debugger connection, attach to debugger. Covers placing the breakpoint, watching for the hit, FIFO-piped nc attach, pdb commands, quit/continue semantics."
 ---
 
 # Remote Debugger Client (mtv-api-tests)
