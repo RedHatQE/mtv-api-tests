@@ -301,7 +301,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     worker reports completion from its own sessionfinish wrapper, so cleanup placed after that
     yield could be interrupted by worker shutdown mid-deletion. Work that needs other plugins'
     sessionfinish output (JUnit enrichment, terminal summary) runs after the yield. A cleanup
-    error is stashed and re-raised after the yield so the inner hooks still run.
+    error is stashed and re-raised after the yield so the inner hooks still run; a post-yield
+    failure is chained from the stashed cleanup error so both stay visible.
 
     Args:
         session (pytest.Session): Worker-local session holding pending diagnostics and resources.
@@ -349,18 +350,25 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
         session_outcome = yield
 
     try:
-        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-        reporter.summary_stats()
-    finally:
-        if session.config.getoption("analyze_with_ai"):
-            if exitstatus == 0:
-                LOGGER.info(f"No test failures (exit code {exitstatus}), skipping AI analysis")
-            else:
-                try:
-                    enrich_junit_xml(session)
-                except Exception:
-                    LOGGER.exception("Failed to enrich JUnit XML, original preserved")
-                    raise
+        try:
+            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+            reporter.summary_stats()
+        finally:
+            if session.config.getoption("analyze_with_ai"):
+                if exitstatus == 0:
+                    LOGGER.info(f"No test failures (exit code {exitstatus}), skipping AI analysis")
+                else:
+                    try:
+                        enrich_junit_xml(session)
+                    except Exception:
+                        LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+                        raise
+    except Exception as post_yield_error:
+        # A post-yield failure must not swallow a stashed cleanup error: chain the later
+        # exception from it so both remain visible.
+        if cleanup_error is not None:
+            raise post_yield_error from cleanup_error
+        raise
 
     if cleanup_error is not None:
         raise cleanup_error
