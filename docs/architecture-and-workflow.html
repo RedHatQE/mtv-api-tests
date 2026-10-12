@@ -577,12 +577,15 @@ ready in Forklift, and only then opens the matching provider SDK wrapper.</p>
 </li>
 <li>
 <p>The <code>ConnectionError</code> raised when <code>_source_provider.test</code> fails reports what the check actually established, which differs by
-  provider. For the providers that set a <code>host</code> argument - Hyper-V and vSphere connect to the provider's <code>fqdn</code>, RHV,
-  OpenStack and OVA to its <code>api_url</code> - the message names the endpoint the wrapper dialed. OpenShift sets no <code>host</code>, and
-  <code>OCPProvider.test</code> only checks that the created <code>Provider</code> resource exists, so its message names the configured
-  source-provider URL from the providers configuration: the value an operator has to correct, but not an endpoint the wrapper
-  contacted. It is therefore the original URL, not the destination cluster host that the OpenShift branch rewrites
-  <code>source_provider_data_copy["api_url"]</code> to for the secret and the <code>Provider</code> resource.</p>
+  provider. For the providers that set a <code>host</code> argument - Hyper-V and vSphere connect to the provider's <code>fqdn</code>, RHV and
+  OpenStack to its <code>api_url</code> - the message names the endpoint the wrapper dialed. OVA never reaches this failure path:
+  <code>OVAProvider.connect()</code> does not connect, its <code>test</code> always succeeds, and OVA setup waits for the Forklift <code>Provider</code>
+  resource to report ready before the wrapper opens. OpenShift sets no <code>host</code>, and <code>OCPProvider.test</code> only checks that the
+  created <code>Provider</code> resource exists, so its message names the configured source-provider URL from the providers
+  configuration purely as diagnostic context: not an endpoint the wrapper contacted, and correcting it cannot make this
+  check pass - troubleshoot the <code>Provider</code> resource instead. The URL reported is the original one, not the destination
+  cluster host that the OpenShift branch rewrites <code>source_provider_data_copy["api_url"]</code> to for the secret and the
+  <code>Provider</code> resource.</p>
 </li>
 <li>
 <p>Remote OpenShift destination tests reuse the same basic pattern, but switch from <code>destination_provider</code> to
