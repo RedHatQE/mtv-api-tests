@@ -395,12 +395,15 @@ def initialize_class_plan_context(item: pytest.Item) -> None:
     """Clear stale Plan state on entry, without resetting consecutive methods of the same plan.
 
     A re-entered class-plan instance (xdist load/loadgroup/worksteal scheduling can split one
-    class across non-contiguous batches) also drops its stored Plan context unless that instance
-    already completed a successful gather, so a second-run failure cannot gather against the
-    first run's deleted Plan.
+    class across non-contiguous batches) first resolves any gather still owed from its earlier
+    run with that run's original context, and otherwise drops its stored Plan context, so a
+    second-run failure cannot gather against the first run's deleted Plan.
 
     Args:
         item (pytest.Item): Item whose protocol is starting, before any setup hooks run.
+
+    Returns:
+        None: Updates session class-plan context state without returning a value.
     """
     identity = class_plan_identity(item)
     active_identity: str | None = getattr(item.session, "_must_gather_active_class_identity", None)
@@ -409,9 +412,16 @@ def initialize_class_plan_context(item: pytest.Item) -> None:
             node_cls: type = getattr(item, "cls")
             setattr(node_cls, "plan_resource", None)
             if not class_must_gather_collected(item.session, identity):
-                contexts: dict[str, Plan | None] = getattr(item.session, "_must_gather_plan_contexts", {})
-                contexts.pop(identity, None)
-                setattr(item.session, "_must_gather_plan_contexts", contexts)
+                pending: dict[str, pytest.Item] = getattr(item.session, "_must_gather_pending_classes", {})
+                if identity in pending:
+                    # Resolve the owed gather with its original context before this run's state
+                    # replaces it; a still-failing retry keeps that context for the session-end flush.
+                    _collect_pending_class_must_gather(item.session, identity, pending[identity])
+                else:
+                    # No gather is owed: the stored context is stale from the earlier run.
+                    contexts: dict[str, Plan | None] = getattr(item.session, "_must_gather_plan_contexts", {})
+                    contexts.pop(identity, None)
+                    setattr(item.session, "_must_gather_plan_contexts", contexts)
         setattr(item.session, "_must_gather_active_class_identity", identity)
 
 
