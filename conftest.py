@@ -372,7 +372,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
                         LOGGER.exception("Failed to enrich JUnit XML, original preserved")
                         raise
     except Exception as post_yield_error:
-        # A post-yield failure must not swallow an earlier error: chain it from the earliest.
+        # A post-yield failure must not swallow earlier errors: chain it from the earliest
+        # failure, linking the other earlier failure into the same chain so every traceback
+        # stays visible.
+        if cleanup_error is not None and inner_error is not None:
+            inner_error.__cause__ = cleanup_error
+            raise post_yield_error from inner_error
         earlier_error = cleanup_error or inner_error
         if earlier_error is not None:
             raise post_yield_error from earlier_error
