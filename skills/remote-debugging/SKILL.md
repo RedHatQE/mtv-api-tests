@@ -43,12 +43,13 @@ The debugger speaks plain pdb over a TCP socket. Drive it with `nc` fed through 
 commands can be sent programmatically:
 
 ```bash
-FIFO=/tmp/remote-pdb-in
-OUT=/tmp/remote-pdb-out
-rm -f "$FIFO" "$OUT" && mkfifo "$FIFO"
+# Resolve "$port" first (see "Finding the port"), then create owner-only client files.
+# Paths are scoped by port so concurrent agents debugging different runs never collide.
+FIFO="/tmp/remote-pdb-${port}-in"
+OUT="/tmp/remote-pdb-${port}-out"
+umask 077 && rm -f "$FIFO" "$OUT" && mkfifo -m 600 "$FIFO" && touch "$OUT"
 
-# Attach to the listener (port resolved per "Finding the port"; default 4444):
-port=4444
+# Attach to the listener (default 127.0.0.1):
 nohup bash -c "exec tail -f $FIFO | exec nc 127.0.0.1 $port > $OUT 2>&1" < /dev/null > /dev/null 2>&1 &
 
 # Send a command, wait ~1-2s, read the output:
@@ -80,7 +81,7 @@ End the session:
 Track the client PIDs and signal only those PIDs when done. Never use `pkill` in any form: broad
 `-f` patterns containing the FIFO path or `nc 127.0.0.1 4444` match your own shell's command line
 and kill your own session (exit 143), and even exact-name matching (`pkill -x nc`) signals every
-matching process, not just this client. Remove the FIFO afterwards.
+matching process, not just this client. Remove the port-scoped FIFO and output files afterwards.
 
 ## Gotchas learned the hard way
 
