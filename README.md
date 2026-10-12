@@ -335,6 +335,12 @@ nc localhost 4444
 
 Host and port can be overridden with `REMOTE_PDB_HOST` / `REMOTE_PDB_PORT`.
 
+### AI agents
+
+The repo ships an agent skill for driving debugger sessions — see [`skills/`](skills/). It is not
+auto-discovered: symlink `skills/remote-debugging` into your agent harness's skills location manually
+(see `skills/README.md`), and restart the session so the harness picks it up.
+
 > **Note:** while a debugger session is attached, the test process is frozen but the cluster keeps moving —
 > migrations and reconciliation continue server-side. Use the debugger for inspection; avoid long pauses inside
 > migration polling loops.
