@@ -465,8 +465,10 @@ each item's parametrized plan config. Whether a provider supports <code>add_nic<
                     <span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">"add_nic is vSphere-only; skipping for provider '</span><span class="si">{</span><span class="n">source_provider_type</span><span class="si">}</span><span class="s2">'"</span>
                 <span class="p">)</span>
                 <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
-                    <span class="n">test_config</span> <span class="o">=</span> <span class="n">resolve_item_plan_config</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
-                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">)</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">test_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"virtual_machines"</span><span class="p">,</span> <span class="p">[])):</span>
+                    <span class="n">test_config</span> <span class="o">=</span> <span class="n">resolve_item_plan_config</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">test_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">vm</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"add_nic"</span><span class="p">)</span> <span class="k">for</span> <span class="n">vm</span> <span class="ow">in</span> <span class="n">test_config</span><span class="p">[</span><span class="s2">"virtual_machines"</span><span class="p">]):</span>
                         <span class="n">item</span><span class="o">.</span><span class="n">add_marker</span><span class="p">(</span><span class="n">add_nic_skip</span><span class="p">)</span>
 </code></pre></div>
 

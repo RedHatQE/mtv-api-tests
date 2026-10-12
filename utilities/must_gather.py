@@ -395,9 +395,12 @@ def initialize_class_plan_context(item: pytest.Item) -> None:
     """Clear stale Plan state on entry, without resetting consecutive methods of the same plan.
 
     A re-entered class-plan instance (xdist load/loadgroup/worksteal scheduling can split one
-    class across non-contiguous batches) first resolves any gather still owed from its earlier
-    run with that run's original context, and otherwise drops its stored Plan context, so a
-    second-run failure cannot gather against the first run's deleted Plan.
+    class across non-contiguous batches) keeps the stored Plan context while a gather from its
+    earlier run is still owed, so the session-end retry uses that original context, and otherwise
+    drops the stored context so a second-run failure cannot gather against the first run's
+    deleted Plan. The owed gather itself is not retried here: this runs before the runtest
+    protocol yields, and an escaping configuration error would abort the worker as an
+    INTERNALERROR before fixtures finalize.
 
     Args:
         item (pytest.Item): Item whose protocol is starting, before any setup hooks run.
@@ -413,12 +416,10 @@ def initialize_class_plan_context(item: pytest.Item) -> None:
             setattr(node_cls, "plan_resource", None)
             if not class_must_gather_collected(item.session, identity):
                 pending: dict[str, pytest.Item] = getattr(item.session, "_must_gather_pending_classes", {})
-                if identity in pending:
-                    # Resolve the owed gather with its original context before this run's state
-                    # replaces it; a still-failing retry keeps that context for the session-end flush.
-                    _collect_pending_class_must_gather(item.session, identity, pending[identity])
-                else:
-                    # No gather is owed: the stored context is stale from the earlier run.
+                if identity not in pending:
+                    # No gather is owed: the stored context is stale from the earlier run. While a
+                    # gather is owed, the original context stays so the session-end flush retries
+                    # with the Plan the failure was recorded against.
                     contexts: dict[str, Plan | None] = getattr(item.session, "_must_gather_plan_contexts", {})
                     contexts.pop(identity, None)
                     setattr(item.session, "_must_gather_plan_contexts", contexts)
@@ -565,11 +566,25 @@ def flush_pending_class_must_gathers(session: pytest.Session) -> None:
     This fallback cannot guarantee pre-cleanup state after interrupted hooks or recover state
     from a crashed worker process. Normal early exits gather at the nextitem=None boundary.
     An unbound identity can use the class attribute only while it is still active; otherwise
-    it binds None rather than targeting another plan's stale attribute.
+    it binds None rather than targeting another plan's stale attribute. Every identity's retry
+    runs even when an earlier one fails; the first configuration error is re-raised after the
+    loop so one failure cannot skip the remaining diagnostics.
 
     Args:
         session (pytest.Session): Session whose remaining pending map is consumed on success.
+
+    Raises:
+        MustGatherImageError: The first configuration error encountered across the retries,
+            re-raised with its traceback after every identity was attempted.
     """
     pending: dict[str, pytest.Item] = getattr(session, "_must_gather_pending_classes", {})
+    retry_errors: list[MustGatherImageError] = []
     for identity, item in list(pending.items()):
-        _collect_pending_class_must_gather(session, identity, item)
+        try:
+            _collect_pending_class_must_gather(session, identity, item)
+        except MustGatherImageError as exp:
+            # One identity's configuration failure must not skip the remaining retries.
+            LOGGER.exception(f"Must-gather retry for class-plan '{identity}' failed at session finish")
+            retry_errors.append(exp)
+    if retry_errors:
+        raise retry_errors[0]

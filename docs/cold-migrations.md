@@ -58,8 +58,10 @@ provider type other than vSphere. The capability itself is decided by `supports_
                     reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                 )
                 for item in items:
-                    test_config = resolve_item_plan_config(item) or {}
-                    if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                    test_config = resolve_item_plan_config(item)
+                    if test_config is None:
+                        continue
+                    if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
                         item.add_marker(add_nic_skip)
 ```
 
