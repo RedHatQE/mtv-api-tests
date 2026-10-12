@@ -467,8 +467,12 @@ def pytest_collection_modifyitems(session, config, items):
                     reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
                 )
                 for item in items:
-                    test_config = resolve_item_plan_config(item) or {}
-                    if any(vm.get("add_nic") for vm in test_config.get("virtual_machines", [])):
+                    test_config = resolve_item_plan_config(item)
+                    if test_config is None:
+                        continue
+                    # `virtual_machines` is a required plan-config field: direct access fails the
+                    # collection run with a clear KeyError instead of a later fixture error.
+                    if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
                         item.add_marker(add_nic_skip)
 
     _session_store = get_fixture_store(session)
@@ -496,6 +500,8 @@ def pytest_exception_interact(node, call, report):
     Setup/call failures record the failing item by class-plan identity. The tryfirst teardown hook
     binds Plan context at the nextitem boundary before default fixture finalization for all retries.
     With no plan, it binds None and takes a full gather. Standalone tests gather immediately, once on success.
+    Collection-phase failures from collectors carry no test context and are left to pytest's own
+    reporting; the hook returns without gathering so a collection error stays a collection error.
     Unexpected standalone setup/call collector errors are retained on the item until fixture finalization.
     Earlier method teardown failures are deferred while the same class-plan continues. Boundary
     finalizer failures arrive after cleanup and gather only if no successful gather already exists.
@@ -513,6 +519,11 @@ def pytest_exception_interact(node, call, report):
 
     node_cls: type | None = getattr(node, "cls", None)
     if node_cls is None:
+        if call.when == "collect":
+            # Collection failures from collectors (e.g. a Module that fails to import) have no test
+            # context; pytest reports them itself. Attempting a gather here would re-raise inside
+            # this hook and turn a reportable collection error into an INTERNALERROR.
+            return
         collected: set[str] = getattr(node.session, "_must_gather_collected_tests", set())
         worker: str = getattr(node.config, "workerinput", {}).get("workerid", "master")
         identity = f"{node.nodeid}::worker={worker}"
