@@ -317,6 +317,22 @@ def verify_luks_encryption(
     LOGGER.info(f"LUKS encryption verified on VM {vm_name}: {len(luks_devices)} encrypted device(s) found")
 
 
+def _normalize_windows_command_output(output: str) -> str:
+    """Normalize Windows SSH command output for jc parsing.
+
+    The Windows OpenSSH exec channel may deliver UTF-16-mangled text (BOM and NUL
+    bytes) or CRLF line endings, which makes jc fail to recognize the output as
+    Windows ipconfig ("command output from this OS (linux) is not supported").
+
+    Args:
+        output: Raw command output string
+
+    Returns:
+        Normalized string: BOM and NUL bytes stripped, line endings unified to LF
+    """
+    return output.lstrip("\ufeff").replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _parse_windows_network_config(ipconfig_output: str) -> dict[str, dict[str, Any]]:
     """
     Parse Windows ipconfig /all output to extract network interface information.
@@ -329,7 +345,7 @@ def _parse_windows_network_config(ipconfig_output: str) -> dict[str, dict[str, A
         Dictionary mapping interface names to their configuration
     """
     # Parse using jc library
-    parsed = jc.parse("ipconfig", ipconfig_output)
+    parsed = jc.parse("ipconfig", _normalize_windows_command_output(ipconfig_output))
 
     interfaces: dict[str, dict[str, Any]] = {}
 
@@ -433,6 +449,27 @@ def _extract_static_interfaces(source_vm_data: dict[str, Any]) -> list[dict[str,
                 }
                 static_interfaces.append(static_interface)
     return static_interfaces
+
+
+def _get_pod_mapped_static_interfaces(
+    static_interfaces: list[dict[str, Any]], network_map_resource: NetworkMap
+) -> list[dict[str, Any]]:
+    """Return static-IP interfaces whose source network maps to pod networking.
+
+    The product does not preserve static IPs on pod-mapped interfaces (the Plan reports
+    the NetMapPreservingIPsOnPodNetwork warning), so those interfaces must be excluded
+    from static-IP verification.
+
+    Args:
+        static_interfaces: Flattened static-IP interface entries from _extract_static_interfaces
+        network_map_resource: NetworkMap resource resolving source networks to destinations
+
+    Returns:
+        Static-IP interfaces whose source network maps to the pod network
+    """
+    return [
+        interface for interface in static_interfaces if get_all_destinations(network_map_resource, interface) == ["pod"]
+    ]
 
 
 def _verify_subnet_mask(interface_name: str, expected_subnet: str, matching_interface: dict[str, Any]) -> None:
@@ -612,6 +649,7 @@ def check_static_ip_preservation(
     vm_ssh_connections: SSHConnectionManager,
     source_vm_data: dict[str, Any],
     source_provider_data: dict[str, Any],
+    network_map_resource: NetworkMap,
     timeout: int = 660,
     retry_delay: int = 30,
 ) -> None:
@@ -625,6 +663,8 @@ def check_static_ip_preservation(
         vm_ssh_connections: SSH connections fixture manager
         source_vm_data: Source VM data collected during plan setup
         source_provider_data: Provider configuration from .providers.json
+        network_map_resource: NetworkMap resolving source networks to destinations; static IPs
+            on pod-mapped interfaces are excluded from verification (not preserved by the product)
         timeout: Total timeout in seconds for network configuration retrieval (default: 660)
         retry_delay: Delay in seconds between retry attempts (default: 30)
 
@@ -649,6 +689,21 @@ def check_static_ip_preservation(
             f"preserve_static_ips is enabled but no static IP interfaces found for VM {vm_name}. "
             "Ensure the source VM is powered on so guest tools can report IP origin information."
         )
+
+    pod_mapped_interfaces = _get_pod_mapped_static_interfaces(
+        static_interfaces=static_interfaces, network_map_resource=network_map_resource
+    )
+    if pod_mapped_interfaces:
+        for interface in pod_mapped_interfaces:
+            LOGGER.info(
+                f"Interface {interface['name']} ({interface['ip_address']}) excluded from static IP "
+                "verification: pod-network mapped, static IPs are not preserved on pod network"
+            )
+        static_interfaces = [interface for interface in static_interfaces if interface not in pod_mapped_interfaces]
+
+    if not static_interfaces:
+        LOGGER.info(f"All static IP interfaces for VM {vm_name} are pod-network mapped, nothing to verify")
+        return
 
     LOGGER.info(f"Found {len(static_interfaces)} static IP interfaces to verify")
 
@@ -1903,6 +1958,7 @@ def check_vms(
                         vm_ssh_connections=vm_ssh_connections,
                         source_vm_data=source_vm_data,
                         source_provider_data=source_provider_data,
+                        network_map_resource=network_map_resource,
                     )
                 except Exception as exp:
                     res[vm_name].append(f"check_static_ip_preservation - {str(exp)}")
