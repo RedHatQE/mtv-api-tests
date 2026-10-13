@@ -452,6 +452,8 @@ def _extract_static_interfaces(source_vm_data: dict[str, Any]) -> list[dict[str,
 
 
 def _is_pod_mapped_static_interface(
+    # dict values are heterogeneous runtime provider data (bools, IP strings, nested
+    # network dicts) — the file-wide dict[str, Any] convention for external data.
     static_interface: dict[str, Any],
     destination_vm: dict[str, Any],
     network_map_resource: NetworkMap,
