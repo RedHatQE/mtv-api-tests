@@ -15,6 +15,10 @@ import re
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+
+# `Any` is the value type of `.providers.json` entries: schema-validated JSON mappings
+# whose fields vary per provider type (see providers_schema.json), so no narrower static
+# type exists for them in this codebase.
 from typing import TYPE_CHECKING, Any
 
 from ocp_resources.namespace import Namespace
