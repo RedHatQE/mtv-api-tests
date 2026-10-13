@@ -15,7 +15,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import InvalidVMNameError
 from libs.base_provider import BaseProvider
-from utilities.naming import sanitize_kubernetes_name
+from utilities.naming import sanitize_kubernetes_name, truncate_resource_name
 from utilities.ssh_utils import VMSSHConnection, create_vm_ssh_connection
 
 if TYPE_CHECKING:
@@ -145,6 +145,13 @@ class OCPProvider(BaseProvider):
         _source = kwargs.get("source", False)
 
         cnv_vm_name = f"{kwargs['name']}{kwargs.get('vm_name_suffix', '')}"
+
+        if _source:
+            # Source VMs are created by create_and_store_resource(), which truncates long
+            # names to the Kubernetes limit keeping the trailing characters. Apply the same
+            # rule here so the lookup always matches the created VM, and the actual (truncated)
+            # name flows into the plan via the returned vm info.
+            cnv_vm_name = truncate_resource_name(name=cnv_vm_name)
 
         # For destination VMs, sanitize the name to match Kubernetes naming conventions
         # The MTV operator converts source VM names (which may have capitals and underscores)

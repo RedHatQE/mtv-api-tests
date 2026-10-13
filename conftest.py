@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import bdb
 import logging
 import os
 import pickle
@@ -76,12 +77,14 @@ from utilities.pytest_utils import (
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
 from utilities.ssh_utils import SSHConnectionManager
+from utilities.debug import remote_debugger_enabled, remote_post_mortem
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
     extract_vm_from_plan,
     generate_class_hash_prefix,
     get_cluster_client,
+    get_cluster_version,
     get_cluster_version_str,
     get_per_nic_networks,
     get_value_from_py_config,
@@ -391,6 +394,23 @@ def pytest_exception_interact(node, call, report):
 
         run_must_gather(data_collector_path=_data_collector_path, plan=plan)
 
+    # Remote post-mortem debugger (MTV_REMOTE_PDB). Runs after must-gather so diagnostics
+    # are collected before the session blocks waiting for a debugger connection. Skipped
+    # when --pdb is active so the local terminal debugger takes precedence, and skipped
+    # for BdbQuit so quitting a code breakpoint fails that test without opening another
+    # listener. A debugger quit ends the test session, matching pytest's native --pdb
+    # behavior. usepdb has a default because -p no:pdb removes the option.
+    if (
+        remote_debugger_enabled()
+        and not node.config.getoption("usepdb", default=False)
+        and call.excinfo is not None
+        and not isinstance(call.excinfo.value, bdb.BdbQuit)
+    ):
+        try:
+            remote_post_mortem(exception=call.excinfo.value)
+        except bdb.BdbQuit:
+            pytest.exit("Quitting remote debugger")
+
 
 # https://smarie.github.io/python-pytest-harvest/#pytest-x-dist
 def pytest_harvest_xdist_init():
@@ -544,6 +564,26 @@ def ocp_admin_client():
             raise RemoteClusterAndLocalCluterNamesError("Remote cluster must be the same as local cluster.")
 
     yield _client
+
+
+@pytest.fixture(scope="session")
+def target_ocp_version(ocp_admin_client: DynamicClient) -> str:
+    """Target (destination) OpenShift cluster version as "major.minor".
+
+    Derived from the cluster the run targets, so generated VM names always
+    match the actual target cluster version.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for the target cluster.
+
+    Returns:
+        str: Cluster version formatted as "major.minor" (e.g. "4.22").
+
+    Raises:
+        ValueError: If the cluster version cannot be determined or parsed.
+    """
+    version = get_cluster_version(client=ocp_admin_client)
+    return f"{version.major}.{version.minor}"
 
 
 @pytest.fixture(scope="session")
@@ -1103,7 +1143,12 @@ def prepared_plan(
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
-        vm_name_suffix = get_vm_suffix(warm_migration=warm_migration)
+        # Resolved lazily via request so OVA plans (which skip VM-name suffix generation)
+        # never parse the cluster version.
+        vm_name_suffix = get_vm_suffix(
+            warm_migration=warm_migration,
+            ocp_version=request.getfixturevalue("target_ocp_version"),
+        )
 
         if openshift_source_provider:
             # Generate unique network name for class-based tests
@@ -1307,6 +1352,7 @@ def prepared_plan(
                     vm_name_suffix=vm_name_suffix,
                     session_uuid=fixture_store["session_uuid"],
                     clone_options=vm,
+                    source=True,
                 )
                 vm["name"] = source_vm_details["name"]
                 cloned_vm_names.append(vm["name"])

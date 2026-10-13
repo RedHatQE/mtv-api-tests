@@ -375,11 +375,6 @@ keep provider definitions in <code>.providers.json</code>, and pass environment-
 <td>Optional</td>
 <td>Cluster password. Falls back to the <code>CLUSTER_PASSWORD</code> environment variable</td>
 </tr>
-<tr>
-<td><code>target_ocp_version</code></td>
-<td>Optional</td>
-<td>Used only for the generated VM name suffix, where dots are replaced with dashes</td>
-</tr>
 </tbody>
 </table></div>
 <p>If either required key is missing, the session aborts with <code>pytest.exit(...)</code> and return code <code>1</code> before any fixture runs.</p>

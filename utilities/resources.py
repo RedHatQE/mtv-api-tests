@@ -8,7 +8,7 @@ from ocp_resources.plan import Plan
 from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
 
-from utilities.naming import generate_name_with_uuid
+from utilities.naming import generate_name_with_uuid, truncate_resource_name
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -45,9 +45,7 @@ def create_and_store_resource(
         if resource.kind in (Migration.kind, Plan.kind):
             _resource_name = f"{_resource_name}-{'warm' if kwargs.get('warm_migration') else 'cold'}"
 
-    if len(_resource_name) > 63:
-        LOGGER.warning(f"'{_resource_name=}' is too long ({len(_resource_name)} > 63). Truncating.")
-        _resource_name = _resource_name[-63:]
+    _resource_name = truncate_resource_name(name=_resource_name)
 
     kwargs["name"] = _resource_name
 
