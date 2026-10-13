@@ -451,25 +451,40 @@ def _extract_static_interfaces(source_vm_data: dict[str, Any]) -> list[dict[str,
     return static_interfaces
 
 
-def _get_pod_mapped_static_interfaces(
-    static_interfaces: list[dict[str, Any]], network_map_resource: NetworkMap
-) -> list[dict[str, Any]]:
-    """Return static-IP interfaces whose source network maps to pod networking.
+def _is_pod_mapped_static_interface(
+    static_interface: dict[str, Any],
+    destination_vm: dict[str, Any],
+    network_map_resource: NetworkMap,
+) -> bool:
+    """Check whether a static-IP interface landed on pod networking after migration.
 
     The product does not preserve static IPs on pod-mapped interfaces (the Plan reports
     the NetMapPreservingIPsOnPodNetwork warning), so those interfaces must be excluded
     from static-IP verification.
 
+    When the interface's source network maps to a single destination the map alone is
+    decisive. When it maps to several destinations (per-NIC mapping can send one source
+    network to both pod and Multus), the actual binding is resolved from the destination
+    VM's NIC with the same MAC — the same resolution check_network relies on, because
+    Forklift assigns NICs to destinations at migration time.
+
     Args:
-        static_interfaces: Flattened static-IP interface entries from _extract_static_interfaces
+        static_interface: Flattened static-IP interface entry from _extract_static_interfaces
+        destination_vm: Destination VM data whose NICs carry the landed network names
         network_map_resource: NetworkMap resource resolving source networks to destinations
 
     Returns:
-        Static-IP interfaces whose source network maps to the pod network
+        True if the interface is attached to the pod network on the destination VM
     """
-    return [
-        interface for interface in static_interfaces if get_all_destinations(network_map_resource, interface) == ["pod"]
-    ]
+    destinations = get_all_destinations(network_map_resource, static_interface)
+    if destinations == ["pod"]:
+        return True
+    if "pod" in destinations:
+        destination_nic = get_nic_by_mac(
+            nics=destination_vm["network_interfaces"], mac_address=static_interface["macAddress"]
+        )
+        return destination_nic["network"] == "pod"
+    return False
 
 
 def _verify_subnet_mask(interface_name: str, expected_subnet: str, matching_interface: dict[str, Any]) -> None:
@@ -650,6 +665,7 @@ def check_static_ip_preservation(
     source_vm_data: dict[str, Any],
     source_provider_data: dict[str, Any],
     network_map_resource: NetworkMap,
+    destination_vm: dict[str, Any],
     timeout: int = 660,
     retry_delay: int = 30,
 ) -> None:
@@ -665,6 +681,8 @@ def check_static_ip_preservation(
         source_provider_data: Provider configuration from .providers.json
         network_map_resource: NetworkMap resolving source networks to destinations; static IPs
             on pod-mapped interfaces are excluded from verification (not preserved by the product)
+        destination_vm: Destination VM data; resolves per-NIC destination binding by MAC when a
+            source network maps to several destinations (per-NIC mapping)
         timeout: Total timeout in seconds for network configuration retrieval (default: 660)
         retry_delay: Delay in seconds between retry attempts (default: 30)
 
@@ -690,9 +708,15 @@ def check_static_ip_preservation(
             "Ensure the source VM is powered on so guest tools can report IP origin information."
         )
 
-    pod_mapped_interfaces = _get_pod_mapped_static_interfaces(
-        static_interfaces=static_interfaces, network_map_resource=network_map_resource
-    )
+    pod_mapped_interfaces = [
+        interface
+        for interface in static_interfaces
+        if _is_pod_mapped_static_interface(
+            static_interface=interface,
+            destination_vm=destination_vm,
+            network_map_resource=network_map_resource,
+        )
+    ]
     if pod_mapped_interfaces:
         for interface in pod_mapped_interfaces:
             LOGGER.info(
@@ -1959,6 +1983,7 @@ def check_vms(
                         source_vm_data=source_vm_data,
                         source_provider_data=source_provider_data,
                         network_map_resource=network_map_resource,
+                        destination_vm=destination_vm,
                     )
                 except Exception as exp:
                     res[vm_name].append(f"check_static_ip_preservation - {str(exp)}")
