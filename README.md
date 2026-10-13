@@ -691,8 +691,9 @@ version and let the suite pick the fastest member from the cluster's point of vi
 --tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1
 ```
 
-An optional feature key restricts the pool (currently `copyoffload` — only providers whose entry
-carries a `copyoffload` section):
+A feature key (`copyoffload`) flips pool membership: copy-offload-capable providers — entries
+with a `copyoffload` section — are **excluded** from the pool by default and included **only** when
+the key is passed:
 
 ```bash
 --tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1 --tc=source_provider_feature:copyoffload
@@ -709,8 +710,9 @@ Rules:
 - Explicit `--tc=source_provider:<key>` always wins: nothing is probed and nothing changes.
 - The pool form requires both keys together; a partial pair aborts the session with `pytest.exit(...)`.
 - Neither an explicit provider nor a pool aborts with the missing-config error, exactly as before.
-- Candidates are the `.providers.json` entries matching the requested type **and** version (and feature,
-  when requested); an empty pool aborts the session with a clear error — never a skip.
+- Candidates are the `.providers.json` entries matching the requested type **and** version, gated by the
+  feature key (`copyoffload` providers only with the key, excluded without it); an empty pool aborts
+  the session with a clear error — never a skip.
 - The winner is the lowest-RTT candidate, with the lowest provider key as the deterministic tiebreak.
 - Unreachable candidates are excluded; a fully unreachable pool aborts the session.
 - In pool mode the provider is unknown at collection time, so collection-time provider gating uses the

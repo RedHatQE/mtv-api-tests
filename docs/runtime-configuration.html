@@ -368,7 +368,7 @@ keep provider definitions in <code>.providers.json</code>, and pass environment-
 <tr>
 <td><code>source_provider_feature</code></td>
 <td>Optional</td>
-<td>Restricts the pool to providers supporting a feature (<code>copyoffload</code>)</td>
+<td>Feature gate for the pool (<code>copyoffload</code>): copy-offload-capable providers are excluded without it and included with it</td>
 </tr>
 <tr>
 <td><code>storage_class</code></td>
@@ -423,10 +423,12 @@ client, before any migration work, and the message says which variable to set.</
 <div class="highlight"><pre><span></span><code>--tc<span class="o">=</span>source_provider_type:vsphere<span class="w"> </span>--tc<span class="o">=</span>source_provider_version:8.0.1
 </code></pre></div>
 
-<p>An optional feature key (<code>--tc=source_provider_feature:copyoffload</code>) keeps only providers whose entry carries a
-<code>copyoffload</code> section. The session-scoped <code>latency_selected_source_provider</code> fixture — requested first by the
+<p>A feature key (<code>--tc=source_provider_feature:copyoffload</code>) flips pool membership: copy-offload-capable providers —
+entries with a <code>copyoffload</code> section — are excluded from the pool by default and included only when the key is
+passed. The session-scoped <code>latency_selected_source_provider</code> fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from <code>.providers.json</code>
-(entries matching the type <strong>and</strong> version, and the feature when requested), launches one probe pod on the cluster,
+(entries matching the type <strong>and</strong> version, gated by the feature key — <code>copyoffload</code> providers only with the key, excluded
+without it), launches one probe pod on the cluster,
 measures TCP-connect RTT to every candidate's API endpoint (port from <code>api_url</code> when it carries one, otherwise the
 type's API port — Hyper-V 5986, everything else 443;
 median of three connects), and selects the lowest RTT with the lowest provider key as the deterministic tiebreak.

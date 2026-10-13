@@ -4029,7 +4029,7 @@ For a normal run, the suite expects two runtime values even though they are not 
 | `source_provider` | Yes (or a pool, see below) | Selects the source provider entry from `.providers.json` |
 | `source_provider_type` | Pool alternative | With `source_provider_version`, identifies the candidate pool for latency-based selection |
 | `source_provider_version` | Pool alternative | With `source_provider_type`, identifies the candidate pool for latency-based selection |
-| `source_provider_feature` | Optional | Restricts the pool to providers supporting a feature (`copyoffload`) |
+| `source_provider_feature` | Optional | Feature gate for the pool (`copyoffload`): copy-offload-capable providers are excluded without it and included with it |
 | `storage_class` | Yes | Sets the target OpenShift storage class for migration |
 | `cluster_host` | Optional | Cluster API URL. Falls back to the `CLUSTER_HOST` environment variable |
 | `cluster_username` | Optional | Cluster user. Falls back to the `CLUSTER_USERNAME` environment variable |
@@ -4071,10 +4071,12 @@ The repository's OpenShift Job template in `README.md` uses `--tc=` overrides li
     --tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1
 ```
 
-An optional feature key (`--tc=source_provider_feature:copyoffload`) keeps only providers whose entry carries a
-`copyoffload` section. The session-scoped `latency_selected_source_provider` fixture — requested first by the
+A feature key (`--tc=source_provider_feature:copyoffload`) flips pool membership: copy-offload-capable providers —
+entries with a `copyoffload` section — are excluded from the pool by default and included only when the key is
+passed. The session-scoped `latency_selected_source_provider` fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from `.providers.json`
-(entries matching the type **and** version, and the feature when requested), launches one probe pod on the cluster,
+(entries matching the type **and** version, gated by the feature key — `copyoffload` providers only with the key, excluded
+without it), launches one probe pod on the cluster,
 measures TCP-connect RTT to every candidate's API endpoint (port from `api_url` when it carries one, otherwise the
 type's API port — Hyper-V 5986, everything else 443;
 median of three connects), and selects the lowest RTT with the lowest provider key as the deterministic tiebreak.

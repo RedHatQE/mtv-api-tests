@@ -76,22 +76,24 @@ print(json.dumps(dict(zip(targets, results))))
 """
 
 
-def provider_feature_supported(provider_data: dict[str, Any], feature: str) -> bool:
-    """Report whether a provider entry supports a requested feature.
+def provider_feature_supported(provider_data: dict[str, Any], feature: str | None) -> bool:
+    """Report whether a provider entry passes the requested feature gate.
 
     Args:
         provider_data (dict[str, Any]): One provider entry from `.providers.json`.
-        feature (str): Requested feature key (e.g. `copyoffload`).
+        feature (str | None): Requested feature key (e.g. `copyoffload`). None means no
+            feature is requested — copy-offload-capable providers are then excluded, so
+            plain runs never land on a copy-offload provider.
 
     Returns:
-        bool: True when the provider entry carries the requested feature.
+        bool: True when the provider belongs in the pool.
 
     Raises:
         ValueError: When the feature name is not supported.
     """
-    if feature == "copyoffload":
-        return "copyoffload" in provider_data
-    raise ValueError(f"Unknown source_provider_feature {feature!r} (supported: 'copyoffload')")
+    if feature is not None and feature != "copyoffload":
+        raise ValueError(f"Unknown source_provider_feature {feature!r} (supported: 'copyoffload')")
+    return ("copyoffload" in provider_data) == (feature == "copyoffload")
 
 
 def derive_provider_pool(
@@ -107,6 +109,7 @@ def derive_provider_pool(
         provider_type (str): Required provider type (e.g. "vsphere").
         provider_version (str): Required provider version (e.g. "8.0.1").
         required_feature (str | None): Keep only providers supporting this feature.
+            Copy-offload-capable providers are excluded unless it is `copyoffload`.
 
     Returns:
         dict[str, dict[str, Any]]: Candidate providers, keyed by name.
@@ -120,10 +123,7 @@ def derive_provider_pool(
         if isinstance(provider_data, dict)
         and provider_data["type"] == provider_type
         and provider_data["version"] == provider_version
-        and (
-            required_feature is None
-            or provider_feature_supported(provider_data=provider_data, feature=required_feature)
-        )
+        and provider_feature_supported(provider_data=provider_data, feature=required_feature)
     }
     if not pool:
         raise ValueError(
