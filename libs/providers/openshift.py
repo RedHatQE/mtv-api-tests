@@ -318,7 +318,8 @@ class OCPProvider(BaseProvider):
                 "name": interface.name,
                 "macAddress": mac_addr,
                 "ip": self.get_ip_by_mac_address(mac_address=mac_addr, vm=cnv_vm) if not _source else "",
-                "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[1],
+                # networkName is "<ns>/<nad>" or just "<nad>" when the NAD is in the VM's namespace
+                "network": "pod" if network.get("pod", False) else network["multus"]["networkName"].split("/")[-1],
                 "guest_interface_name": interface.get("interfaceName") or "",
             })
 
