@@ -200,7 +200,7 @@ def latency_selected_source_provider(request: pytest.FixtureRequest, ocp_admin_c
         client=ocp_admin_client,
         providers_json_path=request.config.getoption("providers_json"),
         provider_type=py_config["source_provider_type"],
-        provider_version=py_config["source_provider_version"],
+        provider_version=py_config.get("source_provider_version"),
         required_feature=py_config.get("source_provider_feature"),
     )
     run_uid = os.environ.get("PYTEST_XDIST_TESTRUNUID")
@@ -217,7 +217,10 @@ def latency_selected_source_provider(request: pytest.FixtureRequest, ocp_admin_c
                 selection = select_from_pool()
                 selection_path.write_text(json.dumps(selection))
     py_config["source_provider"] = selection["provider"]
-    LOGGER.info(f"Source provider for this run: {selection['provider']} ({selection['rtt_ms']:.1f} ms)")
+    if selection["rtt_ms"] is None:
+        LOGGER.info(f"Source provider for this run: {selection['provider']} (selected without probing)")
+    else:
+        LOGGER.info(f"Source provider for this run: {selection['provider']} ({selection['rtt_ms']:.1f} ms)")
     return selection["provider"]
 
 
@@ -229,14 +232,14 @@ def pytest_sessionstart(session):
 
         missing_configs: list[str] = []
 
-        # Latency-based pool selection (issue #728): a type+version pool key pair
-        # replaces the explicit provider key. The selection itself runs later, in the
-        # latency_selected_source_provider fixture, once per run.
+        # Latency-based pool selection (issue #728): a provider-type pool key
+        # (version optional) replaces the explicit provider key. The selection itself
+        # runs later, in the latency_selected_source_provider fixture, once per run.
         pool_type = py_config.get("source_provider_type")
         pool_version = py_config.get("source_provider_version")
-        if not py_config.get("source_provider") and bool(pool_type) != bool(pool_version):
+        if not py_config.get("source_provider") and pool_version and not pool_type:
             pytest.exit(
-                reason="source_provider_type and source_provider_version must be set together",
+                reason="source_provider_version requires source_provider_type",
                 returncode=1,
             )
 

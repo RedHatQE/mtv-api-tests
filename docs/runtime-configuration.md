@@ -47,8 +47,8 @@ For a normal run, the suite expects two runtime values even though they are not 
 | Key | Required | Purpose |
 | --- | --- | --- |
 | `source_provider` | Yes (or a pool, see below) | Selects the source provider entry from `.providers.json` |
-| `source_provider_type` | Pool alternative | With `source_provider_version`, identifies the candidate pool for latency-based selection |
-| `source_provider_version` | Pool alternative | With `source_provider_type`, identifies the candidate pool for latency-based selection |
+| `source_provider_type` | Pool alternative | Identifies the candidate pool for latency-based selection (required for pool mode) |
+| `source_provider_version` | Optional | Narrows the pool to an exact version; omitted, every version of the type competes |
 | `source_provider_feature` | Optional | Feature gate for the pool (`copyoffload`): copy-offload-capable providers are excluded without it and included with it |
 | `storage_class` | Yes | Sets the target OpenShift storage class for migration |
 | `cluster_host` | Optional | Cluster API URL. Falls back to the `CLUSTER_HOST` environment variable |
@@ -88,18 +88,25 @@ uv run pytest -m "[TEST_MARKERS]" \
 `source_provider` can be resolved by latency instead of being pinned explicitly. Pass a pool instead of a key:
 
 ```bash
---tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1
+--tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1   # exact version
+--tc=source_provider_type:vsphere                                     # every version of the type
 ```
 
 A feature key (`--tc=source_provider_feature:copyoffload`) flips pool membership: copy-offload-capable providers —
 entries with a `copyoffload` section — are excluded from the pool by default and included only when the key is
 passed. The session-scoped `latency_selected_source_provider` fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from `.providers.json`
-(entries matching the type **and** version, gated by the feature key — `copyoffload` providers only with the key, excluded
-without it), launches one probe pod on the cluster,
-measures TCP-connect RTT to every candidate's API endpoint (port from `api_url` when it carries one, otherwise the
-type's API port — Hyper-V 5986, everything else 443;
-median of three connects), and selects the lowest RTT with the lowest provider key as the deterministic tiebreak.
+(entries matching the type, and the version when passed, gated by the feature key — `copyoffload` providers only
+with the key, excluded without it). A pool with a single member — or whose members all share one probe endpoint,
+e.g. two OVA entries on the same NFS server — is selected instantly without probing: no probe pod is created and
+the lowest provider key wins. Otherwise the fixture launches one probe pod on the cluster and measures TCP-connect
+RTT to every **unique** candidate endpoint (providers sharing a `host:port` are measured once and share the
+measurement). Each endpoint's host comes from `fqdn` when set, else from `api_url` (a URL authority or an NFS
+export path — OVA entries carry an empty `fqdn` and an NFS `api_url`), else from the OpenShift `host` field; the
+port comes from an explicit port in `api_url` when it carries one (e.g. OpenStack 13000), otherwise the type's API
+port — OVA NFS 2049, Hyper-V 5986, everything else 443. OVA endpoints are probed on the NFS port (2049) because
+that is the data path Forklift's populator mounts. Selection is the lowest RTT with the lowest provider key as the
+deterministic tiebreak — median of three connects.
 In a single-process run the pool is probed inline; under xdist the first worker to hold a run-scoped file lock
 (`PYTEST_XDIST_TESTRUNUID`-keyed, so parallel runs never share it) probes and writes the selection while every other
 worker reads the same file. The chosen provider and its RTT are logged.
@@ -107,9 +114,12 @@ worker reads the same file. The chosen provider and its RTT are logged.
 Precedence and failure modes:
 
 - Explicit `--tc=source_provider:<key>` always wins: nothing is probed and nothing changes.
-- The pool form requires both keys together; a partial pair aborts the session with `pytest.exit(...)`.
+- The pool form requires the type key; version is optional and `source_provider_version` without
+  `source_provider_type` aborts the session with `pytest.exit(...)`.
 - Neither an explicit provider nor a pool aborts with the missing-config error, as before.
-- An empty pool (no type+version match, or no provider passes the feature filter) aborts the session — never a skip.
+- An empty pool (no type match, or no provider passes the feature gate) aborts the session — never a skip.
+- An entry with no resolvable endpoint host (empty `fqdn`, `api_url`, and `host`) raises a `ValueError` naming the
+type — it is never probed against an empty host.
 - Unreachable candidates are excluded from selection; a fully unreachable pool aborts the session.
 - In pool mode the provider is unknown at collection time, so collection-time provider gating uses the pool's
   `source_provider_type` and item names carry the type instead of the provider key.

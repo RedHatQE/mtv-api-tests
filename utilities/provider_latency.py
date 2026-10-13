@@ -32,8 +32,9 @@ if TYPE_CHECKING:
 # Public ubi9 python image: the probe script needs only a python3 interpreter.
 PROBE_IMAGE = "registry.access.redhat.com/ubi9/python-314"
 _DEFAULT_PROBE_PORT = 443  # Default provider API port when the endpoint does not specify one
-# Hyper-V api_url is a bare hostname while its WinRM/WSMan endpoint listens on 5986.
-_PROBE_PORTS_BY_TYPE = {"hyperv": 5986}
+# Type-based probe ports when the endpoint does not specify one: Hyper-V WSMan listens
+# on 5986 behind a bare-hostname api_url; OVA entries are NFS exports probed on 2049.
+_PROBE_PORTS_BY_TYPE = {"hyperv": 5986, "ova": 2049}
 PROBE_CONNECT_ATTEMPTS = 3  # Median of three TCP connects per provider endpoint
 PROBE_CONNECT_TIMEOUT_SECONDS = 5
 PROBE_POD_START_TIMEOUT_SECONDS = 300  # First run pulls the image from the registry
@@ -99,15 +100,16 @@ def provider_feature_supported(provider_data: dict[str, Any], feature: str | Non
 def derive_provider_pool(
     providers: dict[str, dict[str, Any]],
     provider_type: str,
-    provider_version: str,
+    provider_version: str | None = None,
     required_feature: str | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Derive the candidate provider pool for a type + version pair.
+    """Derive the candidate provider pool for a provider type.
 
     Args:
         providers (dict[str, dict[str, Any]]): All source providers, keyed by name.
         provider_type (str): Required provider type (e.g. "vsphere").
-        provider_version (str): Required provider version (e.g. "8.0.1").
+        provider_version (str | None): Required provider version (e.g. "8.0.1");
+            None pools every version of the type.
         required_feature (str | None): Keep only providers supporting this feature.
             Copy-offload-capable providers are excluded unless it is `copyoffload`.
 
@@ -122,7 +124,7 @@ def derive_provider_pool(
         for name, provider_data in providers.items()
         if isinstance(provider_data, dict)
         and provider_data["type"] == provider_type
-        and provider_data["version"] == provider_version
+        and (provider_version is None or provider_data["version"] == provider_version)
         and provider_feature_supported(provider_data=provider_data, feature=required_feature)
     }
     if not pool:
@@ -148,12 +150,33 @@ def _port_from_api_url(api_url: str | None, default_port: int) -> int:
     return default_port
 
 
+def _host_from_api_url(api_url: str) -> str | None:
+    """Extract the host from a URL or an NFS export path.
+
+    Args:
+        api_url (str): Provider API URL ("https://host:5000/v3") or NFS export
+            path ("nfs-host:/export/path").
+
+    Returns:
+        str | None: The host, or None when the URL carries none.
+    """
+    if "://" in api_url:
+        api_url = api_url.split("://", 1)[1]
+    authority = api_url.split("/", 1)[0]
+    host = authority.rpartition("@")[2] if "@" in authority else authority
+    if ":" in host:
+        host = host.rpartition(":")[0]
+    return host or None
+
+
 def provider_probe_endpoint(provider_data: dict[str, Any]) -> tuple[str, int]:
     """Resolve a provider's probe target from its configured endpoint.
 
-    The host comes from the schema-required `fqdn`; the port comes from an explicit port
-    in `api_url` (e.g. OpenStack 5000) and otherwise defaults to the provider type's API
-    port (Hyper-V 5986, everything else 443).
+    The host comes from `fqdn` when set, else from `api_url` (a URL authority or an NFS
+    export path — OVA entries carry an empty `fqdn` and an NFS `api_url`), else from the
+    OpenShift `host` field. The port comes from an explicit port in `api_url` and
+    otherwise defaults to the provider type's API port (OVA NFS 2049, Hyper-V 5986,
+    everything else 443).
 
     Args:
         provider_data (dict[str, Any]): One provider entry from `.providers.json`.
@@ -162,12 +185,18 @@ def provider_probe_endpoint(provider_data: dict[str, Any]) -> tuple[str, int]:
         tuple[str, int]: The (host, port) probe target.
 
     Raises:
-        KeyError: When the entry lacks the schema-required `fqdn` (malformed entry).
+        ValueError: When no endpoint host can be resolved from the entry.
     """
+    host = provider_data["fqdn"] or _host_from_api_url(api_url=provider_data["api_url"]) or provider_data.get("host")
+    if not host:
+        raise ValueError(
+            f"Provider entry of type {provider_data['type']} has no resolvable probe endpoint "
+            "(fqdn, api_url, and host are all empty)"
+        )
     return (
-        provider_data["fqdn"],
+        host,
         _port_from_api_url(
-            api_url=provider_data.get("api_url"),
+            api_url=provider_data["api_url"],
             default_port=_PROBE_PORTS_BY_TYPE.get(provider_data["type"], _DEFAULT_PROBE_PORT),
         ),
     )
@@ -230,21 +259,26 @@ def select_provider_from_pool(
     client: DynamicClient,
     providers_json_path: str | None,
     provider_type: str,
-    provider_version: str,
+    provider_version: str | None = None,
     required_feature: str | None = None,
 ) -> dict[str, Any]:
     """Derive the candidate pool, probe it, and select the fastest member.
+
+    A pool whose members all share one probe endpoint — a single candidate, or several
+    providers behind the same endpoint — is selected without probing: no probe pod is
+    created and the lowest provider key wins deterministically.
 
     Args:
         client (DynamicClient): OpenShift client used to run the probe pod.
         providers_json_path (str | None): Path to `.providers.json` (None resolves
             the standard location / `PROVIDERS_JSON_PATH` environment variable).
         provider_type (str): Required provider type (e.g. "vsphere").
-        provider_version (str): Required provider version (e.g. "8.0.1").
+        provider_version (str | None): Required provider version (e.g. "8.0.1");
+            None pools every version of the type.
         required_feature (str | None): Keep only providers supporting this feature.
 
     Returns:
-        dict[str, Any]: `{"provider": <name>, "rtt_ms": <median round-trip>}`.
+        dict[str, Any]: `{"provider": <name>, "rtt_ms": <median round-trip or None>}`.
 
     Raises:
         ValueError: When the pool is empty or has no reachable member.
@@ -256,6 +290,15 @@ def select_provider_from_pool(
         provider_version=provider_version,
         required_feature=required_feature,
     )
+    if len(pool) == 1:
+        selected = next(iter(pool))
+        LOGGER.info(f"Single candidate provider '{selected}', selected without probing")
+        return {"provider": selected, "rtt_ms": None}
+    endpoints = {provider_probe_endpoint(provider_data=provider_data) for provider_data in pool.values()}
+    if len(endpoints) == 1:
+        selected = min(pool)
+        LOGGER.info(f"{len(pool)} candidate providers share one probe endpoint, selected '{selected}' without probing")
+        return {"provider": selected, "rtt_ms": None}
     LOGGER.info(f"Probing {len(pool)} candidate providers: {sorted(pool)}")
     rtts = probe_provider_latencies(client=client, providers=pool)
     selected, rtt = select_fastest_provider(providers=pool, rtts=rtts)

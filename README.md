@@ -684,11 +684,12 @@ Use `uv run mtv-api-tests generate --help` or `uv run mtv-api-tests run --help` 
 
 ### Latency-Based Provider Selection
 
-Instead of pinning `--tc=source_provider:<key>`, a run can identify a **candidate pool** by type and
-version and let the suite pick the fastest member from the cluster's point of view:
+Instead of pinning `--tc=source_provider:<key>`, a run can identify a **candidate pool** by type —
+version optional — and let the suite pick the fastest member from the cluster's point of view:
 
 ```bash
---tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1
+--tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1   # exact version
+--tc=source_provider_type:vsphere                                     # every version of the type
 ```
 
 A feature key (`copyoffload`) flips pool membership: copy-offload-capable providers — entries
@@ -700,20 +701,28 @@ the key is passed:
 ```
 
 Selection happens once per run, in the session-scoped `latency_selected_source_provider` fixture
-(requested first by the autouse fixture, before anything consumes the provider). In a single-process
+(requested first by the autouse fixture, before anything consumes the provider). A pool with a single
+member — or whose members all share one probe endpoint (e.g. two OVA entries on the same NFS server)
+— is selected instantly without probing; no probe pod is created. Otherwise, in a single-process
 run the pool is probed inline; under xdist the first worker to hold a run-scoped file lock probes and
 writes the selection while every other worker reads the same file, so all workers run against the
-same provider. The chosen provider and its measured RTT are logged.
+same provider. Probing measures every **unique** endpoint once (providers sharing a `host:port`
+share the measurement); each endpoint's host comes from `fqdn`, else from `api_url` (URL or NFS
+export path), else from the OpenShift `host` field, and the port from `api_url` when it carries one,
+else the type's API port (OVA NFS 2049, Hyper-V 5986, otherwise 443). The chosen provider and its
+measured RTT are logged.
 
 Rules:
 
 - Explicit `--tc=source_provider:<key>` always wins: nothing is probed and nothing changes.
-- The pool form requires both keys together; a partial pair aborts the session with `pytest.exit(...)`.
+- The pool form requires the type key; version is optional and `source_provider_version` without
+  `source_provider_type` aborts the session with `pytest.exit(...)`.
 - Neither an explicit provider nor a pool aborts with the missing-config error, exactly as before.
-- Candidates are the `.providers.json` entries matching the requested type **and** version, gated by the
-  feature key (`copyoffload` providers only with the key, excluded without it); an empty pool aborts
-  the session with a clear error — never a skip.
-- The winner is the lowest-RTT candidate, with the lowest provider key as the deterministic tiebreak.
+- Candidates are the `.providers.json` entries matching the requested type (and version, when
+  passed), gated by the feature key (`copyoffload` providers only with the key, excluded without
+  it); an empty pool aborts the session with a clear error — never a skip.
+- A single-candidate or single-endpoint pool is selected without probing; otherwise the winner is
+  the lowest-RTT endpoint with the lowest provider key as the deterministic tiebreak.
 - Unreachable candidates are excluded; a fully unreachable pool aborts the session.
 - In pool mode the provider is unknown at collection time, so collection-time provider gating uses the
   pool's `source_provider_type` and test item names carry the type instead of the provider key.
