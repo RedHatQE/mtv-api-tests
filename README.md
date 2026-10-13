@@ -682,6 +682,54 @@ uv run mtv-api-tests run --mode job --job-yaml /path/to/mtv-api-tests-manifests.
 
 Use `uv run mtv-api-tests generate --help` or `uv run mtv-api-tests run --help` to see all available flags.
 
+### Measure Provider Latency
+
+```bash
+uv run mtv-api-tests measure-providers
+```
+
+Launches one unprivileged probe pod on the destination OpenShift cluster, times TCP connects to every
+provider's API endpoint (port 443, median of three connects, measured in parallel), and prints a ranked
+table grouped by provider type and version. The measurement runs from the cluster — the same network
+path Forklift's controller and populator pods use — not from the test runner. ICMP is not used: provider
+endpoints commonly block it and restricted-SCC pods cannot send raw ICMP.
+
+Pass `--providers-json /path/to/file` to probe a non-default providers file.
+
+### Latency-Based Provider Selection
+
+Instead of pinning `--tc=source_provider:<key>`, a run can identify a **candidate pool** by type and
+version and let the suite pick the fastest member from the cluster's point of view:
+
+```bash
+--tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1
+```
+
+Selection happens once per session in `pytest_sessionstart`, before xdist workers start, so every
+worker runs against the same provider. The chosen provider and its measured RTT are logged. Explicit
+`--tc=source_provider:<key>` always wins and bypasses selection entirely; the pool form requires both
+keys together.
+
+Rules:
+
+- Candidates are the `.providers.json` entries matching the requested type **and** version.
+- When any plan config in the run enables `copyoffload: True`, the pool is filtered to providers whose
+  entry carries a `copyoffloadConfig` section; an empty filtered pool aborts the session with a clear
+  configuration error — never a skip and never a silent non-copy-offload selection.
+- The winner is the lowest-RTT candidate, with the lowest provider key as the deterministic tiebreak.
+- Unreachable candidates are excluded; a fully unreachable pool aborts the session.
+
+> **Note:** for copy-offload (XCOPY) plans the bulk disk copy executes array-side (storage array / ESXi
+> hosts, including `dedicated_migration_hosts`) and does not traverse the cluster-to-provider path. The
+> probe measures the vCenter API path, which copy-offload runs still use for inventory and controller
+> operations — selection stays valid for copy-offload pools, but the runtime win applies to cold/warm
+> (NBD) migrations only.
+
+> **Warning:** pool selection assumes every member of the pool is a true clone — same VM inventory
+> (names, guest agent, disk layouts) and same capabilities. Copy-offload capability is enforced by the
+> filter above; VM inventory equivalence is the operator's responsibility because it is not
+> machine-checkable. Test configs pin VM names, so a pool of non-interchangeable providers breaks tests.
+
 ---
 
 ## Copy-Offload: Accelerated Migrations (Advanced)

@@ -46,7 +46,9 @@ For a normal run, the suite expects two runtime values even though they are not 
 
 | Key | Required | Purpose |
 | --- | --- | --- |
-| `source_provider` | Yes | Selects the source provider entry from `.providers.json` |
+| `source_provider` | Yes (or a pool, see below) | Selects the source provider entry from `.providers.json` |
+| `source_provider_type` | Pool alternative | With `source_provider_version`, identifies the candidate pool for latency-based selection |
+| `source_provider_version` | Pool alternative | With `source_provider_type`, identifies the candidate pool for latency-based selection |
 | `storage_class` | Yes | Sets the target OpenShift storage class for migration |
 | `cluster_host` | Optional | Cluster API URL. Falls back to the `CLUSTER_HOST` environment variable |
 | `cluster_username` | Optional | Cluster user. Falls back to the `CLUSTER_USERNAME` environment variable |
@@ -79,6 +81,39 @@ uv run pytest -m "[TEST_MARKERS]" \
 ```
 
 > **Warning:** `source_provider` is not the provider type. It must match a top-level key in `.providers.json` exactly.
+
+## Latency-Based Provider Selection
+
+`source_provider` can be resolved by latency instead of being pinned explicitly. Pass a pool instead of a key:
+
+```bash
+--tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1
+```
+
+In `pytest_sessionstart` the controller derives the candidate pool from `.providers.json` (entries matching the
+type **and** version), launches one probe pod on the cluster, measures TCP-connect RTT to every candidate's API
+endpoint (port 443, median of three connects), and selects the lowest RTT with the lowest provider key as the
+deterministic tiebreak. The selection is written under the session's `basetemp` and read by every xdist worker, so
+all workers use the same provider; xdist spawns workers in a `trylast` sessionstart hookimpl, after the selection
+is already written. The chosen provider and its RTT are logged.
+
+Precedence and failure modes:
+
+- Explicit `--tc=source_provider:<key>` always wins and bypasses selection entirely.
+- The pool form requires both keys together; a partial pair aborts the session with `pytest.exit(...)`.
+- When any plan config in the run enables `copyoffload: True`, the pool is first filtered to providers whose entry
+  contains a `copyoffloadConfig` section; an empty filtered pool aborts the session — never a skip and never a
+  silent non-copy-offload selection.
+- Unreachable candidates are excluded from selection; a fully unreachable pool aborts the session.
+
+For copy-offload (XCOPY) plans the bulk disk copy runs array-side (storage array / ESXi hosts, including
+`dedicated_migration_hosts`) and does not traverse the cluster-to-provider path: the probe measures the vCenter API
+path only, so selection stays valid for copy-offload pools but the runtime win applies to cold/warm (NBD)
+migrations. Pool members are expected to be true clones of each other (same VM inventory, same capabilities);
+copy-offload capability is enforced by the filter, VM inventory equivalence is the operator's responsibility.
+
+`uv run mtv-api-tests measure-providers` (see the README) prints the ranked latency table for every configured
+provider without running any tests.
 
 ## Global `pytest-testconfig` Values
 

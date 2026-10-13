@@ -7,6 +7,7 @@ import os
 import pickle
 import shutil
 import tempfile
+import time
 import uuid
 from collections.abc import Generator
 from copy import deepcopy
@@ -64,6 +65,11 @@ from utilities.must_gather import (
     mark_class_pending_must_gather,
     run_must_gather,
 )
+from utilities.provider_latency import (
+    derive_provider_pool,
+    probe_provider_latencies,
+    select_fastest_provider,
+)
 from utilities.provider_inventory import (
     validate_source_vms_exist,
     wait_for_added_nics_in_forklift_inventory,
@@ -110,6 +116,11 @@ LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 _STANDALONE_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 _CLASS_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
+
+# Latency-based source provider selection (issue #728). The controller writes its
+# selection to this file under basetemp; xdist workers read it in their sessionstart.
+_PROVIDER_SELECTION_FILENAME = "provider-selection.json"
+_PROVIDER_SELECTION_WAIT_SECONDS = 300  # Safety net; workers spawn after the controller writes
 
 
 # Pytest start
@@ -168,6 +179,67 @@ def pytest_runtest_makereport(item, call):
         item.parent._previousfailed = item
 
 
+def _plan_configs_enable_copyoffload() -> bool:
+    """Report whether any plan config in the run enables copy-offload.
+
+    Returns:
+        bool: True when at least one plan config sets `copyoffload: True`.
+    """
+    return any(plan.get("copyoffload", False) for plan in py_config["tests_params"].values())
+
+
+def _resolve_source_provider_from_pool(session: pytest.Session) -> None:
+    """Select the fastest pool member once per session (issue #728).
+
+    Explicit `source_provider` config bypasses this entirely. A `source_provider_type`
+    + `source_provider_version` pair identifies the candidate pool; the controller
+    (or a single-process run) probes it and writes the selection to a basetemp file,
+    which xdist workers read so every worker uses the same provider. xdist spawns
+    workers in a trylast sessionstart hookimpl, after this hook already wrote the
+    file; the worker wait is a safety net only. Copy-offload runs filter the pool to
+    providers carrying `copyoffloadConfig` and fail fast when none qualifies.
+
+    Args:
+        session (pytest.Session): Session whose config and basetemp resolve the pool.
+
+    Returns:
+        None: Sets `py_config["source_provider"]` when pool selection applies.
+    """
+    provider_type = py_config.get("source_provider_type")
+    provider_version = py_config.get("source_provider_version")
+    if not provider_type and not provider_version:
+        return
+    if not provider_type or not provider_version:
+        pytest.exit(
+            reason=(
+                "source_provider_type and source_provider_version must be set together "
+                f"(got type={provider_type!r}, version={provider_version!r})"
+            ),
+            returncode=1,
+        )
+    selection_path = Path(session.config.option.basetemp) / _PROVIDER_SELECTION_FILENAME
+    if getattr(session.config, "workerinput", None) is None:
+        pool = derive_provider_pool(
+            providers=load_source_providers(providers_json_path=session.config.getoption("providers_json")),
+            provider_type=provider_type,
+            provider_version=provider_version,
+            require_copyoffload=_plan_configs_enable_copyoffload(),
+        )
+        LOGGER.info(f"Probing {len(pool)} candidate providers: {sorted(pool)}")
+        rtts = probe_provider_latencies(client=get_cluster_client(), providers=pool)
+        selected, rtt = select_fastest_provider(providers=pool, rtts=rtts)
+        selection_path.write_text(json.dumps({"provider": selected, "rtt_ms": rtt}))
+        LOGGER.info(f"Latency-based source provider selection: {selected} ({rtt:.1f} ms)")
+    else:
+        deadline = time.monotonic() + _PROVIDER_SELECTION_WAIT_SECONDS
+        while not selection_path.exists():
+            if time.monotonic() > deadline:
+                pytest.exit(reason=f"Timed out waiting for provider selection: {selection_path}", returncode=1)
+            time.sleep(1)
+    selection = json.loads(selection_path.read_text())
+    py_config["source_provider"] = selection["provider"]
+
+
 def pytest_sessionstart(session):
     required_config = ("storage_class", "source_provider")
 
@@ -175,6 +247,10 @@ def pytest_sessionstart(session):
         BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION START')}")
 
         missing_configs: list[str] = []
+
+        # Pool selection runs before the required-config check so `source_provider`
+        # set via a type+version pool satisfies it.
+        _resolve_source_provider_from_pool(session=session)
 
         for _req in required_config:
             if not py_config.get(_req):

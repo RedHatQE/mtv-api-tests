@@ -352,8 +352,18 @@ keep provider definitions in <code>.providers.json</code>, and pass environment-
 <tbody>
 <tr>
 <td><code>source_provider</code></td>
-<td>Yes</td>
+<td>Yes (or a pool, see below)</td>
 <td>Selects the source provider entry from <code>.providers.json</code></td>
+</tr>
+<tr>
+<td><code>source_provider_type</code></td>
+<td>Pool alternative</td>
+<td>With <code>source_provider_version</code>, identifies the candidate pool for latency-based selection</td>
+</tr>
+<tr>
+<td><code>source_provider_version</code></td>
+<td>Pool alternative</td>
+<td>With <code>source_provider_type</code>, identifies the candidate pool for latency-based selection</td>
 </tr>
 <tr>
 <td><code>storage_class</code></td>
@@ -403,6 +413,37 @@ client, before any migration work, and the message says which variable to set.</
 <blockquote>
 <p><strong>Warning:</strong> <code>source_provider</code> is not the provider type. It must match a top-level key in <code>.providers.json</code> exactly.</p>
 </blockquote>
+<h2 id="latency-based-provider-selection">Latency-Based Provider Selection</h2>
+<p><code>source_provider</code> can be resolved by latency instead of being pinned explicitly. Pass a pool instead of a key:</p>
+<div class="highlight"><pre><span></span><code>--tc<span class="o">=</span>source_provider_type:vsphere<span class="w"> </span>--tc<span class="o">=</span>source_provider_version:8.0.1
+</code></pre></div>
+
+<p>In <code>pytest_sessionstart</code> the controller derives the candidate pool from <code>.providers.json</code> (entries matching the
+type <strong>and</strong> version), launches one probe pod on the cluster, measures TCP-connect RTT to every candidate's API
+endpoint (port 443, median of three connects), and selects the lowest RTT with the lowest provider key as the
+deterministic tiebreak. The selection is written under the session's <code>basetemp</code> and read by every xdist worker, so
+all workers use the same provider; xdist spawns workers in a <code>trylast</code> sessionstart hookimpl, after the selection
+is already written. The chosen provider and its RTT are logged.</p>
+<p>Precedence and failure modes:</p>
+<ul>
+<li>Explicit <code>--tc=source_provider:&lt;key&gt;</code> always wins and bypasses selection entirely.</li>
+<li>The pool form requires both keys together; a partial pair aborts the session with <code>pytest.exit(...)</code>.</li>
+<li>
+<p>When any plan config in the run enables <code>copyoffload: True</code>, the pool is first filtered to providers whose entry
+  contains a <code>copyoffloadConfig</code> section; an empty filtered pool aborts the session — never a skip and never a
+  silent non-copy-offload selection.</p>
+</li>
+<li>
+<p>Unreachable candidates are excluded from selection; a fully unreachable pool aborts the session.</p>
+</li>
+</ul>
+<p>For copy-offload (XCOPY) plans the bulk disk copy runs array-side (storage array / ESXi hosts, including
+<code>dedicated_migration_hosts</code>) and does not traverse the cluster-to-provider path: the probe measures the vCenter API
+path only, so selection stays valid for copy-offload pools but the runtime win applies to cold/warm (NBD)
+migrations. Pool members are expected to be true clones of each other (same VM inventory, same capabilities);
+copy-offload capability is enforced by the filter, VM inventory equivalence is the operator's responsibility.</p>
+<p><code>uv run mtv-api-tests measure-providers</code> (see the README) prints the ranked latency table for every configured
+provider without running any tests.</p>
 <h2 id="global-pytest-testconfig-values">Global <code>pytest-testconfig</code> Values</h2>
 <p>The default shared values live at the top of <code>tests/tests_config/config.py</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">global</span> <span class="n">config</span>
@@ -759,6 +800,7 @@ command.</p>
 <ul>
 <li><a href="#how-configuration-is-loaded">How Configuration Is Loaded</a></li>
 <li><a href="#required-runtime-overrides">Required Runtime Overrides</a></li>
+<li><a href="#latency-based-provider-selection">Latency-Based Provider Selection</a></li>
 <li><a href="#global-pytest-testconfig-values">Global pytest-testconfig Values</a><ul>
 <li><a href="#actively-used-global-values">Actively used global values</a></li>
 <li><a href="#defined-in-the-default-file-but-not-currently-used-elsewhere">Defined in the default file but not currently used elsewhere</a></li>
