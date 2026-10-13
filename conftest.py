@@ -7,8 +7,8 @@ import os
 import pickle
 import shutil
 import tempfile
-import time
 import uuid
+from functools import partial
 from collections.abc import Generator
 from copy import deepcopy
 from pathlib import Path
@@ -65,17 +65,13 @@ from utilities.must_gather import (
     mark_class_pending_must_gather,
     run_must_gather,
 )
-from utilities.provider_latency import (
-    derive_provider_pool,
-    probe_provider_latencies,
-    select_fastest_provider,
-)
 from utilities.provider_inventory import (
     validate_source_vms_exist,
     wait_for_added_nics_in_forklift_inventory,
     wait_for_cloned_vms_in_forklift_inventory,
     wait_for_inventory_guest_networks,
 )
+from utilities.provider_latency import select_provider_from_pool
 from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
@@ -116,11 +112,6 @@ LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 _STANDALONE_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 _CLASS_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
-
-# Latency-based source provider selection (issue #728). The controller writes its
-# selection to this file under basetemp; xdist workers read it in their sessionstart.
-_PROVIDER_SELECTION_FILENAME = "provider-selection.json"
-_PROVIDER_SELECTION_WAIT_SECONDS = 300  # Safety net; workers spawn after the controller writes
 
 
 # Pytest start
@@ -179,65 +170,55 @@ def pytest_runtest_makereport(item, call):
         item.parent._previousfailed = item
 
 
-def _plan_configs_enable_copyoffload() -> bool:
-    """Report whether any plan config in the run enables copy-offload.
+@pytest.fixture(scope="session")
+def latency_selected_source_provider(request: pytest.FixtureRequest, ocp_admin_client: DynamicClient) -> str:
+    """Resolve the run's source provider, selecting the fastest pool member when requested.
 
-    Returns:
-        bool: True when at least one plan config sets `copyoffload: True`.
-    """
-    return any(plan.get("copyoffload", False) for plan in py_config["tests_params"].values())
-
-
-def _resolve_source_provider_from_pool(session: pytest.Session) -> None:
-    """Select the fastest pool member once per session (issue #728).
-
-    Explicit `source_provider` config bypasses this entirely. A `source_provider_type`
-    + `source_provider_version` pair identifies the candidate pool; the controller
-    (or a single-process run) probes it and writes the selection to a basetemp file,
-    which xdist workers read so every worker uses the same provider. xdist spawns
-    workers in a trylast sessionstart hookimpl, after this hook already wrote the
-    file; the worker wait is a safety net only. Copy-offload runs filter the pool to
-    providers carrying `copyoffloadConfig` and fail fast when none qualifies.
+    Explicit `source_provider` config is returned unchanged - nothing is probed and
+    nothing changes. Otherwise the `source_provider_type` + `source_provider_version`
+    pool (with optional `source_provider_feature`) is probed once per run using the
+    session's admin client: in a single-process run the provider is selected inline,
+    and under xdist the first worker to hold the run-scoped file lock probes and
+    writes the selection while every other worker reads the same file, so all
+    workers run against the same provider.
 
     Args:
-        session (pytest.Session): Session whose config and basetemp resolve the pool.
+        request (pytest.FixtureRequest): Request supplying the providers JSON option.
+        ocp_admin_client (DynamicClient): Client used to run the probe pod.
 
     Returns:
-        None: Sets `py_config["source_provider"]` when pool selection applies.
+        str: The explicitly configured or latency-selected source provider key.
+
+    Raises:
+        ValueError: When the pool is empty or has no reachable member.
     """
-    provider_type = py_config.get("source_provider_type")
-    provider_version = py_config.get("source_provider_version")
-    if not provider_type and not provider_version:
-        return
-    if not provider_type or not provider_version:
-        pytest.exit(
-            reason=(
-                "source_provider_type and source_provider_version must be set together "
-                f"(got type={provider_type!r}, version={provider_version!r})"
-            ),
-            returncode=1,
-        )
-    selection_path = Path(session.config.option.basetemp) / _PROVIDER_SELECTION_FILENAME
-    if getattr(session.config, "workerinput", None) is None:
-        pool = derive_provider_pool(
-            providers=load_source_providers(providers_json_path=session.config.getoption("providers_json")),
-            provider_type=provider_type,
-            provider_version=provider_version,
-            require_copyoffload=_plan_configs_enable_copyoffload(),
-        )
-        LOGGER.info(f"Probing {len(pool)} candidate providers: {sorted(pool)}")
-        rtts = probe_provider_latencies(client=get_cluster_client(), providers=pool)
-        selected, rtt = select_fastest_provider(providers=pool, rtts=rtts)
-        selection_path.write_text(json.dumps({"provider": selected, "rtt_ms": rtt}))
-        LOGGER.info(f"Latency-based source provider selection: {selected} ({rtt:.1f} ms)")
+    if py_config.get("source_provider"):
+        return py_config["source_provider"]
+
+    select_from_pool = partial(
+        select_provider_from_pool,
+        client=ocp_admin_client,
+        providers_json_path=request.config.getoption("providers_json"),
+        provider_type=py_config["source_provider_type"],
+        provider_version=py_config["source_provider_version"],
+        required_feature=py_config.get("source_provider_feature"),
+    )
+    run_uid = os.environ.get("PYTEST_XDIST_TESTRUNUID")
+    if run_uid is None:
+        selection = select_from_pool()
     else:
-        deadline = time.monotonic() + _PROVIDER_SELECTION_WAIT_SECONDS
-        while not selection_path.exists():
-            if time.monotonic() > deadline:
-                pytest.exit(reason=f"Timed out waiting for provider selection: {selection_path}", returncode=1)
-            time.sleep(1)
-    selection = json.loads(selection_path.read_text())
+        # The testrunuid scopes the file to this run, so parallel runs never share it.
+        # The first worker through the lock probes once; the rest read its selection.
+        selection_path = Path(tempfile.gettempdir()) / f"pytest-provider-selection-{run_uid}.json"
+        with filelock.FileLock(f"{selection_path}.lock", timeout=600):
+            if selection_path.exists():
+                selection = json.loads(selection_path.read_text())
+            else:
+                selection = select_from_pool()
+                selection_path.write_text(json.dumps(selection))
     py_config["source_provider"] = selection["provider"]
+    LOGGER.info(f"Source provider for this run: {selection['provider']} ({selection['rtt_ms']:.1f} ms)")
+    return selection["provider"]
 
 
 def pytest_sessionstart(session):
@@ -248,11 +229,21 @@ def pytest_sessionstart(session):
 
         missing_configs: list[str] = []
 
-        # Pool selection runs before the required-config check so `source_provider`
-        # set via a type+version pool satisfies it.
-        _resolve_source_provider_from_pool(session=session)
+        # Latency-based pool selection (issue #728): a type+version pool key pair
+        # replaces the explicit provider key. The selection itself runs later, in the
+        # latency_selected_source_provider fixture, once per run.
+        pool_type = py_config.get("source_provider_type")
+        pool_version = py_config.get("source_provider_version")
+        if not py_config.get("source_provider") and bool(pool_type) != bool(pool_version):
+            pytest.exit(
+                reason="source_provider_type and source_provider_version must be set together",
+                returncode=1,
+            )
 
         for _req in required_config:
+            if _req == "source_provider" and pool_type:
+                # Pool mode: the provider is resolved by the latency fixture.
+                continue
             if not py_config.get(_req):
                 missing_configs.append(_req)
 
@@ -502,8 +493,12 @@ def pytest_collection_modifyitems(session, config, items):
         providers_json_path = config.getoption("providers_json", default=None)
         providers = load_source_providers(providers_json_path=providers_json_path)
         # .get() with default is intentional: source_provider may not be configured (e.g., partial config),
-        # in which case provider-type gating is silently skipped.
-        source_provider_type = providers.get(py_config.get("source_provider", ""), {}).get("type")
+        # in which case provider-type gating is silently skipped. In pool mode the provider key is
+        # unresolved at collection time (the latency fixture runs later), so the pool's
+        # type key drives the gating instead.
+        source_provider_type = providers.get(py_config.get("source_provider", ""), {}).get("type") or py_config.get(
+            "source_provider_type"
+        )
 
         if source_provider_type:
             # Skip warm migration tests for providers that do not support warm migration.
@@ -557,9 +552,11 @@ def pytest_collection_modifyitems(session, config, items):
 
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
+    # In pool mode the provider is unresolved at collection time; the pool type labels the items.
+    provider_label = py_config.get("source_provider") or py_config.get("source_provider_type")
 
     for item, test_config in resolved_plan_configs:
-        item.name = f"{item.name}-{py_config.get('source_provider')}-{py_config.get('storage_class')}"
+        item.name = f"{item.name}-{provider_label}-{py_config.get('storage_class')}"
 
         if test_config and "virtual_machines" in test_config:
             for _vm in test_config["virtual_machines"]:
@@ -732,9 +729,16 @@ def pytest_harvest_xdist_cleanup():
 
 @pytest.fixture(scope="session", autouse=True)
 def autouse_fixtures(
-    source_provider_data, nfs_storage_profile, base_resource_name, forklift_pods_state, virtctl_binary
+    latency_selected_source_provider,
+    source_provider_data,
+    nfs_storage_profile,
+    base_resource_name,
+    forklift_pods_state,
+    virtctl_binary,
 ):
-    # source_provider_data called here to fail fast in provider not found in the providers list from config
+    # latency_selected_source_provider runs first so pool-mode runs resolve their
+    # provider before anything consumes it. source_provider_data is called here to
+    # fail fast if the provider is not found in the providers list from config.
     yield
 
 
