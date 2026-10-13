@@ -203,7 +203,9 @@ def provider_probe_endpoint(provider_data: dict[str, Any]) -> tuple[str, int]:
     Raises:
         ValueError: When no endpoint host can be resolved from the entry.
     """
-    host = provider_data["fqdn"] or _host_from_api_url(api_url=provider_data["api_url"]) or provider_data.get("host")
+    host = (
+        provider_data.get("fqdn") or _host_from_api_url(api_url=provider_data["api_url"]) or provider_data.get("host")
+    )
     if not host:
         raise ValueError(
             f"Provider entry of type {provider_data['type']} has no resolvable probe endpoint "
@@ -282,7 +284,9 @@ def select_provider_from_pool(
 
     A pool whose members all share one probe endpoint — a single candidate, or several
     providers behind the same endpoint — is selected without probing: no probe pod is
-    created and the lowest provider key wins deterministically.
+    created and the lowest provider key wins deterministically. Every candidate's
+    endpoint is resolved and validated before the shortcuts, so an entry with no
+    resolvable host fails fast even when it is the pool's only member.
 
     Args:
         client (DynamicClient): OpenShift client used to run the probe pod.
@@ -306,11 +310,11 @@ def select_provider_from_pool(
         provider_version=provider_version,
         required_feature=required_feature,
     )
+    endpoints = {provider_probe_endpoint(provider_data=provider_data) for provider_data in pool.values()}
     if len(pool) == 1:
         selected = next(iter(pool))
         LOGGER.info(f"Single candidate provider '{selected}', selected without probing")
         return {"provider": selected, "rtt_ms": None}
-    endpoints = {provider_probe_endpoint(provider_data=provider_data) for provider_data in pool.values()}
     if len(endpoints) == 1:
         selected = min(pool)
         LOGGER.info(f"{len(pool)} candidate providers share one probe endpoint, selected '{selected}' without probing")
