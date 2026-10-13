@@ -77,6 +77,19 @@ print(json.dumps(dict(zip(targets, results))))
 """
 
 
+def _validate_feature_name(feature: str | None) -> None:
+    """Fail fast on feature names the pool derivation does not support.
+
+    Args:
+        feature (str | None): Requested feature key (e.g. `copyoffload`).
+
+    Raises:
+        ValueError: When the feature name is not supported.
+    """
+    if feature is not None and feature != "copyoffload":
+        raise ValueError(f"Unknown source_provider_feature {feature!r} (supported: 'copyoffload')")
+
+
 def provider_feature_supported(provider_data: dict[str, Any], feature: str | None) -> bool:
     """Report whether a provider entry passes the requested feature gate.
 
@@ -92,8 +105,7 @@ def provider_feature_supported(provider_data: dict[str, Any], feature: str | Non
     Raises:
         ValueError: When the feature name is not supported.
     """
-    if feature is not None and feature != "copyoffload":
-        raise ValueError(f"Unknown source_provider_feature {feature!r} (supported: 'copyoffload')")
+    _validate_feature_name(feature=feature)
     return ("copyoffload" in provider_data) == (feature == "copyoffload")
 
 
@@ -117,8 +129,12 @@ def derive_provider_pool(
         dict[str, dict[str, Any]]: Candidate providers, keyed by name.
 
     Raises:
-        ValueError: When no provider matches the requested pool.
+        ValueError: When the feature name is not supported, or no provider matches
+            the requested pool.
     """
+    # Validate the feature name before filtering so a bad name is reported even
+    # when the type/version pair already matches nothing.
+    _validate_feature_name(feature=required_feature)
     pool = {
         name: provider_data
         for name, provider_data in providers.items()
