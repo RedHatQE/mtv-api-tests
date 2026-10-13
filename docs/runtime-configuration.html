@@ -427,7 +427,8 @@ client, before any migration work, and the message says which variable to set.</
 <code>copyoffload</code> section. The session-scoped <code>latency_selected_source_provider</code> fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from <code>.providers.json</code>
 (entries matching the type <strong>and</strong> version, and the feature when requested), launches one probe pod on the cluster,
-measures TCP-connect RTT to every candidate's API endpoint (port from <code>api_url</code> when it carries one, 443 otherwise;
+measures TCP-connect RTT to every candidate's API endpoint (port from <code>api_url</code> when it carries one, otherwise the
+type's API port — Hyper-V 5986, everything else 443;
 median of three connects), and selects the lowest RTT with the lowest provider key as the deterministic tiebreak.
 In a single-process run the pool is probed inline; under xdist the first worker to hold a run-scoped file lock
 (<code>PYTEST_XDIST_TESTRUNUID</code>-keyed, so parallel runs never share it) probes and writes the selection while every other

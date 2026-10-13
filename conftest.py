@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import json
 import bdb
+import json
 import logging
 import os
 import pickle
 import shutil
 import tempfile
 import uuid
-from functools import partial
 from collections.abc import Generator
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
 from shutil import rmtree
 from typing import TYPE_CHECKING, Any
@@ -45,13 +45,14 @@ from exceptions.exceptions import (
     MtvOperatorNotInstalledError,
     RemoteClusterAndLocalCluterNamesError,
 )
-from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
-from utilities.copyoffload_migration import apply_copyoffload_vm_name_override, resolve_non_dedicated_esxi_host
 from libs.base_provider import BaseProvider, supports_add_nic
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
+from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
+from utilities.copyoffload_migration import apply_copyoffload_vm_name_override, resolve_non_dedicated_esxi_host
+from utilities.debug import remote_debugger_enabled, remote_post_mortem
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
@@ -65,6 +66,11 @@ from utilities.must_gather import (
     mark_class_pending_must_gather,
     run_must_gather,
 )
+from utilities.naming import (
+    generate_name_with_uuid,
+    resolve_destination_vm_name,
+    sanitize_kubernetes_name,
+)
 from utilities.provider_inventory import (
     validate_source_vms_exist,
     wait_for_added_nics_in_forklift_inventory,
@@ -72,11 +78,6 @@ from utilities.provider_inventory import (
     wait_for_inventory_guest_networks,
 )
 from utilities.provider_latency import select_provider_from_pool
-from utilities.naming import (
-    generate_name_with_uuid,
-    resolve_destination_vm_name,
-    sanitize_kubernetes_name,
-)
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
@@ -88,7 +89,6 @@ from utilities.pytest_utils import (
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
 from utilities.ssh_utils import SSHConnectionManager
-from utilities.debug import remote_debugger_enabled, remote_post_mortem
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,

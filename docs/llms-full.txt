@@ -4075,7 +4075,8 @@ An optional feature key (`--tc=source_provider_feature:copyoffload`) keeps only 
 `copyoffload` section. The session-scoped `latency_selected_source_provider` fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from `.providers.json`
 (entries matching the type **and** version, and the feature when requested), launches one probe pod on the cluster,
-measures TCP-connect RTT to every candidate's API endpoint (port from `api_url` when it carries one, 443 otherwise;
+measures TCP-connect RTT to every candidate's API endpoint (port from `api_url` when it carries one, otherwise the
+type's API port — Hyper-V 5986, everything else 443;
 median of three connects), and selects the lowest RTT with the lowest provider key as the deterministic tiebreak.
 In a single-process run the pool is probed inline; under xdist the first worker to hold a run-scoped file lock
 (`PYTEST_XDIST_TESTRUNUID`-keyed, so parallel runs never share it) probes and writes the selection while every other

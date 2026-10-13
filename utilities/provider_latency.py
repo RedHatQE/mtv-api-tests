@@ -25,16 +25,18 @@ from utilities.utils import load_source_providers
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
-LOGGER = logging.getLogger(__name__)
-
 # Public ubi9 python image: the probe script needs only a python3 interpreter.
 PROBE_IMAGE = "registry.access.redhat.com/ubi9/python-314"
 _DEFAULT_PROBE_PORT = 443  # Default provider API port when the endpoint does not specify one
+# Hyper-V api_url is a bare hostname while its WinRM/WSMan endpoint listens on 5986.
+_PROBE_PORTS_BY_TYPE = {"hyperv": 5986}
 PROBE_CONNECT_ATTEMPTS = 3  # Median of three TCP connects per provider endpoint
 PROBE_CONNECT_TIMEOUT_SECONDS = 5
 PROBE_POD_START_TIMEOUT_SECONDS = 300  # First run pulls the image from the registry
 PROBE_SCRIPT_TIMEOUT_SECONDS = 120
 PROBE_POD_IDLE_SECONDS = 600  # The pod sleeps while probe commands are exec'd into it
+
+LOGGER = logging.getLogger(__name__)
 
 # The script below runs inside the probe pod's python3, not in the test runner. It
 # measures every endpoint in parallel and prints one JSON object to stdout.
@@ -109,12 +111,15 @@ def derive_provider_pool(
         ValueError: When no provider matches the requested pool.
     """
     pool = {
-        name: data
-        for name, data in providers.items()
-        if isinstance(data, dict)
-        and data["type"] == provider_type
-        and data["version"] == provider_version
-        and (required_feature is None or provider_feature_supported(provider_data=data, feature=required_feature))
+        name: provider_data
+        for name, provider_data in providers.items()
+        if isinstance(provider_data, dict)
+        and provider_data["type"] == provider_type
+        and provider_data["version"] == provider_version
+        and (
+            required_feature is None
+            or provider_feature_supported(provider_data=provider_data, feature=required_feature)
+        )
     }
     if not pool:
         raise ValueError(
@@ -124,46 +129,53 @@ def derive_provider_pool(
     return pool
 
 
-def _port_from_api_url(api_url: str | None) -> int:
+def _port_from_api_url(api_url: str | None, default_port: int) -> int:
     """Extract an explicit TCP port from a provider API URL.
 
     Args:
-        api_url (str | None): Provider API URL (e.g. "https://host:5000/path", "host/sdk").
+        api_url (str | None): Provider API URL (e.g. "https://host:5000/v3", "host/sdk").
+        default_port (int): Port to use when the URL carries no explicit one.
 
     Returns:
-        int: The explicit port, or the default provider API port when none is present.
+        int: The explicit port, or `default_port` when none is present.
     """
-    if api_url and (match := re.search(r":(\d+)(?:/|$)", api_url)):
+    if api_url and (match := re.search(r":(\d+)(?=/|\?|#|$)", api_url)):
         return int(match.group(1))
-    return _DEFAULT_PROBE_PORT
+    return default_port
 
 
-def provider_probe_endpoint(provider_data: dict[str, Any]) -> tuple[str, int] | None:
+def provider_probe_endpoint(provider_data: dict[str, Any]) -> tuple[str, int]:
     """Resolve a provider's probe target from its configured endpoint.
 
     The host comes from the schema-required `fqdn`; the port comes from an explicit port
-    in `api_url` (Hyper-V 5986, OpenStack 5000) and defaults to the provider API port.
+    in `api_url` (e.g. OpenStack 5000) and otherwise defaults to the provider type's API
+    port (Hyper-V 5986, everything else 443).
 
     Args:
         provider_data (dict[str, Any]): One provider entry from `.providers.json`.
 
     Returns:
-        tuple[str, int] | None: (host, port), or None for entries without `fqdn`
-        (metadata entries and destination OpenShift providers).
+        tuple[str, int]: The (host, port) probe target.
+
+    Raises:
+        KeyError: When the entry lacks the schema-required `fqdn` (malformed entry).
     """
-    host = provider_data.get("fqdn")
-    if not host:
-        return None
-    return host, _port_from_api_url(api_url=provider_data.get("api_url"))
+    return (
+        provider_data["fqdn"],
+        _port_from_api_url(
+            api_url=provider_data.get("api_url"),
+            default_port=_PROBE_PORTS_BY_TYPE.get(provider_data["type"], _DEFAULT_PROBE_PORT),
+        ),
+    )
 
 
 def probe_provider_latencies(client: DynamicClient, providers: dict[str, dict[str, Any]]) -> dict[str, float | None]:
     """Measure cluster-to-provider TCP-connect latency for every provider.
 
     One unprivileged probe pod runs on the cluster and connects to every provider's
-    API endpoint in parallel. Providers sharing an endpoint are measured once.
-    Entries without a resolvable endpoint (metadata, destination OpenShift providers)
-    are reported as unreachable rather than probed.
+    API endpoint in parallel. Providers sharing an endpoint are measured once. File
+    metadata entries such as `$schema` are skipped; a provider entry lacking its
+    schema-required `fqdn` fails loudly via `provider_probe_endpoint`.
 
     Args:
         client (DynamicClient): OpenShift client used to create the probe pod.
@@ -171,18 +183,14 @@ def probe_provider_latencies(client: DynamicClient, providers: dict[str, dict[st
 
     Returns:
         dict[str, float | None]: Median round-trip in milliseconds per provider name,
-        or None when the provider endpoint is unreachable or not probeable.
+        or None when the provider endpoint is unreachable.
     """
     endpoint_to_providers: dict[str, list[str]] = {}
-    rtts: dict[str, float | None] = {}
-    for name, data in providers.items():
-        if not isinstance(data, dict):
+    for name, provider_data in providers.items():
+        if not isinstance(provider_data, dict):
             # File metadata such as `$schema` is not a provider.
             continue
-        endpoint = provider_probe_endpoint(provider_data=data)
-        if endpoint is None:
-            rtts[name] = None
-            continue
+        endpoint = provider_probe_endpoint(provider_data=provider_data)
         endpoint_to_providers.setdefault(f"{endpoint[0]}:{endpoint[1]}", []).append(name)
 
     with _probe_pod(client=client, targets=list(endpoint_to_providers)) as pod:
@@ -191,10 +199,7 @@ def probe_provider_latencies(client: DynamicClient, providers: dict[str, dict[st
             timeout=PROBE_SCRIPT_TIMEOUT_SECONDS,
         )
     endpoint_rtts: dict[str, float | None] = json.loads(_last_json_line(output=output))
-    for target, names in endpoint_to_providers.items():
-        for name in names:
-            rtts[name] = endpoint_rtts.get(target)
-    return rtts
+    return {name: endpoint_rtts.get(target) for target, names in endpoint_to_providers.items() for name in names}
 
 
 def select_fastest_provider(providers: dict[str, dict[str, Any]], rtts: dict[str, float | None]) -> tuple[str, float]:
@@ -298,8 +303,13 @@ def _probe_pod(client: DynamicClient, targets: list[str]) -> Iterator[Pod]:
         client=client,
         name=f"latency-probe-{unique}",
         namespace=namespace.name,
-        command=["sleep", str(PROBE_POD_IDLE_SECONDS)],
-        image=PROBE_IMAGE,
+        containers=[
+            {
+                "name": "probe",
+                "image": PROBE_IMAGE,
+                "command": ["sleep", str(PROBE_POD_IDLE_SECONDS)],
+            }
+        ],
     )
     try:
         namespace.deploy()
