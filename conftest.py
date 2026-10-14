@@ -1027,6 +1027,7 @@ def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixtu
 
 @pytest.fixture(scope="session")
 def source_provider_data(
+    latency_selected_source_provider: str,
     source_providers: dict[str, dict[str, Any]],
     fixture_store: dict[str, Any],
     request: pytest.FixtureRequest,
@@ -1034,6 +1035,8 @@ def source_provider_data(
     """Resolve source provider configuration from the loaded providers data.
 
     Args:
+        latency_selected_source_provider (str): The explicit or latency-selected provider
+            key; requested directly so selection always runs before this fixture.
         source_providers (dict[str, dict[str, Any]]): All provider configurations loaded from providers JSON file.
         fixture_store (dict[str, Any]): Session fixture store for teardown tracking.
         request (pytest.FixtureRequest): Pytest request object to access CLI options.
@@ -1050,7 +1053,7 @@ def source_provider_data(
     if not source_providers:
         raise MissingProvidersFileError(path=providers_path)
 
-    requested_provider = py_config["source_provider"]
+    requested_provider = latency_selected_source_provider
     if requested_provider not in source_providers:
         raise ValueError(
             f"Source provider '{requested_provider}' not found in '{providers_path}'. "

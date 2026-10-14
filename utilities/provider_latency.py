@@ -154,16 +154,24 @@ def derive_provider_pool(
 
 
 def _port_from_api_url(api_url: str | None, default_port: int) -> int:
-    """Extract an explicit TCP port from a provider API URL.
+    """Extract an explicit TCP port from a provider API URL's authority.
+
+    Only the URL authority (the `host:port` part before any path) is parsed, so digits in
+    an NFS export path (e.g. `nfs-host:/exports/vm:5000`) never masquerade as a port.
 
     Args:
-        api_url (str | None): Provider API URL (e.g. "https://host:5000/v3", "host/sdk").
+        api_url (str | None): Provider API URL (e.g. "https://host:5000/v3") or NFS
+            export path ("nfs-host:/export/path").
         default_port (int): Port to use when the URL carries no explicit one.
 
     Returns:
         int: The explicit port, or `default_port` when none is present.
     """
-    if api_url and (match := re.search(r":(\d+)(?=/|\?|#|$)", api_url)):
+    if not api_url:
+        return default_port
+    url = api_url.split("://", 1)[1] if "://" in api_url else api_url
+    authority = url.split("/", 1)[0]
+    if match := re.search(r":(\d+)$", authority):
         return int(match.group(1))
     return default_port
 
