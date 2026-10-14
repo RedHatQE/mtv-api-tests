@@ -812,7 +812,6 @@ def storage_canary(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
     session_uuid: str,
-    fixture_store: dict[str, Any],
 ) -> None:
     """Fail fast when destination storage provisioning is permanently failing.
 
@@ -826,7 +825,6 @@ def storage_canary(
         ocp_admin_client (DynamicClient): OpenShift admin client for the target cluster.
         target_namespace (str): Target namespace for the canary PVC.
         session_uuid (str): Session UUID, used for the canary PVC name.
-        fixture_store (dict[str, Any]): Fixture store for resource tracking.
 
     Raises:
         StorageProvisioningError: If the destination storage class cannot provision volumes.
@@ -834,7 +832,6 @@ def storage_canary(
     """
     verify_destination_storage_provisioning(
         client=ocp_admin_client,
-        fixture_store=fixture_store,
         namespace=target_namespace,
         session_uuid=session_uuid,
     )
