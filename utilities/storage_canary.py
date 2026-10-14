@@ -52,6 +52,10 @@ def _wait_for_canary_bound(
             wait_timeout=_CANARY_BIND_TIMEOUT_SECONDS,
             sleep=_CANARY_BIND_POLL_INTERVAL_SECONDS,
             func=lambda: canary.instance.get("status", {}).get("phase"),
+            # Empty dict: any status-lookup error (API/authorization failure) re-raises
+            # immediately instead of being retried into the bind timeout and reported
+            # as a Pending PVC.
+            exceptions_dict={},
         ):
             if phase == PersistentVolumeClaim.Status.BOUND:
                 LOGGER.info(
@@ -60,7 +64,14 @@ def _wait_for_canary_bound(
                 )
                 return
 
-    except TimeoutExpiredError:
+    except TimeoutExpiredError as exc:
+        if exc.last_exp is not None:
+            # The sampler re-raised an underlying lookup error immediately.
+            raise StorageProvisioningError(
+                storage_class=storage_class_name,
+                pvc_name=canary.name,
+                detail=f"canary status lookup failed: {exc.last_exp}",
+            ) from exc.last_exp
         raise StorageProvisioningError(
             storage_class=storage_class_name,
             pvc_name=canary.name,
