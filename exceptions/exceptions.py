@@ -146,21 +146,18 @@ class PowerShellCommandError(Exception):
 class StorageProvisioningError(Exception):
     """Raised when destination storage cannot provision volumes (e.g. broken Ceph)."""
 
-    def __init__(self, storage_class: str, pvc_name: str, provisioner_message: str) -> None:
+    def __init__(self, storage_class: str, pvc_name: str, detail: str) -> None:
         """Initialize StorageProvisioningError.
 
         Args:
             storage_class (str): Storage class that failed to provision a volume.
             pvc_name (str): Name of the PVC that could not be provisioned.
-            provisioner_message (str): Error message reported by the storage provisioner.
+            detail (str): What was observed on the PVC (e.g. how long it stayed Pending).
         """
         self.storage_class = storage_class
         self.pvc_name = pvc_name
-        self.provisioner_message = provisioner_message
-        super().__init__(
-            f"Storage class '{storage_class}' cannot provision volumes: PVC '{pvc_name}' "
-            f"failed with ProvisioningFailed: {provisioner_message}"
-        )
+        self.detail = detail
+        super().__init__(f"Storage class '{storage_class}' cannot provision volumes: PVC '{pvc_name}' {detail}")
 
 
 class ConversionError(Exception):

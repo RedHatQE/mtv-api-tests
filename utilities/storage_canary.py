@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ocp_resources.event import Event
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
+from ocp_resources.storage_class import StorageClass
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -17,51 +17,19 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
+# Kubernetes default when a StorageClass omits volumeBindingMode.
+_IMMEDIATE_BINDING_MODE = "Immediate"
+# WaitForFirstConsumer: binding is deferred until a pod consumes the PVC, so a bare
+# canary PVC can never bind and says nothing about provisioning health — skipped.
+_WAIT_FOR_FIRST_CONSUMER_BINDING_MODE = "WaitForFirstConsumer"
 # Canary PVC size — small enough to bind within seconds on healthy storage.
 _CANARY_SIZE = "1Gi"
-# Overall canary observation window, reached only when the canary is Pending without
-# ProvisioningFailed events (Pending alone is normal mid-provision: WaitForFirstConsumer,
-# slow storage). Confirmed provisioning failure raises earlier, ~2-3 minutes after PVC
-# creation, via the event path below.
-_CANARY_OBSERVATION_WINDOW_SECONDS = 300
-# Seconds between canary phase / event checks.
-_PROVISIONING_FAILURE_POLL_INTERVAL_SECONDS = 30
-# Consecutive polls that must observe a Warning ProvisioningFailed event before failing
-# the run. A single event can be transient; the observed broken-Ceph timeline emits them
-# continuously (first failure event ~2 minutes after PVC creation).
-_PROVISIONING_FAILURE_CONFIRMATIONS = 3
-
-
-def _get_provisioning_failure_message(
-    client: DynamicClient,
-    namespace: str,
-    pvc_name: str,
-) -> str | None:
-    """Return the provisioner error from the PVC's most recent Warning ProvisioningFailed event.
-
-    Args:
-        client (DynamicClient): OpenShift client for the target cluster.
-        namespace (str): Namespace where the canary PVC exists.
-        pvc_name (str): Name of the canary PVC.
-
-    Returns:
-        str | None: The provisioner's error message, or None when no Warning
-            ProvisioningFailed event exists for the PVC.
-    """
-    events = Event.list(
-        client=client,
-        namespace=namespace,
-        field_selector=(
-            f"involvedObject.kind=PersistentVolumeClaim,"
-            f"involvedObject.name={pvc_name},"
-            f"reason=ProvisioningFailed,type=Warning"
-        ),
-        since_seconds=_CANARY_OBSERVATION_WINDOW_SECONDS,
-    )
-    if not events:
-        return None
-    # Event.list sorts by lastTimestamp, most recent first.
-    return str(events[0].get("message") or "unknown provisioner error")
+# How long the canary may stay Pending before provisioning is declared broken.
+# Healthy Immediate storage binds in seconds; the window only exists so legitimately
+# slow storage is not misreported as broken.
+_CANARY_BIND_TIMEOUT_SECONDS = 300
+# Seconds between canary phase checks.
+_CANARY_BIND_POLL_INTERVAL_SECONDS = 30
 
 
 def verify_destination_storage_provisioning(
@@ -73,13 +41,12 @@ def verify_destination_storage_provisioning(
     """Fail fast when the run's storage class cannot provision volumes.
 
     Creates a small canary PVC in the target namespace using the run's configured
-    storage class and watches it for Warning ``ProvisioningFailed`` events from the
-    provisioner. Teardown of the canary PVC is registered by
-    ``create_and_store_resource()`` and handled by session teardown.
+    storage class and waits for it to bind. Teardown of the canary PVC is registered
+    by ``create_and_store_resource()`` and handled by session teardown.
 
-    A Pending canary without failure events is NOT an error — binding can legitimately
-    be slow (WaitForFirstConsumer, slow storage). Only consecutive, confirmed
-    ``ProvisioningFailed`` observations fail the run.
+    Storage classes with ``volumeBindingMode: WaitForFirstConsumer`` are skipped:
+    binding there is deferred until a pod consumes the PVC, so a bare canary can
+    never bind and carries no signal.
 
     Args:
         client (DynamicClient): OpenShift client for the target cluster.
@@ -88,65 +55,54 @@ def verify_destination_storage_provisioning(
         session_uuid (str): Session UUID, used for the canary PVC name.
 
     Raises:
-        StorageProvisioningError: If the provisioner reports confirmed ProvisioningFailed
-            events for the canary PVC.
+        ValueError: If the configured storage class does not exist on the cluster.
+        StorageProvisioningError: If the canary PVC is still Pending after
+            ``_CANARY_BIND_TIMEOUT_SECONDS``.
     """
-    storage_class = py_config["storage_class"]
+    storage_class_name = py_config["storage_class"]
+    storage_class = StorageClass(client=client, name=storage_class_name)
+    if not storage_class.exists:
+        raise ValueError(f"Storage class '{storage_class_name}' not found on the cluster")
+
+    binding_mode = storage_class.instance.get("volumeBindingMode") or _IMMEDIATE_BINDING_MODE
+    if binding_mode == _WAIT_FOR_FIRST_CONSUMER_BINDING_MODE:
+        LOGGER.info(
+            f"Storage class '{storage_class_name}' uses WaitForFirstConsumer binding — "
+            "storage canary skipped (a bare canary PVC cannot bind without a consumer)"
+        )
+        return
+
     canary = create_and_store_resource(
         client=client,
         fixture_store=fixture_store,
         resource=PersistentVolumeClaim,
         name=generate_name_with_uuid(name=f"{session_uuid}-storage-canary"),
         namespace=namespace,
-        storage_class=storage_class,
+        storage_class=storage_class_name,
         access_modes=[PersistentVolumeClaim.AccessMode.RWO],
         size=_CANARY_SIZE,
     )
     LOGGER.info(
         f"Storage canary PVC '{canary.name}' created in namespace '{namespace}' "
-        f"(storage class '{storage_class}', size {_CANARY_SIZE})"
+        f"(storage class '{storage_class_name}', size {_CANARY_SIZE})"
     )
 
-    failure_observations = 0
     try:
         for phase in TimeoutSampler(
-            wait_timeout=_CANARY_OBSERVATION_WINDOW_SECONDS,
-            sleep=_PROVISIONING_FAILURE_POLL_INTERVAL_SECONDS,
+            wait_timeout=_CANARY_BIND_TIMEOUT_SECONDS,
+            sleep=_CANARY_BIND_POLL_INTERVAL_SECONDS,
             func=lambda: canary.instance.get("status", {}).get("phase"),
         ):
             if phase == PersistentVolumeClaim.Status.BOUND:
                 LOGGER.info(
-                    f"Storage canary PVC '{canary.name}' bound — storage class '{storage_class}' can provision volumes"
+                    f"Storage canary PVC '{canary.name}' bound — storage class "
+                    f"'{storage_class_name}' can provision volumes"
                 )
                 return
 
-            provisioner_message = _get_provisioning_failure_message(
-                client=client,
-                namespace=namespace,
-                pvc_name=canary.name,
-            )
-            if provisioner_message is None:
-                # Pending without ProvisioningFailed events is normal mid-provision.
-                failure_observations = 0
-                continue
-
-            failure_observations += 1
-            LOGGER.warning(
-                f"Storage canary PVC '{canary.name}' ProvisioningFailed "
-                f"({failure_observations}/{_PROVISIONING_FAILURE_CONFIRMATIONS}): {provisioner_message}"
-            )
-            if failure_observations >= _PROVISIONING_FAILURE_CONFIRMATIONS:
-                raise StorageProvisioningError(
-                    storage_class=storage_class,
-                    pvc_name=canary.name,
-                    provisioner_message=provisioner_message,
-                )
-
     except TimeoutExpiredError:
-        # Not a failure: Pending without ProvisioningFailed events means binding is
-        # slow, not broken. Proceed and let migrations surface any real issue.
-        LOGGER.warning(
-            f"Storage canary PVC '{canary.name}' still Pending after "
-            f"{_CANARY_OBSERVATION_WINDOW_SECONDS}s without ProvisioningFailed events — "
-            "proceeding with the run"
-        )
+        raise StorageProvisioningError(
+            storage_class=storage_class_name,
+            pvc_name=canary.name,
+            detail=(f"still Pending after {_CANARY_BIND_TIMEOUT_SECONDS}s (volumeBindingMode={binding_mode})"),
+        ) from None

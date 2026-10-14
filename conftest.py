@@ -818,7 +818,9 @@ def storage_canary(
 
     Creates a small canary PVC in the target namespace using the run's configured
     storage class, before any migration runs. Healthy storage binds it in seconds;
-    broken storage emits Warning ``ProvisioningFailed`` events within a few minutes.
+    a canary that is still Pending after the bind timeout fails the session.
+    WaitForFirstConsumer storage classes are skipped (a bare canary PVC cannot
+    bind without a consumer).
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for the target cluster.
@@ -828,6 +830,7 @@ def storage_canary(
 
     Raises:
         StorageProvisioningError: If the destination storage class cannot provision volumes.
+        ValueError: If the configured storage class does not exist on the cluster.
     """
     verify_destination_storage_provisioning(
         client=ocp_admin_client,
