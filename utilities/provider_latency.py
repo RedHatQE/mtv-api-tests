@@ -166,16 +166,18 @@ def _port_from_api_url(api_url: str | None, default_port: int) -> int:
     return default_port
 
 
-def _host_from_api_url(api_url: str) -> str | None:
+def _host_from_api_url(api_url: str | None) -> str | None:
     """Extract the host from a URL or an NFS export path.
 
     Args:
-        api_url (str): Provider API URL ("https://host:5000/v3") or NFS export
-            path ("nfs-host:/export/path").
+        api_url (str | None): Provider API URL ("https://host:5000/v3") or NFS export
+            path ("nfs-host:/export/path"); None when the entry carries none.
 
     Returns:
         str | None: The host, or None when the URL carries none.
     """
+    if not api_url:
+        return None
     if "://" in api_url:
         api_url = api_url.split("://", 1)[1]
     authority = api_url.split("/", 1)[0]
@@ -204,7 +206,9 @@ def provider_probe_endpoint(provider_data: dict[str, Any]) -> tuple[str, int]:
         ValueError: When no endpoint host can be resolved from the entry.
     """
     host = (
-        provider_data.get("fqdn") or _host_from_api_url(api_url=provider_data["api_url"]) or provider_data.get("host")
+        provider_data.get("fqdn")
+        or _host_from_api_url(api_url=provider_data.get("api_url"))
+        or provider_data.get("host")
     )
     if not host:
         raise ValueError(
@@ -214,7 +218,7 @@ def provider_probe_endpoint(provider_data: dict[str, Any]) -> tuple[str, int]:
     return (
         host,
         _port_from_api_url(
-            api_url=provider_data["api_url"],
+            api_url=provider_data.get("api_url"),
             default_port=_PROBE_PORTS_BY_TYPE.get(provider_data["type"], _DEFAULT_PROBE_PORT),
         ),
     )
