@@ -94,7 +94,7 @@ uv run pytest -m "[TEST_MARKERS]" \
 
 A feature key (`--tc=source_provider_feature:copyoffload`) flips pool membership: copy-offload-capable providers —
 entries with a `copyoffload` section — are excluded from the pool by default and included only when the key is
-passed. The session-scoped `latency_selected_source_provider` fixture — requested first by the
+passed. The session-scoped `selected_source_provider` fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from `.providers.json`
 (entries matching the type, and the version when passed, gated by the feature key — `copyoffload` providers only
 with the key, excluded without it). **OpenShift pools are never probed**: `create_source_provider` rewrites

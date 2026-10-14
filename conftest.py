@@ -171,7 +171,7 @@ def pytest_runtest_makereport(item, call):
 
 
 @pytest.fixture(scope="session")
-def latency_selected_source_provider(request: pytest.FixtureRequest, ocp_admin_client: DynamicClient) -> str:
+def selected_source_provider(request: pytest.FixtureRequest, ocp_admin_client: DynamicClient) -> str:
     """Resolve the run's source provider, selecting the fastest pool member when requested.
 
     Explicit `source_provider` config is returned unchanged - nothing is probed and
@@ -246,7 +246,7 @@ def pytest_sessionstart(session):
 
         # Latency-based pool selection (issue #728): a provider-type pool key
         # (version optional) replaces the explicit provider key. The selection itself
-        # runs later, in the latency_selected_source_provider fixture, once per run.
+        # runs later, in the selected_source_provider fixture, once per run.
         pool_type = py_config.get("source_provider_type")
         pool_version = py_config.get("source_provider_version")
         if not py_config.get("source_provider") and pool_version and not pool_type:
@@ -744,14 +744,14 @@ def pytest_harvest_xdist_cleanup():
 
 @pytest.fixture(scope="session", autouse=True)
 def autouse_fixtures(
-    latency_selected_source_provider,
+    selected_source_provider,
     source_provider_data,
     nfs_storage_profile,
     base_resource_name,
     forklift_pods_state,
     virtctl_binary,
 ):
-    # latency_selected_source_provider runs first so pool-mode runs resolve their
+    # selected_source_provider runs first so pool-mode runs resolve their
     # provider before anything consumes it. source_provider_data is called here to
     # fail fast if the provider is not found in the providers list from config.
     yield
@@ -1027,7 +1027,7 @@ def destination_provider(session_uuid, ocp_admin_client, target_namespace, fixtu
 
 @pytest.fixture(scope="session")
 def source_provider_data(
-    latency_selected_source_provider: str,
+    selected_source_provider: str,
     source_providers: dict[str, dict[str, Any]],
     fixture_store: dict[str, Any],
     request: pytest.FixtureRequest,
@@ -1035,7 +1035,7 @@ def source_provider_data(
     """Resolve source provider configuration from the loaded providers data.
 
     Args:
-        latency_selected_source_provider (str): The explicit or latency-selected provider
+        selected_source_provider (str): The explicit or latency-selected provider
             key; requested directly so selection always runs before this fixture.
         source_providers (dict[str, dict[str, Any]]): All provider configurations loaded from providers JSON file.
         fixture_store (dict[str, Any]): Session fixture store for teardown tracking.
@@ -1053,7 +1053,7 @@ def source_provider_data(
     if not source_providers:
         raise MissingProvidersFileError(path=providers_path)
 
-    requested_provider = latency_selected_source_provider
+    requested_provider = selected_source_provider
     if requested_provider not in source_providers:
         raise ValueError(
             f"Source provider '{requested_provider}' not found in '{providers_path}'. "

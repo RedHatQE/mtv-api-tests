@@ -700,7 +700,7 @@ the key is passed:
 --tc=source_provider_type:vsphere --tc=source_provider_version:8.0.1 --tc=source_provider_feature:copyoffload
 ```
 
-Selection happens once per run, in the session-scoped `latency_selected_source_provider` fixture
+Selection happens once per run, in the session-scoped `selected_source_provider` fixture
 (requested first by the autouse fixture, before anything consumes the provider). A pool with a single
 member — or whose members all share one probe endpoint (e.g. two OVA entries on the same NFS server)
 — is selected instantly without probing; no probe pod is created. Otherwise, in a single-process

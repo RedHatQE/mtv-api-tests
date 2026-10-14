@@ -426,7 +426,7 @@ client, before any migration work, and the message says which variable to set.</
 
 <p>A feature key (<code>--tc=source_provider_feature:copyoffload</code>) flips pool membership: copy-offload-capable providers —
 entries with a <code>copyoffload</code> section — are excluded from the pool by default and included only when the key is
-passed. The session-scoped <code>latency_selected_source_provider</code> fixture — requested first by the
+passed. The session-scoped <code>selected_source_provider</code> fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from <code>.providers.json</code>
 (entries matching the type, and the version when passed, gated by the feature key — <code>copyoffload</code> providers only
 with the key, excluded without it). <strong>OpenShift pools are never probed</strong>: <code>create_source_provider</code> rewrites
