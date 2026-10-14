@@ -111,6 +111,9 @@ BASIC_LOGGER = logging.getLogger("basic")
 _STANDALONE_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 _CLASS_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 
+# Value of the vSphere provider's optional `endpoint_type` field (providers_schema.json enum
+# ["vcenter", "esxi"]) that marks a direct ESXi host connection rather than vCenter Server
+VSPHERE_ESXI_ENDPOINT_TYPE = "esxi"
 
 # Pytest start
 
@@ -428,6 +431,8 @@ def pytest_collection_modifyitems(session, config, items):
         # .get() with default is intentional: source_provider may not be configured (e.g., partial config),
         # in which case provider-type gating is silently skipped.
         source_provider_type = providers.get(py_config.get("source_provider", ""), {}).get("type")
+        source_provider_data = providers.get(py_config.get("source_provider", ""), {})
+        source_provider_type = source_provider_data.get("type")
 
         if source_provider_type:
             # Skip warm migration tests for providers that do not support warm migration.
@@ -478,6 +483,21 @@ def pytest_collection_modifyitems(session, config, items):
                     # collection run with a clear KeyError instead of a later fixture error.
                     if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
                         item.add_marker(add_nic_skip)
+
+        # Skip IPv6 tests unless running against the supported IPv6 environment. IPv6 migration
+        # works today only with a vSphere source connected directly to an ESXi host (not vCenter)
+        if source_provider_type != Provider.ProviderType.VSPHERE:
+            ipv6_skip_reason = "IPv6 tests require a vSphere source provider"
+        elif source_provider_data.get("endpoint_type") != VSPHERE_ESXI_ENDPOINT_TYPE:
+            ipv6_skip_reason = "IPv6 tests require a vSphere ESXi endpoint, not vCenter"
+        else:
+            ipv6_skip_reason = ""
+
+        if ipv6_skip_reason:
+            ipv6_skip = pytest.mark.skip(reason=ipv6_skip_reason)
+            for item in items:
+                if "ipv6" in item.keywords:
+                    item.add_marker(ipv6_skip)
 
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
@@ -1437,7 +1457,13 @@ def prepared_plan(
                     "VMs must be cloned from templates."
                 )
             skip_clone_incompatible = ["disable_drs_for_vms", "clone_to_same_host"]
-            if source_provider.type != Provider.ProviderType.HYPERV:
+            # Only ESXi provider supports IPv6 currently, but it doesn't support VM cloning
+            # Allow skip_clone: true to work with ESXi provider
+            is_esxi_vsphere = (
+                source_provider.type == Provider.ProviderType.VSPHERE
+                and source_provider_data.get("endpoint_type") == VSPHERE_ESXI_ENDPOINT_TYPE
+            )
+            if not (is_esxi_vsphere or source_provider.type == Provider.ProviderType.HYPERV):
                 skip_clone_incompatible.append("preserve_static_ips")
             conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]
             if has_shared_disk_config:
