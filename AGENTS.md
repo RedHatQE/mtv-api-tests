@@ -625,6 +625,18 @@ with ResourceEditor(node) as editor:
 
 ## Critical Constraints
 
+### No Rebase on PR Branches (MUST)
+
+Never rebase PR branches and never rewrite their history. To bring a PR up to date
+with main, merge main INTO the PR branch and push normally — force-push is never
+needed under this policy.
+
+Qodo anchors its review to the commit SHAs it has already reviewed. Rebasing (or
+amending) rewrites every SHA, so Qodo treats the PR as a brand-new diff and runs a
+full re-review, losing the approved state. A merge commit preserves the reviewed
+SHAs, so Qodo reviews only the delta — or skips the review entirely when the merge
+brings no new code.
+
 ### Test Execution Prohibition
 
 AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live clusters, provider connections, and credentials.
