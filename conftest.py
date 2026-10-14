@@ -1448,6 +1448,11 @@ def prepared_plan(
         )
 
         if openshift_source_provider:
+            # OCPProvider.get_vm_by_name resolves VMs only within this namespace:
+            # concurrent sessions create identically-named VMs in their own
+            # source namespaces.
+            source_provider.source_vms_namespace = source_vms_namespace
+
             # Generate unique network name for class-based tests
             hash_prefix = generate_class_hash_prefix(request.node.nodeid, session_uuid=fixture_store["session_uuid"])
             multus_network_name = f"cb-{hash_prefix}"
