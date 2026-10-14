@@ -89,6 +89,7 @@ from utilities.pytest_utils import (
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
 from utilities.ssh_utils import SSHConnectionManager
+from utilities.storage_canary import verify_destination_storage_provisioning
 from utilities.utils import (
     create_source_cnv_vms,
     create_source_provider,
@@ -747,6 +748,7 @@ def autouse_fixtures(
     selected_source_provider,
     source_provider_data,
     nfs_storage_profile,
+    storage_canary,
     base_resource_name,
     forklift_pods_state,
     virtctl_binary,
@@ -754,6 +756,8 @@ def autouse_fixtures(
     # selected_source_provider runs first so pool-mode runs resolve their
     # provider before anything consumes it. source_provider_data is called here to
     # fail fast if the provider is not found in the providers list from config.
+    # storage_canary (which creates target_namespace) runs before any class-scoped
+    # fixture so broken destination storage fails the session before migrations run.
     yield
 
 
@@ -801,6 +805,36 @@ def target_namespace(fixture_store, session_uuid, ocp_admin_client):
     )
     namespace.wait_for_status(status=namespace.Status.ACTIVE)
     yield namespace.name
+
+
+@pytest.fixture(scope="session")
+def storage_canary(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    session_uuid: str,
+    fixture_store: dict[str, Any],
+) -> None:
+    """Fail fast when destination storage provisioning is permanently failing.
+
+    Creates a small canary PVC in the target namespace using the run's configured
+    storage class, before any migration runs. Healthy storage binds it in seconds;
+    broken storage emits Warning ``ProvisioningFailed`` events within a few minutes.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for the target cluster.
+        target_namespace (str): Target namespace for the canary PVC.
+        session_uuid (str): Session UUID, used for the canary PVC name.
+        fixture_store (dict[str, Any]): Fixture store for resource tracking.
+
+    Raises:
+        StorageProvisioningError: If the destination storage class cannot provision volumes.
+    """
+    verify_destination_storage_provisioning(
+        client=ocp_admin_client,
+        fixture_store=fixture_store,
+        namespace=target_namespace,
+        session_uuid=session_uuid,
+    )
 
 
 @pytest.fixture(scope="session")
