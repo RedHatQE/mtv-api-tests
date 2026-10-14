@@ -13,7 +13,7 @@ from ocp_resources.virtual_machine import VirtualMachine
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import InvalidVMNameError
+from exceptions.exceptions import InvalidVMNameError, VmNotFoundError
 from libs.base_provider import BaseProvider
 from utilities.naming import sanitize_kubernetes_name, truncate_resource_name
 from utilities.ssh_utils import VMSSHConnection, create_vm_ssh_connection
@@ -118,6 +118,47 @@ class OCPProvider(BaseProvider):
             bool: True if the VM is ready (running), False otherwise
         """
         return bool(vm_api.ready)
+
+    def get_vm_by_name(
+        self,
+        query: str,
+        vm_name_suffix: str = "",
+        clone_vm: bool = False,
+        session_uuid: str = "",
+        clone_options: dict[str, Any] | None = None,
+    ) -> VirtualMachine:
+        """Look up an existing CNV VirtualMachine by name.
+
+        Source VMs for OpenShift providers are created up-front by create_source_cnv_vms()
+        (name = query + vm_name_suffix, truncated by create_and_store_resource()); cloning does
+        not apply, so clone_vm, session_uuid and clone_options are accepted for signature
+        compatibility with other providers and ignored.
+
+        Args:
+            query: Base VM name.
+            vm_name_suffix: Suffix appended to the base name at VM creation.
+            clone_vm: Ignored (the VM already exists).
+            session_uuid: Ignored (the VM already exists).
+            clone_options: Ignored (the VM already exists).
+
+        Returns:
+            VirtualMachine: The existing CNV VirtualMachine.
+
+        Raises:
+            VmNotFoundError: If no VirtualMachine with the resolved name exists on the cluster.
+            ValueError: If `ocp_resource` is not set.
+        """
+        if not self.ocp_resource:
+            raise ValueError("Missing `ocp_resource`")
+
+        # Same truncation rule as create_and_store_resource() so the lookup always
+        # matches the created VM name.
+        vm_name = truncate_resource_name(name=f"{query}{vm_name_suffix}")
+        for vm in VirtualMachine.get(client=self.ocp_resource.client):
+            if vm.name == vm_name:
+                return vm
+
+        raise VmNotFoundError(f"VM '{vm_name}' not found on OpenShift cluster")
 
     def vm_dict(
         self, *, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any
