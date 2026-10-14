@@ -429,7 +429,9 @@ entries with a <code>copyoffload</code> section — are excluded from the pool b
 passed. The session-scoped <code>latency_selected_source_provider</code> fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from <code>.providers.json</code>
 (entries matching the type, and the version when passed, gated by the feature key — <code>copyoffload</code> providers only
-with the key, excluded without it). A pool with a single member — or whose members all share one probe endpoint,
+with the key, excluded without it). <strong>OpenShift pools are never probed</strong>: <code>create_source_provider</code> rewrites
+OpenShift sources to the local cluster host, so their configured endpoints are unused — the lowest provider key
+is selected deterministically. A pool with a single member — or whose members all share one probe endpoint,
 e.g. two OVA entries on the same NFS server — is selected instantly without probing: no probe pod is created and
 the lowest provider key wins. Otherwise the fixture launches one probe pod on the cluster and measures TCP-connect
 RTT to every <strong>unique</strong> candidate endpoint (providers sharing a <code>host:port</code> are measured once and share the
@@ -455,7 +457,7 @@ worker reads the same file. The chosen provider and its RTT are logged.</p>
 <li>An empty pool (no type match, or no provider passes the feature gate) aborts the session — never a skip.</li>
 <li>
 <p>An entry with no resolvable endpoint host (empty <code>fqdn</code>, <code>api_url</code>, and <code>host</code>) raises a <code>ValueError</code> naming the
-type — it is never probed against an empty host.</p>
+type — it is never probed against an empty host (OpenShift entries are exempt: they are never probed at all).</p>
 </li>
 <li>
 <p>Unreachable candidates are excluded from selection; a fully unreachable pool aborts the session.</p>

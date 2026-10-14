@@ -4077,7 +4077,9 @@ entries with a `copyoffload` section — are excluded from the pool by default a
 passed. The session-scoped `latency_selected_source_provider` fixture — requested first by the
 autouse fixture, before anything consumes the provider — derives the candidate pool from `.providers.json`
 (entries matching the type, and the version when passed, gated by the feature key — `copyoffload` providers only
-with the key, excluded without it). A pool with a single member — or whose members all share one probe endpoint,
+with the key, excluded without it). **OpenShift pools are never probed**: `create_source_provider` rewrites
+OpenShift sources to the local cluster host, so their configured endpoints are unused — the lowest provider key
+is selected deterministically. A pool with a single member — or whose members all share one probe endpoint,
 e.g. two OVA entries on the same NFS server — is selected instantly without probing: no probe pod is created and
 the lowest provider key wins. Otherwise the fixture launches one probe pod on the cluster and measures TCP-connect
 RTT to every **unique** candidate endpoint (providers sharing a `host:port` are measured once and share the
@@ -4099,7 +4101,7 @@ Precedence and failure modes:
 - Neither an explicit provider nor a pool aborts with the missing-config error, as before.
 - An empty pool (no type match, or no provider passes the feature gate) aborts the session — never a skip.
 - An entry with no resolvable endpoint host (empty `fqdn`, `api_url`, and `host`) raises a `ValueError` naming the
-type — it is never probed against an empty host.
+type — it is never probed against an empty host (OpenShift entries are exempt: they are never probed at all).
 - Unreachable candidates are excluded from selection; a fully unreachable pool aborts the session.
 - In pool mode the provider is unknown at collection time, so collection-time provider gating uses the pool's
   `source_provider_type` and item names carry the type instead of the provider key.

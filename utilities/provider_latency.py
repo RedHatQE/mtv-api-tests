@@ -307,11 +307,14 @@ def select_provider_from_pool(
 ) -> dict[str, Any]:
     """Derive the candidate pool, probe it, and select the fastest member.
 
-    A pool whose members all share one probe endpoint — a single candidate, or several
-    providers behind the same endpoint — is selected without probing: no probe pod is
-    created and the lowest provider key wins deterministically. Every candidate's
-    endpoint is resolved and validated before the shortcuts, so an entry with no
-    resolvable host fails fast even when it is the pool's only member.
+    OpenShift pools are selected deterministically (lowest provider key) without probing:
+    `create_source_provider` rewrites OpenShift sources to the local cluster host, so
+    their configured endpoints are never used. For every other type, a pool whose
+    members all share one probe endpoint — a single candidate, or several providers
+    behind the same endpoint — is also selected without probing: no probe pod is
+    created and the lowest provider key wins deterministically. Every non-OpenShift
+    candidate's endpoint is resolved and validated before the shortcuts, so an entry
+    with no resolvable host fails fast even when it is the pool's only member.
 
     Args:
         client (DynamicClient): OpenShift client used to run the probe pod.
@@ -335,6 +338,15 @@ def select_provider_from_pool(
         provider_version=provider_version,
         required_feature=required_feature,
     )
+    if provider_type == "openshift":
+        # OpenShift sources always migrate through the local cluster: create_source_provider
+        # rewrites their api_url to the destination cluster host, so their configured
+        # endpoints are never used and probing them would rank an unused URL.
+        selected = min(pool)
+        LOGGER.info(
+            f"OpenShift candidate providers use the local cluster endpoint, selected '{selected}' without probing"
+        )
+        return {"provider": selected, "rtt_ms": None}
     endpoints = {provider_probe_endpoint(provider_data=provider_data) for provider_data in pool.values()}
     if len(pool) == 1:
         selected = next(iter(pool))

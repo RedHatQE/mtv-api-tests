@@ -723,6 +723,9 @@ Rules:
   it); an empty pool aborts the session with a clear error — never a skip.
 - A single-candidate or single-endpoint pool is selected without probing; otherwise the winner is
   the lowest-RTT endpoint with the lowest provider key as the deterministic tiebreak.
+- OpenShift pools are never probed: `create_source_provider` rewrites OpenShift sources to the
+  local cluster host, so their configured endpoints are unused and the lowest provider key wins
+  deterministically.
 - Unreachable candidates are excluded; a fully unreachable pool aborts the session.
 - In pool mode the provider is unknown at collection time, so collection-time provider gating uses the
   pool's `source_provider_type` and test item names carry the type instead of the provider key.
