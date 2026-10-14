@@ -1268,7 +1268,7 @@ requires-dist = [
     { name = "humanfriendly", specifier = ">=10.0" },
     { name = "jc", specifier = ">=1.25.0" },
     { name = "openshift-python-utilities", specifier = ">=6.0.7" },
-    { name = "openshift-python-wrapper", specifier = ">=11.0.136" },
+    { name = "openshift-python-wrapper", specifier = ">=11.0.143" },
     { name = "openstacksdk", specifier = ">=4.0.0" },
     { name = "ovirt-python-sdk", specifier = ">=1.2.0" },
     { name = "packaging", specifier = ">=24.0" },
@@ -1392,7 +1392,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/11/8c/5a03b7c28670dd355
 
 [[package]]
 name = "openshift-python-wrapper"
-version = "11.0.142"
+version = "11.0.143"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloup" },
@@ -1411,7 +1411,7 @@ dependencies = [
     { name = "timeout-sampler" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/71/0476283e9e3ca0b05bf863eeeb8a8a33b2ee1de9b43cbaec6dbdd2f57f1e/openshift_python_wrapper-11.0.142.tar.gz", hash = "sha256:7834db409005590c9ad40fcfcfb90963e974d231badfb6c012ba1039a9a23303", size = 8222726, upload-time = "2026-10-11T09:58:14.805Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/bc/323be01e5001c05958d99e27120cab265c039553c82f075411f188c646ff/openshift_python_wrapper-11.0.143.tar.gz", hash = "sha256:0b23a3a777bce9c4027199a7a715d5351fb453952f245b22d836affb860e8ac6", size = 8228632, upload-time = "2026-10-12T08:13:28.634Z" }
 
 [[package]]
 name = "openshift-python-wrapper-data-collector"

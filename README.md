@@ -204,6 +204,24 @@ cp .providers.json.example .providers.json
 
 See `.providers.json.example` for complete templates of all supported providers.
 
+**Hyper-V `management_type`:** Optional. `"cluster"` for a Failover Cluster, `"standalone"` for a single host.
+The value is passed through to `spec.settings.managementType` on the MTV Provider CR. If the key is omitted,
+the suite does not set the field and MTV uses standalone.
+
+**Hyper-V two-phase transfer:** `TestColdMigrationComprehensive` passes Plan `pre_copy_source_disks` (spec
+`preCopySourceDisks`) when the source provider is Hyper-V. The Hyper-V Provider CR is created with
+`smb_max_channels` from `tests/tests_config/config.py` (default `4`, spec `settings.smbMaxChannels`) when any
+plan config sets `pre_copy_source_disks: True`. Other Hyper-V tests keep MTV defaults (`preCopySourceDisks`
+unset; `smbMaxChannels` omitted unless that plan flag is present).
+
+**Hyper-V `preserve_static_ips`:** Before creating the Plan, the suite waits until Forklift inventory has
+`guestNetworks` entries matching every static IPv4 address reported in the saved source VM data
+(host KVP is not sufficient on cluster). Any required gateway must appear on the matching entry, not on
+an unrelated NIC. The existing IPv4/gateway readiness check also remains: a gateway is required when the
+source reports one or its network metadata is incomplete. The gateway requirement is waived only when
+every source NIC has IP entries that explicitly report no gateway; missing metadata is not treated as
+gatewayless. Timeout scales with `HYPERV_REFRESH_INTERVAL` (default ~700s).
+
 > **Schema & IDE support:** `providers_schema.json` documents which fields are required vs optional
 > per provider type. Add `"$schema"` as the first key in your `.providers.json` for IDE autocomplete:
 >
@@ -1109,6 +1127,24 @@ oc describe plan <plan-name> -n openshift-mtv
 ```
 
 ### Collect Debug Information
+
+Automatic failure collection attempts at most one successful must-gather per class-plan instance per worker,
+using a percent-encoded class node ID, class parameter indices and worker ID under `.data-collector/`.
+It binds the current Plan or explicit None at the class-plan boundary before default fixture finalization,
+including early exits, and retains that context for retries. Standalone tests gather immediately.
+Known operational class-plan collection failures remain pending for the session-finish retry; artifacts are not guaranteed if it fails.
+Standalone tests gather immediately on the first failing phase; an operational failure is retried only when another
+phase of the same test also fails. Collector exceptions during setup or call are stashed on the item, cleared at teardown
+and not retried there. Standalone failures are not queued for session-finish retry.
+Unexpected standalone setup/call collector errors are retained on the item until pytest fixture finalization.
+The session-finish hook runs the pending-gather flush, resource inventory writing and configured cleanup before the inner
+session hooks yield, so xdist worker shutdown cannot interrupt them; the summary and enabled AI enrichment run after those
+hooks, and errors are re-raised at the end with earlier errors chained.
+Invalid image metadata and other configuration/programming errors propagate instead of returning `False`. A pending class-plan gather
+remains queued and may raise again when retried at a later boundary or session finish.
+Inventory, configured teardown, temporary-directory removal, summary and enabled AI enrichment are attempted independently;
+cleanup errors propagate with earlier errors chained. See
+[diagnostic collection](docs/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
 
 ```bash
 oc adm must-gather --image=quay.io/kubev2v/forklift-must-gather:latest --dest-dir=/tmp/mtv-logs

@@ -151,6 +151,25 @@ def hyperv_provider(provider_data: dict[str, Any]) -> bool:
     return provider_data["type"] == Provider.ProviderType.HYPERV
 
 
+# provider_data is .providers.json config whose value types vary across provider types,
+# so dict[str, Any] is required (same as the sibling provider type checks above).
+def hyperv_smb_max_channels(provider_data: dict[str, Any]) -> str | None:
+    """SMB max_channels for Provider.smb_max_channels when two-phase Hyper-V is configured.
+
+    Args:
+        provider_data (dict[str, Any]): Source provider configuration.
+
+    Returns:
+        str | None: Channel count for spec.settings.smbMaxChannels, or None when the
+        Provider CR should omit the setting.
+    """
+    if not hyperv_provider(provider_data=provider_data):
+        return None
+    if not any(plan.get("pre_copy_source_disks", False) for plan in py_config["tests_params"].values()):
+        return None
+    return str(py_config["smb_max_channels"])
+
+
 def generate_ca_cert_file(provider_fqdn: str, cert_file: Path, port: int = 443) -> Path:
     """Fetch CA certificate from provider FQDN and save to file.
 
@@ -548,6 +567,8 @@ def create_source_provider(
         provider_type=source_provider_data_copy["type"],
         vddk_init_image=source_provider_data_copy.get("vddk_init_image"),
         sdk_endpoint=source_provider_data_copy.get("endpoint_type"),
+        management_type=source_provider_data_copy.get("management_type"),
+        smb_max_channels=hyperv_smb_max_channels(provider_data=source_provider_data_copy),
         annotations=provider_annotations or None,
     )
     # OVA (NFS-based) can transiently report ConnectionFailed while NFS initializes;

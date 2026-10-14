@@ -46,7 +46,7 @@ from exceptions.exceptions import (
 )
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from utilities.copyoffload_migration import apply_copyoffload_vm_name_override, resolve_non_dedicated_esxi_host
-from libs.base_provider import BaseProvider
+from libs.base_provider import BaseProvider, supports_add_nic
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
 from libs.providers.vmware import VMWareProvider
@@ -54,23 +54,33 @@ from utilities.constants import MTV_OPERATOR_NAME
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
-from utilities.must_gather import run_must_gather
+from utilities.must_gather import (
+    collect_class_must_gather,
+    collect_class_teardown_must_gather,
+    collect_must_gather_for_item,
+    collect_pending_class_must_gather_now,
+    flush_pending_class_must_gathers,
+    initialize_class_plan_context,
+    mark_class_pending_must_gather,
+    run_must_gather,
+)
 from utilities.provider_inventory import (
     validate_source_vms_exist,
     wait_for_added_nics_in_forklift_inventory,
     wait_for_cloned_vms_in_forklift_inventory,
+    wait_for_inventory_guest_networks,
 )
 from utilities.naming import (
     generate_name_with_uuid,
     resolve_destination_vm_name,
     sanitize_kubernetes_name,
-    sanitize_test_name_for_path,
 )
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
     is_dry_run,
     prepare_base_path,
+    resolve_item_plan_config,
     session_teardown,
     setup_ai_analysis,
 )
@@ -98,6 +108,8 @@ RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
+_STANDALONE_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
+_CLASS_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 
 
 # Pytest start
@@ -203,6 +215,21 @@ def pytest_fixture_setup(fixturedef, request):
     LOGGER.info(f"Executing {fixturedef.scope} fixture: {fixturedef.argname}")
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
+    """Initialize class-plan state before setup, including hooks that can skip or fail.
+
+    Args:
+        item (pytest.Item): Item whose setup/call/teardown protocol is starting.
+
+    Returns:
+        None: Hook wrapper — the yield passes control to the inner runtest protocol hooks.
+    """
+    if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
+        initialize_class_plan_context(item)
+    yield
+
+
 def pytest_runtest_setup(item):
     # Incremental test support - xfail if previous test in class failed
     if "incremental" in item.keywords:
@@ -218,8 +245,35 @@ def pytest_runtest_call(item):
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='CALL')}")
 
 
-def pytest_runtest_teardown(item):
+@pytest.hookimpl(tryfirst=True, wrapper=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> Generator[None, object, object]:
+    """Gather at a class-plan boundary, always allowing pytest's fixture finalization.
+
+    Args:
+        item (pytest.Item): Item about to tear down.
+        nextitem (pytest.Item | None): Next worker item, or None when execution stops.
+
+    Returns:
+        object: The result of the inner pytest_runtest_teardown hooks, forwarded unchanged.
+    """
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='TEARDOWN')}")
+    try:
+        collector_error = item.stash.get(_STANDALONE_MUST_GATHER_ERROR, None)
+        if collector_error is not None:
+            raise collector_error.with_traceback(collector_error.__traceback__)
+        if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
+            try:
+                collect_class_must_gather(item, nextitem)
+            except Exception as exp:
+                # Report the collector error once as this item's teardown error. The stash keeps
+                # pytest_exception_interact from retrying the same gather inside its hook (a second
+                # raise there becomes an INTERNALERROR); the identity stays pending for the
+                # session-end flush.
+                item.stash[_CLASS_MUST_GATHER_ERROR] = exp
+                raise
+    finally:
+        teardown_outcome = yield
+    return teardown_outcome
 
 
 def pytest_report_teststatus(report, config):
@@ -241,9 +295,26 @@ def pytest_report_teststatus(report, config):
             BASIC_LOGGER.info(f"\nTEST: {test_name} STATUS: \033[0;31mFAILED\033[0m")
 
 
-def pytest_sessionfinish(session, exitstatus):
+@pytest.hookimpl(tryfirst=True, wrapper=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[None, object, object]:
+    """Flush diagnostics and finish cleanup without suppressing collector programming errors.
+
+    Diagnostics flush, resource inventory, and configured teardown run before the yield: the xdist
+    worker reports completion from its own sessionfinish wrapper, so cleanup placed after that
+    yield could be interrupted by worker shutdown mid-deletion. Work that needs other plugins'
+    sessionfinish output (JUnit enrichment, terminal summary) runs after the yield, even when an
+    inner session-finish hook raises. An inner-hook, cleanup, or post-yield failure is re-raised
+    after that processing, chained from the earliest earlier error so all of them stay visible.
+
+    Args:
+        session (pytest.Session): Worker-local session holding pending diagnostics and resources.
+        exitstatus (int): Pytest exit status before session cleanup.
+
+    Returns:
+        object: The result of the inner pytest_sessionfinish hooks, forwarded unchanged.
+    """
     if is_dry_run(session.config):
-        return
+        return (yield)
 
     BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION FINISH')}")
 
@@ -251,34 +322,77 @@ def pytest_sessionfinish(session, exitstatus):
 
     _data_collector_path = Path(session.config.getoption("data_collector_path"))
 
-    if not session.config.getoption("skip_data_collector"):
-        collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
-
-    if session.config.getoption("skip_teardown"):
-        LOGGER.warning("User requested to skip teardown of resources")
-
-    else:
-        # TODO: Maybe we need to check session_teardown return and fail the run if any leftovers
+    # --- Pre-yield cleanup: must finish before the xdist worker reports completion ---
+    cleanup_error: Exception | None = None
+    inner_error: Exception | None = None
+    try:
+        # Each independent action runs even if an earlier one raises; errors stay chained.
         try:
-            session_teardown(session_store=_session_store)
-        except Exception as exp:
-            LOGGER.error(f"the following resources was left after tests are finished: {exp}")
             if not session.config.getoption("skip_data_collector"):
-                run_must_gather(data_collector_path=_data_collector_path)
-
-    shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
-    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-    reporter.summary_stats()
-
-    if session.config.getoption("analyze_with_ai"):
-        if exitstatus == 0:
-            LOGGER.info("No test failures (exit code %d), skipping AI analysis", exitstatus)
-
-        else:
+                flush_pending_class_must_gathers(session)
+        finally:
             try:
-                enrich_junit_xml(session)
-            except Exception:
-                LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+                if not session.config.getoption("skip_data_collector"):
+                    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
+            finally:
+                try:
+                    if session.config.getoption("skip_teardown"):
+                        LOGGER.warning("User requested to skip teardown of resources")
+                    else:
+                        try:
+                            session_teardown(session_store=_session_store)
+                        except Exception:
+                            LOGGER.exception("Resources remain after session teardown")
+                            if not session.config.getoption("skip_data_collector"):
+                                run_must_gather(data_collector_path=_data_collector_path)
+                            raise
+                finally:
+                    shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
+    except Exception as exp:
+        cleanup_error = exp
+
+    # --- Inner session hooks: retain a raised exception so reporting still runs ---
+    session_outcome: object = None
+    try:
+        session_outcome = yield
+    except Exception as exp:
+        inner_error = exp
+
+    # --- Post-yield reporting: needs other plugins' session-finish output ---
+    try:
+        try:
+            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+            reporter.summary_stats()
+        finally:
+            if session.config.getoption("analyze_with_ai"):
+                if exitstatus == 0:
+                    LOGGER.info(f"No test failures (exit code {exitstatus}), skipping AI analysis")
+                else:
+                    try:
+                        enrich_junit_xml(session)
+                    except Exception:
+                        LOGGER.exception("Failed to enrich JUnit XML, original preserved")
+                        raise
+    except Exception as post_yield_error:
+        # A post-yield failure must not swallow earlier errors: chain it from the earliest
+        # failure, linking the other earlier failure into the same chain so every traceback
+        # stays visible.
+        if cleanup_error is not None and inner_error is not None:
+            inner_error.__cause__ = cleanup_error
+            raise post_yield_error from inner_error
+        earlier_error = cleanup_error or inner_error
+        if earlier_error is not None:
+            raise post_yield_error from earlier_error
+        raise
+
+    # --- Error propagation: the earliest failure wins, later ones chain from it ---
+    if inner_error is not None:
+        if cleanup_error is not None:
+            raise inner_error from cleanup_error
+        raise inner_error
+    if cleanup_error is not None:
+        raise cleanup_error
+    return session_outcome
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -305,6 +419,9 @@ def pytest_collection_modifyitems(session, config, items):
     #        @pytest.mark.my_new_marker
     #        class TestMyFeature: ...
     # -------------------------------------------------------------------
+    # Resolve each item's plan config once: the skip loops and the later rename loop share
+    # the same resolution (parametrization fields or item.originalname).
+    resolved_plan_configs = [(item, resolve_item_plan_config(item)) for item in items]
     if not is_dry_run(config):
         providers_json_path = config.getoption("providers_json", default=None)
         providers = load_source_providers(providers_json_path=providers_json_path)
@@ -348,24 +465,25 @@ def pytest_collection_modifyitems(session, config, items):
                     if "ca_crt" in item.keywords:
                         item.add_marker(ca_cert_skip)
 
+            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
+            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
+            if not supports_add_nic(source_provider_type):
+                add_nic_skip = pytest.mark.skip(
+                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
+                )
+                for item, test_config in resolved_plan_configs:
+                    if test_config is None:
+                        continue
+                    # `virtual_machines` is a required plan-config field: direct access fails the
+                    # collection run with a clear KeyError instead of a later fixture error.
+                    if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
+                        item.add_marker(add_nic_skip)
+
     _session_store = get_fixture_store(session)
     vms_for_current_session: set = set()
 
-    for item in items:
+    for item, test_config in resolved_plan_configs:
         item.name = f"{item.name}-{py_config.get('source_provider')}-{py_config.get('storage_class')}"
-
-        # Get test config from parametrization or tests_params
-        test_config = None
-        if hasattr(item, "callspec"):
-            # Class-based tests use class_plan_config
-            test_config = item.callspec.params.get("class_plan_config")
-            if test_config is None:
-                # Function-based tests use plan
-                test_config = item.callspec.params.get("plan")
-
-        if test_config is None:
-            # Fallback to looking up by test name (for non-parametrized tests)
-            test_config = py_config["tests_params"].get(item.originalname)
 
         if test_config and "virtual_machines" in test_config:
             for _vm in test_config["virtual_machines"]:
@@ -377,28 +495,110 @@ def pytest_collection_modifyitems(session, config, items):
         LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
 
 
+def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseException]) -> None:
+    """Collect or defer a must-gather for a failing test item.
+
+    Standalone tests gather immediately, once per worker-qualified identity. Their setup/call
+    collector errors propagate to the caller, which stashes them on the item for teardown.
+    Class setup/call failures are marked pending for the class-plan boundary; when the remote
+    debugger is enabled the owed gather runs immediately against the still-alive class Plan so
+    diagnostics precede the blocking post-mortem session. Class teardown failures gather through
+    the boundary-aware teardown path.
+
+    Args:
+        node (pytest.Item): The test item reporting the exception.
+        call (pytest.CallInfo[BaseException]): The call info of the failing phase.
+
+    Raises:
+        Exception: Whatever the attempted collection raises, for the caller to defer or re-raise.
+
+    Returns:
+        None: The helper only records or collects diagnostics.
+    """
+    node_cls: type | None = getattr(node, "cls", None)
+    if node_cls is None:
+        collected: set[str] = getattr(node.session, "_must_gather_collected_tests", set())
+        worker: str = getattr(node.config, "workerinput", {}).get("workerid", "master")
+        identity = f"{node.nodeid}::worker={worker}"
+        collector_error = node.stash.get(_STANDALONE_MUST_GATHER_ERROR, None)
+        if call.when == "teardown" and collector_error is not None:
+            del node.stash[_STANDALONE_MUST_GATHER_ERROR]
+            return
+        if identity not in collected and collect_must_gather_for_item(node, identity, plan_obj=None):
+            collected.add(identity)
+            setattr(node.session, "_must_gather_collected_tests", collected)
+        return
+
+    if call.when == "teardown":
+        class_collector_error = node.stash.get(_CLASS_MUST_GATHER_ERROR, None)
+        if class_collector_error is not None:
+            # The teardown wrapper already reported this collector error; retrying the gather here
+            # would raise inside the hook and abort the worker with an INTERNALERROR. The identity
+            # stays pending for the session-end flush.
+            del node.stash[_CLASS_MUST_GATHER_ERROR]
+            return
+        collect_class_teardown_must_gather(node)
+        return
+
+    mark_class_pending_must_gather(node)
+    if remote_debugger_enabled():
+        # The post-mortem debugger blocks the process until a client detaches, so the owed gather
+        # runs now, against the still-alive class Plan, instead of waiting for the class-plan
+        # boundary. Success marks the identity collected and the boundary skips it; a failed
+        # attempt stays pending for the boundary retry and the session-end flush.
+        collect_pending_class_must_gather_now(node)
+
+
 def pytest_exception_interact(node, call, report):
+    """Defer or collect a must-gather for a failing test, then open the remote post-mortem debugger.
+
+    Setup/call failures record the failing item by class-plan identity. The tryfirst teardown hook
+    binds Plan context at the nextitem boundary before default fixture finalization for all retries.
+    With no plan, it binds None and takes a full gather. Standalone tests gather immediately, once on success.
+    Collection-phase failures from collectors carry no test context and are left to pytest's own
+    reporting; the hook returns without gathering so a collection error stays a collection error.
+    Unexpected standalone setup/call collector errors are retained on the item until fixture finalization.
+    Earlier method teardown failures are deferred while the same class-plan continues. Boundary
+    finalizer failures arrive after cleanup and gather only if no successful gather already exists.
+
+    Args:
+        node (pytest.Item): The test item reporting the exception.
+        call (pytest.CallInfo[BaseException]): The call info of the failing phase.
+        report (pytest.TestReport): The report of the failing phase.
+
+    Returns:
+        None: The hook only records or collects diagnostics.
+    """
     if is_dry_run(node.session.config):
         return
 
+    if call.when == "collect":
+        # Collection failures from collectors (a Module that fails to import, or a Class collector
+        # whose collection failed) have no test context; pytest reports them itself. This check runs
+        # before the class/standalone split because a pytest.Class collector reports `cls` as set.
+        # Attempting a gather here would re-raise inside this hook and turn a reportable collection
+        # error into an INTERNALERROR.
+        return
+
     if not node.session.config.getoption("skip_data_collector"):
-        _data_collector_path = Path(
-            f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(node.name)}"
-        )
-        plan = None
-        if hasattr(node, "cls") and node.cls and hasattr(node.cls, "plan_resource"):
-            plan_obj = node.cls.plan_resource
-            if plan_obj:
-                plan = {"name": plan_obj.name, "namespace": plan_obj.namespace}
+        try:
+            _handle_failure_must_gather(node=node, call=call)
+        except Exception as exp:
+            if getattr(node, "cls", None) is None and call.when in ("setup", "call"):
+                # Retain a standalone collector error on this item so setup/call reporting can
+                # reach fixture teardown; the teardown wrapper re-raises it as the item's error.
+                node.stash[_STANDALONE_MUST_GATHER_ERROR] = exp
+            else:
+                raise
 
-        run_must_gather(data_collector_path=_data_collector_path, plan=plan)
-
-    # Remote post-mortem debugger (MTV_REMOTE_PDB). Runs after must-gather so diagnostics
-    # are collected before the session blocks waiting for a debugger connection. Skipped
-    # when --pdb is active so the local terminal debugger takes precedence, and skipped
-    # for BdbQuit so quitting a code breakpoint fails that test without opening another
-    # listener. A debugger quit ends the test session, matching pytest's native --pdb
-    # behavior. usepdb has a default because -p no:pdb removes the option.
+    # Remote post-mortem debugger (MTV_REMOTE_PDB). Reached by every non-dry-run, non-collect
+    # failure regardless of --skip-data-collector, after must-gather handling so diagnostics
+    # precede the blocking debugger session: standalone gathers already ran, and class gathers
+    # ran immediately above when the debugger is enabled (otherwise they are deferred to the
+    # class-plan boundary). Skipped when --pdb is active so the local terminal debugger takes
+    # precedence, and skipped for BdbQuit so quitting a code breakpoint fails that test without
+    # opening another listener. A debugger quit ends the test session, matching pytest's native
+    # --pdb behavior. usepdb has a default because -p no:pdb removes the option.
     if (
         remote_debugger_enabled()
         and not node.config.getoption("usepdb", default=False)
@@ -1190,10 +1390,10 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
+        # The non-vSphere provider case is gated at collection time in
+        # pytest_collection_modifyitems (pytest.skip must not be used in fixtures).
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config:
-            if not isinstance(source_provider, VMWareProvider):
-                pytest.skip(f"add_nic is vSphere-only; skipping for provider '{source_provider.type}'")
             for vm in virtual_machines:
                 if vm.get("add_nic"):
                     if "add_nic_start_connected" not in vm:
@@ -1211,7 +1411,7 @@ def prepared_plan(
                 f"disable_drs_for_vms requires a VMware clone provider, got '{type(clone_provider).__name__}'"
             )
 
-        if plan.get("preserve_static_ips"):
+        if plan.get("preserve_static_ips", False):
             for vm in virtual_machines:
                 if vm.get("source_vm_power") != "on":
                     raise ValueError(
@@ -1272,7 +1472,7 @@ def prepared_plan(
                     elif source_vm_power == "off":
                         source_provider.stop_vm(provider_vm_api)
 
-                if plan.get("preserve_static_ips"):
+                if plan.get("preserve_static_ips", False):
                     source_vm_details = source_provider.vm_dict(
                         provider_vm_api=provider_vm_api,
                         name=vm["name"],
@@ -1392,7 +1592,7 @@ def prepared_plan(
                     except ValueError:
                         raise
                     except (GuestCommandError, vim.fault.VimFault, TimeoutExpiredError, OSError) as e:
-                        if plan.get("preserve_static_ips"):
+                        if plan.get("preserve_static_ips", False):
                             raise ValueError(
                                 f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
                                 "IP origin detection is required when preserve_static_ips is enabled."
@@ -1402,7 +1602,7 @@ def prepared_plan(
                             "Static IP verification may not work for this VM."
                         )
 
-                    if plan.get("preserve_static_ips"):
+                    if plan.get("preserve_static_ips", False):
                         detect_guest_nic_names(
                             source_provider=source_provider,
                             vm=provider_vm_api,
@@ -1440,6 +1640,13 @@ def prepared_plan(
                     source_vm_names=original_source_vm_names,
                     cloned_vms=cloned_vm_objects,
                 )
+
+        if plan.get("preserve_static_ips", False) and source_provider.type == Provider.ProviderType.HYPERV:
+            wait_for_inventory_guest_networks(
+                source_provider_inventory=source_provider_inventory,
+                vm_names=[vm["name"] for vm in virtual_machines],
+                source_vms_data=plan["source_vms_data"],
+            )
     else:
         # OVA VMs aren't cloned — add unique targetName to prevent destination VM name conflicts
         # across parallel test sessions. The source VM name stays unchanged (must match OVA file).

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
+from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 
@@ -50,6 +51,7 @@ class TestColdMigrationComprehensive:
     - Custom target namespace for VMs
     - Nested virtualization disabled (vmx/svm CPU features)
     - VBS (Virtualization Based Security) verification
+    - Hyper-V two-phase disk transfer (preCopySourceDisks) and SMB max channels
     """
 
     storage_map: StorageMap
@@ -161,6 +163,10 @@ class TestColdMigrationComprehensive:
         """
         populate_vm_ids(prepared_plan, source_provider_inventory)
 
+        pre_copy_source_disks = source_provider.type == Provider.ProviderType.HYPERV and prepared_plan.get(
+            "pre_copy_source_disks", False
+        )
+
         self.__class__.plan_resource = create_plan_resource(
             fixture_store=fixture_store,
             source_provider=source_provider,
@@ -180,6 +186,7 @@ class TestColdMigrationComprehensive:
             target_affinity=prepared_plan["target_affinity"],
             vm_target_namespace=prepared_plan["vm_target_namespace"],
             enable_nested_virtualization=prepared_plan["enable_nested_virtualization"],
+            pre_copy_source_disks=pre_copy_source_disks,
         )
         assert self.plan_resource, "Plan creation failed"
 

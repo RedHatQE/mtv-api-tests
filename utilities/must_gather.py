@@ -2,19 +2,34 @@ from __future__ import annotations
 
 import shlex
 from pathlib import Path
-from typing import TYPE_CHECKING
+from subprocess import CalledProcessError, TimeoutExpired
+from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import quote
 
+import pytest
+from kubernetes.dynamic.exceptions import DynamicApiError, ResourceNotFoundError
 from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.image_digest_mirror_set import ImageDigestMirrorSet
+from ocp_resources.exceptions import ClientWithBasicAuthError
+from ocp_resources.plan import Plan
 from ocp_resources.subscription import Subscription
 from pyhelper_utils.shell import run_command
 from pytest_testconfig import py_config
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import HTTPError as RequestsHTTPError
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
+from requests.exceptions import Timeout as RequestsTimeout
 from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError
+from urllib3.exceptions import MaxRetryError, ProtocolError, SSLError
+from urllib3.exceptions import TimeoutError as HTTPTimeoutError
 
+from exceptions.exceptions import MustGatherImageError
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.utils import get_cluster_client
 
 if TYPE_CHECKING:
+    from _pytest.python import CallSpec2
     from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(__name__)
@@ -35,16 +50,47 @@ def _get_idms_name(channel: str) -> str:
         str: The derived IDMS resource name.
 
     Raises:
-        ValueError: If ``channel`` is empty or has no version after
+        MustGatherImageError: If ``channel`` is empty or has no version after
             the ``release-v`` prefix.
     """
     if not channel:
-        raise ValueError("Subscription channel is empty")
+        raise MustGatherImageError("Subscription channel is empty")
 
     stripped = channel.removeprefix("release-v")
     if not stripped:
-        raise ValueError(f"Subscription channel '{channel}' has no version after 'release-v'")
+        raise MustGatherImageError(f"Subscription channel '{channel}' has no version after 'release-v'")
     return f"devel-testing-for-{stripped.replace('.', '-')}"
+
+
+# The dict value type below is `Any` on purpose: provider-controlled metadata entries carry
+# arbitrary value types until each caller validates the specific fields it reads.
+def _entry_to_dict(entry: object, resource_description: str, entry_description: str) -> dict[str, Any]:
+    """Normalize a provider-controlled metadata entry to a native dict for validation.
+
+    Kubernetes dynamic API objects expose nested mappings as ``ResourceField`` objects that
+    support ``.get()`` but are not ``dict`` instances, so valid live-cluster data fails an
+    ``isinstance(entry, dict)`` check. ``ResourceField.to_dict()`` converts them. Importing
+    ``ResourceField`` for an ``isinstance`` check is forbidden (no runtime ``kubernetes.*``
+    imports beyond ``kubernetes.dynamic.exceptions``), so the conversion is detected duck-typed
+    and the result is still type-checked.
+
+    Args:
+        entry (object): A metadata entry read from a provider-controlled resource.
+        resource_description (str): Resource name and kind for error messages.
+        entry_description (str): Short description of the entry kind for error messages.
+
+    Returns:
+        dict[str, Any]: The entry converted to a native dict.
+
+    Raises:
+        MustGatherImageError: If the entry cannot be converted to a mapping.
+    """
+    to_dict = getattr(entry, "to_dict", None)
+    if callable(to_dict):
+        entry = to_dict()
+    if not isinstance(entry, dict):
+        raise MustGatherImageError(f"{resource_description} has {entry_description} that is not a mapping: {entry!r}")
+    return entry
 
 
 def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
@@ -62,18 +108,30 @@ def _get_must_gather_mirror_url(idms: ImageDigestMirrorSet) -> str:
             quay mirror exists.
 
     Raises:
-        ValueError: If no ``imageDigestMirrors`` entry contains ``must-gather``
-            in its source, or if the matching entry has an empty mirrors list.
+        MustGatherImageError: If mirror entries or sources are missing or malformed, no entry contains
+            ``must-gather`` in its source, or the matching entry has an empty or invalid mirrors list.
     """
-    for mirror_entry in idms.instance.spec.imageDigestMirrors:
-        if "must-gather" in mirror_entry["source"]:
-            mirrors = mirror_entry.get("mirrors", [])
-            if not mirrors:
-                raise ValueError(f"IDMS '{idms.name}' has must-gather entry with no mirrors")
-            quay_mirrors = [m for m in mirrors if "quay" in m]
+    mirror_entries = idms.instance.spec.imageDigestMirrors
+    if not isinstance(mirror_entries, list) or not mirror_entries:
+        raise MustGatherImageError(f"IDMS '{idms.name}' has no imageDigestMirrors")
+    for mirror_entry in mirror_entries:
+        entry = _entry_to_dict(mirror_entry, f"IDMS '{idms.name}'", "a mirror entry")
+        source = entry.get("source")
+        if not isinstance(source, str) or not source:
+            raise MustGatherImageError(f"IDMS '{idms.name}' has a mirror entry with an invalid source: {source!r}")
+        if "must-gather" in source:
+            mirrors = entry.get("mirrors", [])
+            if not isinstance(mirrors, list) or not mirrors:
+                raise MustGatherImageError(f"IDMS '{idms.name}' has must-gather entry with no mirrors")
+            invalid_mirrors = [mirror for mirror in mirrors if not isinstance(mirror, str) or not mirror]
+            if invalid_mirrors:
+                raise MustGatherImageError(
+                    f"IDMS '{idms.name}' has mirror entries that are not non-empty strings: {invalid_mirrors!r}"
+                )
+            quay_mirrors = [mirror for mirror in mirrors if "quay" in mirror]
             return quay_mirrors[0] if quay_mirrors else mirrors[0]
 
-    raise ValueError(f"No must-gather entry found in IDMS '{idms.name}'")
+    raise MustGatherImageError(f"No must-gather entry found in IDMS '{idms.name}'")
 
 
 def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
@@ -86,16 +144,36 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
         str: The MUST_GATHER_IMAGE value.
 
     Raises:
-        ValueError: If the container env list is None or MUST_GATHER_IMAGE is
-            missing from the CSV environment variables.
+        MustGatherImageError: If deployments, containers, environment variables or the
+            MUST_GATHER_IMAGE value are missing or malformed in the CSV.
     """
-    envs = mtv_csv.instance.spec.install.spec.deployments[0].spec.template.spec.containers[0].env
-    if envs is None:
-        raise ValueError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no container env list")
-    images = [env["value"] for env in envs if env["name"] == "MUST_GATHER_IMAGE"]
-    if not images:
-        raise ValueError(f"No MUST_GATHER_IMAGE found in MTV ClusterServiceVersion '{mtv_csv.name}'")
-    return images[0]
+    deployments = mtv_csv.instance.spec.install.spec.deployments
+    if not deployments:
+        raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no deployments")
+    containers = deployments[0].spec.template.spec.containers
+    if not containers:
+        raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no containers")
+    envs = containers[0].env
+    if not isinstance(envs, list) or not envs:
+        raise MustGatherImageError(f"MTV ClusterServiceVersion '{mtv_csv.name}' has no container env list")
+    must_gather_envs: list[dict[str, str]] = []
+    for env in envs:
+        entry = _entry_to_dict(env, f"MTV ClusterServiceVersion '{mtv_csv.name}'", "an env entry")
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            raise MustGatherImageError(
+                f"MTV ClusterServiceVersion '{mtv_csv.name}' has an env entry with an invalid name: {name!r}"
+            )
+        if name == "MUST_GATHER_IMAGE":
+            must_gather_envs.append(entry)
+    if not must_gather_envs:
+        raise MustGatherImageError(f"No MUST_GATHER_IMAGE value found in MTV ClusterServiceVersion '{mtv_csv.name}'")
+    image = must_gather_envs[0].get("value")
+    if not isinstance(image, str) or not image:
+        raise MustGatherImageError(
+            f"MUST_GATHER_IMAGE in MTV ClusterServiceVersion '{mtv_csv.name}' is not a non-empty string: {image!r}"
+        )
+    return image
 
 
 def _resolve_must_gather_image(
@@ -119,7 +197,7 @@ def _resolve_must_gather_image(
         str: The resolved must-gather image string.
 
     Raises:
-        ValueError: If MUST_GATHER_IMAGE is missing from the CSV environment
+        MustGatherImageError: If MUST_GATHER_IMAGE is missing from the CSV environment
             variables, the Subscription channel is empty, no must-gather entry
             is found in the IDMS, or the CSV image has no digest separator.
     """
@@ -132,26 +210,67 @@ def _resolve_must_gather_image(
     must_gather_mirror_url = _get_must_gather_mirror_url(idms=idms)
 
     if "@" not in csv_image:
-        raise ValueError(f"CSV image '{csv_image}' does not contain a digest separator '@'")
+        raise MustGatherImageError(f"CSV image '{csv_image}' does not contain a digest separator '@'")
     sha = csv_image.split("@")[1]
+    if not sha:
+        raise MustGatherImageError(f"CSV image '{csv_image}' has an empty digest after '@'")
     resolved_image = f"{must_gather_mirror_url}@{sha}"
     LOGGER.info(f"Resolved must-gather image from IDMS: {resolved_image}")
     return resolved_image
 
 
-def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = None) -> None:
-    """Run ``oc adm must-gather`` to collect MTV diagnostic data.
+def run_must_gather(data_collector_path: Path) -> bool:
+    """Run ``oc adm must-gather`` to collect the full MTV diagnostic bundle.
 
-    Resolves the must-gather image by looking up the IDMS mirror URL and
-    combining it with the SHA from the installed CSV. Any errors during
-    resolution are logged but do not fail the test run.
+    Used where there is no plan to scope by: session teardown after leftovers, and an item whose
+    test class carries no ``plan_resource``. Resolves the must-gather image by looking up the IDMS
+    mirror URL and combining it with the SHA from the installed CSV. Known operational failures
+    return False for retry; programming and configuration errors propagate.
 
     Args:
         data_collector_path (Path): Directory where must-gather output is written.
-        plan (dict[str, str] | None): Optional dict with ``name`` and ``namespace``
-            keys to scope the must-gather to a specific migration plan.
+
+    Returns:
+        bool: True when the gather command ran. False when it did not, so the caller can keep the
+            failure pending instead of recording a gather that produced no diagnostics.
+    """
+    LOGGER.info("Running full must-gather collection")
+    return _run_must_gather(data_collector_path=data_collector_path, target_args="")
+
+
+def run_plan_must_gather(data_collector_path: Path, plan: dict[str, str]) -> bool:
+    """Run the plan-targeted ``oc adm must-gather`` collection for one migration plan.
+
+    A different gather script from :func:`run_must_gather`: it runs ``/usr/bin/targeted`` with the
+    plan's name and namespace as env, so the artifact holds that plan's VMs, networks and events
+    instead of a full-cluster snapshot. Image resolution is shared with the full collection.
+
+    Args:
+        data_collector_path (Path): Directory where must-gather output is written.
+        plan (dict[str, str]): Dict with ``name`` and ``namespace`` keys identifying the plan.
+
+    Returns:
+        bool: True when the gather command ran. False when it did not, so the caller can keep the
+            failure pending instead of recording a gather that produced no diagnostics.
+    """
+    LOGGER.info(f"Running targeted must-gather for plan '{plan['name']}' in namespace '{plan['namespace']}'")
+    target_args = f"NS={plan['namespace']} PLAN={plan['name']} /usr/bin/targeted"
+    return _run_must_gather(data_collector_path=data_collector_path, target_args=target_args)
+
+
+def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
+    """Resolve the must-gather image and run ``oc adm must-gather`` with the given trailing arguments.
+
+    Args:
+        data_collector_path (Path): Directory where must-gather output is written.
+        target_args (str): Arguments appended after the image and dest-dir flags, naming the gather
+            script to run. Empty runs the full diagnostic collection.
+
+    Returns:
+        bool: True when the gather command ran. False when it did not.
     """
     try:
+        # Resource discovery: cluster client, MTV Subscription, and its installed CSV.
         # https://github.com/kubev2v/forklift-must-gather
         ocp_admin_client = get_cluster_client()
         mtv_namespace = py_config["mtv_namespace"]
@@ -164,24 +283,329 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
             client=ocp_admin_client, name=installed_csv, namespace=mtv_namespace, ensure_exists=True
         )
 
+        # Image resolution: derive the gather image from operator state. Invalid image metadata
+        # is configuration, not a retryable resource failure.
         must_gather_image = _resolve_must_gather_image(
             ocp_admin_client=ocp_admin_client,
             mtv_subs=mtv_subs,
             mtv_csv=mtv_csv,
         )
 
-        _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
-
-        if plan:
-            plan_name = plan["name"]
-            plan_namespace = plan["namespace"]
-            LOGGER.info(f"Running targeted must-gather for plan '{plan_name}' in namespace '{plan_namespace}'")
-            run_command(
-                shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted"),
-                verify_stderr=False,
-            )
-        else:
-            LOGGER.info("Running full must-gather collection")
-            run_command(shlex.split(_must_gather_base_cmd), verify_stderr=False)
-    except Exception as ex:
+        # Command execution: run `oc adm must-gather` with the resolved image and arguments.
+        command = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
+        if target_args:
+            command = f"{command} -- {target_args}"
+        success, _, _ = run_command(shlex.split(command), verify_stderr=False)
+        return success
+    except NotImplementedError as ex:
+        # API unavailability: the wrapper has no dedicated missing-API exception, so match its
+        # discovery origin and message before treating it as a gather that cannot run.
+        origin = ex.__traceback__
+        while origin is not None and origin.tb_next is not None:
+            origin = origin.tb_next
+        if (
+            origin is None
+            or origin.tb_frame.f_globals.get("__name__") != "ocp_resources.resource"
+            or origin.tb_frame.f_code.co_name != "_get_api_version"
+        ):
+            raise
+        if str(ex) not in {
+            f"Couldn't find {resource.kind} in {resource.api_group} api group"
+            for resource in (Subscription, ClusterServiceVersion, ImageDigestMirrorSet)
+        }:
+            raise
+        LOGGER.exception(f"Must-gather resource API is unavailable. {ex}")
+        return False
+    except (
+        CalledProcessError,
+        TimeoutExpired,
+        OSError,
+        ClientWithBasicAuthError,
+        DynamicApiError,
+        ResourceNotFoundError,
+        RequestsConnectionError,
+        RequestsHTTPError,
+        RequestsJSONDecodeError,
+        RequestsTimeout,
+        MaxRetryError,
+        ProtocolError,
+        SSLError,
+        HTTPTimeoutError,
+        TimeoutExpiredError,
+    ) as ex:
+        # Retryable operational failures: log and report the gather as not run; the caller keeps
+        # the class-plan identity pending for the session-end retry.
         LOGGER.exception(f"Failed to run must-gather. {ex}")
+        return False
+
+
+def collect_must_gather_for_item(node: pytest.Item, artifact_name: str, plan_obj: Plan | None) -> bool:
+    """Collect a must-gather for a failure into a named directory under the data collector path.
+
+    Args:
+        node (pytest.Item): Test item supplying the data collector configuration.
+        artifact_name (str): Worker-qualified class-plan identity, or standalone test node ID.
+        plan_obj (Plan | None): Bound Plan context, or None for full collection.
+
+    Returns:
+        bool: True when a must-gather was collected, False when collection itself failed.
+    """
+    # Percent encoding is reversible, unlike replacing punctuation with dashes.
+    data_collector_path = Path(node.session.config.getoption("data_collector_path")) / quote(artifact_name, safe="")
+    if plan_obj is None:
+        return run_must_gather(data_collector_path=data_collector_path)
+
+    plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
+    return run_plan_must_gather(data_collector_path=data_collector_path, plan=plan)
+
+
+def class_plan_identity(item: pytest.Item | None) -> str | None:
+    """Identify a class-plan instance independently of its test methods.
+
+    Pytest keeps one Class collector across parameter sets. Callspec indices for class-scoped
+    parameters distinguish fixture instances without including function-scoped method parameters.
+    Worker IDs keep artifacts separate when xdist splits a class across workers.
+
+    Args:
+        item (pytest.Item | None): Current or next item, or None at the end of execution.
+
+    Returns:
+        str | None: Worker-qualified class node ID and class parameter indices, or None for no class.
+    """
+    if item is None:
+        return None
+    class_node = item.getparent(pytest.Class)
+    if class_node is None:
+        return None
+
+    callspec: CallSpec2 | None = getattr(item, "callspec", None)
+    parameters = ""
+    if callspec is not None:
+        # Pytest exposes parameter scopes only on CallSpec2._arg2scope.
+        parameters = ",".join(
+            f"{name}={callspec.indices[name]}"
+            for name, scope in sorted(callspec._arg2scope.items())
+            if scope.value == "class" or name == "class_plan_config"
+        )
+    worker: str = getattr(item.config, "workerinput", {}).get("workerid", "master")
+    return f"{class_node.nodeid}::params={parameters}::worker={worker}"
+
+
+def initialize_class_plan_context(item: pytest.Item) -> None:
+    """Clear stale Plan state on entry, without resetting consecutive methods of the same plan.
+
+    A re-entered class-plan instance (xdist load/loadgroup/worksteal scheduling can split one
+    class across non-contiguous batches) keeps the stored Plan context while a gather from its
+    earlier run is still owed, so the session-end retry uses that original context, and otherwise
+    drops the stored context so a second-run failure cannot gather against the first run's
+    deleted Plan. The owed gather itself is not retried here: this runs before the runtest
+    protocol yields, and an escaping configuration error would abort the worker as an
+    INTERNALERROR before fixtures finalize.
+
+    Args:
+        item (pytest.Item): Item whose protocol is starting, before any setup hooks run.
+
+    Returns:
+        None: Updates session class-plan context state without returning a value.
+    """
+    identity = class_plan_identity(item)
+    active_identity: str | None = getattr(item.session, "_must_gather_active_class_identity", None)
+    if identity != active_identity:
+        if identity is not None:
+            node_cls: type = getattr(item, "cls")
+            setattr(node_cls, "plan_resource", None)
+            if not class_must_gather_collected(item.session, identity):
+                pending: dict[str, pytest.Item] = getattr(item.session, "_must_gather_pending_classes", {})
+                if identity not in pending:
+                    # No gather is owed: the stored context is stale from the earlier run. While a
+                    # gather is owed, the original context stays so the session-end flush retries
+                    # with the Plan the failure was recorded against.
+                    contexts: dict[str, Plan | None] = getattr(item.session, "_must_gather_plan_contexts", {})
+                    contexts.pop(identity, None)
+                    setattr(item.session, "_must_gather_plan_contexts", contexts)
+        setattr(item.session, "_must_gather_active_class_identity", identity)
+
+
+def _bind_class_plan_context(session: pytest.Session, identity: str, item: pytest.Item) -> Plan | None:
+    """Retain the current Plan or explicit None for this identity's collection and retries.
+
+    Args:
+        session (pytest.Session): Session holding worker-local contexts.
+        identity (str): Class-plan identity to bind if not already bound.
+        item (pytest.Item): Item whose class may still hold this identity's Plan.
+
+    Returns:
+        Plan | None: First bound context, never a later class-plan's mutable attribute.
+    """
+    contexts: dict[str, Plan | None] = getattr(session, "_must_gather_plan_contexts", {})
+    if identity not in contexts:
+        active_identity: str | None = getattr(session, "_must_gather_active_class_identity", None)
+        node_cls: type | None = getattr(item, "cls", None)
+        contexts[identity] = getattr(node_cls, "plan_resource", None) if identity == active_identity else None
+        setattr(session, "_must_gather_plan_contexts", contexts)
+    return contexts[identity]
+
+
+def mark_class_pending_must_gather(item: pytest.Item) -> None:
+    """Store a failing item in session pending state for its class-plan instance.
+
+    Args:
+        item (pytest.Item): Failing item retained for plan context and the artifact path.
+    """
+    identity = class_plan_identity(item)
+    if identity is None or class_must_gather_collected(item.session, identity):
+        return
+    pending: dict[str, pytest.Item] = getattr(item.session, "_must_gather_pending_classes", {})
+    pending.setdefault(identity, item)
+    setattr(item.session, "_must_gather_pending_classes", pending)
+
+
+def class_must_gather_collected(session: pytest.Session, identity: str) -> bool:
+    """Report whether this worker already gathered a class-plan instance successfully.
+
+    Args:
+        session (pytest.Session): Session holding worker-local state.
+        identity (str): Class-plan identity to look up.
+
+    Returns:
+        bool: True only after a successful gather.
+    """
+    collected: set[str] = getattr(session, "_must_gather_collected_classes", set())
+    return identity in collected
+
+
+def mark_class_must_gather_collected(session: pytest.Session, identity: str) -> None:
+    """Add a successfully gathered class-plan identity to session collected state.
+
+    Args:
+        session (pytest.Session): Session holding worker-local state.
+        identity (str): Successfully gathered class-plan instance.
+    """
+    collected: set[str] = getattr(session, "_must_gather_collected_classes", set())
+    collected.add(identity)
+    setattr(session, "_must_gather_collected_classes", collected)
+
+
+def _collect_pending_class_must_gather(session: pytest.Session, identity: str, item: pytest.Item) -> bool:
+    """Collect an owed class-plan gather, updating session state only on success.
+
+    A failed operational collection stays pending for the session-end retry.
+
+    Args:
+        session (pytest.Session): Session holding pending and collected state.
+        identity (str): Class-plan instance owing diagnostics.
+        item (pytest.Item): Item supplying configuration and context if not yet bound.
+
+    Returns:
+        bool: True when this call collected diagnostics and removed the pending entry.
+    """
+    pending: dict[str, pytest.Item] = getattr(session, "_must_gather_pending_classes", {})
+    if identity not in pending or class_must_gather_collected(session, identity):
+        return False
+
+    plan_obj = _bind_class_plan_context(session, identity, item)
+    if collect_must_gather_for_item(item, identity, plan_obj):
+        pending.pop(identity, None)
+        mark_class_must_gather_collected(session, identity)
+        return True
+    return False
+
+
+def collect_pending_class_must_gather_now(item: pytest.Item) -> None:
+    """Collect a pending class-plan gather immediately instead of at the class-plan boundary.
+
+    Used before a blocking post-mortem debugger session so diagnostics are gathered while the
+    class Plan is still alive. Success marks the identity collected and the boundary skips it;
+    a failed attempt stays pending for the boundary retry and the session-end flush.
+
+    Args:
+        item (pytest.Item): Failing item whose class-plan identity may owe a gather.
+    """
+    identity = class_plan_identity(item)
+    if identity is None:
+        return
+    try:
+        _collect_pending_class_must_gather(item.session, identity, item)
+    except MustGatherImageError:
+        # Keep the identity pending: the session-end flush reports the configuration error
+        # without turning the calling hook into an INTERNALERROR.
+        LOGGER.exception(f"Must-gather for class-plan '{identity}' failed before the remote debugger session")
+
+
+def collect_class_must_gather(item: pytest.Item, nextitem: pytest.Item | None) -> None:
+    """Gather pending diagnostics at a worker's class-plan boundary before fixture cleanup.
+
+    Called by a tryfirst teardown hook. A different Class collector or class parameter set ends
+    the current instance; None flushes it on normal completion or early -x/--maxfail exit.
+    Parameter changes can finalize fixtures during the next setup even when the Class collector
+    stays active, so they must also count as boundaries. The next identity is retained on the
+    item so a later teardown exception can defer collection while this instance continues.
+
+    Args:
+        item (pytest.Item): Item about to tear down, including setup-error items.
+        nextitem (pytest.Item | None): Next item scheduled on this worker, or None on exit.
+    """
+    identity = class_plan_identity(item)
+    next_identity = class_plan_identity(nextitem)
+    setattr(item, "_must_gather_next_class_identity", next_identity)
+    if identity is not None and identity != next_identity:
+        # Bind even without a pending failure: boundary finalizers may report one later.
+        _bind_class_plan_context(item.session, identity, item)
+        _collect_pending_class_must_gather(item.session, identity, item)
+
+
+def collect_class_teardown_must_gather(node: pytest.Item) -> bool:
+    """Queue a teardown failure, gathering now only if its class-plan boundary already passed.
+
+    Exception interaction runs after fixture finalization. Earlier method teardown failures stay
+    pending until the boundary; a boundary-only failure uses the pre-finalizer Plan context
+    but can only collect post-finalizer cluster state.
+    A successful pre-finalizer gather suppresses this repeat.
+
+    Args:
+        node (pytest.Item): Item whose teardown failed.
+
+    Returns:
+        bool: True when this call collected diagnostics successfully.
+    """
+    identity = class_plan_identity(node)
+    if identity is None:
+        return False
+    if class_must_gather_collected(node.session, identity):
+        LOGGER.info(f"Suppressing must-gather for {identity}: class-plan must-gather already collected.")
+        return False
+
+    mark_class_pending_must_gather(node)
+    if getattr(node, "_must_gather_next_class_identity", None) == identity:
+        return False
+    return _collect_pending_class_must_gather(node.session, identity, node)
+
+
+def flush_pending_class_must_gathers(session: pytest.Session) -> None:
+    """Retry remaining pending gathers at session finish if this worker is still alive.
+
+    This fallback cannot guarantee pre-cleanup state after interrupted hooks or recover state
+    from a crashed worker process. Normal early exits gather at the nextitem=None boundary.
+    An unbound identity can use the class attribute only while it is still active; otherwise
+    it binds None rather than targeting another plan's stale attribute. Every identity's retry
+    runs even when an earlier one fails; the first configuration error is re-raised after the
+    loop so one failure cannot skip the remaining diagnostics.
+
+    Args:
+        session (pytest.Session): Session whose remaining pending map is consumed on success.
+
+    Raises:
+        MustGatherImageError: The first configuration error encountered across the retries,
+            re-raised with its traceback after every identity was attempted.
+    """
+    pending: dict[str, pytest.Item] = getattr(session, "_must_gather_pending_classes", {})
+    retry_errors: list[MustGatherImageError] = []
+    for identity, item in list(pending.items()):
+        try:
+            _collect_pending_class_must_gather(session, identity, item)
+        except MustGatherImageError as exp:
+            # One identity's configuration failure must not skip the remaining retries.
+            LOGGER.exception(f"Must-gather retry for class-plan '{identity}' failed at session finish")
+            retry_errors.append(exp)
+    if retry_errors:
+        raise retry_errors[0]
