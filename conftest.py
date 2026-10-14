@@ -77,7 +77,7 @@ from utilities.provider_inventory import (
     wait_for_cloned_vms_in_forklift_inventory,
     wait_for_inventory_guest_networks,
 )
-from utilities.provider_latency import select_provider_from_pool
+from utilities.provider_latency import select_provider_from_pool, store_provider_selection
 from utilities.pytest_utils import (
     collect_created_resources,
     enrich_junit_xml,
@@ -209,13 +209,21 @@ def latency_selected_source_provider(request: pytest.FixtureRequest, ocp_admin_c
     else:
         # The testrunuid scopes the file to this run, so parallel runs never share it.
         # The first worker through the lock probes once; the rest read its selection.
+        # A failed selection is recorded too, so the failure happens once instead of
+        # once per worker, and workers see the original error instead of a lock timeout.
         selection_path = Path(tempfile.gettempdir()) / f"pytest-provider-selection-{run_uid}.json"
         with filelock.FileLock(f"{selection_path}.lock", timeout=600):
             if selection_path.exists():
                 selection = json.loads(selection_path.read_text())
+                if "error" in selection:
+                    raise ValueError(f"Provider selection failed on the first worker: {selection['error']}")
             else:
-                selection = select_from_pool()
-                selection_path.write_text(json.dumps(selection))
+                try:
+                    selection = select_from_pool()
+                except (ValueError, TimeoutExpiredError) as selection_error:
+                    store_provider_selection(selection_path=selection_path, content={"error": str(selection_error)})
+                    raise
+                store_provider_selection(selection_path=selection_path, content=selection)
     py_config["source_provider"] = selection["provider"]
     if selection["rtt_ms"] is None:
         LOGGER.info(f"Source provider for this run: {selection['provider']} (selected without probing)")

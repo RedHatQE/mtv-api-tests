@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 # `Any` is the value type of `.providers.json` entries: schema-validated JSON mappings
 # whose fields vary per provider type (see providers_schema.json), so no narrower static
@@ -182,8 +184,12 @@ def _host_from_api_url(api_url: str | None) -> str | None:
         api_url = api_url.split("://", 1)[1]
     authority = api_url.split("/", 1)[0]
     host = authority.rpartition("@")[2] if "@" in authority else authority
+    if host.startswith("[") and host.endswith("]"):
+        return host[1:-1]
     if ":" in host:
         host = host.rpartition(":")[0]
+        if host.startswith("[") and host.endswith("]"):
+            host = host[1:-1]
     return host or None
 
 
@@ -255,6 +261,21 @@ def probe_provider_latencies(client: DynamicClient, providers: dict[str, dict[st
         )
     endpoint_rtts: dict[str, float | None] = json.loads(_last_json_line(output=output))
     return {name: endpoint_rtts.get(target) for target, names in endpoint_to_providers.items() for name in names}
+
+
+def store_provider_selection(selection_path: Path, content: dict[str, Any]) -> None:
+    """Atomically write the run's provider selection (or its recorded failure).
+
+    The write goes to a sibling temporary file replaced into place, so xdist workers
+    reading under the lock never observe a partially written selection.
+
+    Args:
+        selection_path (Path): Run-scoped selection file (`PYTEST_XDIST_TESTRUNUID`-keyed).
+        content (dict[str, Any]): The selection, or `{"error": ...}` for a failed one.
+    """
+    tmp_path = selection_path.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(content))
+    os.replace(tmp_path, selection_path)
 
 
 def select_fastest_provider(providers: dict[str, dict[str, Any]], rtts: dict[str, float | None]) -> tuple[str, float]:
@@ -388,8 +409,10 @@ def _probe_pod(client: DynamicClient, targets: list[str]) -> Iterator[Pod]:
         pod.wait_for_status(status=Pod.Status.RUNNING, timeout=PROBE_POD_START_TIMEOUT_SECONDS)
         yield pod
     finally:
-        pod.clean_up(wait=False)
-        namespace.clean_up(wait=True)
+        try:
+            pod.clean_up(wait=False)
+        finally:
+            namespace.clean_up(wait=True)
 
 
 __all__ = [
@@ -400,4 +423,5 @@ __all__ = [
     "provider_probe_endpoint",
     "select_fastest_provider",
     "select_provider_from_pool",
+    "store_provider_selection",
 ]
