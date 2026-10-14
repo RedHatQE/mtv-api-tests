@@ -152,13 +152,18 @@ class OCPProvider(BaseProvider):
             raise ValueError("Missing `ocp_resource`")
 
         # Same truncation rule as create_and_store_resource() so the lookup always
-        # matches the created VM name.
+        # matches the created VM name. The field selector makes the API server filter
+        # by name directly — no cluster-wide VM listing is transferred.
         vm_name = truncate_resource_name(name=f"{query}{vm_name_suffix}")
-        for vm in VirtualMachine.get(client=self.ocp_resource.client):
-            if vm.name == vm_name:
-                return vm
-
-        raise VmNotFoundError(f"VM '{vm_name}' not found on OpenShift cluster")
+        vms = list(
+            VirtualMachine.get(
+                client=self.ocp_resource.client,
+                field_selector=f"metadata.name={vm_name}",
+            )
+        )
+        if not vms:
+            raise VmNotFoundError(f"VM '{vm_name}' not found on OpenShift cluster")
+        return vms[0]
 
     def vm_dict(
         self, *, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any
