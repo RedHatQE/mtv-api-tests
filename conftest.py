@@ -212,7 +212,11 @@ def latency_selected_source_provider(request: pytest.FixtureRequest, ocp_admin_c
         # A failed selection is recorded too, so the failure happens once instead of
         # once per worker, and workers see the original error instead of a lock timeout.
         selection_path = Path(tempfile.gettempdir()) / f"pytest-provider-selection-{run_uid}.json"
-        with filelock.FileLock(f"{selection_path}.lock", timeout=600):
+        # The lock timeout must cover one full probe cycle held by the first worker:
+        # namespace deploy + Active wait, up to PROBE_POD_START_TIMEOUT_SECONDS of pod
+        # start, PROBE_SCRIPT_TIMEOUT_SECONDS of exec, and the blocking namespace
+        # cleanup — 900s leaves margin over that worst case.
+        with filelock.FileLock(f"{selection_path}.lock", timeout=900):
             if selection_path.exists():
                 selection = json.loads(selection_path.read_text())
                 if "error" in selection:

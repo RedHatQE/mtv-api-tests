@@ -417,6 +417,10 @@ def _probe_pod(client: DynamicClient, targets: list[str]) -> Iterator[Pod]:
     )
     try:
         namespace.deploy()
+        # Wait for the namespace to be Active before deploying the pod: on OpenShift the
+        # default ServiceAccount is created asynchronously, and a pod created in that
+        # window can be rejected by admission (utilities/resources.py waits the same way).
+        namespace.wait_for_status(status=Namespace.Status.ACTIVE)
         pod.deploy()
         pod.wait_for_status(status=Pod.Status.RUNNING, timeout=PROBE_POD_START_TIMEOUT_SECONDS)
         yield pod
