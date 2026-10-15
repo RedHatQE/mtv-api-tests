@@ -72,7 +72,8 @@ from utilities.naming import (
     sanitize_kubernetes_name,
 )
 from utilities.provider_inventory import (
-    validate_source_vms_exist,
+    get_missing_source_vms,
+    raise_for_missing_source_vms,
     wait_for_added_nics_in_forklift_inventory,
     wait_for_cloned_vms_in_forklift_inventory,
     wait_for_inventory_guest_networks,
@@ -569,22 +570,35 @@ def pytest_collection_modifyitems(session, config, items):
                     if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
                         item.add_marker(add_nic_skip)
 
-    _session_store = get_fixture_store(session)
-    vms_for_current_session: set = set()
     # In pool mode the provider is unresolved at collection time; the pool type labels the items.
     provider_label = py_config.get("source_provider") or py_config.get("source_provider_type")
 
-    for item, test_config in resolved_plan_configs:
+    for item, _ in resolved_plan_configs:
         item.name = f"{item.name}-{provider_label}-{py_config.get('storage_class')}"
 
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Collect the base VM names needed by the tests selected for this run.
+
+    Runs after all deselection (``-k``, ``-m``, path selection, ``--ignore``), so only VMs
+    of tests that will actually execute are collected. Items skipped at collection time
+    (provider gating) never execute fixtures, so their VMs are not needed.
+
+    Args:
+        session (pytest.Session): Pytest session holding the final selected items.
+    """
+    vms_for_current_session: set[str] = set()
+    for item in session.items:
+        if item.get_closest_marker("skip"):
+            continue
+        test_config = resolve_item_plan_config(item=item)
         if test_config and "virtual_machines" in test_config:
-            for _vm in test_config["virtual_machines"]:
-                vms_for_current_session.add(_vm["name"])
+            for vm in test_config["virtual_machines"]:
+                vms_for_current_session.add(vm["name"])
 
-    _session_store["vms_for_current_session"] = vms_for_current_session
-
-    if not is_dry_run(session.config):
-        LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(vms_for_current_session)}")
+    get_fixture_store(session)["vms_for_current_session"] = vms_for_current_session
+    # Logged in every mode, including `--collect-only`: the run command decides the needed VMs.
+    LOGGER.info(f"Base VMS names for current session:\n {'\n'.join(sorted(vms_for_current_session))}")
 
 
 def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseException]) -> None:
@@ -1367,30 +1381,81 @@ def class_plan_config(request: pytest.FixtureRequest) -> dict[str, Any]:
     return request.param
 
 
+@pytest.fixture(scope="session")
+def source_vms_existence(
+    fixture_store: dict[str, Any],
+    source_provider: Any,
+) -> dict[str, bool]:
+    """Snapshot which run-needed VMs exist on the source provider, checked once per session.
+
+    The snapshot is logged (found summary plus one ERROR line per missing VM), stored in the
+    session store, and returned for reuse by test classes. OpenShift and OVA sources are
+    skipped because their VMs are created at runtime. Dry runs never execute fixtures, so
+    the provider is never queried for ``--collect-only``.
+
+    Args:
+        fixture_store (dict[str, Any]): Session fixture store.
+        source_provider: Source provider instance.
+
+    Returns:
+        dict[str, bool]: VM name to existence on the source provider; empty when skipped.
+    """
+    if source_provider.type in (Provider.ProviderType.OVA, Provider.ProviderType.OPENSHIFT):
+        LOGGER.info(
+            f"Source provider type {source_provider.type} creates VMs at runtime; skipping VM existence snapshot"
+        )
+        return {}
+
+    vm_names = fixture_store["vms_for_current_session"]
+    missing = get_missing_source_vms(source_provider=source_provider, vm_names=sorted(vm_names))
+    vm_existence: dict[str, bool] = {name: name not in missing for name in vm_names}
+    fixture_store["source_vms_existence"] = vm_existence
+
+    LOGGER.info(
+        f"Source VM existence on {source_provider.type} provider [{source_provider.host}] "
+        f"(checked {len(vm_names)} needed VMs): "
+        f"found: {sorted(name for name, exists in vm_existence.items() if exists)}"
+    )
+    for name in missing:
+        LOGGER.error(f"VM '{name}' needed by the current run was not found on source provider [{source_provider.host}]")
+    return vm_existence
+
+
 @pytest.fixture(scope="class")
 def validated_source_vms(
     class_plan_config: dict[str, Any],
     source_provider: Any,
+    source_vms_existence: dict[str, bool],
 ) -> None:
     """Validate that source VMs/templates exist on the provider before any test setup.
 
-    Runs once per test class as early as possible to fail fast before cloning,
+    Uses the session-level existence snapshot. Names absent from the snapshot (copy-offload
+    name overrides replace placeholder names after collection) fall back to a live provider
+    check. Runs once per test class as early as possible to fail fast before cloning,
     namespace creation, or other expensive setup.
 
     Args:
         class_plan_config (dict[str, Any]): Plan configuration from parametrization.
         source_provider: Source provider instance.
+        source_vms_existence (dict[str, bool]): Session VM existence snapshot.
 
     Raises:
         VmNotFoundError: If one or more VMs/templates are not found.
     """
-    if source_provider.type not in (Provider.ProviderType.OVA, Provider.ProviderType.OPENSHIFT):
-        virtual_machines = [dict(vm) for vm in class_plan_config["virtual_machines"]]
-        apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
-        validate_source_vms_exist(
-            source_provider=source_provider,
-            vm_names=[vm["name"] for vm in virtual_machines],
-        )
+    if source_provider.type in (Provider.ProviderType.OVA, Provider.ProviderType.OPENSHIFT):
+        return
+
+    virtual_machines = [dict(vm) for vm in class_plan_config["virtual_machines"]]
+    apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
+    vm_names = [vm["name"] for vm in virtual_machines]
+
+    # Copy-offload overrides resolve to names that were not part of the session snapshot:
+    # live-check those; every other name comes from the cached snapshot.
+    uncached_names = [name for name in vm_names if name not in source_vms_existence]
+    missing = [name for name in vm_names if source_vms_existence.get(name) is False]
+    if uncached_names:
+        missing += get_missing_source_vms(source_provider=source_provider, vm_names=uncached_names)
+    raise_for_missing_source_vms(source_provider=source_provider, missing=missing)
 
 
 @pytest.fixture(scope="class")

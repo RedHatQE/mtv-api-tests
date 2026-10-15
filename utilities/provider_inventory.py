@@ -325,18 +325,21 @@ def wait_for_cloned_vms_in_forklift_inventory(
             )
 
 
-def validate_source_vms_exist(source_provider: BaseProvider, vm_names: list[str]) -> None:
-    """Validate that all source VMs/templates exist on the provider before cloning.
+def get_missing_source_vms(source_provider: BaseProvider, vm_names: list[str]) -> list[str]:
+    """Return the names from ``vm_names`` that do not exist on the source provider.
 
     For RHV, validates template names (RHV clones from templates, not VMs).
     For VMware, OpenStack, and Hyper-V, validates VM names.
 
     Args:
-        source_provider: Source provider instance (VMware, RHV, OpenStack, or Hyper-V).
-        vm_names: VM or template names to check on the source provider.
+        source_provider (BaseProvider): Source provider instance (VMware, RHV, OpenStack, or Hyper-V).
+        vm_names (list[str]): VM or template names to check on the source provider.
+
+    Returns:
+        list[str]: Names not found on the source provider.
 
     Raises:
-        VmNotFoundError: If one or more VMs/templates are not found on the source provider.
+        TypeError: If the provider type does not support VM validation.
     """
     missing: list[str] = []
 
@@ -346,18 +349,30 @@ def validate_source_vms_exist(source_provider: BaseProvider, vm_names: list[str]
                 source_provider.get_template_by_name(name=name)
             except OvirtNotFoundError:
                 missing.append(name)
-        entity_type = "templates"
     elif isinstance(source_provider, (VMWareProvider, OpenStackProvider, HyperVProvider)):
         for name in vm_names:
             try:
                 source_provider.get_vm_by_name(query=name)
             except VmNotFoundError:
                 missing.append(name)
-        entity_type = "VMs"
     else:
         raise TypeError(f"Unsupported provider type for VM validation: {type(source_provider).__name__}")
 
+    return missing
+
+
+def raise_for_missing_source_vms(source_provider: BaseProvider, missing: list[str]) -> None:
+    """Raise ``VmNotFoundError`` listing the missing source VMs/templates.
+
+    Args:
+        source_provider (BaseProvider): Source provider instance (VMware, RHV, OpenStack, or Hyper-V).
+        missing (list[str]): Missing VM or template names.
+
+    Raises:
+        VmNotFoundError: If ``missing`` is not empty.
+    """
     if missing:
+        entity_type = "templates" if isinstance(source_provider, OvirtProvider) else "VMs"
         raise VmNotFoundError(
             f"Source {entity_type} not found on {source_provider.type} provider [{source_provider.host}]: "
             f"{', '.join(missing)}. "
