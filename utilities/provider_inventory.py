@@ -4,17 +4,12 @@ from typing import Any
 
 from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
-from ovirtsdk4 import NotFoundError as OvirtNotFoundError
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import VmNotFoundError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
-from libs.providers.hyperv import HyperVProvider
-from libs.providers.openstack import OpenStackProvider
-from libs.providers.rhv import OvirtProvider
-from libs.providers.vmware import VMWareProvider
 
 LOGGER = get_logger(__name__)
 
@@ -325,56 +320,38 @@ def wait_for_cloned_vms_in_forklift_inventory(
             )
 
 
-def get_missing_source_vms(source_provider: BaseProvider, vm_names: list[str]) -> list[str]:
-    """Return the names from ``vm_names`` that do not exist on the source provider.
+def get_missing_inventory_vms(source_provider_inventory: ForkliftInventory, vm_names: list[str]) -> list[str]:
+    """Return the names from ``vm_names`` that are absent from the Forklift inventory.
 
-    For RHV, validates template names (RHV clones from templates, not VMs).
-    For VMware, OpenStack, and Hyper-V, validates VM names.
+    The inventory is what MTV actually migrates, so it is the source of truth for whether
+    a source VM can be migrated: a name present on the provider but missing from the
+    inventory still cannot be migrated.
 
     Args:
-        source_provider (BaseProvider): Source provider instance (VMware, RHV, OpenStack, or Hyper-V).
-        vm_names (list[str]): VM or template names to check on the source provider.
+        source_provider_inventory (ForkliftInventory): Forklift inventory of the selected source provider.
+        vm_names (list[str]): VM names to check.
 
     Returns:
-        list[str]: Names not found on the source provider.
-
-    Raises:
-        TypeError: If the provider type does not support VM validation.
+        list[str]: Names not present in the inventory.
     """
-    missing: list[str] = []
-
-    if isinstance(source_provider, OvirtProvider):
-        for name in vm_names:
-            try:
-                source_provider.get_template_by_name(name=name)
-            except OvirtNotFoundError:
-                missing.append(name)
-    elif isinstance(source_provider, (VMWareProvider, OpenStackProvider, HyperVProvider)):
-        for name in vm_names:
-            try:
-                source_provider.get_vm_by_name(query=name)
-            except VmNotFoundError:
-                missing.append(name)
-    else:
-        raise TypeError(f"Unsupported provider type for VM validation: {type(source_provider).__name__}")
-
-    return missing
+    inventory_vm_names = set(source_provider_inventory.vms_names)
+    return [name for name in vm_names if name not in inventory_vm_names]
 
 
-def raise_for_missing_source_vms(source_provider: BaseProvider, missing: list[str]) -> None:
-    """Raise ``VmNotFoundError`` listing the missing source VMs/templates.
+def raise_for_missing_source_vms(source_provider: BaseProvider, provider_name: str, missing: list[str]) -> None:
+    """Raise ``VmNotFoundError`` listing source VMs missing from the provider inventory.
 
     Args:
-        source_provider (BaseProvider): Source provider instance (VMware, RHV, OpenStack, or Hyper-V).
-        missing (list[str]): Missing VM or template names.
+        source_provider (BaseProvider): Source provider instance used for type and host context.
+        provider_name (str): Configured name of the source provider (e.g. ``vsphere-8.0.1``).
+        missing (list[str]): Missing VM names.
 
     Raises:
         VmNotFoundError: If ``missing`` is not empty.
     """
     if missing:
-        entity_type = "templates" if isinstance(source_provider, OvirtProvider) else "VMs"
         raise VmNotFoundError(
-            f"Source {entity_type} not found on {source_provider.type} provider [{source_provider.host}]: "
-            f"{', '.join(missing)}. "
-            f"Verify names in the test config match {entity_type} on the source provider."
+            f"Source VMs not found in the inventory of provider '{provider_name}' "
+            f"[{source_provider.host}] ({source_provider.type}): {', '.join(missing)}. "
+            f"Verify names in the test config match VMs on the source provider."
         )
