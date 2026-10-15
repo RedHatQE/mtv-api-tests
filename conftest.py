@@ -48,6 +48,7 @@ from exceptions.exceptions import (
 from libs.base_provider import _PROVIDER_TEST_MARKERS, BaseProvider, supports_add_nic
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
+from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
@@ -72,7 +73,7 @@ from utilities.naming import (
     sanitize_kubernetes_name,
 )
 from utilities.provider_inventory import (
-    get_missing_inventory_vms,
+    get_missing_source_vms,
     raise_for_missing_source_vms,
     wait_for_added_nics_in_forklift_inventory,
     wait_for_cloned_vms_in_forklift_inventory,
@@ -1424,11 +1425,18 @@ def source_vms_existence(
     apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
     vm_names = sorted({vm["name"] for vm in virtual_machines})
 
-    LOGGER.info(
-        f"Checking existence of {len(vm_names)} needed VMs in the inventory of source provider "
-        f"'{selected_source_provider}' [{source_provider.host}] (type {source_provider.type})"
+    # RHV clones from templates, which the Forklift inventory does not list (see
+    # get_vm_or_template_networks): template existence is verified on the provider itself.
+    check_scope = (
+        f"on source provider '{selected_source_provider}' [{source_provider.host}] "
+        f"(type {source_provider.type}; templates are not listed in the inventory)"
+        if isinstance(source_provider, OvirtProvider)
+        else f"in the inventory of source provider '{selected_source_provider}' "
+        f"[{source_provider.host}] (type {source_provider.type})"
     )
-    missing = get_missing_inventory_vms(
+    LOGGER.info(f"Checking existence of {len(vm_names)} needed VMs {check_scope}")
+    missing = get_missing_source_vms(
+        source_provider=source_provider,
         source_provider_inventory=source_provider_inventory,
         vm_names=vm_names,
     )
@@ -1436,15 +1444,10 @@ def source_vms_existence(
     fixture_store["source_vms_existence"] = vm_existence
 
     LOGGER.info(
-        f"Source VM existence in the inventory of provider '{selected_source_provider}' "
-        f"[{source_provider.host}] (type {source_provider.type}): "
-        f"found: {sorted(name for name, exists in vm_existence.items() if exists)}"
+        f"Source VM existence {check_scope}: found: {sorted(name for name, exists in vm_existence.items() if exists)}"
     )
     for name in missing:
-        LOGGER.error(
-            f"VM '{name}' needed by the current run was not found in the inventory of "
-            f"source provider '{selected_source_provider}' [{source_provider.host}] (type {source_provider.type})"
-        )
+        LOGGER.error(f"VM '{name}' needed by the current run was not found {check_scope}")
     return vm_existence
 
 
