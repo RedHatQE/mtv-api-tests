@@ -13,6 +13,7 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
+from utilities.overlay import OverlayLogCapture, verify_overlay_lifecycle
 from utilities.post_migration import check_vms
 from utilities.utils import get_value_from_py_config, populate_vm_ids
 
@@ -35,7 +36,7 @@ from utilities.utils import get_value_from_py_config, populate_vm_ids
 )
 @pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestSanityWarmMtvMigration:
-    """Warm migration sanity test."""
+    """Warm migration sanity test with vSphere overlay lifecycle verification."""
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -172,20 +173,29 @@ class TestSanityWarmMtvMigration:
         target_namespace,
         source_provider,
     ):
-        """Execute warm migration with cutover.
+        """Execute warm migration with cutover and verify vSphere overlay lifecycle.
 
         Args:
             fixture_store (dict[str, Any]): Fixture store for resource tracking.
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (Namespace): Target namespace for migration.
-            source_provider (BaseProvider): Source provider, used to gate DI capture to vSphere.
+            source_provider (BaseProvider): Source provider, used to gate DI capture and overlay checks to vSphere.
 
         Returns:
             None
         """
+        is_vsphere = source_provider.type == Provider.ProviderType.VSPHERE
         di_callback = (
-            create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store)
-            if source_provider.type == Provider.ProviderType.VSPHERE
+            create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store) if is_vsphere else None
+        )
+        overlay_capture = (
+            OverlayLogCapture(
+                ocp_admin_client=ocp_admin_client,
+                plan=self.plan_resource,
+                target_namespace=target_namespace,
+                on_status_poll=di_callback,
+            )
+            if is_vsphere
             else None
         )
         execute_migration(
@@ -194,8 +204,11 @@ class TestSanityWarmMtvMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             cut_over=get_cutover_value(),
-            on_status_poll=di_callback,
+            on_status_poll=overlay_capture.capture if overlay_capture is not None else di_callback,
         )
+        if overlay_capture is not None:
+            overlay_capture.wait_for_complete_logs()
+            verify_overlay_lifecycle(capture=overlay_capture)
 
     def test_check_vms(
         self,
