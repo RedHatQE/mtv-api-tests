@@ -52,7 +52,11 @@ from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
-from utilities.copyoffload_migration import apply_copyoffload_vm_name_override, resolve_non_dedicated_esxi_host
+from utilities.copyoffload_migration import (
+    apply_copyoffload_vm_name_override,
+    resolve_dedicated_esxi_host,
+    resolve_non_dedicated_esxi_host,
+)
 from utilities.debug import remote_debugger_enabled, remote_post_mortem
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
@@ -1658,11 +1662,20 @@ def prepared_plan(
         cloned_vm_names: list[str] = []
         first_vm_esxi_host: str | None = None
         non_dedicated_host_name: str | None = None
+        dedicated_host_name: str | None = None
         # VM name -> expected total NIC count after add_nic; used to wait for a fresh inventory
         # that includes the added NIC before NetworkMap creation.
         added_nic_expected_counts: dict[str, int] = {}
 
         skip_clone = plan.get("skip_clone", False)
+
+        if plan.get("pin_first_vm_to_dedicated_host", False) and plan.get("clone_to_same_host", False):
+            subsequent_vms_without_target = [vm for vm in virtual_machines[1:] if not vm.get("target_esxi_host")]
+            if subsequent_vms_without_target:
+                raise ValueError(
+                    "pin_first_vm_to_dedicated_host with clone_to_same_host requires an explicit "
+                    "target_esxi_host for each subsequent VM"
+                )
 
         if skip_clone:
             if not source_provider.supports_skip_clone():
@@ -1670,7 +1683,12 @@ def prepared_plan(
                     f"skip_clone=True is not supported for provider type '{source_provider.type}'; "
                     "VMs must be cloned from templates."
                 )
-            skip_clone_incompatible = ["disable_drs_for_vms", "clone_to_same_host"]
+            skip_clone_incompatible = [
+                "disable_drs_for_vms",
+                "clone_to_same_host",
+                "pin_to_non_dedicated_host",
+                "pin_first_vm_to_dedicated_host",
+            ]
             if source_provider.type != Provider.ProviderType.HYPERV:
                 skip_clone_incompatible.append("preserve_static_ips")
             conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]
@@ -1716,16 +1734,27 @@ def prepared_plan(
                     plan["source_vms_data"][vm["name"]] = source_vm_details
 
         if not skip_clone:
-            for vm in virtual_machines:
+            for vm_index, vm in enumerate(virtual_machines):
                 clone_options = {**vm, "enable_ctk": warm_migration}
+
+                if plan.get("pin_first_vm_to_dedicated_host", False) and vm_index == 0:
+                    if "target_esxi_host" in clone_options:
+                        raise ValueError(
+                            "pin_first_vm_to_dedicated_host conflicts with the first VM's target_esxi_host"
+                        )
+                    if dedicated_host_name is None:
+                        dedicated_host_name = resolve_dedicated_esxi_host(
+                            source_provider_inventory=source_provider_inventory,
+                            source_provider_data=source_provider_data,
+                        )
+                    clone_options["target_esxi_host"] = dedicated_host_name
 
                 # Pin VM2+ to same ESXi host as VM1 (required for per-host inflight throttling).
                 # Uses setdefault to respect any explicit per-VM target_esxi_host override.
                 if plan.get("clone_to_same_host", False) and first_vm_esxi_host:
                     clone_options.setdefault("target_esxi_host", first_vm_esxi_host)
 
-                # Pin every VM to an ESXi host outside the configured dedicated hosts, so
-                # dedicated-host verification can never coincide with a VM's own host (MTV-6136).
+                # Pin VMs without an explicit host target outside the dedicated hosts.
                 if plan.get("pin_to_non_dedicated_host", False):
                     if non_dedicated_host_name is None:
                         non_dedicated_host_name = resolve_non_dedicated_esxi_host(

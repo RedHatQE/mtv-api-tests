@@ -762,11 +762,26 @@ troubleshooting, see:
 
 📖 **[Copy-Offload Testing Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)**
 
-> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) mutates cluster-wide
-> `ForkliftController` populator settings. Do not run it in parallel with other copy-offload tests on the
-> same cluster — the test temporarily sets `controller_max_populator_inflight` (and the populator
-> deployment `MAX_POPULATOR_INFLIGHT` env) to **2**, which caps in-flight populate pods cluster-wide for
-> every other migration running at the same time.
+> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) and
+> `TestCopyoffloadDedicatedMigrationHost` set both the ForkliftController
+> `controller_max_populator_inflight` and populator deployment `MAX_POPULATOR_INFLIGHT` to **2**.
+> `TestCopyoffloadDedicatedHostSharedPopulatorLimit` (MTV-4494) sets both to **1** and sets the
+> VM in-flight limit to **2**. The fixtures restore the prior values afterward.
+> Do not run them alongside other MTV migrations or copy-offload tests on the same cluster. The original
+> dedicated-host test pins both source VMs away from configured dedicated hosts and retains
+> multi-host coverage. The shared-limit scenario requires exactly one configured dedicated
+> ESXi host and at least one other ESXi host; it places one source VM on each and checks that
+> their active populate pods stay within the shared runtime-host populator limit. The assertion checks
+> the peak observed Pending/Running-pod count during migration; it does not require a specific
+> count of `PopulatorThrottled` events. It requires one migration poll to observe a Pending
+> PVC with a structured `PopulatorThrottled` event, alongside a Running worker from the other
+> source host on the sole configured dedicated host. The Event's involved PVC is matched by
+> name and UID; the PVC's `sourceHost` label identifies its source, and the worker's runtime
+> metadata identifies the dedicated host. The Event's latest timestamp must be at or after that
+> worker started. The poll reuses its populate-Pod snapshot for concurrency counting and only
+> lists PVCs when throttling Events exist. Runtime-host grouping
+> prefers `throttleHost` when present and otherwise uses the worker's `--migration-host`
+> argument. Current Forklift builds may reuse the populate Pod's `sourceHost` label for the runtime host.
 
 For array-specific Secret keys not covered by built-in vendor fields, use `storage_secret_extra` in the
 `copyoffload` section of `.providers.json` (or `COPYOFFLOAD_STORAGE_SECRET_EXTRA`); see the guide.

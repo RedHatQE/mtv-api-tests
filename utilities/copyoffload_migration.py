@@ -11,9 +11,9 @@ import json
 import os
 import re
 from collections import defaultdict
-from collections.abc import Callable
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from collections.abc import Callable, Mapping
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from kubernetes.dynamic.exceptions import ApiException
 from ocp_resources.event import Event
@@ -27,9 +27,11 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import MigrationNotFoundError
 from utilities.copyoffload_constants import (
+    MIGRATION_HOST_ARG,
     POPULATOR_INFLIGHT_LIMIT,
     POPULATOR_THROTTLED_EVENT_REASON,
     SOURCE_HOST_LABEL,
+    THROTTLE_HOST_LABEL,
     VM_INFLIGHT_LIMIT,
     VM_POPULATOR_INFLIGHT_LIMIT,
 )
@@ -49,7 +51,7 @@ if TYPE_CHECKING:
 LOGGER = get_logger(__name__)
 
 STORAGE_SECRET_EXTRA_ENV = "COPYOFFLOAD_STORAGE_SECRET_EXTRA"  # pragma: allowlist secret
-_ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
+_ACTIVE_POPULATOR_POD_PHASES = frozenset({Pod.Status.RUNNING, Pod.Status.PENDING})
 
 # Volume populator framework label for PVC name on populate pods
 PVC_NAME_LABEL = "pvcName"
@@ -91,8 +93,58 @@ class PopulatePodLogData(TypedDict):
 
     pod_name: str
     pvc_name: str
-    source_host: str  # ESXi sourceHost label value, empty string if not present
+    source_host: str  # Raw sourceHost pod label; some builds set it to the runtime host
+    throttle_host: str  # Raw throttleHost pod label; not present on all supported builds
+    container_args: list[str]
     log_content: str
+
+
+def _migration_host_from_args(container_args: list[str]) -> str | None:
+    """Extract the migration host from populate worker arguments, if present.
+
+    Args:
+        container_args (list[str]): Arguments from the populate worker container.
+
+    Returns:
+        str | None: The migration host ID, or None when the argument is absent or empty.
+    """
+    for index, arg in enumerate(container_args):
+        if arg.startswith(f"{MIGRATION_HOST_ARG}="):
+            return arg.partition("=")[2] or None
+        if arg == MIGRATION_HOST_ARG and index + 1 < len(container_args):
+            return container_args[index + 1] or None
+    return None
+
+
+def _runtime_host_from_pod_metadata(labels: dict[str, str], container_args: list[str]) -> str | None:
+    """Resolve the execution host across controller builds that expose different Pod labels.
+
+    Newer/alternate builds can expose ``throttleHost`` directly. The MTV-6055
+    implementation reuses the Pod's ``sourceHost`` label for the runtime host, so the
+    worker argument is the version-independent fallback and the original source host
+    label is only a final compatibility fallback.
+
+    Args:
+        labels (dict[str, str]): Labels from the populate Pod.
+        container_args (list[str]): Arguments from the populate worker container.
+
+    Returns:
+        str | None: The best available runtime host ID, or None when none is recorded.
+    """
+    return labels.get(THROTTLE_HOST_LABEL) or _migration_host_from_args(container_args) or labels.get(SOURCE_HOST_LABEL)
+
+
+def _container_args_from_pod(pod: Pod) -> list[str]:
+    """Return all container arguments from a populate Pod.
+
+    Args:
+        pod (Pod): Populate Pod resource.
+
+    Returns:
+        list[str]: Arguments from every container in the Pod.
+    """
+    containers = (pod.instance.spec.containers or []) if pod.instance.spec else []
+    return [arg for container in containers for arg in (container.args or [])]
 
 
 def get_copyoffload_credential(
@@ -303,10 +355,14 @@ def _capture_logs_from_pods(pods_with_content: list[tuple[Pod, str]]) -> list[Po
     captured_logs: list[PopulatePodLogData] = []
     for pod, log_content in pods_with_content:
         phase = pod.instance.status.phase if pod.instance.status else "Unknown"
+        labels: dict[str, str] = pod.instance.metadata.labels or {}
+        container_args = _container_args_from_pod(pod)
         pod_data: PopulatePodLogData = {
             "pod_name": pod.name,
-            "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-            "source_host": pod.instance.metadata.labels.get(SOURCE_HOST_LABEL, ""),
+            "pvc_name": labels.get(PVC_NAME_LABEL, pod.name),
+            "source_host": labels.get(SOURCE_HOST_LABEL, ""),
+            "throttle_host": labels.get(THROTTLE_HOST_LABEL, ""),
+            "container_args": container_args,
             "log_content": log_content,
         }
         captured_logs.append(pod_data)
@@ -794,7 +850,7 @@ def _extract_cached_populate_logs(
         migration_uid (str): Migration UID to retrieve cached logs for.
 
     Returns:
-        list[PopulatePodLogData]: Cached pod logs with keys: pod_name, pvc_name, source_host, log_content.
+        list[PopulatePodLogData]: Cached pod logs with pod name, PVC, source/throttle hosts, worker args, and logs.
     """
     cached_logs: list[PopulatePodLogData] | None = fixture_store.get(_POPULATE_POD_LOGS_CACHE_KEY, {}).get(
         migration_uid
@@ -822,7 +878,7 @@ def _collect_live_populate_logs(
         cached_pod_names (set[str]): Names of pods already in cache (to avoid duplicates).
 
     Returns:
-        list[PopulatePodLogData]: Live pod logs with keys: pod_name, pvc_name, source_host, log_content.
+        list[PopulatePodLogData]: Live pod logs with pod name, PVC, source/throttle hosts, worker args, and logs.
     """
     uncached_pods = [pod for pod in populate_pods if pod.name not in cached_pod_names]
 
@@ -861,7 +917,7 @@ def _get_populate_pod_logs(
         fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
 
     Returns:
-        list[PopulatePodLogData]: List of pod logs with keys: pod_name, pvc_name, source_host, log_content.
+        list[PopulatePodLogData]: Pod logs with pod name, PVC, source/throttle hosts, worker args, and logs.
 
     Raises:
         ValueError: If no populate pods found and no cached logs available.
@@ -1352,38 +1408,280 @@ def verify_xcopy_used_per_datastore(
 
 
 def _count_active_populator_pods_by_host(
+    populate_pods: list[Pod],
+    host_label: str = SOURCE_HOST_LABEL,
+    include_pending: bool = True,
+    use_runtime_host: bool = False,
+) -> dict[str, int]:
+    """Count active populate pods for a migration grouped by host label.
+
+    Existing source-host throttling tests use their requested label directly. Dedicated-host
+    verification resolves the runtime host from ``throttleHost`` when present, then from the
+    worker's ``--migration-host`` argument, because current Forklift builds may instead write
+    the runtime host to the Pod's ``sourceHost`` label.
+
+    Args:
+        populate_pods (list[Pod]): Populate pods already fetched for this migration poll.
+        host_label (str): Pod label identifying the host used for grouping.
+        include_pending (bool): Whether Pending pods should be included in the count.
+        use_runtime_host (bool): Resolve the execution host from runtime metadata instead of
+            reading only ``host_label``.
+
+    Returns:
+        dict[str, int]: Active populate pod count per selected label or resolved runtime host.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    counted_phases = _ACTIVE_POPULATOR_POD_PHASES if include_pending else frozenset({Pod.Status.RUNNING})
+    for pod in populate_pods:
+        pod_status = pod.instance.status
+        if not pod_status or pod_status.phase not in counted_phases:
+            continue
+        labels: dict[str, str] = pod.instance.metadata.labels or {}
+        host = (
+            _runtime_host_from_pod_metadata(labels, _container_args_from_pod(pod))
+            if use_runtime_host
+            else labels.get(host_label)
+        )
+        if host:
+            counts[host] += 1
+    return dict(counts)
+
+
+def _as_utc_datetime(timestamp_value: object) -> datetime | None:
+    """Parse a Kubernetes timestamp as an aware UTC datetime.
+
+    Args:
+        timestamp_value (object): Dynamic API timestamp, expected to be a datetime or ISO-8601 string.
+
+    Returns:
+        datetime | None: The timestamp normalized to UTC, or None when it cannot be parsed.
+    """
+    if isinstance(timestamp_value, str):
+        try:
+            timestamp_value = datetime.fromisoformat(timestamp_value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(timestamp_value, datetime):
+        return None
+    if timestamp_value.tzinfo is None:
+        return timestamp_value.replace(tzinfo=timezone.utc)
+    return timestamp_value.astimezone(timezone.utc)
+
+
+def _pending_pvc_source_hosts(
+    pvcs: list[PersistentVolumeClaim],
+) -> dict[str, tuple[str, str]]:
+    """Find Pending migration PVCs and their source host and UID.
+
+    The shared-limit scenario configures exactly one dedicated host, so every XCOPY PVC in this
+    migration targets that runtime host. The controller emits the throttling Event before it
+    creates a populate Pod for a queued PVC.
+
+    Args:
+        pvcs (list[PersistentVolumeClaim]): PVCs belonging to the migration.
+
+    Returns:
+        dict[str, tuple[str, str]]: Pending PVC names mapped to their original source host
+            and UID, so stale Events from a previous PVC with the same name are ignored.
+    """
+    pending_source_hosts: dict[str, tuple[str, str]] = {}
+    for pvc in pvcs:
+        status = pvc.instance.status
+        if not status or status.phase != PersistentVolumeClaim.Status.PENDING:
+            continue
+        source_host = (pvc.instance.metadata.labels or {}).get(SOURCE_HOST_LABEL)
+        pvc_uid = pvc.instance.metadata.uid
+        if source_host and pvc_uid:
+            pending_source_hosts[pvc.name] = (source_host, pvc_uid)
+    return pending_source_hosts
+
+
+def _get_populator_throttling_events_and_pvcs(
     ocp_admin_client: DynamicClient,
     namespace: str,
     migration_uid: str,
-) -> dict[str, int]:
-    """Count active populate pods for a migration grouped by sourceHost label.
+) -> tuple[list[Any], list[PersistentVolumeClaim]]:
+    """Fetch throttling Events and migration PVCs before the Pod snapshot.
 
-    Matches the populator controller's per-host throttling logic: only Running and Pending
-    pods with a sourceHost label are counted.
+    Skip the PVC list request when there are no throttling Events to verify.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
-        namespace (str): Namespace where populate pods exist.
-        migration_uid (str): Migration UID to filter populate pods by.
+        namespace (str): Namespace containing the migration's resources.
+        migration_uid (str): Migration UID used to select its PVCs.
 
     Returns:
-        dict[str, int]: Active populator pod count per ESXi source host.
+        tuple[list[Any], list[PersistentVolumeClaim]]: Matching Events and migration PVCs.
     """
-    counts: dict[str, int] = defaultdict(int)
-    for pod in _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=namespace,
-        migration_uid=migration_uid,
-        require_pods=False,
-    ):
-        pod_status = pod.instance.status
-        if not pod_status or pod_status.phase not in _ACTIVE_POPULATOR_POD_PHASES:
+    event_resource = ocp_admin_client.resources.get(api_version=Event.api_version, kind=Event.__name__)
+    events = (
+        event_resource.get(
+            namespace=namespace,
+            field_selector=f"reason={POPULATOR_THROTTLED_EVENT_REASON}",
+        ).items
+        or []
+    )
+    if not events:
+        return [], []
+
+    pvcs = list(
+        PersistentVolumeClaim.get(
+            client=ocp_admin_client,
+            namespace=namespace,
+            label_selector=f"migration={migration_uid}",
+        )
+    )
+    return events, pvcs
+
+
+def _running_populate_worker_starts(
+    populate_pods: list[Pod],
+    pvc_by_name: dict[str, PersistentVolumeClaim],
+    dedicated_runtime_host: str,
+) -> list[tuple[str, datetime]]:
+    """Get source hosts and start times for workers running on one runtime host.
+
+    Args:
+        populate_pods (list[Pod]): Populate pods already fetched for this migration poll.
+        pvc_by_name (dict[str, PersistentVolumeClaim]): Migration PVCs keyed by name.
+        dedicated_runtime_host (str): Runtime host whose workers are relevant.
+
+    Returns:
+        list[tuple[str, datetime]]: Source host and worker start time for each matching worker.
+    """
+    worker_starts: list[tuple[str, datetime]] = []
+    for pod in populate_pods:
+        status = pod.instance.status
+        if not status or status.phase != Pod.Status.RUNNING:
             continue
+
         labels: dict[str, str] = pod.instance.metadata.labels or {}
-        source_host: str | None = labels.get(SOURCE_HOST_LABEL)
-        if source_host:
-            counts[source_host] += 1
-    return dict(counts)
+        pvc_name = labels.get(PVC_NAME_LABEL, "")
+        pvc = pvc_by_name.get(pvc_name)
+        if pvc is None:
+            continue
+
+        containers = (pod.instance.spec.containers or []) if pod.instance.spec else []
+        worker_names = {container.name for container in containers if _migration_host_from_args(container.args or [])}
+        source_host = (pvc.instance.metadata.labels or {}).get(SOURCE_HOST_LABEL)
+        runtime_host = _runtime_host_from_pod_metadata(labels, _container_args_from_pod(pod))
+        if not worker_names or not source_host or runtime_host != dedicated_runtime_host:
+            continue
+
+        for container_status in status.containerStatuses or []:
+            if (
+                container_status.name not in worker_names
+                or not container_status.state
+                or not container_status.state.running
+            ):
+                continue
+            worker_started_at = _as_utc_datetime(container_status.state.running.startedAt)
+            if worker_started_at:
+                worker_starts.append((source_host, worker_started_at))
+    return worker_starts
+
+
+def _has_cross_source_populator_throttling_event(
+    events: list[Any],
+    pending_source_hosts: dict[str, tuple[str, str]],
+    worker_starts: list[tuple[str, datetime]],
+    dedicated_runtime_host: str,
+) -> bool:
+    """Match a structured throttling Event with cross-source workers on one runtime host.
+
+    Args:
+        events (list[Any]): PopulatorThrottled Events fetched before the Pod snapshot.
+        pending_source_hosts (dict[str, tuple[str, str]]): Pending PVC name mapped to
+            source host and PVC UID.
+        worker_starts (list[tuple[str, datetime]]): Running worker source hosts and start times.
+        dedicated_runtime_host (str): The configured dedicated runtime host for both sources.
+
+    Returns:
+        bool: True when a matching Event was observed while another source host's worker ran.
+    """
+    for event in events:
+        if event.get("reason") != POPULATOR_THROTTLED_EVENT_REASON:
+            continue
+
+        involved_object = event.get("involvedObject") or {}
+        if involved_object.get("kind") != PersistentVolumeClaim.kind:
+            continue
+
+        pvc_name = involved_object.get("name")
+        pending_pvc = pending_source_hosts.get(pvc_name) if isinstance(pvc_name, str) else None
+        if pending_pvc is None:
+            continue
+
+        throttled_source_host, pending_pvc_uid = pending_pvc
+        if involved_object.get("uid") != pending_pvc_uid:
+            continue
+
+        event_series = event.get("series") or {}
+        event_metadata = event.get("metadata") or {}
+        event_time = _as_utc_datetime(
+            event_series.get("lastObservedTime")
+            or event.get("lastTimestamp")
+            or event.get("eventTime")
+            or event.get("firstTimestamp")
+            or event_metadata.get("creationTimestamp")
+        )
+        if event_time is None:
+            continue
+
+        other_source_hosts = {
+            source_host
+            for source_host, worker_started_at in worker_starts
+            if source_host != throttled_source_host and event_time >= worker_started_at
+        }
+        if other_source_hosts:
+            LOGGER.info(
+                f"Observed cross-source-host populator contention on dedicated runtime host "
+                f"'{dedicated_runtime_host}': source host '{throttled_source_host}' has a Pending PVC "
+                f"while a worker from source host(s) {sorted(other_source_hosts)} is running"
+            )
+            return True
+    return False
+
+
+def _cross_source_host_contention_observed(
+    events: list[Any],
+    pvc_by_name: dict[str, PersistentVolumeClaim],
+    pending_source_hosts: dict[str, tuple[str, str]],
+    populate_pods: list[Pod],
+    dedicated_runtime_host: str,
+) -> bool:
+    """Check one migration poll for cross-source throttling on the dedicated host.
+
+    A structured PopulatorThrottled Event identifies a waiting PVC. Since the scenario configures
+    exactly one dedicated host, that PVC and another source host's worker target the same runtime
+    host when the worker metadata resolves to that host. Event and worker timestamps reject stale
+    evidence.
+
+    Args:
+        events (list[Any]): Throttling Events fetched before the current Pod snapshot.
+        pvc_by_name (dict[str, PersistentVolumeClaim]): Migration PVCs keyed by name.
+        pending_source_hosts (dict[str, tuple[str, str]]): Pending migration PVC source hosts and UIDs.
+        populate_pods (list[Pod]): Populate pods fetched after the Events for this migration poll.
+        dedicated_runtime_host (str): The sole configured dedicated host for this scenario.
+
+    Returns:
+        bool: True when a throttled Pending PVC and another source host's Running worker
+            are observed targeting the dedicated runtime host.
+    """
+    if not events or not pending_source_hosts:
+        return False
+
+    worker_starts = _running_populate_worker_starts(
+        populate_pods=populate_pods,
+        pvc_by_name=pvc_by_name,
+        dedicated_runtime_host=dedicated_runtime_host,
+    )
+    return bool(worker_starts) and _has_cross_source_populator_throttling_event(
+        events=events,
+        pending_source_hosts=pending_source_hosts,
+        worker_starts=worker_starts,
+        dedicated_runtime_host=dedicated_runtime_host,
+    )
 
 
 class _PopulatorConcurrencyTracker:
@@ -1395,6 +1693,10 @@ class _PopulatorConcurrencyTracker:
         ocp_admin_client: DynamicClient,
         target_namespace: str,
         max_populator_inflight: int,
+        host_label: str = SOURCE_HOST_LABEL,
+        include_pending: bool = True,
+        use_runtime_host: bool = False,
+        contention_runtime_host: str | None = None,
     ) -> None:
         """Initialize tracker state for one migration execution.
 
@@ -1403,11 +1705,22 @@ class _PopulatorConcurrencyTracker:
             ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
             target_namespace (str): Namespace where populate pods exist.
             max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+            host_label (str): Pod label identifying the host used for grouping.
+            include_pending (bool): Whether Pending pods should be included in the count.
+            use_runtime_host (bool): Resolve the execution host from runtime metadata instead of
+                reading only ``host_label``.
+            contention_runtime_host (str | None): Dedicated runtime host where the live
+                cross-source-host contention check is required, if any.
         """
         self._plan = plan
         self._ocp_admin_client = ocp_admin_client
         self._target_namespace = target_namespace
         self._max_populator_inflight = max_populator_inflight
+        self._host_label = host_label
+        self._include_pending = include_pending
+        self._use_runtime_host = use_runtime_host
+        self._contention_runtime_host = contention_runtime_host
+        self.cross_source_contention_observed = False
         self._migration_uid: str | None = None
         self._max_concurrent_by_host: dict[str, int] = defaultdict(int)
 
@@ -1423,25 +1736,54 @@ class _PopulatorConcurrencyTracker:
         if self._migration_uid is None:
             return
 
-        active_by_host = _count_active_populator_pods_by_host(
+        events: list[Any] = []
+        pvc_by_name: dict[str, PersistentVolumeClaim] = {}
+        pending_source_hosts: dict[str, tuple[str, str]] = {}
+        if self._contention_runtime_host is not None and not self.cross_source_contention_observed:
+            events, pvcs = _get_populator_throttling_events_and_pvcs(
+                ocp_admin_client=self._ocp_admin_client,
+                namespace=self._target_namespace,
+                migration_uid=self._migration_uid,
+            )
+            if events:
+                pvc_by_name = {pvc.name: pvc for pvc in pvcs}
+                pending_source_hosts = _pending_pvc_source_hosts(pvcs=pvcs)
+
+        populate_pods = _find_populate_pods(
             ocp_admin_client=self._ocp_admin_client,
             namespace=self._target_namespace,
             migration_uid=self._migration_uid,
+            require_pods=False,
         )
-        for source_host, active_count in active_by_host.items():
-            self._max_concurrent_by_host[source_host] = max(self._max_concurrent_by_host[source_host], active_count)
+
+        if self._contention_runtime_host is not None and not self.cross_source_contention_observed:
+            self.cross_source_contention_observed = _cross_source_host_contention_observed(
+                events=events,
+                pvc_by_name=pvc_by_name,
+                pending_source_hosts=pending_source_hosts,
+                populate_pods=populate_pods,
+                dedicated_runtime_host=self._contention_runtime_host,
+            )
+
+        active_by_host = _count_active_populator_pods_by_host(
+            populate_pods=populate_pods,
+            host_label=self._host_label,
+            include_pending=self._include_pending,
+            use_runtime_host=self._use_runtime_host,
+        )
+        for host, active_count in active_by_host.items():
+            self._max_concurrent_by_host[host] = max(self._max_concurrent_by_host[host], active_count)
             if active_count > self._max_populator_inflight:
                 LOGGER.warning(
-                    f"Populator concurrency for host '{source_host}' is {active_count} "
-                    f"(limit={self._max_populator_inflight})"
+                    f"Populator concurrency for host '{host}' is {active_count} (limit={self._max_populator_inflight})"
                 )
 
     @property
     def results(self) -> dict[str, int]:
-        """Peak concurrent active populate pods observed per sourceHost label.
+        """Peak concurrent active populate pods observed per selected host label or runtime host.
 
         Returns:
-            dict[str, int]: Peak active populator pod count per ESXi source host.
+            dict[str, int]: Peak active populator pod count per ESXi host.
         """
         return dict(self._max_concurrent_by_host)
 
@@ -1533,6 +1875,10 @@ def execute_migration_monitoring_populator_inflight(
     target_namespace: str,
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
     cut_over: datetime | None = None,
+    host_label: str = SOURCE_HOST_LABEL,
+    include_pending: bool = True,
+    use_runtime_host: bool = False,
+    contention_runtime_host: str | None = None,
 ) -> dict[str, int]:
     """Execute a copy-offload migration while tracking peak populator concurrency per host.
 
@@ -1543,9 +1889,16 @@ def execute_migration_monitoring_populator_inflight(
         target_namespace (str): Target namespace for the Migration CR.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
         cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+        host_label (str): Pod label identifying the host used for concurrency grouping.
+        include_pending (bool): Whether Pending pods should be included in the observed count.
+        use_runtime_host (bool): Resolve the execution host from runtime metadata instead of
+            reading only ``host_label``.
+        contention_runtime_host (str | None): Require live contention evidence on this
+            dedicated runtime host when provided.
 
     Returns:
-        dict[str, int]: Peak concurrent active populate pods observed per sourceHost label.
+        dict[str, int]: Peak concurrent active populate pods observed per selected host label
+            or resolved runtime host.
 
     Raises:
         MigrationPlanExecError: If migration fails or times out.
@@ -1564,6 +1917,10 @@ def execute_migration_monitoring_populator_inflight(
         ocp_admin_client=ocp_admin_client,
         target_namespace=target_namespace,
         max_populator_inflight=max_populator_inflight,
+        host_label=host_label,
+        include_pending=include_pending,
+        use_runtime_host=use_runtime_host,
+        contention_runtime_host=contention_runtime_host,
     )
 
     # Create log capture callback for test_check_xcopy_used verification
@@ -1578,20 +1935,29 @@ def execute_migration_monitoring_populator_inflight(
     def combined_callback(status: str) -> None:
         """Run concurrency tracking and log capture for one migration status poll.
 
-        Isolates exceptions so failure in one callback doesn't prevent the other from running.
+        Captures logs first for cross-source contention, whose extra API reads could delay pod-log capture.
 
         Args:
             status (str): Current migration status from migration polling.
         """
+        if contention_runtime_host is not None:
+            log_capture(status)
+
         try:
             tracker.poll(status)
         except ApiException as tracker_err:
             LOGGER.warning(f"Populator concurrency tracking failed during poll: {tracker_err}")
 
-        # log_capture already isolates its own expected failure modes internally
-        log_capture(status)
+        if contention_runtime_host is None:
+            log_capture(status)
 
     wait_for_migration_complate(plan=plan, on_status_poll=combined_callback)
+    if contention_runtime_host is not None and not tracker.cross_source_contention_observed:
+        raise ValueError(
+            "The migration completed without observing a Pending PVC with a PopulatorThrottled event "
+            f"while a worker from another source host was running on dedicated host '{contention_runtime_host}'; "
+            "the MTV-4494 shared populator-limit regression was not exercised"
+        )
     return tracker.results
 
 
@@ -1638,38 +2004,56 @@ def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) ->
     return source_hosts.pop()
 
 
-def _verify_source_host_labels_against_allowed_set(
-    pod_logs: list[PopulatePodLogData],
-    allowed_hosts: list[str],
-) -> set[str]:
-    """Verify every populate pod's sourceHost label is one of the configured dedicated hosts.
+def _verify_dedicated_host_pod_metadata(pod_logs: list[PopulatePodLogData], allowed_hosts: list[str]) -> set[str]:
+    """Verify runtime-host metadata, worker arguments, and logs for dedicated-host pods.
 
-    Unlike _verify_source_host_labels_from_cache, this does not require a single uniform
-    host across all pods: Forklift selects a dedicated host at random per disk
-    (pkg/controller/plan/adapter/vsphere/builder.go), so different disks of the same
-    migration may legitimately report different sourceHost values when multiple
-    dedicated hosts are configured.
+    Prefer ``throttleHost`` where the controller exposes it. Otherwise, use the worker's
+    ``--migration-host`` argument; the Pod's ``sourceHost`` label can identify the VM's
+    original host on builds that do not expose ``throttleHost``. Worker arguments and logs
+    provide the execution-host check across builds.
 
     Args:
-        pod_logs (list[PopulatePodLogData]): Cached populate pod log data including source_host.
+        pod_logs (list[PopulatePodLogData]): Cached populate pod metadata and logs.
         allowed_hosts (list[str]): Configured dedicatedMigrationHosts for the StorageMap.
 
     Returns:
-        set[str]: Distinct sourceHost values observed across all populate pods.
+        set[str]: Runtime hosts observed on the populate pods.
 
     Raises:
-        ValueError: If a pod's sourceHost is not in allowed_hosts (i.e. XCOPY ran on a VM's
-            registered host instead of a dedicated host).
+        ValueError: If a runtime host is missing or not allowed, or worker args/logs disagree.
     """
     allowed_hosts_set = set(allowed_hosts)
-    source_hosts = _extract_source_hosts(pod_logs)
-    for pod_name, source_host in source_hosts.items():
-        if source_host not in allowed_hosts_set:
+    observed_hosts: set[str] = set()
+    for pod_data in pod_logs:
+        pod_name = pod_data["pod_name"]
+        throttle_host = pod_data["throttle_host"]
+        migration_host = _migration_host_from_args(pod_data["container_args"])
+        if not migration_host:
+            raise ValueError(f"Populate pod '{pod_name}' is missing its {MIGRATION_HOST_ARG} worker argument")
+        runtime_host = throttle_host or migration_host
+        if throttle_host and migration_host != throttle_host:
             raise ValueError(
-                f"Populate pod '{pod_name}' has {SOURCE_HOST_LABEL}={source_host!r}, "
+                f"Populate pod '{pod_name}' has {MIGRATION_HOST_ARG}={migration_host!r}, "
+                f"but {THROTTLE_HOST_LABEL}={throttle_host!r}"
+            )
+        if runtime_host not in allowed_hosts_set:
+            raise ValueError(
+                f"Populate pod '{pod_name}' executed on runtime host {runtime_host!r}, "
                 f"which is not one of the configured dedicated hosts {sorted(allowed_hosts_set)}"
             )
-    return set(source_hosts.values())
+
+        expected_log_host = f"HostSystem:{runtime_host}"
+        exact_log_host_match = re.search(
+            rf"{re.escape(expected_log_host)}(?![A-Za-z0-9_-])",
+            pod_data["log_content"],
+        )
+        if not exact_log_host_match:
+            raise ValueError(
+                f"Populate pod '{pod_name}' logs do not show XCOPY on {expected_log_host}; "
+                f"expected execution host from {THROTTLE_HOST_LABEL} or {MIGRATION_HOST_ARG}"
+            )
+        observed_hosts.add(runtime_host)
+    return observed_hosts
 
 
 def get_configured_dedicated_hosts(source_provider_data: dict[str, Any]) -> list[str]:
@@ -1703,20 +2087,39 @@ def get_configured_dedicated_hosts(source_provider_data: dict[str, Any]) -> list
     return dedicated_hosts
 
 
+def _inventory_esxi_host_field(host: Mapping[str, object], field: Literal["id", "name"]) -> str:
+    """Return a non-empty string field without surrounding whitespace.
+
+    Args:
+        host (Mapping[str, object]): Host record from the vSphere inventory API.
+        field (Literal["id", "name"]): ESXi host field to retrieve.
+
+    Returns:
+        str: Field value containing no surrounding whitespace.
+
+    Raises:
+        ValueError: If the inventory record has a missing or malformed field.
+    """
+    field_value = host.get(field)
+    if not isinstance(field_value, str) or not field_value.strip() or field_value != field_value.strip():
+        raise ValueError(f"ESXi host inventory entry has an invalid '{field}' field: {host!r}")
+    return field_value
+
+
 def resolve_non_dedicated_esxi_host(
     source_provider_inventory: ForkliftInventory,
     source_provider_data: dict[str, Any],
 ) -> str:
     """Resolve one ESXi host name outside the configured dedicated hosts, for VM clone pinning.
 
-    Guards against a false-pass regression (MTV-6136): dedicated-host verification only checks
-    that populate pods' sourceHost label is a member of the configured dedicatedMigrationHosts
-    set. If a VM's actual host happened to coincide with a configured dedicated host, a
-    completely broken/reverted dedicated-host feature that silently falls back to each VM's own
-    host would still satisfy that membership check undetected. Rather than letting DRS decide VM
-    placement and reacting after the fact, this resolves a single non-dedicated host upfront so
-    every VM can be pinned to it (see prepared_plan's pin_to_non_dedicated_host handling in the
-    root conftest.py), guaranteeing the two can never coincide.
+    Guards against a false-pass regression (MTV-6136): dedicated-host verification checks
+    that each populate pod's resolved runtime host is a member of the configured
+    dedicatedMigrationHosts set. If a VM's actual host happened to coincide with a configured
+    dedicated host, a completely broken/reverted dedicated-host feature that silently falls back
+    to each VM's own host would still satisfy that membership check undetected. Rather than letting
+    DRS decide VM placement and reacting after the fact, this resolves a single non-dedicated host
+    upfront so VMs without an explicit host override can be pinned to it (see prepared_plan's
+    pin_to_non_dedicated_host handling in the root conftest.py).
 
     Args:
         source_provider_inventory (ForkliftInventory): Inventory API client for ESXi host lookup.
@@ -1738,10 +2141,11 @@ def resolve_non_dedicated_esxi_host(
 
     dedicated_hosts = set(get_configured_dedicated_hosts(source_provider_data))
     hosts = source_provider_inventory.hosts
-    total_hosts = len(hosts)
+    hosts_with_ids = [(host, _inventory_esxi_host_field(host, "id")) for host in hosts]
+    total_hosts = len(hosts_with_ids)
     # Only count configured dedicated hosts that actually exist in inventory — a stale/typo'd
     # host ID must not be able to mask an otherwise-available non-dedicated host.
-    present_dedicated_hosts = dedicated_hosts & {host.get("id") for host in hosts}
+    present_dedicated_hosts = dedicated_hosts & {host_id for _, host_id in hosts_with_ids}
 
     if total_hosts <= len(present_dedicated_hosts):
         raise ValueError(
@@ -1751,14 +2155,9 @@ def resolve_non_dedicated_esxi_host(
             "Use a lab with more ESXi hosts or reduce dedicated_migration_hosts."
         )
 
-    for host in hosts:
-        host_id = host.get("id")
-        if not host_id:
-            raise ValueError(f"ESXi host entry missing 'id' field: {host!r}")
+    for host, host_id in hosts_with_ids:
         if host_id not in dedicated_hosts:
-            host_name = host.get("name")
-            if not host_name:
-                raise ValueError(f"ESXi host '{host_id}' has no 'name' field: {host!r}")
+            host_name = _inventory_esxi_host_field(host, "name")
             LOGGER.info(f"Pinning VMs to non-dedicated ESXi host '{host_name}' (id={host_id})")
             return host_name
 
@@ -1769,6 +2168,49 @@ def resolve_non_dedicated_esxi_host(
     )
 
 
+def resolve_dedicated_esxi_host(
+    source_provider_inventory: ForkliftInventory,
+    source_provider_data: dict[str, Any],
+) -> str:
+    """Resolve the sole configured dedicated ESXi host ID to its inventory name.
+
+    Clone placement uses the host name, while dedicatedMigrationHosts uses its MoRef ID.
+
+    Args:
+        source_provider_inventory (ForkliftInventory): Inventory API client for ESXi host lookup.
+        source_provider_data (dict[str, Any]): Source provider configuration data.
+
+    Returns:
+        str: Display name of the configured dedicated ESXi host.
+
+    Raises:
+        TypeError: If the source inventory is not vSphere inventory.
+        ValueError: If there is not exactly one distinct dedicated host, or its inventory
+            entry is missing or has no name.
+    """
+    if not isinstance(source_provider_inventory, VsphereForkliftInventory):
+        raise TypeError(
+            "dedicatedMigrationHosts is a vSphere-only feature; got inventory type "
+            f"'{type(source_provider_inventory).__name__}'"
+        )
+
+    dedicated_hosts = set(get_configured_dedicated_hosts(source_provider_data))
+    if len(dedicated_hosts) != 1:
+        raise ValueError(
+            f"Mixed-host throttling requires exactly one distinct dedicated ESXi host, got {sorted(dedicated_hosts)}"
+        )
+    dedicated_host_id = dedicated_hosts.pop()
+    hosts_with_ids = [(host, _inventory_esxi_host_field(host, "id")) for host in source_provider_inventory.hosts]
+    matching_hosts = [host for host, host_id in hosts_with_ids if host_id == dedicated_host_id]
+    if len(matching_hosts) != 1:
+        raise ValueError(
+            f"Expected one inventory entry for dedicated ESXi host '{dedicated_host_id}', found {len(matching_hosts)}"
+        )
+    host_name = _inventory_esxi_host_field(matching_hosts[0], "name")
+    LOGGER.info(f"Pinning first VM to dedicated ESXi host '{host_name}' (id={dedicated_host_id})")
+    return host_name
+
+
 def verify_dedicated_migration_host(
     ocp_admin_client: DynamicClient,
     plan: Plan,
@@ -1777,6 +2219,7 @@ def verify_dedicated_migration_host(
     max_concurrent_by_host: dict[str, int],
     fixture_store: dict[str, Any],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+    require_cross_source_contention: bool = False,
 ) -> set[str]:
     """Verify populate pods executed XCOPY on configured dedicated migration hosts.
 
@@ -1786,29 +2229,33 @@ def verify_dedicated_migration_host(
     host, different disks may land on different hosts within the same migration; this is
     checked as set membership per pod, not a uniform value across pods.
 
-    Populator throttling (MAX_POPULATOR_INFLIGHT) is keyed on the same sourceHost pod
-    label used here, so with a single configured host every disk shares one throttle
-    budget and the peak concurrency is verified to reach min(limit, disk_count) and to
-    have produced PopulatorThrottled events. With multiple configured hosts, disks split
-    their throttle budget unpredictably across hosts, so only the per-host ceiling is
-    enforced there and neither a minimum peak nor PopulatorThrottled events are required.
+    The verifier prefers ``throttleHost`` when available and otherwise resolves the runtime
+    host from each worker's ``--migration-host`` argument. The MTV-6055 implementation
+    reuses the populate Pod's ``sourceHost`` label for the runtime host. Worker arguments and
+    logs must agree with a configured dedicated host. For the regular single-host routing
+    scenario, verify throttled PVC events and the minimum expected concurrency peak. For the
+    shared-host scenario, migration monitoring already requires cross-source contention, so
+    this verifier checks the concurrency ceiling without requiring a fixed event count.
+    Multiple dedicated hosts also use a ceiling-only check because disk placement is random.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         plan (Plan): The Plan CR resource (used to find the migration UID).
         target_namespace (str): Namespace where populate pods and PVCs exist.
         dedicated_hosts (list[str]): Configured dedicatedMigrationHosts from the StorageMap.
-        max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per sourceHost
-            observed during migration.
+        max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per runtime
+            host observed during migration.
         fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        require_cross_source_contention (bool): Whether migration monitoring required and
+            observed cross-source-host contention for this scenario.
 
     Returns:
         set[str]: Distinct dedicated hosts observed executing XCOPY across all populate pods.
 
     Raises:
-        ValueError: If dedicated_hosts is empty, any populate pod ran on a host outside
-            dedicated_hosts, or observed concurrency for any host exceeded max_populator_inflight.
+        ValueError: If a populate pod uses an invalid runtime host, its args/logs disagree,
+            no activity was observed, or observed concurrency exceeds the limit.
     """
     if not dedicated_hosts:
         raise ValueError(
@@ -1823,35 +2270,51 @@ def verify_dedicated_migration_host(
         migration_uid=migration_uid,
         fixture_store=fixture_store,
     )
-    observed_hosts = _verify_source_host_labels_against_allowed_set(pod_logs=pod_logs, allowed_hosts=dedicated_hosts)
+    observed_hosts = _verify_dedicated_host_pod_metadata(pod_logs=pod_logs, allowed_hosts=dedicated_hosts)
     distinct_dedicated_hosts = set(dedicated_hosts)
 
-    if len(distinct_dedicated_hosts) == 1:
-        # With one dedicated host, every disk shares its throttle budget — same sequence
-        # (labels, throttled events, peak concurrency) as the non-dedicated-host throttling
-        # test, so delegate to it instead of re-implementing it here. _get_populate_pod_logs
-        # is cache-backed, so this second call is cheap.
-        verify_populator_throttling(
+    if len(distinct_dedicated_hosts) == 1 and not require_cross_source_contention:
+        # Preserve the existing routing test's proof that the single-host limit was
+        # exercised: throttled PVC evidence plus a peak of min(limit, disk count).
+        runtime_host = next(iter(distinct_dedicated_hosts))
+        if runtime_host not in observed_hosts:
+            raise ValueError(f"No populate pod was observed executing on dedicated runtime host '{runtime_host}'")
+        if runtime_host not in max_concurrent_by_host:
+            raise ValueError(
+                f"No active-pod concurrency samples were recorded for dedicated runtime host '{runtime_host}'; "
+                f"observed sample hosts: {sorted(max_concurrent_by_host)}"
+            )
+        _verify_throttled_events_on_pod_logs(
             ocp_admin_client=ocp_admin_client,
-            plan=plan,
             target_namespace=target_namespace,
-            max_concurrent_by_host=max_concurrent_by_host,
-            fixture_store=fixture_store,
+            migration_uid=migration_uid,
+            pod_logs=pod_logs,
             max_populator_inflight=max_populator_inflight,
         )
+        verify_populator_inflight_observed(
+            max_concurrent_by_host={runtime_host: max_concurrent_by_host[runtime_host]},
+            max_populator_inflight=max_populator_inflight,
+            disk_count=len(pod_logs),
+        )
     else:
-        # Random per-disk host selection: don't require a minimum peak or throttled
-        # events per host, only that no host's concurrency exceeded the limit.
+        # Shared-host contention is asserted during migration monitoring; random
+        # multi-host placement only supports a per-host ceiling assertion here.
         verify_populator_inflight_observed(
             max_concurrent_by_host=max_concurrent_by_host,
             max_populator_inflight=max_populator_inflight,
         )
-        if len(observed_hosts) < len(distinct_dedicated_hosts):
-            LOGGER.warning(
-                f"Configured {len(distinct_dedicated_hosts)} dedicated hosts {sorted(distinct_dedicated_hosts)} but "
-                f"only {len(observed_hosts)} distinct host(s) were observed executing XCOPY: {sorted(observed_hosts)}. "
-                "Host selection is random per disk; re-run with more disks for stronger distribution coverage."
+        if len(distinct_dedicated_hosts) == 1 and not observed_hosts.issubset(max_concurrent_by_host):
+            unmonitored_hosts = observed_hosts - max_concurrent_by_host.keys()
+            raise ValueError(
+                f"No active-pod concurrency samples were recorded for dedicated runtime host(s) "
+                f"{sorted(unmonitored_hosts)}; observed sample hosts: {sorted(max_concurrent_by_host)}"
             )
+    if len(distinct_dedicated_hosts) > 1 and len(observed_hosts) < len(distinct_dedicated_hosts):
+        LOGGER.warning(
+            f"Configured {len(distinct_dedicated_hosts)} dedicated hosts {sorted(distinct_dedicated_hosts)} but "
+            f"only {len(observed_hosts)} distinct host(s) were observed executing XCOPY: {sorted(observed_hosts)}. "
+            "Host selection is random per disk; re-run with more disks for stronger distribution coverage."
+        )
 
     LOGGER.info(f"Dedicated migration host verification passed: observed hosts {sorted(observed_hosts)}")
     return observed_hosts
@@ -1960,10 +2423,10 @@ def _get_pvc_events(
     Returns:
         list[Any]: Event objects for the PVC from the Kubernetes API.
     """
-    event_resource = ocp_admin_client.resources.get(api_version=Event.api_version, kind="Event")
+    event_resource = ocp_admin_client.resources.get(api_version=Event.api_version, kind=Event.__name__)
     response = event_resource.get(
         namespace=namespace,
-        field_selector=f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim",
+        field_selector=f"involvedObject.name={pvc_name},involvedObject.kind={PersistentVolumeClaim.kind}",
     )
     return response.items or []
 
@@ -2138,14 +2601,14 @@ def verify_populator_inflight_observed(
     """Verify observed peak concurrent populate pods per host respect the in-flight limit.
 
     Peak-only check: validates concurrency ceilings (and optional minimum peak when
-    ``disk_count`` is set). Does not verify PopulatorThrottled events or sourceHost labels.
+    ``disk_count`` is set). Does not verify PopulatorThrottled events or host labels.
 
     When ``disk_count`` is provided, also verifies the limit was exercised: peak concurrency
     must reach ``min(max_populator_inflight, disk_count)``. For example, 5 disks with limit 2
     requires peak >= 2, proving two populate pods ran concurrently before others were throttled.
 
     Args:
-        max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per sourceHost.
+        max_concurrent_by_host (dict[str, int]): Peak concurrent populate pods per host.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
         disk_count (int | None): Total disk/populate-pod count for a single-ESXi-host migration;
             enables minimum peak assertion. Not valid for multi-host migrations.
@@ -2159,19 +2622,19 @@ def verify_populator_inflight_observed(
 
     min_expected_peak = min(max_populator_inflight, disk_count) if disk_count is not None else None
 
-    for source_host, peak_count in max_concurrent_by_host.items():
+    for host, peak_count in max_concurrent_by_host.items():
         if peak_count > max_populator_inflight:
             raise ValueError(
-                f"Peak populator concurrency for host '{source_host}' was {peak_count}, "
+                f"Peak populator concurrency for host '{host}' was {peak_count}, "
                 f"exceeding limit {max_populator_inflight}"
             )
         if min_expected_peak is not None and peak_count < min_expected_peak:
             raise ValueError(
-                f"Peak populator concurrency for host '{source_host}' was {peak_count}, "
+                f"Peak populator concurrency for host '{host}' was {peak_count}, "
                 f"expected at least {min_expected_peak} "
                 f"(limit={max_populator_inflight}, disks={disk_count})"
             )
-        LOGGER.info(f"Host '{source_host}': peak populator concurrency {peak_count}/{max_populator_inflight} (PASS)")
+        LOGGER.info(f"Host '{host}': peak populator concurrency {peak_count}/{max_populator_inflight} (PASS)")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -2179,7 +2642,7 @@ def verify_populator_inflight_observed(
 # ────────────────────────────────────────────────────────────────────────────
 
 
-def _get_vm_esxi_host(vm_data: dict[str, Any], vm_name: str) -> str:
+def get_vm_esxi_host(vm_data: dict[str, Any], vm_name: str) -> str:
     """Extract the ESXi host identifier from a Forklift inventory VM response.
 
     Args:
@@ -2228,7 +2691,7 @@ def _build_vm_host_map(
     vm_host_map: dict[str, str] = {}
     for vm_name in vm_names:
         vm_data = source_provider_inventory.get_vm(vm_name)
-        host = _get_vm_esxi_host(vm_data=vm_data, vm_name=vm_name)
+        host = get_vm_esxi_host(vm_data=vm_data, vm_name=vm_name)
         vm_host_map[vm_name] = host
         vm_id = vm_data.get("id")
         if vm_id:
