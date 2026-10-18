@@ -17,9 +17,9 @@ hit, or a test failed with post-mortem debugging enabled).
    when the debugging session is done.
 2. **Tell the user to run**: `MTV_REMOTE_PDB=1 uv run pytest <args> -s -n 0`.
 3. **Watch for the hit**: poll the run's output for the line
-   `RemotePdb session open at 127.0.0.1:<port>, waiting for connection ...` — it means the
-   breakpoint was reached and the process is blocked. Its port is the attach port (step 1 of
-   "Finding the listener address" below).
+   `RemotePdb session open at <host>:<port>, waiting for connection ...` — it means the
+   breakpoint was reached and the process is blocked. Its address is the attach address
+   (step 1 of "Finding the listener address" below).
 4. **Attach and debug** (see "Attaching"), end with `c` (continue the run) or `q` (quit —
    at a breakpoint the current test fails, at a post-mortem the session exits).
 5. **Remove the breakpoint** from the code afterwards.
@@ -47,14 +47,18 @@ blocks after must-gather collection — go straight to watching for the session-
 Resolve the listener host and port before attaching, in this order:
 
 1. **The run's own output** (authoritative, requires `-s`): the line
-   `RemotePdb session open at 127.0.0.1:<port>, waiting for connection ...` — grep the run's
-   output or ask the user to paste it.
-2. **The user's configuration**: ask which `REMOTE_PDB_PORT` was set and which pytest-xdist
-   worker hit the breakpoint/failure (worker `gwN` listens on `base + N`).
+   `RemotePdb session open at <host>:<port>, waiting for connection ...` — grep the run's
+   output or ask the user to paste it. `<host>` is the configured `REMOTE_PDB_HOST`
+   (default `127.0.0.1`), so do not match the literal `127.0.0.1` when a custom host is set.
+2. **The user's configuration**: ask which `REMOTE_PDB_PORT` and `REMOTE_PDB_HOST` were set
+   (default `127.0.0.1`), and which pytest-xdist worker hit the breakpoint/failure
+   (worker `gwN` listens on `base + N`).
 3. **Probe listening sockets**: `ss -ltn | grep -E ':44[0-9]{2}'` shows debugger listeners in
    the default range. With a custom `REMOTE_PDB_PORT`, probe that exact port instead
    (`ss -ltn | grep ":$REMOTE_PDB_PORT"`), including its xdist worker offsets (`base + N`).
-4. Otherwise assume the default: `4444`.
+   The host is the configured `REMOTE_PDB_HOST` (default `127.0.0.1`) — `ss` output shows
+   the bound address.
+4. Otherwise assume the defaults: host `127.0.0.1`, port `4444`.
 
 ## Attaching (AI agent client pattern)
 
@@ -93,13 +97,15 @@ FORWARD_PID=$!
 
 # RemotePdb accepts a single client: never probe readiness with a connection (nc -z,
 # telnet, ...) — the probe consumes the session (probe exits → EOF → pdb quits → the
-# debugged run fails). Poll the local listening socket and forward liveness only, bounded:
+# debugged run fails). Verify the listener belongs to THIS forward (pid match) and the
+# forward is alive — a bare port match could be another process that already owned the
+# port, sending the client to an unrelated process. Bounded:
 for _ in $(seq 1 30); do
-  ss -ltn | grep -q ":$port " && break
-  kill -0 "$FORWARD_PID" 2>/dev/null || { echo "port-forward died"; exit 1; }
+  ss -ltnp | grep ":$port " | grep -q "pid=$FORWARD_PID" && break
+  kill -0 "$FORWARD_PID" 2>/dev/null || { echo "port-forward died (port already in use?)"; exit 1; }
   sleep 1
 done
-ss -ltn | grep -q ":$port " || { echo "port-forward not ready after 30s"; kill "$FORWARD_PID"; exit 1; }
+ss -ltnp | grep ":$port " | grep -q "pid=$FORWARD_PID" || { echo "port-forward not ready after 30s"; kill "$FORWARD_PID"; exit 1; }
 ```
 
 Kill `"$FORWARD_PID"` when the session ends.
