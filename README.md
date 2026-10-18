@@ -333,7 +333,9 @@ traceback (no `--pdb` needed). If you pass `--pdb`, the local terminal debugger 
 ### Attaching
 
 ```bash
-nc 127.0.0.1 4444        # or: rlwrap nc 127.0.0.1 4444 / telnet 127.0.0.1 4444
+# host and port come from the run's "RemotePdb session open at <host>:<port>" line
+# (defaults: 127.0.0.1 4444; see the REMOTE_PDB_HOST / REMOTE_PDB_PORT overrides below)
+nc <host> <port>        # or: rlwrap nc <host> <port> / telnet <host> <port>
 ```
 
 Send `c` to continue the run. `q` — or dropping the connection — quits the debugger: at a code
