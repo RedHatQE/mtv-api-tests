@@ -36,6 +36,56 @@ tests_params: dict = {
         ],
         "warm_migration": True,
     },
+    "test_cold_migration_network_ip_mode": {
+        "virtual_machines": [
+            {
+                # 4-NIC Windows VM: one DHCP-served NIC, one single-static-IP NIC,
+                # one multiple-static-IP NIC, one NIC on the network to ignore
+                "name": "mtv-feature-win2019-multi-nics",
+                "source_vm_power": "on",  # Guest tools must report IP origin for preserve_static_ips
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": False,
+        "preserve_static_ips": True,
+        "target_power_state": "on",
+        # Per-network destination overrides: each entry selects one source
+        # network by its guest IP configuration (source_ip_config: "dhcp", "static" for
+        # a single static IP, "static-multiple" for several static IPs on one NIC) and
+        # maps it to an explicit destination. network_ip_mode maps 1:1 to the NetworkMap
+        # CRD networkIPMode enum (forklift MTV-5674): preserve/dhcp/none.
+        "network_map_overrides": [
+            {"source_ip_config": "dhcp", "destination": {"type": "pod"}},
+            {"source_ip_config": "static", "destination": {"type": "multus"}, "network_ip_mode": "dhcp"},
+            {"source_ip_config": "static", "destination": {"type": "ignored"}},
+            {"source_ip_config": "static-multiple", "destination": {"type": "multus"}, "network_ip_mode": "preserve"},
+        ],
+    },
+    "test_cold_migration_network_ip_mode_linux": {
+        "virtual_machines": [
+            {
+                # 4-NIC Linux VM: one DHCP-served NIC, two single-static-IP NICs
+                # (on different networks), one multiple-static-IP NIC
+                "name": "mtv-feature-rhel9-multi-nics",
+                "source_vm_power": "on",  # Guest IP origins are detected in the guest (open-vm-tools reports no origin)
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": False,
+        "preserve_static_ips": True,
+        "target_power_state": "on",
+        # Linux variant of the Windows overrides: covers the `none` and `dhcp`
+        # guest IP modes in one migration (the Windows variant covers `dhcp` and
+        # an ignored destination); networks are selected by guest IP configuration
+        # (see test_cold_migration_network_ip_mode), the two single-static
+        # networks assigned in NIC order.
+        "network_map_overrides": [
+            {"source_ip_config": "dhcp", "destination": {"type": "pod"}},
+            {"source_ip_config": "static", "destination": {"type": "multus"}, "network_ip_mode": "none"},
+            {"source_ip_config": "static", "destination": {"type": "multus"}, "network_ip_mode": "dhcp"},
+            {"source_ip_config": "static-multiple", "destination": {"type": "multus"}, "network_ip_mode": "preserve"},
+        ],
+    },
     "test_warm_remote_ocp": {
         "virtual_machines": [
             {

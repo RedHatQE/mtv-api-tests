@@ -282,6 +282,7 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `skip_clone` | Skip VM cloning in `prepared_plan` (plan-readiness tests on existing VMs) |
 | `rdm_as_lun` | Map RDM disks as LUN devices with SCSI bus |
 | `pre_copy_source_disks` | Hyper-V two-phase VHDX→raw transfer (Hyper-V source only) |
+| `network_map_overrides` | Per-network destination overrides chosen by `source_ip_config`; `pod`/`multus`/`ignored` + optional `network_ip_mode` |
 
 The boolean flags in this table use `plan.get("flag", False)` in code. Exceptions:
 `inventory_timeout` is numeric and defaults via `plan.get("inventory_timeout", 300)`;

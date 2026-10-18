@@ -710,6 +710,7 @@ def get_network_migration_map(
     source_provider_inventory: ForkliftInventory,
     vms: list[str],
     per_nic_network_map: bool = False,
+    network_map_overrides: list[dict[str, Any]] | None = None,
 ) -> NetworkMap:
     """Create a NetworkMap resource for migration.
 
@@ -723,12 +724,16 @@ def get_network_migration_map(
         source_provider_inventory (ForkliftInventory): Source provider inventory.
         vms (list[str]): VM names to query.
         per_nic_network_map (bool): Create one map entry per NIC without deduplication.
+        network_map_overrides (list[dict[str, Any]] | None): Explicit per-network
+            destination overrides; each entry maps one source network to a pod,
+            multus or ignored destination and may set a guest IP mode. When set,
+            this replaces the automatic destination assignment.
 
     Returns:
         NetworkMap: The created NetworkMap resource.
 
     Raises:
-        ValueError: If provider resources are not set.
+        ValueError: If provider resources are not set, or an override is invalid.
     """
     if not source_provider.ocp_resource:
         raise ValueError("source_provider.ocp_resource is not set")
@@ -743,6 +748,7 @@ def get_network_migration_map(
         multus_network_name=multus_network_name,
         vms=vms,
         per_nic_network_map=per_nic_network_map,
+        network_map_overrides=network_map_overrides,
     )
     network_map = create_and_store_resource(
         fixture_store=fixture_store,

@@ -45,6 +45,84 @@ LOGGER = get_logger(__name__)
 
 DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
 CLUSTER_CREDENTIAL_KEYS: tuple[str, ...] = ("cluster_host", "cluster_username", "cluster_password")
+# Valid values of the NetworkMap CRD networkIPMode enum (forklift MTV-5674)
+VALID_NETWORK_IP_MODES: tuple[str, ...] = ("preserve", "dhcp", "none")
+
+
+def normalize_source_network(source_vm_nic: dict[str, Any]) -> str | None:
+    """Return a source NIC's network name/id, accepting str and dict network forms.
+
+    Args:
+        source_vm_nic (dict[str, Any]): Source VM NIC dict with a "network" name/id/dict.
+
+    Returns:
+        str | None: The source network name or id, or None if a dict carried neither.
+    """
+    source_vm_network = source_vm_nic["network"]
+    if isinstance(source_vm_network, dict):
+        return source_vm_network.get("name", source_vm_network.get("id", None))
+    return source_vm_network
+
+
+def resolve_network_map_overrides(
+    network_map_overrides: list[dict[str, Any]],
+    source_vms_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Resolve requirement-based network map overrides to concrete source networks.
+
+    Each override selects a network by ``source_ip_config`` ("dhcp" — proven by a
+    guest-reported dhcp IP origin (tools on Windows, guest operations on Linux),
+    "static" — one static IP, "static-multiple" — several) rather than by name;
+    networks are assigned in order, each used once.
+
+    Args:
+        network_map_overrides (list[dict[str, Any]]): Requirement-based overrides.
+        source_vms_data (dict[str, Any]): Source VM data (from prepared_plan) keyed by VM name.
+
+    Returns:
+        list[dict[str, Any]]: New overrides with ``source_network`` set to a matched network name.
+
+    Raises:
+        ValueError: If no unused network matches an override's requirement.
+    """
+    networks_by_ip_config: dict[str, list[str]] = {}
+    for vm_data in source_vms_data.values():
+        for nic in vm_data.get("network_interfaces", []):
+            ip_configs = nic.get("ip_addresses", [])
+            static_ip_count = sum(1 for ip_config in ip_configs if ip_config.get("is_static_ip"))
+            if static_ip_count == 1:
+                ip_config_mode = "static"
+            elif static_ip_count > 1:
+                ip_config_mode = "static-multiple"
+            elif any(ip_config.get("ip_origin") == "dhcp" for ip_config in ip_configs):
+                # Only guest tools reporting a dhcp IP origin proves a NIC is
+                # DHCP-served; missing origin data must not satisfy the requirement.
+                ip_config_mode = "dhcp"
+            else:
+                continue
+            network = normalize_source_network(nic)
+            if network is None:
+                raise ValueError(f"Source VM NIC '{nic.get('name')}' has no resolvable network name")
+            if network not in networks_by_ip_config.setdefault(ip_config_mode, []):
+                networks_by_ip_config[ip_config_mode].append(network)
+
+    resolved_overrides: list[dict[str, Any]] = []
+    used_networks: set[str] = set()
+    for override in network_map_overrides:
+        candidates = [
+            network
+            for network in networks_by_ip_config.get(override["source_ip_config"], [])
+            if network not in used_networks
+        ]
+        if not candidates:
+            raise ValueError(
+                f"No unused source network with guest IP configuration "
+                f"'{override['source_ip_config']}' for a network_map_overrides entry; "
+                f"available: {networks_by_ip_config}"
+            )
+        used_networks.add(candidates[0])
+        resolved_overrides.append({**override, "source_network": candidates[0]})
+    return resolved_overrides
 
 
 def resolve_providers_json_path(cli_path: str | None = None) -> str:
@@ -320,6 +398,130 @@ def get_per_nic_networks(
     return source_provider_inventory.vms_networks_mappings(vms=vms, deduplicate=False)
 
 
+def _validate_network_map_overrides(
+    network_map_overrides: list[dict[str, Any]],
+    inventory_networks_by_name: dict[str, dict[str, str]],
+) -> None:
+    """Validate overrides against the inventory and the NetworkMap CRD constraints.
+
+    Args:
+        network_map_overrides (list[dict[str, Any]]): Per-network destination overrides.
+        inventory_networks_by_name (dict[str, dict[str, str]]): Inventory networks keyed by name.
+
+    Raises:
+        ValueError: If an override's source network is not in the inventory, an inventoried
+            network has no override, a source network is overridden twice, or a destination
+            type or guest IP mode is invalid.
+    """
+    unmatched_overrides = [
+        override["source_network"]
+        for override in network_map_overrides
+        if override["source_network"] not in inventory_networks_by_name
+    ]
+    if unmatched_overrides:
+        raise ValueError(
+            f"network_map_overrides source networks not found in inventory: {unmatched_overrides}. "
+            f"Available networks: {sorted(inventory_networks_by_name)}"
+        )
+
+    override_network_names = [override["source_network"] for override in network_map_overrides]
+    uncovered_networks = sorted(set(inventory_networks_by_name) - set(override_network_names))
+    if uncovered_networks:
+        raise ValueError(
+            f"network_map_overrides must cover every source network; missing overrides for: {uncovered_networks}"
+        )
+
+    duplicated_networks = sorted({name for name in override_network_names if override_network_names.count(name) > 1})
+    if duplicated_networks:
+        raise ValueError(
+            f"network_map_overrides must not repeat a source network: {duplicated_networks}. "
+            "Map multiple NICs of one network with per_nic_network_map instead."
+        )
+
+    for override in network_map_overrides:
+        source_network = override["source_network"]
+        destination_type = override["destination"]["type"]
+        network_ip_mode = override.get("network_ip_mode")
+
+        if destination_type not in ("pod", "multus", "ignored"):
+            raise ValueError(
+                f"Invalid destination type '{destination_type}' for source network "
+                f"'{source_network}': must be 'pod', 'multus' or 'ignored'"
+            )
+
+        if network_ip_mode is not None and network_ip_mode not in VALID_NETWORK_IP_MODES:
+            raise ValueError(
+                f"Invalid network_ip_mode '{network_ip_mode}' for source network "
+                f"'{source_network}': must be one of {VALID_NETWORK_IP_MODES}"
+            )
+
+        if destination_type == "ignored" and network_ip_mode is not None:
+            raise ValueError(
+                f"network_ip_mode is not allowed on an ignored destination "
+                f"(source network '{source_network}'): the product rejects this combination"
+            )
+
+
+def _gen_network_map_entries_from_overrides(
+    source_provider_inventory: ForkliftInventory,
+    vms: list[str],
+    multus_network_name: dict[str, str],
+    network_map_overrides: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build one NetworkMap entry per override, with ``network_ip_mode`` emitted as ``networkIPMode``.
+
+    Multus destinations get NADs (``{base}-{n}``) in override order, matching the NADs
+    the ``multus_network_name`` fixture creates for the same overrides.
+
+    Args:
+        source_provider_inventory (ForkliftInventory): Source provider inventory.
+        vms (list[str]): VM names to query.
+        multus_network_name (dict[str, str]): Multus network base name and namespace.
+        network_map_overrides (list[dict[str, Any]]): Per-network destination overrides.
+
+    Returns:
+        list[dict[str, Any]]: Network map entries, one per override.
+
+    Raises:
+        ValueError: If an override is invalid or does not cover the inventory.
+    """
+    inventory_networks_by_name = {
+        network["name"]: network for network in source_provider_inventory.vms_networks_mappings(vms=vms)
+    }
+    _validate_network_map_overrides(
+        network_map_overrides=network_map_overrides,
+        inventory_networks_by_name=inventory_networks_by_name,
+    )
+
+    entries: list[dict[str, Any]] = []
+    multus_counter = 0
+    for override in network_map_overrides:
+        destination_type = override["destination"]["type"]
+        network_ip_mode = override.get("network_ip_mode")
+
+        if destination_type == "multus":
+            multus_counter += 1
+            destination: dict[str, Any] = {
+                "name": f"{multus_network_name['name']}-{multus_counter}",
+                "namespace": multus_network_name["namespace"],
+                "type": "multus",
+            }
+        elif destination_type == "ignored":
+            destination = {"type": "ignored"}
+        else:
+            destination = {"type": "pod"}
+
+        entry: dict[str, Any] = {
+            "destination": destination,
+            "source": inventory_networks_by_name[override["source_network"]],
+        }
+        if network_ip_mode is not None:
+            entry["networkIPMode"] = network_ip_mode
+        entries.append(entry)
+
+    return entries
+
+
 def gen_network_map_list(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
@@ -328,7 +530,8 @@ def gen_network_map_list(
     multus_network_name: dict[str, str],
     pod_only: bool = False,
     per_nic_network_map: bool = False,
-) -> list[dict[str, dict[str, str]]]:
+    network_map_overrides: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Build network map entries from source provider inventory.
 
     Args:
@@ -341,14 +544,25 @@ def gen_network_map_list(
         multus_network_name (dict[str, str]): Multus network name and namespace.
         pod_only (bool): Map all networks to pod network.
         per_nic_network_map (bool): Create one map entry per NIC without deduplication.
+        network_map_overrides (list[dict[str, Any]] | None): Per-network destination
+            overrides (pod/multus/ignored + optional guest IP mode); replaces the
+            automatic destination assignment.
 
     Returns:
-        list[dict[str, dict[str, str]]]: Network map entries.
+        list[dict[str, Any]]: Network map entries.
 
     Raises:
-        ValueError: If no networks are found for the given VMs.
+        ValueError: If no networks are found for the given VMs, or an override is invalid.
     """
-    network_map_list: list[dict[str, dict[str, str]]] = []
+    if network_map_overrides is not None:
+        return _gen_network_map_entries_from_overrides(
+            source_provider_inventory=source_provider_inventory,
+            vms=vms,
+            multus_network_name=multus_network_name,
+            network_map_overrides=network_map_overrides,
+        )
+
+    network_map_list: list[dict[str, Any]] = []
     _destination_pod: dict[str, str] = {"type": "pod"}
     multus_counter = 1
 

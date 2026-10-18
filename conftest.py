@@ -1259,32 +1259,39 @@ def multus_network_name(
         nad_namespace = target_namespace
 
     virtual_machines = [dict(vm) for vm in class_plan_config["virtual_machines"]]
-    # Copy-offload configs use a placeholder VM name; the real name comes from .providers.json
-    apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
-    vms = [vm["name"] for vm in virtual_machines]
-    LOGGER.info(f"Found VMs for network lookup: {vms}")
-
-    # Query networks using provider abstraction (handles templates vs VMs internally)
-    networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)
-
-    if not networks:
-        raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
-
-    # Calculate how many multus NADs we need
-    extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic"))
-    if class_plan_config.get("per_nic_network_map", False):
-        multus_count = max(
-            0,
-            len(
-                get_per_nic_networks(
-                    source_provider=source_provider, source_provider_inventory=source_provider_inventory, vms=vms
-                )
-            )
-            - 1
-            + extra_nics,
-        )
+    network_map_overrides = class_plan_config.get("network_map_overrides")
+    if network_map_overrides:
+        # Overrides drive the map: one NAD per multus destination, in override order
+        # (must match _gen_network_map_entries_from_overrides NAD assignment).
+        multus_count = sum(1 for override in network_map_overrides if override["destination"]["type"] == "multus")
     else:
-        multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
+        # Copy-offload configs use a placeholder VM name; the real name comes from .providers.json
+        apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
+        vms = [vm["name"] for vm in virtual_machines]
+        LOGGER.info(f"Found VMs for network lookup: {vms}")
+
+        # Query networks using provider abstraction (handles templates vs VMs internally)
+        networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)
+        if not networks:
+            raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
+
+        # Calculate how many multus NADs we need
+        if class_plan_config.get("per_nic_network_map", False):
+            extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic"))
+            multus_count = max(
+                0,
+                len(
+                    get_per_nic_networks(
+                        source_provider=source_provider,
+                        source_provider_inventory=source_provider_inventory,
+                        vms=vms,
+                    )
+                )
+                - 1
+                + extra_nics,
+            )
+        else:
+            multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
 
     created_nads = []
     # Create all required NADs with consistent naming

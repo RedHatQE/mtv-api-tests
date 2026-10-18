@@ -31,11 +31,50 @@ if TYPE_CHECKING:
 
 LOGGER = get_logger(__name__)
 
-# VMware vSphere NIC device key offset
-# In vSphere, network adapter device keys start at 4000
-# The gateway routing table uses device IDs without this offset
-# Reference: VMware vSphere API VirtualEthernetCard documentation
-VSPHERE_NIC_DEVICE_KEY_OFFSET = 4000
+
+def _resolve_nic_gateway_from_routes(
+    vm: vim.VirtualMachine, nic_label: str, ipv4_addresses: list[vim.net.NetIpConfigInfoIpAddress]
+) -> str | None:
+    """Resolve a NIC's IPv4 default gateway from the guest routing table.
+
+    VMware Tools attributes routing-table entries to devices by its own guest-side
+    enumeration, which does not reliably match vSphere device-key order (observed
+    attributing two NICs' gateways to each other). A gateway is therefore attributed
+    to the NIC whose subnet contains it — a default gateway is on-link for its NIC.
+
+    Args:
+        vm (vim.VirtualMachine): Powered-on VMware VM object with guest data.
+        nic_label (str): NIC label, used in log messages.
+        ipv4_addresses (list[vim.net.NetIpConfigInfoIpAddress]): NIC IPv4 address
+            entries (ipAddress + prefixLength).
+
+    Returns:
+        str | None: The NIC's IPv4 default gateway, or None when no route matches.
+    """
+    if not (hasattr(vm.guest, "ipStack") and vm.guest.ipStack):
+        return None
+
+    nic_subnets = [
+        ipaddress.ip_network(f"{ip_info.ipAddress}/{ip_info.prefixLength}", strict=False) for ip_info in ipv4_addresses
+    ]
+    for ip_stack in vm.guest.ipStack:
+        if not (hasattr(ip_stack, "ipRouteConfig") and ip_stack.ipRouteConfig):
+            continue
+        for route in ip_stack.ipRouteConfig.ipRoute:
+            gateway_ip = getattr(getattr(route, "gateway", None), "ipAddress", None)
+            if route.network != "0.0.0.0" or route.prefixLength != 0 or not gateway_ip:
+                continue
+            try:
+                gateway_address = ipaddress.ip_address(gateway_ip)
+            except ValueError:
+                LOGGER.info(f"VM {vm.name} NIC {nic_label}: Invalid gateway IP {gateway_ip}")
+                continue
+            if isinstance(gateway_address, ipaddress.IPv4Address) and any(
+                gateway_address in subnet for subnet in nic_subnets
+            ):
+                LOGGER.info(f"VM {vm.name} NIC {nic_label}: Gateway={gateway_ip}")
+                return gateway_ip
+    return None
 
 
 def format_insufficient_capacity_message(datastore_name: str, required_gb: float, available_gb: float) -> str:
@@ -533,7 +572,7 @@ class VMWareProvider(BaseProvider):
         This method retrieves IP configuration from VMware Tools guest information including:
         - IPv4 addresses (filters out link-local and IPv6)
         - Subnet masks (prefix lengths)
-        - Default gateway (from guest routing table)
+        - Default gateway (from guest routing table, matched to the NIC by subnet)
         - IP assignment method (static vs DHCP)
 
         Args:
@@ -615,41 +654,15 @@ class VMWareProvider(BaseProvider):
             # Initialize ip_addresses as a list to store multiple IP configurations
             result["ip_addresses"] = []
 
-            # Try to get gateway information from guest IP stack routing table
-            gateway_ip = None
+            gateway_ip = _resolve_nic_gateway_from_routes(
+                vm=vm,
+                nic_label=device.deviceInfo.label,
+                ipv4_addresses=ipv4_addresses,
+            )
+
+            # Extract DNS servers if available
             dns_servers = None
             if hasattr(vm.guest, "ipStack") and vm.guest.ipStack:
-                # Look for default gateway routes (0.0.0.0/0) that match this NIC
-                device_id = str(device.key - VSPHERE_NIC_DEVICE_KEY_OFFSET)
-
-                for ip_stack in vm.guest.ipStack:
-                    if hasattr(ip_stack, "ipRouteConfig") and ip_stack.ipRouteConfig:
-                        for route in ip_stack.ipRouteConfig.ipRoute:
-                            # Look for default routes (0.0.0.0/0) with IPv4 gateway
-                            if (
-                                route.network == "0.0.0.0"
-                                and route.prefixLength == 0
-                                and hasattr(route.gateway, "ipAddress")
-                                and route.gateway.ipAddress
-                                and route.gateway.device == device_id
-                            ):
-                                # Check if it's IPv4 (not IPv6)
-                                try:
-                                    ip_obj = ipaddress.ip_address(route.gateway.ipAddress)
-                                    if isinstance(ip_obj, ipaddress.IPv4Address):
-                                        gateway_ip = route.gateway.ipAddress
-                                        LOGGER.info(
-                                            f"VM {vm.name} NIC {device.deviceInfo.label}:"
-                                            f" Gateway={route.gateway.ipAddress}",
-                                        )
-                                        break
-                                except ValueError:
-                                    LOGGER.info(
-                                        f"VM {vm.name} NIC {device.deviceInfo.label}: Invalid"
-                                        f" gateway IP {route.gateway.ipAddress}",
-                                    )
-
-                # Extract DNS servers if available
                 for ip_stack in vm.guest.ipStack:
                     if hasattr(ip_stack, "dnsConfig") and ip_stack.dnsConfig:
                         dns_servers = ip_stack.dnsConfig.ipAddress

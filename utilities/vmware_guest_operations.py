@@ -127,47 +127,57 @@ def run_command_in_vmware_guest(
             LOGGER.debug(f"Failed to clean up temp file {output_file} in guest VM {vm.name}", exc_info=True)
 
 
-def _parse_nmcli_ip_origins(output: str) -> dict[str, bool]:
-    """Parse nmcli IP origin output into a mapping of IP addresses to static IP flags.
+def _parse_nmcli_ip_data(output: str) -> dict[str, tuple[bool, list[str]]]:
+    """Parse nmcli IP data output into per-IP origin and per-connection DNS mappings.
 
     Args:
-        output (str): Raw output from nmcli command, with lines in 'IP|method' format
+        output (str): Raw output from nmcli command, with lines in 'IP|method|dns' format
+            (dns is a comma-separated list, possibly empty)
 
     Returns:
-        dict[str, bool]: Mapping of IP address to whether it's a static IP (method == 'manual')
+        dict[str, tuple[bool, list[str]]]: Mapping of IP address to (static IP flag,
+            DNS servers configured on the IP's NM connection profile)
     """
-    origins: dict[str, bool] = {}
+    ip_data: dict[str, tuple[bool, list[str]]] = {}
     for line in output.strip().splitlines():
-        if "|" in line:
-            ip_addr, method = line.split("|", 1)
-            origins[ip_addr.strip()] = method.strip() == "manual"
-    return origins
+        parts = line.split("|", 2)
+        if len(parts) != 3:
+            continue
+        ip_addr, method, dns = (part.strip() for part in parts)
+        ip_data[ip_addr] = (method == "manual", [server for server in dns.split(",") if server])
+    return ip_data
 
 
 def _apply_ip_origins_to_vm_details(
     vm_details: dict[str, Any],
-    origins: dict[str, bool],
+    ip_data: dict[str, tuple[bool, list[str]]],
     vm_name: str,
 ) -> None:
-    """Apply detected IP origins to VM details network interface data.
+    """Set is_static_ip, ip_origin and dns_servers on IPs with an unknown origin, in-place.
 
-    Updates vm_details in-place, setting is_static_ip and ip_origin for IPs
-    where the origin was previously unknown (None).
+    Origins use the vSphere tools vocabulary ("manual"/"dhcp"); DNS servers come
+    from the IP's NM connection profile.
 
     Args:
-        vm_details (dict[str, Any]): VM details dict with network_interfaces data
-        origins (dict[str, bool]): Mapping of IP address to static IP flag
-        vm_name (str): VM name for logging
+        vm_details (dict[str, Any]): VM details dict with network_interfaces data.
+        ip_data (dict[str, tuple[bool, list[str]]]): IP address mapped to its
+            static flag and NM connection profile DNS servers.
+        vm_name (str): VM name for logging.
     """
     for nic in vm_details.get("network_interfaces", []):
         for ip_config in nic.get("ip_addresses", []):
             if ip_config.get("is_static_ip") is not None:
                 continue
             ip_addr = ip_config.get("ip_address", "")
-            if ip_addr in origins:
-                ip_config["is_static_ip"] = origins[ip_addr]
-                ip_config["ip_origin"] = "manual" if origins[ip_addr] else "auto"
-                LOGGER.info(f"VM {vm_name}: IP {ip_addr} origin={ip_config['ip_origin']} (via Guest Operations)")
+            if ip_addr in ip_data:
+                is_static_ip, dns_servers = ip_data[ip_addr]
+                ip_config["is_static_ip"] = is_static_ip
+                ip_config["ip_origin"] = "manual" if is_static_ip else "dhcp"
+                ip_config["dns_servers"] = dns_servers
+                LOGGER.info(
+                    f"VM {vm_name}: IP {ip_addr} origin={ip_config['ip_origin']} "
+                    f"dns={dns_servers} (via Guest Operations)"
+                )
 
 
 def detect_vmware_ip_origins_via_guest_ops(
@@ -176,13 +186,14 @@ def detect_vmware_ip_origins_via_guest_ops(
     source_provider_data: dict[str, Any],
     vm_details: dict[str, Any],
 ) -> None:
-    """Detect IP assignment method for Linux guests via VMware Guest Operations API.
+    """Detect IP assignment method and per-NIC DNS for Linux guests via VMware Guest Operations API.
 
     Workaround for open-vm-tools not reporting IP origin on Linux guests
     (https://github.com/vmware/open-vm-tools/issues/694).
     Runs nmcli inside the guest via vCenter Guest Operations (no SSH needed).
 
-    Updates vm_details in-place with detected IP origins.
+    Updates vm_details in-place with detected IP origins and per-connection
+    DNS servers.
 
     Args:
         source_provider (VMWareProvider): VMware provider instance with `content` and `host` attributes
@@ -227,8 +238,9 @@ def detect_vmware_ip_origins_via_guest_ops(
         'test -z "$dev" -o "$dev" = lo && continue; '
         'method=$(nmcli -g ipv4.method connection show "$uuid" 2>/dev/null); '
         'test -z "$method" && continue; '
+        'dns=$(nmcli -g ipv4.dns connection show "$uuid" 2>/dev/null); '
         'ip -4 -o addr show "$dev" 2>/dev/null | while read -r _ _ _ cidr _; do '
-        'printf "%s|%s\\n" "${cidr%%/*}" "$method"; '
+        'printf "%s|%s|%s\\n" "${cidr%%/*}" "$method" "$dns"; '
         "done; done"
     )
 
@@ -248,12 +260,12 @@ def detect_vmware_ip_origins_via_guest_ops(
         LOGGER.warning(f"Guest command failed for VM {vm.name}, IP origin detection incomplete")
         raise
 
-    origins = _parse_nmcli_ip_origins(output)
-    if not origins:
+    ip_data = _parse_nmcli_ip_data(output)
+    if not ip_data:
         LOGGER.warning(f"No IP origin data detected via Guest Operations for VM {vm.name}")
         return
 
-    _apply_ip_origins_to_vm_details(vm_details=vm_details, origins=origins, vm_name=vm.name)
+    _apply_ip_origins_to_vm_details(vm_details=vm_details, ip_data=ip_data, vm_name=vm.name)
 
 
 def detect_guest_nic_names(

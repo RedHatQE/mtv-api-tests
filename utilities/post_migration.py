@@ -32,7 +32,7 @@ from libs.providers.rhv import OvirtProvider
 from utilities.deep_inspection import verify_captured_di_results
 from utilities.naming import resolve_destination_vm_name
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection, run_cmd_in_vm
-from utilities.utils import get_cluster_version, get_value_from_py_config, rhv_provider
+from utilities.utils import get_cluster_version, get_value_from_py_config, normalize_source_network, rhv_provider
 from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
 
 if TYPE_CHECKING:
@@ -61,6 +61,8 @@ _FORKLIFT_CONTROLLER_NAME = "forklift-controller"
 
 # Session-level cache for is_multus_network_name_always_qualified(); tests never modify this flag.
 _multus_network_name_always_qualified_cache: bool | None = None
+
+_WINDOWS_NETWORK_CMD = ["ipconfig", "/all"]
 
 
 def get_ssh_credentials_from_provider_config(
@@ -379,10 +381,19 @@ def _parse_windows_network_config(ipconfig_output: str) -> dict[str, dict[str, A
         if adapter.get("physical_address"):
             interface_config["macAddress"] = adapter["physical_address"]
 
-        # Add gateway if available (use first one)
+        # Add DHCP status if reported (absent on some loopback-like adapters)
+        if adapter.get("dhcp_enabled") is not None:
+            interface_config["dhcp_enabled"] = adapter["dhcp_enabled"]
+
+        # Add DNS servers if reported
+        if adapter.get("dns_servers"):
+            interface_config["dns_servers"] = adapter["dns_servers"]
+
+        # Add gateways if available (use first one as primary)
         gateways = adapter.get("default_gateways", [])
         if gateways:
             interface_config["gateway"] = gateways[0]
+            interface_config["default_gateways"] = gateways
 
         interfaces[interface_name] = interface_config
 
@@ -425,6 +436,7 @@ def _parse_linux_network_config(nmcli_output: str) -> dict[str, dict[str, Any]]:
             ],
             **({"macAddress": device["hwaddr"]} if device.get("hwaddr") else {}),
             **({"gateway": device["ip4_gateway"]} if device.get("ip4_gateway") else {}),
+            "dns_servers": [v for k, v in device.items() if k.startswith("ip4_dns_")],
         }
 
     return interfaces
@@ -453,6 +465,7 @@ def _extract_static_interfaces(source_vm_data: dict[str, Any]) -> list[dict[str,
                     "ip_address": ip_config["ip_address"],
                     "subnet_mask": ip_config["subnet_mask"],
                     "gateway": ip_config.get("gateway", ""),
+                    "dns_servers": ip_config.get("dns_servers", []),
                     "ip_origin": ip_config.get("ip_origin", ""),
                     "is_static_ip": ip_config["is_static_ip"],
                 }
@@ -469,20 +482,14 @@ def _is_pod_mapped_static_interface(
 ) -> bool:
     """Check whether a static-IP interface landed on pod networking after migration.
 
-    The product does not preserve static IPs on pod-mapped interfaces (the Plan reports
-    the NetMapPreservingIPsOnPodNetwork warning), so those interfaces must be excluded
-    from static-IP verification.
-
-    When the interface's source network maps to a single destination the map alone is
-    decisive. When it maps to several destinations (per-NIC mapping can send one source
-    network to both pod and Multus), the actual binding is resolved from the destination
-    VM's NIC with the same MAC — the same resolution check_network relies on, because
-    Forklift assigns NICs to destinations at migration time.
+    The product does not preserve static IPs on pod-mapped interfaces, so they are
+    excluded from static-IP verification. With several destinations (per-NIC mapping),
+    the actual binding is resolved from the destination VM's NIC with the same MAC.
 
     Args:
-        static_interface: Flattened static-IP interface entry from _extract_static_interfaces
-        destination_vm: Destination VM data whose NICs carry the landed network names
-        network_map_resource: NetworkMap resource resolving source networks to destinations
+        static_interface (dict[str, Any]): Flattened static-IP interface entry from _extract_static_interfaces
+        destination_vm (dict[str, Any]): Destination VM data whose NICs carry the landed network names
+        network_map_resource (NetworkMap): NetworkMap resource resolving source networks to destinations
 
     Returns:
         True if the interface is attached to the pod network on the destination VM
@@ -565,7 +572,37 @@ def _verify_gateway(interface_name: str, expected_gateway: str, matching_interfa
         )
 
 
-def _load_current_interfaces(
+def _verify_dns_servers(
+    interface_name: str, expected_dns_servers: list[str], matching_interface: dict[str, Any]
+) -> None:
+    """
+    Verify that the destination interface's DNS servers come from the source VM's DNS set.
+
+    VMware Tools reports the guest's system-wide DNS resolver list, not per-NIC
+    configuration, so per-NIC DNS preservation cannot be verified — the check only
+    catches DNS servers invented or changed on the destination.
+
+    Args:
+        interface_name (str): Name of the network interface
+        expected_dns_servers (list[str]): DNS servers reported by the source VM (empty skips verification)
+        matching_interface (dict[str, Any]): Current interface configuration from destination VM
+
+    Raises:
+        AssertionError: If the destination reports a DNS server the source VM never had
+    """
+    if not expected_dns_servers:
+        return
+
+    actual_dns_servers = matching_interface.get("dns_servers", [])
+    unknown = [dns_server for dns_server in actual_dns_servers if dns_server not in expected_dns_servers]
+    assert not unknown, (
+        f"DNS servers not preserved for interface {interface_name}: source VM DNS set "
+        f"{expected_dns_servers}, got {actual_dns_servers}"
+    )
+    LOGGER.info(f"DNS servers verified for interface {interface_name}: {actual_dns_servers}")
+
+
+def load_current_interfaces(
     ssh_conn: VMSSHConnection,
     network_cmd: list[str],
     is_windows: bool,
@@ -690,10 +727,8 @@ def check_static_ip_preservation(
         vm_ssh_connections: SSH connections fixture manager
         source_vm_data: Source VM data collected during plan setup
         source_provider_data: Provider configuration from .providers.json
-        network_map_resource: NetworkMap resolving source networks to destinations; static IPs
-            on pod-mapped interfaces are excluded from verification (not preserved by the product)
-        destination_vm: Destination VM data; resolves per-NIC destination binding by MAC when a
-            source network maps to several destinations (per-NIC mapping)
+        network_map_resource: NetworkMap resolving source networks to destinations
+        destination_vm: Destination VM data with network_interfaces
         timeout: Total timeout in seconds for network configuration retrieval (default: 660)
         retry_delay: Delay in seconds between retry attempts (default: 30)
 
@@ -705,10 +740,7 @@ def check_static_ip_preservation(
     LOGGER.info(f"Verifying static IP preservation for VM {vm_name}")
 
     is_windows = source_vm_data.get("win_os", False)
-    if is_windows:
-        network_cmd = ["ipconfig", "/all"]
-    else:
-        network_cmd = ["nmcli", "device", "show"]
+    network_cmd = _WINDOWS_NETWORK_CMD if is_windows else ["nmcli", "device", "show"]
 
     # Extract static interfaces
     static_interfaces = _extract_static_interfaces(source_vm_data)
@@ -719,7 +751,10 @@ def check_static_ip_preservation(
             "Ensure the source VM is powered on so guest tools can report IP origin information."
         )
 
-    pod_mapped_interfaces = [
+    # Interfaces the product intentionally does NOT preserve: pod-mapped (the pod
+    # network has a different subnet) and non-preserve guest IP modes (ignored
+    # destinations, networkIPMode dhcp/none — forklift MTV-5674).
+    excluded_interfaces = [
         interface
         for interface in static_interfaces
         if _is_pod_mapped_static_interface(
@@ -727,17 +762,17 @@ def check_static_ip_preservation(
             destination_vm=destination_vm,
             network_map_resource=network_map_resource,
         )
+        or _resolve_interface_guest_ip_mode(network_map_resource, interface) != "preserve"
     ]
-    if pod_mapped_interfaces:
-        for interface in pod_mapped_interfaces:
-            LOGGER.info(
-                f"Interface {interface['name']} ({interface['ip_address']}) excluded from static IP "
-                "verification: pod-network mapped, static IPs are not preserved on pod network"
-            )
-        static_interfaces = [interface for interface in static_interfaces if interface not in pod_mapped_interfaces]
+    if excluded_interfaces:
+        LOGGER.info(
+            f"Excluded from static IP verification (pod-mapped or non-preserve guest IP mode): "
+            f"{[(interface['name'], interface['ip_address']) for interface in excluded_interfaces]}"
+        )
+        static_interfaces = [interface for interface in static_interfaces if interface not in excluded_interfaces]
 
     if not static_interfaces:
-        LOGGER.info(f"All static IP interfaces for VM {vm_name} are pod-network mapped, nothing to verify")
+        LOGGER.info(f"All static IP interfaces for VM {vm_name} are excluded from preservation, nothing to verify")
         return
 
     LOGGER.info(f"Found {len(static_interfaces)} static IP interfaces to verify")
@@ -766,7 +801,7 @@ def check_static_ip_preservation(
         nonlocal last_missing
         try:
             with ssh_conn:
-                current_interfaces = _load_current_interfaces(
+                current_interfaces = load_current_interfaces(
                     ssh_conn=ssh_conn,
                     network_cmd=network_cmd,
                     is_windows=is_windows,
@@ -816,46 +851,29 @@ def check_static_ip_preservation(
         interface_name = interface["name"]
         expected_subnet = interface.get("subnet_mask", "")
         expected_gateway = interface.get("gateway", "")
+        expected_dns_servers = interface.get("dns_servers", [])
 
         if expected_subnet:
             _verify_subnet_mask(interface_name, expected_subnet, matched)
 
         _verify_gateway(interface_name, expected_gateway, matched)
 
+        _verify_dns_servers(interface_name, expected_dns_servers, matched)
+
         LOGGER.info(f"Static IP {interface['ip_address']} verified for interface {interface_name}")
 
     LOGGER.info(f"Static IP preservation verification completed for VM {vm_name}")
 
 
-def _normalize_source_network(source_vm_nic: dict[str, Any]) -> str | None:
-    """Extract a comparable source-network identifier from a source VM NIC.
-
-    The NIC's ``network`` field may be a plain name/id string or a dict carrying a
-    ``name`` and/or ``id`` (provider inventories differ). This collapses both shapes
-    to the single value used when matching against a migration map's source entries.
-
-    Args:
-        source_vm_nic: Source VM NIC dict with a "network" name/id/dict.
-
-    Returns:
-        The source network name or id, or None if a dict carried neither.
-    """
-    source_vm_network = source_vm_nic["network"]
-    if isinstance(source_vm_network, dict):
-        return source_vm_network.get("name", source_vm_network.get("id", None))
-    return source_vm_network
-
-
-def _map_item_matches_source_network(map_item: Any, source_vm_network: str | None) -> bool:
+def map_item_matches_source_network(map_item: Any, source_vm_network: str | None) -> bool:
     """Return True if a migration-map entry's source matches the given network.
 
-    Matches against the entry's source ``type``, ``name`` (stripping a
-    ``namespace/name`` prefix if present), or ``id`` — the same precedence used
-    across both single- and multi-destination lookups so they never diverge.
+    Matches the entry's source ``type``, ``name`` (stripping a ``namespace/name``
+    prefix), or ``id``.
 
     Args:
-        map_item: A single entry from ``map_resource.instance.spec.map``.
-        source_vm_network: Normalized source network identifier to match.
+        map_item (Any): Map entry from ``spec.map`` — an untyped dynamic-resource object.
+        source_vm_network (str | None): Normalized source network identifier to match.
 
     Returns:
         True if this map entry's source refers to the given source network.
@@ -869,6 +887,35 @@ def _map_item_matches_source_network(map_item: Any, source_vm_network: str | Non
             return True
 
     return bool(map_item.source.id and map_item.source.id == source_vm_network)
+
+
+def _resolve_interface_guest_ip_mode(network_map_resource: NetworkMap, interface: dict[str, Any]) -> str:
+    """Resolve the guest IP mode the NetworkMap applies to an interface.
+
+    Mirrors Forklift's NIC mode resolution (MTV-5674): ignored destination forces
+    "none"; entry-level networkIPMode overrides the plan-level preserveStaticIPs
+    default; entries without networkIPMode keep "preserve".
+
+    Args:
+        network_map_resource (NetworkMap): NetworkMap resource resolving source networks to destinations.
+        interface (dict[str, Any]): Interface mapping with a 'network' key (source NIC
+            or flattened static-IP entry from _extract_static_interfaces).
+
+    Returns:
+        The resolved guest IP mode: "preserve", "dhcp" or "none".
+
+    Raises:
+        ValueError: If no NetworkMap entry matches the interface's source network.
+    """
+    source_vm_network = normalize_source_network(interface)
+    for map_item in network_map_resource.instance.spec.map:
+        if map_item_matches_source_network(map_item, source_vm_network):
+            if map_item.destination.type == "ignored":
+                return "none"
+            return getattr(map_item, "networkIPMode", None) or "preserve"
+    raise ValueError(
+        f"No NetworkMap entry matches source network {source_vm_network!r} for interface '{interface.get('name')}'"
+    )
 
 
 def check_cpu(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
@@ -994,8 +1041,22 @@ def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> N
         raise ValueError(f"Memory mismatch: source={source_mem}MB, destination={dest_mem}MB")
 
 
+def _normalized_mac(mac_address: str) -> str:
+    """Normalize a MAC address for comparison (lowercase, ':' and '-' separators stripped).
+
+    Args:
+        mac_address (str): MAC address in any common notation.
+
+    Returns:
+        str: The normalized MAC address.
+    """
+    return mac_address.replace(":", "").replace("-", "").lower()
+
+
 def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, Any]:
-    """Get a NIC from a list of NICs by MAC address (case-insensitive).
+    """Get a NIC from a list of NICs by MAC address (case- and separator-insensitive).
+
+    Accepts provider-reported NICs and interfaces parsed from guest ipconfig output.
 
     Args:
         nics (list[dict[str, Any]]): List of NIC dictionaries with "macAddress" keys.
@@ -1007,11 +1068,11 @@ def get_nic_by_mac(nics: list[dict[str, Any]], mac_address: str) -> dict[str, An
     Raises:
         ValueError: If no NIC matches the MAC address.
     """
-    matched = [nic for nic in nics if nic["macAddress"].lower() == mac_address.lower()]
+    matched = [nic for nic in nics if _normalized_mac(nic.get("macAddress") or "") == _normalized_mac(mac_address)]
     if not matched:
         raise ValueError(
             f"No NIC found with MAC address '{mac_address}' in {len(nics)} NICs "
-            f"(available: {[n['macAddress'] for n in nics]})"
+            f"(available: {[n.get('macAddress') for n in nics]})"
         )
     return matched[0]
 
@@ -1031,10 +1092,10 @@ def get_all_destinations(map_resource: NetworkMap, source_vm_nic: dict[str, Any]
     Returns:
         Destination network names (``"pod"`` for pod-type entries), one per matching map entry.
     """
-    source_vm_network = _normalize_source_network(source_vm_nic)
+    source_vm_network = normalize_source_network(source_vm_nic)
     destinations: list[str] = []
     for map_item in map_resource.instance.spec.map:
-        if _map_item_matches_source_network(map_item, source_vm_network):
+        if map_item_matches_source_network(map_item, source_vm_network):
             destinations.append("pod" if map_item.destination.type == "pod" else map_item.destination.name)
 
     return destinations
@@ -1042,6 +1103,20 @@ def get_all_destinations(map_resource: NetworkMap, source_vm_nic: dict[str, Any]
 
 def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], network_migration_map: NetworkMap) -> None:
     for source_vm_nic in source_vm["network_interfaces"]:
+        # NICs whose source network maps to an ignored destination are
+        # intentionally dropped from the destination VM — they must be absent.
+        if any(
+            map_item.destination.type == "ignored"
+            for map_item in network_migration_map.instance.spec.map
+            if map_item_matches_source_network(map_item, normalize_source_network(source_vm_nic))
+        ):
+            destination_macs = {_normalized_mac(nic["macAddress"]) for nic in destination_vm["network_interfaces"]}
+            assert _normalized_mac(source_vm_nic["macAddress"]) not in destination_macs, (
+                f"NIC (MAC {source_vm_nic['macAddress']}) on ignored source network "
+                f"'{source_vm_nic['network']}' is still present on the destination VM"
+            )
+            continue
+
         expected_networks = get_all_destinations(network_migration_map, source_vm_nic)
 
         assert expected_networks, f"Network '{source_vm_nic['network']}' not found in migration map"
@@ -1059,18 +1134,25 @@ def check_network(source_vm: dict[str, Any], destination_vm: dict[str, Any], net
         )
 
 
-def check_nic_name_preservation(source_vm_data: dict[str, Any], destination_vm: dict[str, Any]) -> None:
+def check_nic_name_preservation(
+    source_vm_data: dict[str, Any],
+    destination_vm: dict[str, Any],
+    network_map_resource: NetworkMap,
+) -> None:
     """Verify that guest OS NIC names are preserved after migration.
 
     Compares source NIC names (collected via VMware Guest Operations before migration)
     against destination NIC names (reported by guest agent on KubeVirt VMI).
-    Matches NICs by MAC address.
+    Matches NICs by MAC address. NICs on networks mapped with guest IP mode 'none'
+    are skipped: the product applies no guest configuration to them, so they are not
+    renamed to their source names.
 
     Args:
         source_vm_data: Source VM data from plan["source_vms_data"], containing
             network_interfaces with guest_nic_name field
         destination_vm: Destination VM data from vm_dict(), containing
             network_interfaces with guest_interface_name field
+        network_map_resource: NetworkMap resolving source networks to destinations
 
     Raises:
         ValueError: If source or destination has no network interfaces
@@ -1090,6 +1172,10 @@ def check_nic_name_preservation(source_vm_data: dict[str, Any], destination_vm: 
             continue
 
         source_mac = source_nic.get("macAddress", "").lower()
+
+        if _resolve_interface_guest_ip_mode(network_map_resource=network_map_resource, interface=source_nic) == "none":
+            LOGGER.info(f"Skipping NIC name preservation for none-mode NIC {source_nic_name} (MAC {source_mac})")
+            continue
 
         for dest_nic in dest_nics:
             if dest_nic.get("macAddress", "").lower() == source_mac:
@@ -2102,6 +2188,7 @@ def check_vms(
                     check_nic_name_preservation(
                         source_vm_data=source_vm_data,
                         destination_vm=destination_vm,
+                        network_map_resource=network_map_resource,
                     )
                 except Exception as exp:
                     res[vm_name].append(f"check_nic_name_preservation - {str(exp)}")
