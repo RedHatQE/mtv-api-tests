@@ -1917,8 +1917,10 @@ def is_multus_network_name_always_qualified(client: "DynamicClient") -> bool:
             raise ValueError(
                 f"ForkliftController '{_FORKLIFT_CONTROLLER_NAME}' not found in namespace '{py_config['mtv_namespace']}'"
             ) from err
-        value = getattr(controller_instance.spec, "controller_multus_network_name_always_qualified", None)
-        _multus_network_name_always_qualified_cache = str(value).lower() == "true"
+        always_qualified_value = getattr(
+            controller_instance.spec, "controller_multus_network_name_always_qualified", None
+        )
+        _multus_network_name_always_qualified_cache = str(always_qualified_value).lower() == "true"
     return _multus_network_name_always_qualified_cache
 
 
