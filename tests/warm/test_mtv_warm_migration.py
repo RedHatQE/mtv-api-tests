@@ -13,6 +13,7 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
+from utilities.overlay import OverlayLogCapture, verify_overlay_lifecycle
 from utilities.post_migration import check_vms
 from utilities.utils import get_value_from_py_config, populate_vm_ids
 
@@ -43,7 +44,8 @@ class TestSanityWarmMtvMigration:
         configuration preserved on the destination (verified for vSphere
         and Hyper-V sources). On a vSphere source the
         scenario also verifies the warm-migration Deep Inspection results
-        captured during pre-copy. There is no induced failure.
+        captured during pre-copy and the qcow2 overlay lifecycle reported
+        by the virt-v2v conversion pods. There is no induced failure.
 
     Prerequisites:
         Register and connect a source provider (vSphere or RHV) and an
@@ -67,23 +69,30 @@ class TestSanityWarmMtvMigration:
         4. Run the warm migration with a cutover time: incremental copies
            run while the VM stays on, the migration finalizes at cutover.
            Check it reaches Succeeded. On a vSphere source, the inspection
-           data captured during the migration is recorded.
+           data captured during the migration is recorded, and the logs of
+           terminated virt-v2v conversion containers are captured for
+           overlay lifecycle verification.
         5. Validate the migrated VM: power state, guest-agent presence,
            connectivity, and CPU, memory, network, and storage equivalence
            with the source. When migrating from vSphere or Hyper-V, also
            verify static IP/subnet/gateway preservation; on vSphere, also
            NIC name preservation. On a vSphere source, also verify the
            captured warm-migration Deep Inspection results are present and
-           complete. After the checks, delete the migrated VM; the maps and
+           complete, and that the conversion logs confirm virt-v2v-in-place
+           mode with every created qcow2 overlay committed and none
+           discarded. After the checks, delete the migrated VM; the maps and
            Plan are removed with the run.
 
     Expected result:
         The warm migration completes through cutover, the migrated VM keeps
         its static network configuration and connectivity, and (on vSphere)
-        the inspection results captured during pre-copy are complete. On
-        failure, inspect the migration CR status for the failed stage
-        (pre-copy or cutover), the guest network configuration inside the
-        migrated VM, and the Plan-created DeepInspection Conversions' results.
+        the inspection results captured during pre-copy are complete and
+        the overlay lifecycle is healthy: in-place conversion mode,
+        matching created and committed overlay sets, and no discarded
+        overlays. On failure, inspect the migration CR status for the failed
+        stage (pre-copy or cutover), the guest network configuration inside
+        the migrated VM, and the Plan-created DeepInspection Conversions'
+        results.
     """
 
     storage_map: StorageMap
@@ -221,20 +230,29 @@ class TestSanityWarmMtvMigration:
         target_namespace,
         source_provider,
     ):
-        """Execute warm migration with cutover.
+        """Execute warm migration with cutover and verify vSphere overlay lifecycle.
 
         Args:
             fixture_store (dict[str, Any]): Fixture store for resource tracking.
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (Namespace): Target namespace for migration.
-            source_provider (BaseProvider): Source provider, used to gate DI capture to vSphere.
+            source_provider (BaseProvider): Source provider, used to gate DI capture and overlay checks to vSphere.
 
         Returns:
             None
         """
+        is_vsphere = source_provider.type == Provider.ProviderType.VSPHERE
         di_callback = (
-            create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store)
-            if source_provider.type == Provider.ProviderType.VSPHERE
+            create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store) if is_vsphere else None
+        )
+        overlay_capture = (
+            OverlayLogCapture(
+                ocp_admin_client=ocp_admin_client,
+                plan=self.__class__.plan_resource,
+                target_namespace=target_namespace,
+                on_status_poll=di_callback,
+            )
+            if is_vsphere
             else None
         )
         execute_migration(
@@ -243,8 +261,11 @@ class TestSanityWarmMtvMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             cut_over=get_cutover_value(),
-            on_status_poll=di_callback,
+            on_status_poll=overlay_capture.capture if overlay_capture is not None else di_callback,
         )
+        if overlay_capture is not None:
+            overlay_capture.wait_for_complete_logs()
+            verify_overlay_lifecycle(capture=overlay_capture)
 
     def test_check_vms(
         self,
