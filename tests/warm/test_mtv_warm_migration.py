@@ -35,7 +35,56 @@ from utilities.utils import get_value_from_py_config, populate_vm_ids
 )
 @pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestSanityWarmMtvMigration:
-    """Warm migration sanity test."""
+    """Warm-migrate a running Linux VM with static IP preservation and verify the result including inspection data.
+
+    Purpose/Regression:
+        Basic end-to-end warm migration sanity: a powered-on VM is copied
+        incrementally and finalized at cutover, with its static IP
+        configuration preserved on the destination (verified for vSphere
+        and Hyper-V sources). On a vSphere source the
+        scenario also verifies the warm-migration Deep Inspection results
+        captured during pre-copy. There is no induced failure.
+
+    Prerequisites:
+        Register and connect a source provider (vSphere or RHV) and an
+        OpenShift destination with MTV installed, with accessible destination
+        storage and network. Use a disposable, powered-on RHEL VM with
+        guest-agent access, at least one NIC configured with a static IP
+        (address, subnet, gateway), and disks whose changes can be captured
+        incrementally (e.g. changed-block tracking on vSphere). Have
+        permission to create maps and a Plan in a target namespace and to
+        adjust the controller's pre-copy interval for a timely scenario.
+        When migrating from vSphere, warm-migration Deep Inspection must be
+        available.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM with its static IP
+           configuration and wait until it appears in Forklift inventory.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network. Confirm both are created.
+        3. Create a warm Plan for the VM with static IP preservation
+           enabled. Check the Plan's Ready condition is True.
+        4. Run the warm migration with a cutover time: incremental copies
+           run while the VM stays on, the migration finalizes at cutover.
+           Check it reaches Succeeded. On a vSphere source, the inspection
+           data captured during the migration is recorded.
+        5. Validate the migrated VM: power state, guest-agent presence,
+           connectivity, and CPU, memory, network, and storage equivalence
+           with the source. When migrating from vSphere or Hyper-V, also
+           verify static IP/subnet/gateway preservation; on vSphere, also
+           NIC name preservation. On a vSphere source, also verify the
+           captured warm-migration Deep Inspection results are present and
+           complete. After the checks, delete the migrated VM; the maps and
+           Plan are removed with the run.
+
+    Expected result:
+        The warm migration completes through cutover, the migrated VM keeps
+        its static network configuration and connectivity, and (on vSphere)
+        the inspection results captured during pre-copy are complete. On
+        failure, inspect the migration CR status for the failed stage
+        (pre-copy or cutover), the guest network configuration inside the
+        migrated VM, and the Plan-created DeepInspection Conversions' results.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -256,7 +305,44 @@ class TestSanityWarmMtvMigration:
 )
 @pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestMtvMigrationWarm2disks2nics:
-    """Warm migration test with 2 disks and 2 NICs."""
+    """Warm-migrate a running VM with two disks and two NICs and verify both survive cutover (MTV-200).
+
+    Purpose/Regression:
+        Warm migration must handle a VM with multiple disks and multiple
+        network interfaces: both disks must be copied incrementally and
+        finalized at cutover, and both NICs must appear on the migrated VM
+        per the NetworkMap (MTV-200). There is no induced failure.
+
+    Prerequisites:
+        Register and connect a source provider (vSphere or RHV) and an
+        OpenShift destination with MTV installed, with accessible destination
+        storage and network (including a destination network for the second
+        NIC). Use a disposable, powered-on RHEL VM with two disks, two NICs,
+        and guest-agent access, with disks whose changes can be captured
+        incrementally. Have permission to create maps and a Plan in a target
+        namespace and to adjust the controller's pre-copy interval.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM with its two disks and two
+           NICs and wait until it appears in Forklift inventory.
+        2. Create a StorageMap for both disks and a NetworkMap that maps
+           both NICs to destination networks. Confirm both are created.
+        3. Create a warm Plan for the VM. Check the Plan's Ready condition
+           is True.
+        4. Run the warm migration with a cutover time and check it reaches
+           Succeeded.
+        5. Validate the migrated VM: power state, guest-agent presence,
+           connectivity, and CPU, memory, network (both NICs), and storage
+           (both disks) equivalence with the source. After the checks,
+           delete the migrated VM; the maps and Plan are removed with the
+           run.
+
+    Expected result:
+        The warm migration completes through cutover with both disks and
+        both NICs present and equivalent on the migrated VM. On failure,
+        inspect the migration CR status for the failed stage and the
+        migrated VM's disk attachments and network interfaces.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -478,7 +564,47 @@ class TestMtvMigrationWarm2disks2nics:
 @pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote OCP cluster provided")
 @pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestWarmRemoteOcp:
-    """Warm remote OCP migration test."""
+    """Warm-migrate a running VM to a separate remote OpenShift cluster and verify the result.
+
+    Purpose/Regression:
+        Warm migration where the destination is a different, remote
+        OpenShift cluster than the one running MTV: the incremental copies
+        and cutover must run against the remote destination and the migrated
+        VM must validate there. Preflight Deep Inspection is disabled for
+        this scenario. There is no induced failure.
+
+    Prerequisites:
+        Two OpenShift clusters: one running MTV (with the source provider
+        and migration resources) and a remote destination cluster with
+        accessible storage and network, registered with MTV and mutually
+        reachable. Register and connect a source provider (e.g. vSphere).
+        Use a disposable, powered-on Linux VM with guest-agent access and
+        disks whose changes can be captured incrementally. Have permission
+        to create maps and a Plan on the MTV cluster and the target
+        namespace on the remote cluster.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM and wait until it appears
+           in Forklift inventory.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network, targeting the remote OpenShift destination. Confirm both
+           are created.
+        3. Create a warm Plan for the VM with preflight inspection
+           disabled. Check the Plan's Ready condition is True.
+        4. Run the warm migration with a cutover time and check it reaches
+           Succeeded.
+        5. Validate the migrated VM on the remote cluster: power state,
+           guest-agent presence, connectivity, and CPU, memory, network,
+           and storage equivalence with the source. After the checks, delete
+           the migrated VM; the maps and Plan are removed with the run.
+
+    Expected result:
+        The warm migration to the remote cluster completes through cutover
+        and the migrated VM validates. On failure, inspect the migration CR
+        status for the failed stage (pre-copy or cutover), the remote
+        provider resource's conditions on the MTV cluster, and the migrated
+        VM's spec and events in the remote target namespace.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap

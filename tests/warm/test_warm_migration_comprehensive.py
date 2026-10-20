@@ -44,16 +44,64 @@ if TYPE_CHECKING:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms", "precopy_interval_forkliftcontroller")
 class TestWarmMigrationComprehensive:
-    """Comprehensive warm migration test covering multiple features.
+    """Warm-migrate a Windows VM exercising many Plan settings at once and verify each took effect.
 
-    Tests the following MTV 2.10.0+ features:
-    - Static IP preservation
-    - Nested virtualization and VBS verification
-    - Custom VM target namespace
-    - Custom PVC naming template
-    - PVC naming with generateName
-    - Target VM labels
-    - Target VM affinity rules
+    Purpose/Regression:
+        Broad regression coverage for warm-migration Plan options in a
+        single scenario (MTV 2.10.0+): static IP preservation, PVC naming
+        via a name template with generateName, target VM labels, VM affinity
+        rules, a dedicated VM target namespace, target power state, and
+        nested virtualization left disabled. There is no induced failure;
+        the test passes only when every option is observable on the migrated
+        VM.
+
+    Prerequisites:
+        Register and connect a source provider (vSphere or RHV) and an
+        OpenShift destination with MTV 2.10.0 or later installed. Prepare
+        destination storage and a network reachable by the migrated VM
+        (including cross-namespace access to the
+        NetworkAttachmentDefinition when it lives in another namespace).
+        Use a disposable Windows Server VM with several disks (e.g. three),
+        powered on before migration, with guest tools reporting interface IP
+        configuration and at least one NIC configured with a static IP
+        (address, subnet, gateway), and disks whose changes can be captured
+        incrementally. Have permission to create maps, a Plan, and a
+        dedicated target namespace for the migrated VM, and to adjust the
+        controller's pre-copy interval.
+
+    Test plan:
+        1. Prepare the disposable powered-on Windows VM and wait until it
+           appears in Forklift inventory.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           networks. Confirm both are created.
+        3. Create a warm Plan for the VM with: target power state on;
+           preserve static IPs; a PVC name template (per provider, using the
+           source disk file or VM name and disk index) with generateName;
+           target VM labels; a pod-affinity rule on a chosen label; a
+           dedicated VM target namespace; and nested virtualization
+           disabled. Check the Plan's Ready condition is True.
+        4. Run the warm migration with a cutover time and check it reaches
+           Succeeded.
+        5. Verify on the destination VM: it is powered on; guest
+           connectivity works; CPU and memory match the source; NICs and
+           disks match the maps; each PVC is named according to the
+           template (with generated suffixes); the target labels are
+           present; the affinity rule matches; and CPU features vmx/svm are
+           disabled. When migrating from vSphere or Hyper-V, also check the
+           static IP, subnet mask and gateway match the source; on vSphere,
+           also that interface names are preserved. After the checks, delete
+           the migrated VM; the maps and Plan are removed with the run.
+
+    Expected result:
+        The warm migration completes through cutover and every configured
+        option is visible on the migrated VM: static network configuration
+        (verified for vSphere and Hyper-V sources),
+        template-derived PVC names, target labels, affinity, placement in
+        the dedicated namespace, and disabled nested-virtualization CPU
+        features. On failure, inspect the migration CR status for the failed
+        stage (pre-copy or cutover), the VM spec (labels, affinity, CPU
+        features), the PVC names in the VM target namespace, and the guest
+        network configuration inside the VM.
     """
 
     storage_map: StorageMap

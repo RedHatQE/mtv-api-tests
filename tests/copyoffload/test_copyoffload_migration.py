@@ -96,7 +96,54 @@ EARLY_COMPLETION_MSG = (
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThinMigration:
-    """Copy-offload migration test - thin disk."""
+    """Copy-offload a VM with a thin-provisioned disk using XCOPY and verify the migrated VM.
+
+    Purpose/Regression:
+        Basic copy-offload scenario (MTV-559): a VM whose disk is
+        thin-provisioned on XCOPY-capable shared storage must migrate with
+        hardware-assisted copy (VAAI XCOPY) instead of the default transfer.
+        The pass signal is dual: the populate pod logs must report XCOPY was
+        used, and the migrated VM must validate. There is no induced
+        failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. The VM disk must live on storage shared between
+        vSphere and OpenShift that supports hardware-assisted copy (VAAI
+        XCOPY, e.g. NetApp ONTAP or Hitachi Vantara), with storage-vendor
+        credentials available for the copy-offload storage Secret. Prepare a
+        destination storage class that provisions block volumes
+        (volumeMode: Block) on that shared storage and a reachable destination
+        network. Use a disposable Linux VM (e.g. cloned from a template) with
+        a thin-provisioned disk and guest-agent access. Have permission to
+        create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with a thin-provisioned disk, wait until
+           it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin
+           (secret reference and storage vendor product). Create a NetworkMap
+           for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the disk.
+        6. Validate the migrated VM: power state, connectivity, and CPU,
+           memory, network, and storage equivalence with the source. After
+           the checks, delete the migrated VM; the secret, maps, and Plan are
+           removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for the disk, and the migrated
+        VM matches the source. On failure, inspect the migration CR status
+        for the VM's failed step, the populate pod logs for the xcopyUsed
+        value and storage-vendor errors, and the StorageMap's offload plugin
+        configuration.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -528,7 +575,57 @@ class CopyoffloadSnapshotBase:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThickLazySnapshotsMigration(CopyoffloadSnapshotBase):
-    """Copy-offload migration test - thick lazy disk with snapshots."""
+    """Copy-offload a VM with a thick lazy-zeroed disk and source snapshots; verify data integrity and snapshot preservation.
+
+    Purpose/Regression:
+        Copy-offload of a VM that carries source snapshots (MTV-581): the
+        snapshots must not break the migration, the current disk state —
+        including data written after the snapshots — must arrive intact, and
+        the source VM's snapshots must remain unchanged. Snapshots force the
+        populator off the XCOPY path, so the expected transfer is the
+        fallback. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift (XCOPY-capable, e.g. NetApp ONTAP or Hitachi Vantara),
+        with storage-vendor credentials for the copy-offload storage Secret.
+        Prepare a destination storage class that provisions block volumes
+        (volumeMode: Block) and a reachable destination network. Use a
+        disposable Linux VM (e.g. cloned from a template) with a thick
+        lazy-zeroed disk, guest-agent access, and SSH access for the data
+        integrity check. Have permission to create snapshots on the source
+        VM and to create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Start the disposable VM, create two snapshots on it, record the
+           snapshot list, and write a unique data marker file into the guest.
+           Wait until the VM appears in Forklift inventory and create the
+           copy-offload storage Secret.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class with the vsphereXcopyConfig offload plugin, and a
+           NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify the transfer method: the populate pod logs report no XCOPY
+           (fallback) for the disk with snapshots.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence, disk count, and that the source VM's snapshots are
+           unchanged after migration.
+        7. Start the migrated VM, read the marker file over SSH and confirm
+           its content matches what was written before migration, then stop
+           the VM. After the checks, delete the migrated VM; the secret,
+           maps, Plan, and source snapshots are removed with the run.
+
+    Expected result:
+        The migration succeeds via the fallback transfer, the source
+        snapshots are preserved, and the marker data written before migration
+        is present and identical on the migrated VM. On failure, inspect the
+        migration CR status, the populate pod logs, the source VM's snapshot
+        list, and the marker file content on the migrated VM.
+    """
 
 
 @pytest.mark.vsphere
@@ -550,7 +647,56 @@ class TestCopyoffloadThickLazySnapshotsMigration(CopyoffloadSnapshotBase):
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThickEagerSnapshotsMigration(CopyoffloadSnapshotBase):
-    """Copy-offload migration test - thick eager disk with snapshots."""
+    """Copy-offload a VM with a thick eager-zeroed disk and source snapshots; verify data integrity and snapshot preservation.
+
+    Purpose/Regression:
+        Same scenario as the thick lazy-zeroed snapshot variant (MTV-583),
+        exercised with a thick eager-zeroed disk: source snapshots must not
+        break the copy-offload migration, current disk data must arrive
+        intact, and the source snapshots must remain unchanged. Snapshots
+        force the fallback transfer. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift (XCOPY-capable, e.g. NetApp ONTAP or Hitachi Vantara),
+        with storage-vendor credentials for the copy-offload storage Secret.
+        Prepare a destination storage class that provisions block volumes
+        (volumeMode: Block) and a reachable destination network. Use a
+        disposable Linux VM (e.g. cloned from a template) with a thick
+        eager-zeroed disk, guest-agent access, and SSH access for the data
+        integrity check. Have permission to create snapshots on the source
+        VM and to create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Start the disposable VM, create two snapshots on it, record the
+           snapshot list, and write a unique data marker file into the guest.
+           Wait until the VM appears in Forklift inventory and create the
+           copy-offload storage Secret.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class with the vsphereXcopyConfig offload plugin, and a
+           NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify the transfer method: the populate pod logs report no XCOPY
+           (fallback) for the disk with snapshots.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence, disk count, and that the source VM's snapshots are
+           unchanged after migration.
+        7. Start the migrated VM, read the marker file over SSH and confirm
+           its content matches what was written before migration, then stop
+           the VM. After the checks, delete the migrated VM; the secret,
+           maps, Plan, and source snapshots are removed with the run.
+
+    Expected result:
+        The migration succeeds via the fallback transfer, the source
+        snapshots are preserved, and the marker data written before migration
+        is present and identical on the migrated VM. On failure, inspect the
+        migration CR status, the populate pod logs, the source VM's snapshot
+        list, and the marker file content on the migrated VM.
+    """
 
 
 @pytest.mark.copyoffload
@@ -570,7 +716,57 @@ class TestCopyoffloadThickEagerSnapshotsMigration(CopyoffloadSnapshotBase):
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
-    """Copy-offload migration test - thin disk with snapshots."""
+    """Copy-offload a VM with a thin disk and source snapshots; verify data integrity and snapshot preservation.
+
+    Purpose/Regression:
+        Same scenario as the thick-disk snapshot variants, exercised with a
+        thin-provisioned disk (MTV-560): source snapshots must not break the
+        copy-offload migration, current disk data must arrive intact, and
+        the source snapshots must remain unchanged. Snapshots force the
+        fallback transfer. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift (XCOPY-capable, e.g. NetApp ONTAP or Hitachi Vantara),
+        with storage-vendor credentials for the copy-offload storage Secret.
+        Prepare a destination storage class that provisions block volumes
+        (volumeMode: Block) and a reachable destination network. Use a
+        disposable Linux VM (e.g. cloned from a template) with a
+        thin-provisioned disk, guest-agent access, and SSH access for the
+        data integrity check. Have permission to create snapshots on the
+        source VM and to create secrets, maps, and a Plan in a target
+        namespace.
+
+    Test plan:
+        1. Start the disposable VM, create two snapshots on it, record the
+           snapshot list, and write a unique data marker file into the guest.
+           Wait until the VM appears in Forklift inventory and create the
+           copy-offload storage Secret.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class with the vsphereXcopyConfig offload plugin, and a
+           NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify the transfer method: the populate pod logs report no XCOPY
+           (fallback) for the disk with snapshots.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence, disk count, and that the source VM's snapshots are
+           unchanged after migration.
+        7. Start the migrated VM, read the marker file over SSH and confirm
+           its content matches what was written before migration, then stop
+           the VM. After the checks, delete the migrated VM; the secret,
+           maps, Plan, and source snapshots are removed with the run.
+
+    Expected result:
+        The migration succeeds via the fallback transfer, the source
+        snapshots are preserved, and the marker data written before migration
+        is present and identical on the migrated VM. On failure, inspect the
+        migration CR status, the populate pod logs, the source VM's snapshot
+        list, and the marker file content on the migrated VM.
+    """
 
 
 @pytest.mark.vsphere
@@ -591,7 +787,59 @@ class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     "cleanup_migrated_vms",
 )
 class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
-    """Copy-offload migration test - 2TB VM with snapshots."""
+    """Copy-offload a VM with a 2 TB disk and source snapshots; verify the large fallback transfer and data integrity.
+
+    Purpose/Regression:
+        Copy-offload at scale with snapshots (MTV-575): a VM with a 2 TB
+        data disk and two source snapshots must migrate completely via the
+        fallback transfer within the migration timeout, with current disk
+        data intact and the source snapshots unchanged. There is no induced
+        failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift (XCOPY-capable, e.g. NetApp ONTAP or Hitachi Vantara)
+        with capacity for a 2 TB disk, with storage-vendor credentials for
+        the copy-offload storage Secret. Prepare a destination storage class
+        that provisions block volumes (volumeMode: Block) with matching
+        capacity and a reachable destination network. Use a disposable Linux
+        VM (e.g. cloned from a template) with an added 2 TB thin-provisioned
+        data disk, guest-agent access, and SSH access for the data integrity
+        check. Have permission to create snapshots on the source VM and to
+        create secrets, maps, and a Plan in a target namespace, and allow
+        time for the large transfer.
+
+    Test plan:
+        1. Start the disposable VM, create two snapshots on it, record the
+           snapshot list, and write a unique data marker file into the guest.
+           Wait until the VM appears in Forklift inventory and create the
+           copy-offload storage Secret.
+        2. Create a StorageMap that maps the disks to the block-volume
+           storage class with the vsphereXcopyConfig offload plugin, and a
+           NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded within the
+           migration timeout.
+        5. Verify the transfer method: the populate pod logs report no XCOPY
+           (fallback) for the disks with snapshots.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence, disk count, and that the source VM's snapshots are
+           unchanged after migration.
+        7. Start the migrated VM, read the marker file over SSH and confirm
+           its content matches what was written before migration, then stop
+           the VM. After the checks, delete the migrated VM; the secret,
+           maps, Plan, and source snapshots are removed with the run.
+
+    Expected result:
+        The large migration succeeds via the fallback transfer, the source
+        snapshots are preserved, and the marker data written before migration
+        is present and identical on the migrated VM. On failure, inspect the
+        migration CR status for timeouts, the populate pod logs, the source
+        VM's snapshot list, and the marker file content on the migrated VM.
+    """
 
 
 @pytest.mark.vsphere
@@ -611,7 +859,51 @@ class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThickLazyMigration:
-    """Copy-offload migration test - thick lazy disk."""
+    """Copy-offload a VM with a thick lazy-zeroed disk using XCOPY and verify the migrated VM.
+
+    Purpose/Regression:
+        Same core copy-offload behavior as the thin-disk scenario, exercised
+        with a thick-provisioned lazy-zeroed disk: the disk must transfer via
+        hardware-assisted copy (VAAI XCOPY) and the migrated VM must
+        validate. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. The VM disk must live on storage shared between
+        vSphere and OpenShift that supports hardware-assisted copy (VAAI
+        XCOPY, e.g. NetApp ONTAP or Hitachi Vantara), with storage-vendor
+        credentials available for the copy-offload storage Secret. Prepare a
+        destination storage class that provisions block volumes
+        (volumeMode: Block) on that shared storage and a reachable destination
+        network. Use a disposable Linux VM (e.g. cloned from a template) with
+        a thick lazy-zeroed disk and guest-agent access. Have permission to
+        create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with a thick lazy-zeroed disk, wait
+           until it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the disk.
+        6. Validate the migrated VM: power state, connectivity, and CPU,
+           memory, network, and storage equivalence with the source. After
+           the checks, delete the migrated VM; the secret, maps, and Plan are
+           removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for the thick lazy-zeroed
+        disk, and the migrated VM matches the source. On failure, inspect the
+        migration CR status for the VM's failed step, the populate pod logs
+        for the xcopyUsed value and storage-vendor errors, and the StorageMap
+        configuration.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -783,7 +1075,51 @@ class TestCopyoffloadThickLazyMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadThickEagerMigration:
-    """Copy-offload migration test - thick eager disk."""
+    """Copy-offload a VM with a thick eager-zeroed disk using XCOPY and verify the migrated VM.
+
+    Purpose/Regression:
+        Same core copy-offload behavior as the thin-disk scenario, exercised
+        with a thick-provisioned eager-zeroed disk: the disk must transfer via
+        hardware-assisted copy (VAAI XCOPY) and the migrated VM must
+        validate. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. The VM disk must live on storage shared between
+        vSphere and OpenShift that supports hardware-assisted copy (VAAI
+        XCOPY, e.g. NetApp ONTAP or Hitachi Vantara), with storage-vendor
+        credentials available for the copy-offload storage Secret. Prepare a
+        destination storage class that provisions block volumes
+        (volumeMode: Block) on that shared storage and a reachable destination
+        network. Use a disposable Linux VM (e.g. cloned from a template) with
+        a thick eager-zeroed disk and guest-agent access. Have permission to
+        create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with a thick eager-zeroed disk, wait
+           until it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the disk.
+        6. Validate the migrated VM: power state, connectivity, and CPU,
+           memory, network, and storage equivalence with the source. After
+           the checks, delete the migrated VM; the secret, maps, and Plan are
+           removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for the thick eager-zeroed
+        disk, and the migrated VM matches the source. On failure, inspect the
+        migration CR status for the VM's failed step, the populate pod logs
+        for the xcopyUsed value and storage-vendor errors, and the StorageMap
+        configuration.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -954,7 +1290,53 @@ class TestCopyoffloadThickEagerMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMultiDiskMigration:
-    """Copy-offload migration test - multiple disks."""
+    """Copy-offload a multi-disk VM using XCOPY and verify every disk arrives.
+
+    Purpose/Regression:
+        Copy-offload must handle a VM with several disks — the template disk
+        plus added data disks — transferring each via hardware-assisted copy
+        and creating all of them on the destination. The pass signal is XCOPY
+        used for every disk plus a disk-count and content check on the
+        migrated VM. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. The VM disks must live on storage shared between
+        vSphere and OpenShift that supports hardware-assisted copy (VAAI
+        XCOPY, e.g. NetApp ONTAP or Hitachi Vantara), with storage-vendor
+        credentials available for the copy-offload storage Secret. Prepare a
+        destination storage class that provisions block volumes
+        (volumeMode: Block) on that shared storage and a reachable destination
+        network. Use a disposable Linux VM (e.g. cloned from a template) with
+        its template disk plus at least one added persistent data disk (e.g.
+        30 GB thick lazy-zeroed), and guest-agent access. Have permission to
+        create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the added data disk, wait until it
+           appears in Forklift inventory, and create the copy-offload storage
+           Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for every disk and the
+        migrated VM has the same disk count as the source. On failure,
+        inspect the migration CR status for the failed disk step, the
+        populate pod logs per disk for the xcopyUsed value, and the migrated
+        VM's disk attachments.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -1129,7 +1511,54 @@ class TestCopyoffloadMultiDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadDualDiskMixedThinThickMigration:
-    """Copy-offload migration (MTV-584): dual-disk VM with thin + thick-lazy provisioning."""
+    """Copy-offload a VM mixing thin and thick-lazy disks and verify both transfer via XCOPY (MTV-584).
+
+    Purpose/Regression:
+        A VM whose disks use different provisioning types — one
+        thin-provisioned and one thick lazy-zeroed — must have every disk
+        accelerated by hardware-assisted copy (VAAI XCOPY), with no disk
+        falling back due to the mixed configuration (MTV-584). The pass
+        signal is XCOPY used for both disks plus a disk-count and content
+        check on the migrated VM. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. The VM disks must live on storage shared between
+        vSphere and OpenShift that supports hardware-assisted copy (VAAI
+        XCOPY, e.g. NetApp ONTAP or Hitachi Vantara), with storage-vendor
+        credentials available for the copy-offload storage Secret. Prepare a
+        destination storage class that provisions block volumes
+        (volumeMode: Block) on that shared storage and a reachable destination
+        network. Use a disposable Linux VM (e.g. cloned from a template) with
+        a thin-provisioned template disk plus one added thick lazy-zeroed
+        persistent data disk, and guest-agent access. Have permission to
+        create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the thin and thick-lazy disks, wait
+           until it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps both disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for both disks.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for both the thin and the
+        thick-lazy disk, and the migrated VM has the same disk count as the
+        source. On failure, inspect the migration CR status for the failed
+        disk step, the populate pod logs per disk for the xcopyUsed value,
+        and the migrated VM's disk attachments.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -1304,7 +1733,55 @@ class TestCopyoffloadDualDiskMixedThinThickMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMultiDiskDifferentPathMigration:
-    """Copy-offload migration test - multiple disks in different paths."""
+    """Copy-offload a VM whose added disk lives in a different datastore folder and verify XCOPY still finds it.
+
+    Purpose/Regression:
+        Copy-offload disk discovery must locate a disk stored in a different
+        folder (path) on the datastore than the VM's default directory — not
+        only disks in the VM home folder. The pass signal is XCOPY used for
+        every disk plus a disk-count check on the migrated VM. There is no
+        induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret. Prepare a destination storage
+        class that provisions block volumes (volumeMode: Block) on that shared
+        storage and a reachable destination network. Use a disposable Linux
+        VM (e.g. cloned from a template) with its template disk plus one
+        added persistent data disk placed in a separate datastore folder
+        (e.g. a shared disks folder), and guest-agent access. Have permission
+        to create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the added data disk in the separate
+           datastore folder, wait until it appears in Forklift inventory, and
+           create the copy-offload storage Secret with the storage-vendor
+           credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk, including
+           the one in the different folder.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for the disk in the non-default
+        folder, and the migrated VM has the same disk count as the source. On
+        failure, inspect the populate pod logs for disk path resolution
+        errors, the migration CR status for the failed disk step, and the
+        source disk's datastore folder.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -1481,7 +1958,55 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadRdmVirtualDiskMigration:
-    """Copy-offload migration test - RDM virtual disk."""
+    """Copy-offload a VM with a virtual-mode RDM disk and verify it migrates as a SCSI LUN using XCOPY.
+
+    Purpose/Regression:
+        A virtual (dependent) Raw Device Mapping disk on XCOPY-capable
+        storage must transfer via hardware-assisted copy, and with
+        rdmAsLun=true on the Plan it must appear on the destination VM as a
+        LUN device on a SCSI bus rather than a regular virtio disk. The pass
+        signal is XCOPY used for the disk, the LUN/SCSI device type on the
+        migrated VM, and a disk-count check. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret and a LUN available for the RDM
+        disk. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) on that shared storage and a reachable
+        destination network. Use a disposable Linux VM (e.g. cloned from a
+        template) with an added virtual-mode RDM disk backed by the LUN, and
+        guest-agent access. Have permission to create secrets, maps, and a
+        Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the virtual-mode RDM disk, wait
+           until it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload and rdmAsLun
+           enabled. Check the Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the RDM disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, the same disk count as the source,
+           and that the RDM disk is present as a LUN device with SCSI bus
+           (regular disks remain virtio). After the checks, delete the
+           migrated VM; the secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used, and the migrated VM carries
+        the RDM disk as a SCSI-bus LUN with the expected disk count. On
+        failure, inspect the populate pod logs for the xcopyUsed value, the
+        migrated VM's disk devices for lun.bus=scsi, and the migration CR
+        status for the failed disk step.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -1659,7 +2184,57 @@ class TestCopyoffloadRdmVirtualDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadRdmPhysicalDiskMigration:
-    """Copy-offload migration (MTV-596): compatibility-mode physical RDM disk (independent persistent)."""
+    """Copy-offload a VM with a physical-mode (compatibility) RDM disk and verify it migrates as a SCSI LUN using XCOPY (MTV-596).
+
+    Purpose/Regression:
+        A physical-mode RDM disk (compatibility mode, independent
+        persistent) on XCOPY-capable storage must transfer like the
+        virtual-mode variant: via hardware-assisted copy, and with
+        rdmAsLun=true it must appear on the destination VM as a LUN device on
+        a SCSI bus (MTV-596). The pass signal is XCOPY used for the disk,
+        the LUN/SCSI device type on the migrated VM, and a disk-count check.
+        There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret and a LUN available for the RDM
+        disk. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) on that shared storage and a reachable
+        destination network. Use a disposable Linux VM (e.g. cloned from a
+        template) with an added physical-mode (compatibility mode,
+        independent persistent) RDM disk backed by the LUN, and guest-agent
+        access. Have permission to create secrets, maps, and a Plan in a
+        target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the physical-mode RDM disk, wait
+           until it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload and rdmAsLun
+           enabled. Check the Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the RDM disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, the same disk count as the source,
+           and that the RDM disk is present as a LUN device with SCSI bus
+           (regular disks remain virtio). After the checks, delete the
+           migrated VM; the secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used, and the migrated VM carries
+        the physical-mode RDM disk as a SCSI-bus LUN with the expected disk
+        count. On failure, inspect the populate pod logs for the xcopyUsed
+        value, the migrated VM's disk devices for lun.bus=scsi, and the
+        migration CR status for the failed disk step.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -1843,12 +2418,53 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadWarmRdmVirtualDiskMigration:
-    """Copy-offload warm migration (MTV-597): virtual/dependent RDM disk.
+    """Warm copy-offload migration of a running VM with a virtual-mode RDM disk, transferred with XCOPY (MTV-597).
 
-    Note:
-        This scenario is currently affected by [MTV-5622]: warm copy-offload migration
-        may fail preflight when a virtual RDM disk is attached (parent VMDK not found
-        on eco-iscsi-ds3).
+    Purpose/Regression:
+        Warm (incremental, with cutover) copy-offload migration must also
+        handle a VM with a virtual (dependent) RDM disk attached (MTV-597):
+        the incremental passes and cutover must complete with the disk
+        transferred via hardware-assisted copy. There is no induced
+        failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret and a LUN available for the RDM
+        disk. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) on that shared storage and a reachable
+        destination network. Use a disposable Linux VM (e.g. cloned from a
+        template), powered on, with an added virtual-mode RDM disk backed by
+        the LUN, and guest-agent access. Have permission to create secrets,
+        maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM with the virtual-mode RDM
+           disk, wait until it appears in Forklift inventory, and create the
+           copy-offload storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a warm Plan for the VM with copy-offload enabled. Check
+           the Plan's Ready condition is True.
+        4. Run the warm migration with a cutover and check it reaches
+           Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the RDM disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and the same disk count as the
+           source. After the checks, delete the migrated VM; the secret,
+           maps, and Plan are removed with the run.
+
+    Expected result:
+        The warm migration completes through cutover with XCOPY used, and the
+        migrated VM has the expected disk count and validates against
+        the source. On failure, inspect the migration CR status for the
+        failed step (preflight or cutover), the populate pod logs for the
+        xcopyUsed value, and the migrated VM's disk devices.
     """
 
     storage_map: StorageMap
@@ -2033,7 +2649,56 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMultiDatastoreMigration:
-    """Copy-offload migration test - multiple datastores."""
+    """Copy-offload a VM whose disks sit on two different XCOPY-capable datastores and verify XCOPY is used for all.
+
+    Purpose/Regression:
+        Copy-offload must handle a VM whose disks are spread across multiple
+        XCOPY-capable datastores, not only a single datastore: every disk
+        must transfer via hardware-assisted copy. The pass signal is XCOPY
+        used for every disk plus a disk-count check on the migrated VM.
+        There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Have at least two datastores with storage shared
+        between vSphere and OpenShift that supports hardware-assisted copy
+        (VAAI XCOPY, e.g. NetApp ONTAP or Hitachi Vantara), with
+        storage-vendor credentials available for the copy-offload storage
+        Secret. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) on that shared storage and a reachable
+        destination network. Use a disposable Linux VM (e.g. cloned from a
+        template) with its template disk on one datastore and one added
+        persistent data disk on a second datastore, and guest-agent access.
+        Have permission to create secrets, maps, and a Plan in a target
+        namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with disks on both datastores, wait
+           until it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps disks on both datastores to the
+           block-volume storage class and carries the vsphereXcopyConfig
+           offload plugin. Create a NetworkMap for the VM's network. Confirm
+           both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk on both
+           datastores.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for disks on both datastores,
+        and the migrated VM has the same disk count as the source. On
+        failure, inspect the populate pod logs per disk (correlated with the
+        datastore names) for the xcopyUsed value, the migration CR status,
+        and the StorageMap's datastore mappings.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -2214,7 +2879,57 @@ class TestCopyoffloadMultiDatastoreMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
-    """Copy-offload migration (MTV-595): multi-disk VM with secondary disk on another datastore and folder."""
+    """Copy-offload a VM whose added disk lives on another datastore in a different folder (MTV-595).
+
+    Purpose/Regression:
+        Copy-offload disk discovery must locate a disk that differs from the
+        template disk in both datastore and folder (path), combining the
+        multi-datastore and different-path conditions (MTV-595). The pass
+        signal is XCOPY used for every disk plus a disk-count check on the
+        migrated VM. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Have at least two datastores with storage shared
+        between vSphere and OpenShift that supports hardware-assisted copy
+        (VAAI XCOPY, e.g. NetApp ONTAP or Hitachi Vantara), with
+        storage-vendor credentials available for the copy-offload storage
+        Secret. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) on that shared storage and a reachable
+        destination network. Use a disposable Linux VM (e.g. cloned from a
+        template) with its template disk on one datastore and one added
+        persistent data disk on a second datastore placed in a separate
+        folder, and guest-agent access. Have permission to create secrets,
+        maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the added disk on the second
+           datastore in the separate folder, wait until it appears in
+           Forklift inventory, and create the copy-offload storage Secret
+           with the storage-vendor credentials.
+        2. Create a StorageMap that maps disks on both datastores to the
+           block-volume storage class and carries the vsphereXcopyConfig
+           offload plugin. Create a NetworkMap for the VM's network. Confirm
+           both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk, including
+           the one on the other datastore and folder.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for the disk on the different
+        datastore and folder, and the migrated VM has the same disk count as
+        the source. On failure, inspect the populate pod logs for disk path
+        resolution errors, the migration CR status, and the source disk's
+        datastore and folder placement.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -2401,14 +3116,56 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadMixedDatastoreMigration:
-    """Copy-offload migration test - mixed XCOPY and non-XCOPY datastores.
+    """Copy-offload a VM with disks on one XCOPY-capable and one non-XCOPY datastore and verify per-disk transfer method.
 
-    This test validates copy-offload functionality when a VM has:
-    - One disk on the primary XCOPY-capable datastore (from the template)
-    - One additional disk on a non-XCOPY datastore (standard migration)
+    Purpose/Regression:
+        When only some of a VM's disks are on XCOPY-capable storage, the
+        XCOPY-capable disk must use hardware-assisted copy while the disk on
+        the non-XCOPY datastore must fall back to the standard transfer —
+        per disk, not per VM. The pass signal is the xcopyUsed value in the
+        populate pod logs matching each disk's datastore, plus a disk-count
+        check on the migrated VM. There is no induced failure.
 
-    This ensures that copy-offload correctly handles VMs with mixed disk types where
-    only some disks can use XCOPY acceleration while others fall back to standard migration.
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Have one datastore shared between vSphere and
+        OpenShift that supports hardware-assisted copy (VAAI XCOPY, e.g.
+        NetApp ONTAP or Hitachi Vantara) and one shared or accessible
+        datastore without XCOPY support, with storage-vendor credentials
+        available for the copy-offload storage Secret. Prepare a destination
+        storage class that provisions block volumes (volumeMode: Block) and a
+        reachable destination network. Use a disposable Linux VM (e.g.
+        cloned from a template) with its template disk on the XCOPY-capable
+        datastore and one added data disk on the non-XCOPY datastore, and
+        guest-agent access. Have permission to create secrets, maps, and a
+        Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with disks on both datastores, wait
+           until it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps both datastores to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify the transfer method per disk: the populate pod logs and
+           Plan task annotations report xcopyUsed for the disk on the
+           XCOPY-capable datastore and no XCOPY for the disk on the
+           non-XCOPY datastore, with each datastore represented.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with the XCOPY-capable disk using XCOPY and
+        the non-XCOPY datastore disk falling back, and the migrated VM has
+        the same disk count as the source. On failure, inspect the populate
+        pod logs per disk (correlated with the datastore names) for the
+        xcopyUsed value and the migration CR status.
     """
 
     storage_map: StorageMap
@@ -2609,16 +3366,55 @@ class TestCopyoffloadMixedDatastoreMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadFallbackLargeMigration:
-    """Copy-offload migration test - large VM with disks on non-XCOPY datastore.
+    """Copy-offload a large-disk VM on a non-XCOPY datastore and verify it completes via fallback transfer.
 
-    This test validates copy-offload fallback functionality when VM disks are
-    located on a datastore that does NOT support XCOPY acceleration.
-    The VM is configured with:
-    - One disk from the template (relocated to non_xcopy_datastore)
-    - One additional 100GB disk (also on non_xcopy_datastore)
+    Purpose/Regression:
+        When a VM's disks live on a datastore without XCOPY (VAAI) support,
+        copy-offload must fall back to the standard transfer method and still
+        complete, including for large disks. The pass signal is the
+        migration succeeding with no XCOPY reported, plus a disk-count check
+        on the migrated VM. There is no induced failure — the fallback itself
+        is the behavior under test.
 
-    The migration should complete successfully using XCOPY's fallback method
-    for datastores without VAAI support.
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Have a datastore accessible to the migration
+        without XCOPY support and with capacity for large disks (e.g. a
+        100 GB added disk), with storage-vendor credentials available for
+        the copy-offload storage Secret. Prepare a destination storage class
+        that provisions block volumes (volumeMode: Block) and a reachable
+        destination network. Use a disposable Linux VM (e.g. cloned from a
+        template) with its template disk relocated to the non-XCOPY datastore
+        and one added large data disk on the same datastore, and guest-agent
+        access. Have permission to create secrets, maps, and a Plan in a
+        target namespace, and allow time for the large transfer.
+
+    Test plan:
+        1. Prepare the disposable VM with both disks on the non-XCOPY
+           datastore, wait until it appears in Forklift inventory, and create
+           the copy-offload storage Secret with the storage-vendor
+           credentials.
+        2. Create a StorageMap that maps the disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded despite the
+           datastore lacking XCOPY support.
+        5. Verify the fallback was used: the populate pod logs report no
+           XCOPY (xcopyUsed=0) for the disks.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration of the large-disk VM completes successfully using the
+        fallback transfer with no XCOPY reported, and the migrated VM has
+        the same disk count as the source. On failure, inspect the migration
+        CR status for the failed disk step, the populate pod logs, and the
+        datastore's VAAI capability.
     """
 
     storage_map: StorageMap
@@ -2887,7 +3683,52 @@ class TestCopyoffloadFallbackLargeMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadIndependentPersistentDiskMigration:
-    """Copy-offload migration test - independent persistent disk."""
+    """Copy-offload a VM with an independent-persistent disk and verify XCOPY and disk arrival.
+
+    Purpose/Regression:
+        A disk configured as independent persistent (excluded from source
+        snapshots) must still be migrated by copy-offload via
+        hardware-assisted copy and created on the destination. The pass
+        signal is XCOPY used for every disk plus a disk-count check on the
+        migrated VM. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret. Prepare a destination storage
+        class that provisions block volumes (volumeMode: Block) and a
+        reachable destination network. Use a disposable Linux VM (e.g.
+        cloned from a template) with an added independent-persistent data
+        disk, and guest-agent access. Have permission to create secrets,
+        maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the independent-persistent disk,
+           wait until it appears in Forklift inventory, and create the
+           copy-offload storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for the independent-persistent
+        disk, and the migrated VM has the same disk count as the source. On
+        failure, inspect the migration CR status for the failed disk step,
+        the populate pod logs for the xcopyUsed value, and the migrated VM's
+        disk attachments.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -3062,7 +3903,52 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadIndependentNonpersistentDiskMigration:
-    """Copy-offload migration test - independent non-persistent disk."""
+    """Copy-offload a VM with an independent-nonpersistent disk and verify XCOPY and disk arrival.
+
+    Purpose/Regression:
+        A disk configured as independent nonpersistent (excluded from source
+        snapshots, changes discarded on power cycle) must still be migrated
+        by copy-offload via hardware-assisted copy and created on the
+        destination. The pass signal is XCOPY used for every disk plus a
+        disk-count check on the migrated VM. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret. Prepare a destination storage
+        class that provisions block volumes (volumeMode: Block) and a
+        reachable destination network. Use a disposable Linux VM (e.g.
+        cloned from a template) with an added independent-nonpersistent data
+        disk, and guest-agent access. Have permission to create secrets,
+        maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the independent-nonpersistent
+           disk, wait until it appears in Forklift inventory, and create the
+           copy-offload storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for the
+        independent-nonpersistent disk, and the migrated VM has the same
+        disk count as the source. On failure, inspect the migration CR status
+        for the failed disk step, the populate pod logs for the xcopyUsed
+        value, and the migrated VM's disk attachments.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -3238,7 +4124,54 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffload10MixedDisksMigration:
-    """Copy-offload migration test - 10 mixed disks (thin/thick)."""
+    """Copy-offload a VM with ten disks of mixed thin and thick provisioning and verify all arrive via XCOPY.
+
+    Purpose/Regression:
+        Copy-offload must scale to a VM with many disks of mixed provisioning
+        types — ten disks alternating thin and thick lazy-zeroed —
+        transferring each via hardware-assisted copy and creating all of them
+        on the destination. The pass signal is XCOPY used for every disk plus
+        a disk-count check on the migrated VM. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret and capacity for ten additional
+        disks. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) and a reachable destination network. Use
+        a disposable Linux VM (e.g. cloned from a template) with ten added
+        persistent data disks alternating thin and thick lazy-zeroed (e.g.
+        10 GB each), and guest-agent access. Have permission to create
+        secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM with the ten added disks, wait until it
+           appears in Forklift inventory, and create the copy-offload storage
+           Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM (eleven disks including the template disk). After
+           the checks, delete the migrated VM; the secret, maps, and Plan
+           are removed with the run.
+
+    Expected result:
+        The migration succeeds with XCOPY used for all ten mixed disks, and
+        the migrated VM has the same disk count as the source. On failure,
+        inspect the migration CR status for the failed disk step, the
+        populate pod logs per disk for the xcopyUsed value, and the migrated
+        VM's disk attachments.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -3413,7 +4346,54 @@ class TestCopyoffload10MixedDisksMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadLargeVmMigration:
-    """Copy-offload migration test - large VM (1TB)."""
+    """Copy-offload a VM with a 1 TB data disk and verify the large transfer completes via XCOPY.
+
+    Purpose/Regression:
+        Copy-offload must handle a very large disk (1 TB): the
+        hardware-assisted copy path must complete the transfer within the
+        migration timeout and create the disk on the destination. The pass
+        signal is XCOPY used for the disk plus a disk-count check on the
+        migrated VM. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift, support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), and have capacity for a 1 TB disk, with
+        storage-vendor credentials available for the copy-offload storage
+        Secret. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) with matching capacity and a reachable
+        destination network. Use a disposable Linux VM (e.g. cloned from a
+        template) with an added 1 TB thin-provisioned data disk, and
+        guest-agent access. Have permission to create secrets, maps, and a
+        Plan in a target namespace, and allow time for the large transfer.
+
+    Test plan:
+        1. Prepare the disposable VM with the 1 TB data disk, wait until it
+           appears in Forklift inventory, and create the copy-offload storage
+           Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded within the
+           migration timeout.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the large disk.
+        6. Validate the migrated VM: power state, connectivity, resource
+           equivalence with the source, and that the number of disks matches
+           the source VM. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration of the 1 TB disk completes successfully with XCOPY
+        used, and the migrated VM has the same disk count as the source. On
+        failure, inspect the migration CR status for the failed disk step
+        and timeouts, the populate pod logs, and the destination storage
+        class capacity.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -3589,14 +4569,62 @@ class TestCopyoffloadLargeVmMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadPopulatorThrottlingMigration:
-    """Copy-offload migration (MTV-696): per-ESXi-host populator throttling and sourceHost labels.
+    """Copy-offload with per-ESXi-host populate pod throttling: peak concurrency respects the configured limit (MTV-696).
 
-    Covers MTV-5654 Test 1 + Test 3:
-    - Set controller_max_populator_inflight to a low value (2) on ForkliftController
-    - Migrate a VM with 4+ disks from a single ESXi host
-    - Verify peak populator concurrency per host respects the limit and reaches min(limit, disk_count)
-    - Verify PopulatorThrottled events on at least (disk_count - limit) PVCs and sourceHost labels on populate pods
-    - Restore controller_max_populator_inflight to its pre-test value after the class completes
+    Purpose/Regression:
+        The ForkliftController's per-ESXi-host populator limit
+        (controller_max_populator_inflight) must cap concurrently running
+        populate pods per source host while still migrating every disk
+        (MTV-696, covering MTV-5654 scenarios 1 and 3). The failure path is
+        a deliberately low limit (2) against a VM with five disks on a single
+        ESXi host: throttling must hold the peak at the limit, emit
+        PopulatorThrottled events for the queued disks, and label populate
+        pods with their source host. The migration must still complete.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY), with
+        storage-vendor credentials available for the copy-offload storage
+        Secret. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) and a reachable destination network. Use
+        a disposable Linux VM (e.g. cloned from a template) with its template
+        disk plus four added data disks, all disks reachable from one ESXi
+        host, and guest-agent access. Have permission to patch the
+        ForkliftController (to set and later restore the populator limit),
+        create secrets, maps, and a Plan in a target namespace. The limit is
+        restored to its original value after the scenario.
+
+    Test plan:
+        1. Set the ForkliftController's per-host populator limit to 2 and
+           record the previous value. Prepare the disposable five-disk VM,
+           wait until it appears in Forklift inventory, and create the
+           copy-offload storage Secret.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class with the vsphereXcopyConfig offload plugin, and a
+           NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration while monitoring populate pods, and check it
+           reaches Succeeded.
+        5. Verify throttling from the monitoring samples: the peak number of
+           concurrently active populate pods per ESXi host never exceeds the
+           limit of 2 and reaches min(limit, disk count); populate pods
+           carry a source host label; and at least (disk count - limit)
+           PVCs recorded a structured PopulatorThrottled event while queued.
+        6. Verify XCOPY was used for every disk, then validate the migrated
+           VM: power state, connectivity, resource equivalence, and disk
+           count. After the checks, delete the migrated VM, restore the
+           ForkliftController limit, and remove the secret, maps, and Plan.
+
+    Expected result:
+        The migration completes with throttling observable: peak per-host
+        concurrency stays at or below 2, PopulatorThrottled events appear on
+        the queued PVCs, and populate pods carry source host labels. On
+        failure, inspect the PopulatorThrottled events on the PVCs, the
+        populate pod labels and logs, the ForkliftController's configured
+        limit, and the migration CR status.
     """
 
     storage_map: StorageMap
@@ -4130,8 +5158,8 @@ class TestCopyoffloadDedicatedHostSharedPopulatorLimit(CopyoffloadDedicatedMigra
         3. Migrate both VMs. Confirm each populate pod's runtime-host metadata, worker
            argument, and logs identify the dedicated host. Prefer throttleHost when
            present; otherwise use --migration-host (the current controller may write the
-           runtime host to sourceHost). Verify the observed active-pod peak never exceeds
-           1. During one poll, require a still-Pending PVC with a structured
+           runtime host to sourceHost). Verify the observed active-pod peak never exceeds 1.
+           During one poll, require a still-Pending PVC with a structured
            PopulatorThrottled event, plus a Running worker from the other source host.
            The sole configured dedicated host is the shared runtime host. Match the Event
            to the current PVC by UID and require its timestamp to be at or after the other
@@ -4165,12 +5193,52 @@ class TestCopyoffloadDedicatedHostSharedPopulatorLimit(CopyoffloadDedicatedMigra
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadDedicatedMigrationHostInvalidId:
-    """Copy-offload migration (MTV-4494): invalid dedicatedMigrationHosts entry fails fast.
+    """An invalid dedicatedMigrationHosts ESXi host ID must fail the populate pod with a clear error (MTV-4494).
 
-    Configures an ESXi host ID that does not exist in vCenter inventory. Forklift's
-    vsphere-copy-offload-populator resolves the host at runtime inside the populate pod
-    (no admission-time validation exists for this field), so the Plan and Migration CRs
-    are created successfully and only the populate pod fails.
+    Purpose/Regression:
+        A StorageMap's dedicated migration host list referencing an ESXi host
+        ID that does not exist in vCenter must not silently succeed. There is
+        no admission-time validation of the ID, so the failure path is at
+        runtime: the Plan and Migration CRs are created, the populate pod
+        starts, and fails with an error naming the missing host. The pass
+        signal is that failure message, not a successful migration.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY), with
+        storage-vendor credentials available for the copy-offload storage
+        Secret. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) and a reachable destination network. Use
+        a disposable Linux VM (e.g. cloned from a template) with a data disk
+        and guest-agent access. Identify an ESXi host ID that does not exist
+        in the vCenter inventory (e.g. an unused or malformed ID). Have
+        permission to create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM, wait until it appears in Forklift
+           inventory, and create the copy-offload storage Secret with the
+           storage-vendor credentials.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class, carries the vsphereXcopyConfig offload plugin, and
+           lists the non-existent ESXi host ID as a dedicated migration host.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True — the invalid ID is not rejected at
+           admission.
+        4. Run the migration and check that it fails, and that the failing
+           populate pod's logs contain an error naming the invalid host ID
+           (no host with that ID was found). After the check, the failed
+           migration resources, secret, maps, and Plan are removed with the
+           run.
+
+    Expected result:
+        The migration fails at the populate stage with a populate pod error
+        naming the invalid host ID. On failure of the expectation (migration
+        succeeds or the error is missing), inspect the populate pod logs and
+        events in the target namespace and the StorageMap's dedicated
+        migration host list.
     """
 
     storage_map: StorageMap
@@ -4325,26 +5393,55 @@ class TestCopyoffloadDedicatedMigrationHostInvalidId:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadNonconformingNameMigration:
-    """
-    Copy-offload migration test - VM with non-conforming name.
+    """Copy-offload a VM whose name violates Kubernetes naming rules and verify the destination VM gets a sanitized name (MTV-579).
 
-    This test validates that MTV/Forklift properly handles VMs with names that don't
-    conform to Kubernetes naming conventions (e.g., containing capital letters and
-    underscores). The operator should automatically convert the source VM name to a
-    valid Kubernetes name (lowercase, hyphens instead of underscores) when creating
-    the destination VM in OpenShift.
+    Purpose/Regression:
+        A source VM name containing characters that are invalid in
+        Kubernetes names (capital letters, underscores) must not break the
+        migration: the destination VM must be created with a sanitized,
+        Kubernetes-compliant name (lowercase, underscores converted to
+        hyphens), while the migration itself completes normally (MTV-579).
+        The pass signal is the destination VM existing under the sanitized
+        name. There is no induced failure.
 
-    Test Scenario:
-    - Source VM name: "XCopy_Test_VM_CAPS" (has capitals and underscores)
-    - Expected destination: Valid Kubernetes name (e.g., "xcopy-test-vm-caps")
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret. Prepare a destination storage
+        class that provisions block volumes (volumeMode: Block) and a
+        reachable destination network. Use a disposable Linux VM (e.g.
+        cloned from a template) whose clone name deliberately contains
+        capital letters and underscores (e.g. ``XCopy_Test_VM_CAPS``), with
+        guest-agent access. Have permission to create secrets, maps, and a
+        Plan in a target namespace.
 
-    Requirements:
-    - vSphere provider with VMs on XCOPY-capable storage
-    - Shared storage between vSphere and OpenShift (NetApp ONTAP, Hitachi Vantara, etc.)
-    - Storage credentials via environment variables or .providers.json config
-    - ForkliftController with feature_copy_offload: "true" (must be pre-configured)
+    Test plan:
+        1. Prepare the disposable VM with the non-conforming name, wait until
+           it appears in Forklift inventory, and create the copy-offload
+           storage Secret with the storage-vendor credentials.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a cold Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the disk.
+        6. Validate the destination: the migrated VM exists with the source
+           name converted to a valid Kubernetes name (lowercase, hyphens),
+           passes power state, connectivity, resource equivalence, and
+           disk-count checks. After the checks, delete the migrated VM; the
+           secret, maps, and Plan are removed with the run.
 
-    See .providers.json.example for supported vendors and configuration.
+    Expected result:
+        The migration succeeds and the destination VM is created under the
+        sanitized name (e.g. ``xcopy-test-vm-caps``) with working content.
+        On failure, inspect the migration CR status, the destination
+        namespace for a VM whose name was not sanitized, and the forklift
+        controller logs for name-handling errors.
     """
 
     storage_map: StorageMap
@@ -4566,7 +5663,55 @@ class TestCopyoffloadNonconformingNameMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadWarmMigration:
-    """Copy-offload warm migration test."""
+    """Warm copy-offload migration of a running VM with incremental transfer and cutover.
+
+    Purpose/Regression:
+        Copy-offload must work in a warm migration: the running VM's disks
+        are copied incrementally while the source stays up, and a cutover
+        finalizes the migration. The pass signal is a successful warm
+        migration with XCOPY used for the disk. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret. Prepare a destination storage
+        class that provisions block volumes (volumeMode: Block) and a
+        reachable destination network. Use a disposable, powered-on Linux
+        VM (e.g. cloned from a template) with a thin-provisioned disk and
+        guest-agent access, whose disk changes can be captured by
+        incremental transfer (e.g. enabled changed-block tracking). Have
+        permission to create secrets, maps, and a Plan in a target
+        namespace, and a cutover time after which the source VM is stopped.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM, wait until it appears in
+           Forklift inventory, and create the copy-offload storage Secret
+           with the storage-vendor credentials.
+        2. Create a StorageMap that maps the disk to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VM's network. Confirm both are created.
+        3. Create a warm Plan for the VM with copy-offload enabled. Check the
+           Plan's Ready condition is True.
+        4. Run the warm migration with a cutover time: the incremental
+           copies run while the VM is on, then the migration finalizes at
+           cutover. Check it reaches Succeeded.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for the disk.
+        6. Validate the migrated VM: power state, connectivity, and CPU,
+           memory, network, and storage equivalence with the source. After
+           the checks, delete the migrated VM; the secret, maps, and Plan
+           are removed with the run.
+
+    Expected result:
+        The warm migration completes through cutover with XCOPY used, and
+        the migrated VM matches the source. On failure, inspect the
+        migration CR status for the failed stage (incremental copy or
+        cutover), the populate pod logs for the xcopyUsed value, and the
+        Plan conditions.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -4747,7 +5892,56 @@ class TestCopyoffloadWarmMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadScaleMigration:
-    """Copy-offload migration test - scale (5 VMs)."""
+    """Copy-offload five VMs in one Plan and verify all migrations complete via XCOPY.
+
+    Purpose/Regression:
+        Copy-offload must scale beyond a single VM: a Plan containing five
+        VMs, each with two disks, must migrate every VM via
+        hardware-assisted copy with all VMs and disks validated. There is no
+        induced failure; the scenario guards the controller's handling of
+        many concurrent populate pods.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift, support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), and have capacity for five VMs with two
+        disks each, with storage-vendor credentials available for the
+        copy-offload storage Secret. Prepare a destination storage class
+        that provisions block volumes (volumeMode: Block) and a reachable
+        destination network. Use five disposable Linux VMs (e.g. cloned from
+        a template) each with its template disk plus one added thick
+        lazy-zeroed data disk, with guest-agent access. Have permission to
+        create secrets, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the five disposable VMs, wait until they appear in
+           Forklift inventory, and create the copy-offload storage Secret
+           with the storage-vendor credentials.
+        2. Create a StorageMap that maps all VMs' disks to the block-volume
+           storage class and carries the vsphereXcopyConfig offload plugin.
+           Create a NetworkMap for the VMs' networks. Confirm both are
+           created.
+        3. Create a cold Plan covering all five VMs with copy-offload
+           enabled. Check the Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded for all five
+           VMs.
+        5. Verify XCOPY acceleration was used: the populate pod logs and the
+           Plan task annotations report xcopyUsed for every disk of every
+           VM.
+        6. Validate all five migrated VMs: power state, connectivity, and
+           CPU, memory, network, and storage equivalence with the sources,
+           with disk counts matching. After the checks, delete the migrated
+           VMs; the secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        All five VMs migrate successfully with XCOPY used for every disk and
+        each migrated VM matches its source. On failure, inspect the
+        migration CR status for the failed VM and step, the populate pod
+        logs for the xcopyUsed value, and the ForkliftController's
+        concurrency limits.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -4918,7 +6112,58 @@ class TestCopyoffloadScaleMigration:
     "vmware_cloud_init_ready_both_plans", "copyoffload_config", "copyoffload_ssh_key", "cleanup_migrated_vms"
 )
 class TestSimultaneousCopyoffloadMigrations:
-    """Test simultaneous execution of two copyoffload migration plans."""
+    """Two copy-offload Plans must execute their migrations at the same time and both succeed.
+
+    Purpose/Regression:
+        Starting migrations from two separate copy-offload Plans must result
+        in genuinely concurrent execution — both migrations in the Executing
+        state at the same time — with both completing successfully via XCOPY.
+        The failure path guarded against is serialization or interference
+        between concurrent copy-offload migrations. There is no induced
+        failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift, support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), and have capacity for two VMs, with
+        storage-vendor credentials available for the copy-offload storage
+        Secrets. Prepare a destination storage class that provisions block
+        volumes (volumeMode: Block) and a reachable destination network. Use
+        two disposable Linux VMs (e.g. cloned from a template) with
+        thin-provisioned disks and guest-agent access, one per Plan. Have
+        permission to create secrets, maps, and Plans in a target namespace.
+
+    Test plan:
+        1. Prepare the two disposable VMs, wait until they appear in
+           Forklift inventory, and create a copy-offload storage Secret for
+           each Plan with the storage-vendor credentials.
+        2. For each Plan, create a StorageMap that maps its VM's disk to the
+           block-volume storage class with the vsphereXcopyConfig offload
+           plugin, and a NetworkMap for the VM's network. Confirm all four
+           maps are created.
+        3. Create a cold copy-offload Plan for each VM. Check both Plans'
+           Ready conditions are True.
+        4. Start both migrations and poll both Plans' migration statuses
+           until both are in the Executing state at the same time (a
+           migration completing before the other starts executing fails the
+           check). Then wait for both to complete and check both reach
+           Succeeded.
+        5. Verify XCOPY acceleration was used for both migrations: each
+           Plan's populate pod logs and task annotations report xcopyUsed
+           for its disk.
+        6. Validate both migrated VMs: power state, connectivity, resource
+           equivalence, and disk count. After the checks, delete the migrated
+           VMs; the secrets, maps, and Plans are removed with the run.
+
+    Expected result:
+        Both migrations are observed executing simultaneously and both
+        succeed with XCOPY used, and both migrated VMs validate. On failure,
+        inspect both migration CRs' statuses and timing, the populate pod
+        logs for both migrations, and the ForkliftController's concurrency
+        limits.
+    """
 
     storage_map_1: StorageMap
     network_map_1: NetworkMap
@@ -5453,11 +6698,58 @@ class TestSimultaneousCopyoffloadMigrations:
 @pytest.mark.usefixtures(
     "vmware_cloud_init_ready_both_plans", "copyoffload_config", "copyoffload_ssh_key", "cleanup_migrated_vms"
 )
-class TestConcurrentXcopyVddkMigration:
-    """Test simultaneous execution of XCOPY and VDDK migration plans.
+class TestCopyoffloadConcurrentXcopyVddkMigration:
+    """An XCOPY copy-offload Plan and a standard VDDK Plan must run concurrently and both succeed.
 
-    Plan 1: XCOPY based (copyoffload=True)
-    Plan 2: VDDK based (copyoffload=False)
+    Purpose/Regression:
+        A copy-offload (XCOPY) migration and a standard (VDDK) migration
+        started at the same time must not interfere with each other: both
+        must be executing concurrently and complete successfully, each using
+        its own transfer method. The failure path guarded against is the
+        copy-offload path breaking the standard path (or vice versa) when
+        both run together. There is no induced failure.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift and support hardware-assisted copy (VAAI XCOPY, e.g. NetApp
+        ONTAP or Hitachi Vantara), with storage-vendor credentials available
+        for the copy-offload storage Secret. Prepare a destination storage
+        class that provisions block volumes (volumeMode: Block) and a
+        reachable destination network. Use two disposable Linux VMs (e.g.
+        cloned from a template) with thick lazy-zeroed disks and guest-agent
+        access, one for each Plan. Have permission to create secrets, maps,
+        and Plans in a target namespace.
+
+    Test plan:
+        1. Prepare the two disposable VMs, wait until they appear in
+           Forklift inventory, and create the copy-offload storage Secret
+           with the storage-vendor credentials.
+        2. For the XCOPY Plan, create a StorageMap with the vsphereXcopyConfig
+           offload plugin mapping the VM's disk to the block-volume storage
+           class, and confirm the map carries the offload plugin. For the
+           VDDK Plan, create a StorageMap for the other VM without the
+           offload plugin, and confirm it has none. Create a NetworkMap per
+           Plan and confirm all are created.
+        3. Create a cold copy-offload Plan for one VM and a cold standard
+           Plan for the other. Check both Plans' Ready conditions are True.
+        4. Start both migrations and poll both Plans' statuses until both are
+           in the Executing state at the same time. Then wait for both to
+           complete and check both reach Succeeded.
+        5. Verify XCOPY acceleration was used only by the copy-offload Plan:
+           its populate pod logs and task annotations report xcopyUsed for
+           its disk.
+        6. Validate both migrated VMs: power state, connectivity, resource
+           equivalence, and disk count. After the checks, delete the migrated
+           VMs; the secret, maps, and Plans are removed with the run.
+
+    Expected result:
+        Both migrations execute concurrently and succeed; the copy-offload
+        migration used XCOPY while the standard migration completed by its
+        own transfer method, and both VMs validate. On failure, inspect both
+        migration CRs' statuses and timing, the populate pod logs, and the
+        StorageMaps' offload plugin configuration.
     """
 
     storage_map_xcopy: StorageMap
@@ -5918,23 +7210,63 @@ class TestConcurrentXcopyVddkMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadVmPopulatorThrottlingMigration:
-    """Copy-offload migration (MTV-777): combined VM and populator inflight throttling.
+    """Combined VM and populate pod throttling: two VMs with multiple disks share per-host limits on one ESXi host (MTV-777).
 
-    Covers MTV-777:
-    - Set controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and
-      controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (2)
-    - Migrate 2 VMs with 3 disks each (1 OS + 2 additional) from the same ESXi host
-    - Verify peak concurrent VMs per host respects VM_INFLIGHT_LIMIT
-    - Verify populator throttling: sourceHost labels, PopulatorThrottled events
-      (sequential-VM expected count), and peak concurrent populate pods
-      (VM_POPULATOR_INFLIGHT_LIMIT)
-    - Verify XCOPY was used for all disks (populator log cache validates xcopy path)
-    - Restore both limits after the class completes
+    Purpose/Regression:
+        With both the per-host VM in-flight limit (1) and the per-host
+        populator limit (2) set low, migrating two VMs with three disks each
+        from the same ESXi host must respect both limits: at most one VM
+        transferring per host at a time and at most two populate pods per
+        host at a time, with PopulatorThrottled events on the queued PVCs —
+        counted per VM, not globally (MTV-777). The migration must still
+        complete with XCOPY.
 
-    Note:
-        Requires all VMs on the same ESXi host. Plan config uses
-        ``clone_to_same_host`` and ``disable_drs_for_vms`` so clones land on and
-        stay on VM1's host.
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed and the copy-offload feature enabled on the
+        ForkliftController. Storage must be shared between vSphere and
+        OpenShift, support hardware-assisted copy (VAAI XCOPY), and have
+        capacity for two VMs with three disks each, with storage-vendor
+        credentials available for the copy-offload storage Secret. Prepare a
+        destination storage class that provisions block volumes
+        (volumeMode: Block) and a reachable destination network. Use two
+        disposable Linux VMs (e.g. cloned from a template) each with its
+        template disk plus two added data disks, placed on the same ESXi
+        host, with guest-agent access. Have permission to patch the
+        ForkliftController (to set and later restore both limits), create
+        secrets, maps, and a Plan in a target namespace, and prevent DRS from
+        moving the VMs to other hosts during the scenario.
+
+    Test plan:
+        1. Set the ForkliftController's per-host VM in-flight limit to 1 and
+           per-host populator limit to 2, recording the previous values.
+           Prepare the two VMs on the same ESXi host, wait until they appear
+           in Forklift inventory, and create the copy-offload storage Secret.
+        2. Create a StorageMap that maps all disks to the block-volume
+           storage class with the vsphereXcopyConfig offload plugin, and a
+           NetworkMap for the VMs' networks. Confirm both are created.
+        3. Create a cold Plan covering both VMs with copy-offload enabled.
+           Check the Plan's Ready condition is True.
+        4. Run the migration while monitoring VM in-flight and populate pod
+           counts per host, and check it reaches Succeeded.
+        5. Verify throttling from the monitoring samples: the peak number of
+           concurrently transferring VMs per host never exceeds 1; the peak
+           number of concurrently active populate pods per host never exceeds
+           2; populate pods carry source host labels; and the number of PVCs
+           with PopulatorThrottled events is at least the per-VM queued-disk
+           total (VM count times disks beyond the populator limit).
+        6. Verify XCOPY was used for every disk, then validate both migrated
+           VMs: power state, connectivity, resource equivalence, and disk
+           count. After the checks, delete the migrated VMs, restore the
+           ForkliftController limits, and remove the secret, maps, and Plan.
+
+    Expected result:
+        The migration completes with both limits observed: peak per-host VM
+        concurrency of 1, peak per-host populate pod concurrency of 2, and
+        PopulatorThrottled events covering the queued disks. On failure,
+        inspect the PopulatorThrottled events on the PVCs, the populate pod
+        labels and logs, the ForkliftController's configured limits, and the
+        migration CR status.
     """
 
     storage_map: StorageMap

@@ -691,6 +691,38 @@ uv run mtv-api-tests run --mode job --job-yaml /path/to/mtv-api-tests-manifests.
 
 Use `uv run mtv-api-tests generate --help` or `uv run mtv-api-tests run --help` to see all available flags.
 
+### Coverage Search
+
+`uv run mtv-api-tests coverage <keywords>` answers **"is scenario X covered by a test class?"**
+by searching test-class plan docstrings (see `test_plan_schema.md`). It parses the docstrings
+on demand with AST — no test modules are imported and no index is stored — so the docstrings
+are the single source of truth.
+
+When a scenario or regression comes in, the workflow is: search what covers it → copy the
+pytest node ID from the output → check the CI status of that test instead of running it manually.
+
+```bash
+# Search keywords (case-insensitive, partial match; quoting and multiple
+# arguments are equivalent - all words are ANDed)
+uv run mtv-api-tests coverage "static IP"
+
+# Multiple keywords are ANDed
+uv run mtv-api-tests coverage warm resume
+
+# List classes whose docstring is missing or does not follow the schema yet
+uv run mtv-api-tests coverage --missing-plans
+
+# JSON output for scripting
+uv run mtv-api-tests coverage --json "shared disk"
+```
+
+Each match shows the class name, one-sentence scenario summary, pytest markers, `file:line`,
+the pytest node ID that runs exactly that class, and the matching docstring line. Keywords match across
+the whole docstring, the class name, and the markers (`shared disk` matches the `shared_disk`
+marker); matches in classes whose docstring does not follow the schema yet are still listed,
+marked with a note. **No matches exits 0** with a "not covered" message, so scripts can chain
+on output rather than on exit codes.
+
 ### Latency-Based Provider Selection
 
 Instead of pinning `--tc=source_provider:<key>`, a run can identify a **candidate pool** by type —

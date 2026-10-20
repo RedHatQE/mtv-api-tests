@@ -34,24 +34,46 @@ if TYPE_CHECKING:
     ids=["MTV-692"],
 )
 class TestColdDualNicSameNetworkPlanValidation:
-    """Validate Plan acceptance with dual NICs on same source network mapped to different NADs.
+    """A Plan whose NetworkMap maps two NICs on the same source network to different destination networks must be accepted (MTV-5623).
 
-    Test scenario:
-    1. Source VM on vSphere has 2 NICs both connected to the same source network (VM Network)
-    2. First NIC maps to the pod network, one Multus NetworkAttachmentDefinition (NAD) is created
-       on the OCP target cluster using cnv-bridge for the second NIC
-    3. A NetworkMap is created with per-NIC mappings where the same source network is mapped to
-       different destination NADs (one mapping per VM NIC)
-    4. A migration Plan is created using the NetworkMap
+    Purpose/Regression:
+        With per-NIC network mapping, the same source network can legitimately
+        appear multiple times in a NetworkMap — once per VM NIC — each entry
+        mapped to a different destination network. Regression MTV-5623 guards
+        against Forklift rejecting such a Plan with a
+        VMDuplicateNADMappings validation error. The failure path is Plan
+        admission: the Plan must reach Ready without a validation error. No
+        migration is executed.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift
+        destination with MTV installed. Use a disposable Linux VM with two
+        NICs, both connected to the same source network (e.g. ``VM Network``).
+        On the destination, prepare two reachable networks for the two NICs:
+        the pod network and a secondary NetworkAttachmentDefinition (e.g. a
+        Linux bridge NAD). Have permission to create maps and a Plan in a
+        target namespace.
+
+    Test plan:
+        1. Prepare the VM with both NICs on the same source network and wait
+           until it appears in Forklift inventory. Prepare the destination
+           networks, including a secondary NetworkAttachmentDefinition for the
+           second NIC.
+        2. Create a StorageMap for the VM's disks. Confirm it is created.
+        3. Create a NetworkMap with per-NIC mappings: the source network
+           appears twice, once per VM NIC, each mapped to a different
+           destination network. Confirm the NetworkMap is created.
+        4. Create a Plan for the VM using the maps, and check that it is
+           accepted and its Ready condition becomes True, with no
+           VMDuplicateNADMappings validation error. After the check, the
+           maps and Plan are removed with the run.
 
     Expected result:
-    - Forklift accepts the Plan without triggering VMDuplicateNADMappings validation error
-    - Plan reaches Ready status, confirming that duplicate source network entries in the NetworkMap
-      are valid when using per-NIC mapping
-
-    This is a 3-step plan-readiness validation test (no migration executed).
-
-    Jira: MTV-5623
+        The Plan referencing the per-NIC NetworkMap with duplicate source
+        network entries is admitted and reaches Ready. On failure, inspect
+        the Plan's conditions for a validation error naming duplicate NAD
+        mappings and confirm each NetworkMap entry maps one VM NIC to one
+        destination network.
     """
 
     storage_map: StorageMap

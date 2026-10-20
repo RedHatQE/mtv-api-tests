@@ -50,7 +50,59 @@ if TYPE_CHECKING:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestSharedDiskWindowsMigration:
-    """Cold migrate Windows VMs with VM-level migrateSharedDisks overrides."""
+    """Cold-migrate two Windows VMs sharing one NTFS disk; the owner migrates the disk and both keep bidirectional access.
+
+    Purpose/Regression:
+        Windows variant of the shared-disk scenario: with VM-level
+        migrateSharedDisks overrides in one Plan, the owner VM
+        (migrateSharedDisks=true) must migrate the shared NTFS disk while
+        the consumer VM (migrateSharedDisks=false) skips it, and both
+        migrated Windows VMs must see the same shared disk with working
+        bidirectional read/write. The shared disk is located after migration
+        by an NTFS volume label set on the source before migrating, since
+        Windows has no stable device paths. There is no induced failure.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift
+        destination with MTV installed and shared-disk support, with
+        accessible destination storage and network. Use two disposable
+        Windows VMs that share one additional NTFS-formatted disk, powered
+        off before migration, with VMware guest operations credentials (to
+        label the disk on the source) and remote access to the migrated
+        guests. Have permission to create maps and a Plan in a target
+        namespace, and use a disposable environment so the shared disk can
+        be written to.
+
+    Test plan:
+        1. While the source VMs are reachable, set a unique NTFS volume
+           label on the shared disk (matching the shared VMDK to the Windows
+           disk by its serial number) and record it. Wait until both VMs
+           appear in Forklift inventory.
+        2. Create a StorageMap covering both VMs' disks and a NetworkMap
+           for their networks. Confirm both are created.
+        3. Create a cold Plan covering both VMs with the shared-disk
+           setting enabled for the owner VM and disabled for the consumer
+           VM, and target power state on. Check the Plan's Ready condition
+           is True.
+        4. Run the migration and check it reaches Succeeded for both VMs.
+        5. Verify the shared disk from both migrated VMs, locating it by
+           the recorded NTFS label: on VM1 bring the disk online and write
+           data; on VM2 bring it online, refresh the disk cache, read VM1's
+           data, and write new data; back on VM1 refresh the cache and read
+           VM2's data. All reads must match what was written.
+        6. Run the standard VM validation on both VMs: power state,
+           connectivity, and CPU, memory, network, and storage equivalence
+           with the sources. After the checks, delete both migrated VMs and
+           the shared disk PVC; the maps and Plan are removed with the run.
+
+    Expected result:
+        Both Windows VMs migrate, the shared NTFS disk exists once on the
+        destination with the expected volume label, and data written by
+        either VM is readable by the other. On failure, inspect the
+        migration CR status for each VM's failed step, the shared disk's PVC
+        and the VM volume attachments on the destination, and the guest
+        disk-online/read errors on both VMs.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap

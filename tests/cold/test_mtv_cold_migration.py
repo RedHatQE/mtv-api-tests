@@ -36,7 +36,46 @@ from utilities.utils import get_value_from_py_config, populate_vm_ids
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestSanityColdMtvMigration:
-    """Cold migration test - sanity check."""
+    """Cold-migrate a Linux VM to OpenShift and verify it runs with equivalent resources.
+
+    Purpose/Regression:
+        Basic end-to-end cold migration sanity: a running Linux VM moved with
+        a per-NIC network mapping must arrive powered as configured with
+        equivalent CPU, memory, storage, and network. There is no induced
+        failure; the scenario guards the core migration path against
+        regressions in any provider type.
+
+    Prerequisites:
+        Register and connect a source provider (vSphere, RHV, OpenStack,
+        OpenShift, ESXi, or Hyper-V) and an OpenShift destination with MTV
+        installed. Prepare destination storage and network accessible to the
+        migrated VM, including a secondary NetworkAttachmentDefinition when
+        mapping per NIC. Use a disposable RHEL VM with a disk, at least one
+        additional NIC (e.g. one that is not start-connected), and guest-agent
+        access. Have permission to create maps, a Plan, and a target
+        namespace.
+
+    Test plan:
+        1. Prepare the disposable VM and wait until it appears in Forklift
+           inventory.
+        2. Create a StorageMap for the VM's disks and a NetworkMap that maps
+           each VM NIC to its own destination network. Confirm both are
+           created.
+        3. Create a cold Plan for the VM using both maps. Check the Plan's
+           Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Validate the migrated VM: power state, guest-agent presence,
+           connectivity when powered on, and CPU, memory, network, and
+           storage equivalence with the source. After the checks, delete the
+           migrated VM; the maps and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds and the migrated VM matches the source in
+        CPU, memory, disks, and networks, with the configured power state and
+        working connectivity. On failure, inspect the migration CR status for
+        the VM's failed step, the Plan conditions, and the migrated VM's spec
+        and events in the target namespace.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -176,7 +215,45 @@ class TestSanityColdMtvMigration:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestColdRemoteOcp:
-    """Cold migration test to remote OCP cluster."""
+    """Cold-migrate Linux and Windows VMs to a separate remote OpenShift cluster (MTV-79).
+
+    Purpose/Regression:
+        Migration where the destination is a different, remote OpenShift
+        cluster than the one running MTV. Guards the cross-cluster path:
+        provider, maps, and Plan are managed from the MTV cluster while the
+        VMs land on the remote cluster. There is no induced failure; both a
+        Linux and a Windows VM must migrate and validate.
+
+    Prerequisites:
+        Two OpenShift clusters: one running MTV (with the source provider and
+        migration resources) and a remote destination cluster with accessible
+        storage and network, registered with MTV and mutually reachable. Use
+        disposable Linux and Windows VMs on the source with disks and
+        networks supported by both providers. Have permission to create
+        maps and a Plan on the MTV cluster and the target namespace on the
+        remote cluster.
+
+    Test plan:
+        1. Prepare the disposable Linux and Windows VMs and wait until both
+           appear in Forklift inventory.
+        2. Create a StorageMap for the VMs' disks and a NetworkMap for their
+           networks, targeting the remote OpenShift destination. Confirm both
+           are created.
+        3. Create a cold Plan for both VMs using the maps. Check the Plan's
+           Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Validate the migrated VMs on the remote cluster: power state and
+           CPU, memory, network, and storage equivalence with the sources.
+           After the checks, delete the migrated VMs; the maps and Plan are
+           removed with the run.
+
+    Expected result:
+        Both VMs migrate successfully to the remote cluster and match their
+        sources in CPU, memory, disks, and networks. On failure, inspect the
+        migration CR status for each VM's failed step, the remote provider
+        resource's conditions on the MTV cluster, and the migrated VMs' specs
+        and events in the remote target namespace.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap

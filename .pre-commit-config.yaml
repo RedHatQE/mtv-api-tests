@@ -117,3 +117,9 @@ repos:
         entry: scripts/hooks/check_no_runtimeerror.py
         language: python
         types: [python]
+      - id: check-test-plan-docstring-schema
+        name: test classes must have a schema-conforming test plan docstring
+        entry: scripts/hooks/check_test_plan_docstring_schema.py
+        language: python
+        files: ^tests/
+        types: [python]

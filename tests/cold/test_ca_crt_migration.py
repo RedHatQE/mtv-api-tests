@@ -46,12 +46,45 @@ if TYPE_CHECKING:
     ids=["MTV-4561-ca-crt"],
 )
 class TestCaCrtColdMigration:
-    """Verify Forklift accepts ca.crt secret field instead of cacert (MTV-4561).
+    """Verify a provider secret that stores its CA certificate under ca.crt still connects and yields a Ready Plan (MTV-4561).
 
-    Validates provider connectivity and plan readiness using the standard
-    Kubernetes ca.crt convention. No migration is executed — the CA cert
-    code path (getTLSConfig -> Authenticate) runs during provider creation,
-    so plan readiness proves the feature works.
+    Purpose/Regression:
+        Forklift historically read the source provider CA certificate from a
+        Secret field named ``cacert``. MTV-4561 added support for the standard
+        Kubernetes convention ``ca.crt``. The failure path exercised here is
+        provider connectivity with TLS verification enabled: the CA-cert code
+        path runs during provider creation, so a Plan that reaches Ready proves
+        the ``ca.crt`` field was accepted. No migration is executed.
+
+    Prerequisites:
+        Register an OpenShift destination with MTV installed and accessible
+        destination storage and network. Have a source provider whose endpoint
+        is secured by a CA certificate you can supply, and register it with SSL
+        verification enabled (insecure skip-verify disabled) while storing the
+        CA certificate in the provider Secret under the key ``ca.crt`` rather
+        than ``cacert``. Use a disposable Linux VM with a disk and network
+        interface supported by both providers, and guest-agent access. Have
+        permission to create maps and a Plan in a target namespace.
+
+    Test plan:
+        1. Inspect the provider Secret referenced by the registered source
+           provider and confirm its data contains the key ``ca.crt`` and does
+           not contain the legacy key ``cacert``.
+        2. Create a StorageMap that maps the VM's disks to destination
+           storage, and confirm it is created.
+        3. Create a NetworkMap that maps the VM's network to a destination
+           network, and confirm it is created.
+        4. Create a cold-migration Plan for the VM using both maps, and check
+           that the Plan's Ready condition becomes True. This proves the
+           provider authenticated through the ``ca.crt`` Secret field.
+
+    Expected result:
+        The provider Secret contains only ``ca.crt`` (not ``cacert``), and the
+        Plan reaches Ready. On failure, inspect the provider resource's
+        conditions for connection or authentication errors, confirm the
+        Secret key name and certificate contents, and review the forklift
+        controller pod logs for TLS handshake errors against the source
+        endpoint.
     """
 
     storage_map: StorageMap

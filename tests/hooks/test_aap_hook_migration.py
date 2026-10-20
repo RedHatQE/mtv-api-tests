@@ -49,12 +49,54 @@ if TYPE_CHECKING:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms", "aap_hook_refs")
 class TestAapHookMigration:
-    """Test AAP hook integration — cold migration with AWX PreHook and PostHook.
+    """Cold-migrate a VM whose PreHook and PostHook run as Ansible Automation Platform job templates and verify the hooks gate the pipeline.
 
-    Follows the standard 5-step migration pattern. The AAP hooks are created
-    by the ``aap_hook_refs`` fixture which injects Hook CR references into
-    ``prepared_plan``. A successful migration confirms PreHook ran before
-    disk transfer and PostHook ran after VM creation.
+    Purpose/Regression:
+        Hook CRs that reference an AWX job template via
+        ``spec.aap.jobTemplateId`` must launch the job at the right pipeline
+        stage and Forklift must wait for its completion. A successful
+        migration is the pass signal: the PreHook AWX job must finish before
+        disk transfer starts and the PostHook AWX job must finish before the
+        migration completes. There is no induced failure.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift
+        destination with MTV installed, with accessible destination storage
+        and network. Deploy AWX (Ansible Automation Platform) reachable from
+        the cluster, create two job templates with playbooks that run against
+        the migrating VM (one for pre-migration, one for post-migration), and
+        configure MTV with the AAP URL and token so it can launch jobs. Use a
+        disposable powered-on Linux VM with guest-agent access, a disk and
+        network supported by both providers, and credentials the playbooks
+        can use to reach it. Have permission to create Hook CRs, maps, and a
+        Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable source VM, verify it is visible in
+           Forklift inventory, and create the PreHook and PostHook Hook CRs
+           pointing at the AWX job templates.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network. Confirm both are created.
+        3. Create a cold Plan for the VM that attaches both hooks and sets
+           target power state off. Check the Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded, meaning the
+           PreHook AWX job completed before disk transfer and the PostHook
+           AWX job completed after VM creation.
+        5. Validate the retained destination VM (power state and resource
+           equivalence with the source). Both AWX jobs having completed is
+           inferred from the migration reaching Succeeded — Forklift gates
+           the pipeline on hook completion — rather than checked in AWX.
+           After the checks, delete the migrated VM; the hooks, maps, and
+           Plan are removed with the run.
+
+    Expected result:
+        The migration completes successfully, meaning both AWX jobs were
+        launched at their pipeline stages and completed (inferred from the
+        migration reaching Succeeded; job records are not queried
+        directly), and the migrated VM validates. On failure, inspect the
+        VM's failed step in the migration CR status (PreHook or PostHook),
+        the Hook CR conditions, the AWX job run records and their output,
+        and the forklift controller pod logs for AAP API errors.
     """
 
     storage_map: StorageMap

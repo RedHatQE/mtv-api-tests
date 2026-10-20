@@ -8,6 +8,8 @@ import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+from baseline import repo_relative_posix
+
 _SKIP_DIR_NAMES: frozenset[str] = frozenset({
     ".venv",
     ".git",
@@ -102,7 +104,7 @@ def _walk_py_files(root: Path) -> Iterator[Path]:
                 yield Path(dirpath) / filename
 
 
-def parse_file(path: Path, collector: FindingCollector) -> ast.AST | None:
+def parse_file(path: Path, collector: FindingCollector) -> ast.Module | None:
     """Parse a Python file into an AST, reporting read/parse failures as findings.
 
     Args:
@@ -110,7 +112,7 @@ def parse_file(path: Path, collector: FindingCollector) -> ast.AST | None:
         collector (FindingCollector): Finding sink for parse failures.
 
     Returns:
-        ast.AST | None: Parsed module AST, or None if the file could not be
+        ast.Module | None: Parsed module AST, or None if the file could not be
         read or has a syntax error (failures are recorded as findings).
     """
     try:
@@ -302,6 +304,143 @@ def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
         stack.pop()
 
     yield from _visit(tree)
+
+
+def iter_test_module_files(paths: list[str]) -> Iterator[Path]:
+    """Yield pytest test modules under ``tests/`` from argv paths or a full scan.
+
+    If ``paths`` is non-empty, keep only entries that are test modules
+    (``tests/**/test_*.py``). Empty argv scans ``tests/`` recursively.
+
+    Args:
+        paths (list[str]): File or directory paths from pre-commit (empty =
+            scan tests/).
+
+    Yields:
+        Path: Test module paths to evaluate.
+    """
+    if paths:
+        for raw in paths:
+            path = Path(raw)
+            if _is_test_module(path):
+                yield path
+        return
+
+    tests_dir = Path("tests")
+    if not tests_dir.is_dir():
+        return
+    yield from sorted(tests_dir.rglob("test_*.py"))
+
+
+def _is_test_module(path: Path) -> bool:
+    """Return True if ``path`` is a pytest test module under ``tests/``.
+
+    Args:
+        path (Path): Candidate file path.
+
+    Returns:
+        bool: Whether the path is ``tests/**/test_*.py``.
+    """
+    try:
+        rel = Path(repo_relative_posix(path))
+    except (OSError, ValueError):
+        return False
+    return rel.parts[0] == "tests" and rel.name.startswith("test_") and rel.suffix == ".py"
+
+
+def _declares_or_inherits_test_method(
+    node: ast.ClassDef, classes: dict[str, ast.ClassDef], _visited: frozenset[str] | None = None
+) -> bool:
+    """Return True if ``node`` has a ``test_`` method, own or inherited in-module.
+
+    Pytest collects inherited test methods, so a ``Test*`` subclass with no
+    own ``test_`` methods is still collected when its base declares them.
+    Bases are resolved by name within the same module. Unresolvable bases
+    (imported or attribute-accessed) count as declaring tests so such
+    classes are never silently skipped. Cyclic same-module base references
+    are broken by a visited set.
+
+    Args:
+        node (ast.ClassDef): Candidate test class.
+        classes (dict[str, ast.ClassDef]): Class name to node map for the
+            module.
+        _visited (frozenset[str]): Class names already visited on this
+            recursion path (cycle guard).
+
+    Returns:
+        bool: Whether the class declares or inherits a ``test_`` method.
+    """
+    has_own_test_method = any(
+        isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_")
+        for stmt in node.body
+    )
+    if has_own_test_method:
+        return True
+    visited = _visited or frozenset()
+    if node.name in visited:
+        return False
+    visited = visited | {node.name}
+    for base in node.bases:
+        if not isinstance(base, ast.Name):
+            return True
+        base_node = classes.get(base.id)
+        if base_node is None:
+            return True
+        if _declares_or_inherits_test_method(base_node, classes, visited):
+            return True
+    return False
+
+
+def iter_test_classes(tree: ast.Module) -> Iterator[ast.ClassDef]:
+    """Yield pytest-collected test classes from a module AST.
+
+    A test class is named ``Test*`` (pytest's default ``python_classes``)
+    and declares or inherits at least one ``test_`` method, so helper/base
+    classes without test methods are skipped. Only module-level classes
+    are considered — pytest does not collect nested classes — and the
+    name map used for inheritance resolution is likewise built from
+    module-level definitions, so a nested class can never shadow a
+    module-level base or drop it from the check.
+
+    Args:
+        tree (ast.Module): Parsed module AST.
+
+    Yields:
+        ast.ClassDef: Test class nodes.
+    """
+    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    for node in classes.values():
+        if not node.name.startswith("Test"):
+            continue
+        if _declares_or_inherits_test_method(node, classes):
+            yield node
+
+
+def docstring_span(
+    node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[str, int, int] | None:
+    """Return the docstring text and source span of a class or function.
+
+    Args:
+        node (ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef): Node
+            whose first body statement is checked for a string literal.
+
+    Returns:
+        tuple[str, int, int] | None: ``(text, lineno, end_lineno)`` of the
+        docstring (span usable for baseline fingerprinting), or None when
+        absent.
+    """
+    if not node.body:
+        return None
+    first = node.body[0]
+    if not (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)):
+        return None
+    constant = first.value
+    text = constant.value
+    if not isinstance(text, str):
+        return None
+    end_lineno = constant.end_lineno if constant.end_lineno is not None else constant.lineno
+    return text, constant.lineno, end_lineno
 
 
 def for_each_parsed_file(
