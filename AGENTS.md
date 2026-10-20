@@ -932,6 +932,15 @@ class TestNameHere:
   `test_verify_luks_encryption` calls `verify_luks_encryption()` from `utilities/post_migration.py`. LUKS
   secret setup is handled by the `luks_vm_specs` fixture in `tests/luks/conftest.py`, which resolves
   passphrases (per-VM override → provider fallback) and creates K8s Secrets.
+- **6-step exclude-disks pattern (vSphere)**: storagemap -> networkmap -> plan -> migrate -> verify_excluded_disks -> check_vms
+  Disk-exclusion tests set per-VM `exclude_disks` bus addresses (serialized to Plan `spec.vms[].excludeDisks`).
+  `test_verify_excluded_disks` calls `verify_excluded_disks()` from `utilities/post_migration.py`, which
+  splits source disks by bus address via the Forklift inventory and verifies the destination VM disks by
+  serial provenance: each kept disk's inventory serial prefix (20 chars) must exactly match a destination
+  disk serial, with no PVC for excluded disks in the dedicated `vm_target_namespace`. Per-disk capacities
+  are volume-mode aware: exact match against the 1 MiB-aligned source size for Block volumes, CDI-overhead
+  bounds for Filesystem volumes. `check_storage()` receives the expected destination disk count
+  (source count minus distinct exclusions) so the standard disk-count assertion accounts for exclusions.
 - **6-step XFS pattern**: storagemap -> networkmap -> plan -> migrate -> verify_xfs_version -> check_vms
   XFS migration tests insert `test_verify_xfs_version` before `test_check_vms`. This step executes
   `xfs_info` on the migrated VM to verify XFS v4 filesystem compatibility (validates `crc=0` in output).
@@ -951,7 +960,8 @@ throttling tests: same through `test_migrate_vms`, then `test_verify_vm_inflight
 `test_verify_source_vm_placement`, then the base methods through `test_migrate_vms`, followed by
 `test_verify_dedicated_migration_host`, `test_check_xcopy_used`, `test_check_vms`.
 LUKS tests: same through `test_migrate_vms`, then
-`test_verify_luks_encryption`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
+`test_verify_luks_encryption`, `test_check_vms`. Exclude-disks tests: same through `test_migrate_vms`, then
+`test_verify_excluded_disks`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
 `test_verify_xfs_version`, `test_check_vms`. Plan-archive PVC cleanup tests: same through
 `test_migrate_vms` (expects `MigrationPlanExecError`), then `test_archive_and_delete_plan`,
 `test_verify_pvc_cleanup`.
@@ -977,8 +987,8 @@ tests_params: dict = {
 2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
 3. Add pytest markers at class level (tier0, tier1, warm, remote, copyoffload)
 4. Implement the 5 base test methods. Some features need extra validation steps: see **Key Patterns** for the
-   6-step shared-disk (Linux), 7-step shared-disk (Windows), copy-offload, and LUKS patterns, or the 7-step
-   copy-offload throttling and copy-offload dedicated-host patterns
+   6-step shared-disk (Linux), 7-step shared-disk (Windows), copy-offload, LUKS, and exclude-disks patterns, or
+   the 7-step copy-offload throttling and copy-offload dedicated-host patterns
 
 **VM Configuration Options:**
 
@@ -991,6 +1001,8 @@ tests_params: dict = {
 | `disk_type`               | No       | "thin", "thick-lazy", "thick-eager"      |
 | `luks`                    | No       | True if VM has LUKS-encrypted disk       |
 | `luks_passphrase`         | No       | Per-VM passphrase override               |
+| `add_disks`               | No       | Extra disks to attach to the VM clone    |
+| `exclude_disks`           | No       | vSphere bus addresses to exclude         |
 | `migrate_shared_disks`    | No       | True for owner VM in shared disk tests   |
 | `add_nic`                 | No       | True to add a NIC (vSphere only)         |
 | `add_nic_start_connected` | Yes*     | Required when `add_nic=True`; bool       |

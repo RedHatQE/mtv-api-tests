@@ -122,6 +122,7 @@ Each item in `virtual_machines` describes one source VM or template.
 | `target_esxi_host` | No | Pin the clone to a specific ESXi host. Set automatically by `clone_to_same_host` and `pin_to_non_dedicated_host` unless you set it yourself. |
 | `luks` | No | `True` when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference. |
 | `luks_passphrase` | No | Per-VM LUKS passphrase. Overrides the provider-level `luks_passphrase`. |
+| `exclude_disks` | No | vSphere bus addresses of disks to exclude from migration (e.g. `["scsi0:1"]`). Serialized to the Plan `spec.vms[].excludeDisks` field; the excluded disks are neither copied nor attached to the migrated VM. |
 | `migrate_shared_disks` | No | `True` for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM. |
 | `add_nic` | No | `True` to add an extra NIC. vSphere only. |
 | `add_nic_start_connected` | Yes* | Required when `add_nic` is `True`. Must be a `bool`. |

@@ -453,6 +453,11 @@ fixture: it takes <code>destination_ocp_provider</code> instead of <code>destina
 <li><strong>6-step XFS pattern</strong> in <code>tests/cold/test_cold_migration_xfs.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_xfs_version</code> -&gt; check_vms</li>
 <li><strong>6-step LUKS pattern</strong> in <code>tests/luks/test_luks_cold_migration.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_luks_encryption</code> -&gt; check_vms</li>
 <li>
+<p><strong>6-step exclude-disks pattern</strong> in <code>tests/cold/test_cold_migration_exclude_disks.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_excluded_disks</code>
+  -&gt; check_vms. The Plan excludes individual source disks by bus address (<code>spec.vms[].excludeDisks</code>); the verify step confirms the migrated VM has exactly the
+  non-excluded disks attached and no PVC exists for the excluded ones in the dedicated VM namespace.</p>
+</li>
+<li>
 <p><strong>6-step shared-disk pattern (Linux)</strong> in <code>tests/shared_disk/test_shared_disk_rhel_migration.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_shared_disk_data</code>
   -&gt; check_vms</p>
 </li>

@@ -169,6 +169,9 @@ Other cold classes extend the pattern with extra verification steps. `AGENTS.md`
 
 - **6-step XFS pattern** in `tests/cold/test_cold_migration_xfs.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_xfs_version` -> check_vms
 - **6-step LUKS pattern** in `tests/luks/test_luks_cold_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_luks_encryption` -> check_vms
+- **6-step exclude-disks pattern** in `tests/cold/test_cold_migration_exclude_disks.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_excluded_disks`
+  -> check_vms. The Plan excludes individual source disks by bus address (`spec.vms[].excludeDisks`); the verify step confirms the migrated VM has exactly the
+  non-excluded disks attached and no PVC exists for the excluded ones in the dedicated VM namespace.
 - **6-step shared-disk pattern (Linux)** in `tests/shared_disk/test_shared_disk_rhel_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_shared_disk_data`
   -> check_vms
 - **7-step shared-disk pattern (Windows)** in `tests/shared_disk/test_shared_disk_windows_migration.py`: `test_label_shared_disk` -> storagemap -> networkmap -> plan -> migrate
