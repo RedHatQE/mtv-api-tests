@@ -32,6 +32,7 @@ Current baselines:
 - `check_no_except_exception.txt`
 - `check_no_kubernetes_runtime.txt`
 - `check_no_runtimeerror.txt`
+- `check_test_plan_docstring_schema.txt`
 
 - Format: one `relative/posix/path:<16-char-sha256-hex>` per line, where the
   fingerprint is `sha256(span)[:16]`. Each source line is normalized by

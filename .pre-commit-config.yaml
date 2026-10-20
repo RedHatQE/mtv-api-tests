@@ -117,3 +117,15 @@ repos:
         entry: scripts/hooks/check_no_runtimeerror.py
         language: python
         types: [python]
+      - id: check-test-plan-docstring-presence
+        name: test classes must have a test plan docstring
+        entry: scripts/hooks/check_test_plan_docstring_presence.py
+        language: python
+        files: ^tests/
+        types: [python]
+      - id: check-test-plan-docstring-schema
+        name: test class docstrings must follow the test plan schema
+        entry: scripts/hooks/check_test_plan_docstring_schema.py
+        language: python
+        files: ^tests/
+        types: [python]

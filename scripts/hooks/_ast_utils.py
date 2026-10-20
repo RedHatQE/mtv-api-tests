@@ -8,6 +8,8 @@ import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+from baseline import repo_relative_posix
+
 _SKIP_DIR_NAMES: frozenset[str] = frozenset({
     ".venv",
     ".git",
@@ -302,6 +304,101 @@ def walk_with_stack(tree: ast.AST) -> Iterator[tuple[ast.AST, list[ast.AST]]]:
         stack.pop()
 
     yield from _visit(tree)
+
+
+def iter_test_module_files(paths: list[str]) -> Iterator[Path]:
+    """Yield pytest test modules under ``tests/`` from argv paths or a full scan.
+
+    If ``paths`` is non-empty, keep only entries that are test modules
+    (``tests/**/test_*.py``). Empty argv scans ``tests/`` recursively.
+
+    Args:
+        paths (list[str]): File or directory paths from pre-commit (empty =
+            scan tests/).
+
+    Yields:
+        Path: Test module paths to evaluate.
+    """
+    if paths:
+        for raw in paths:
+            path = Path(raw)
+            if _is_test_module(path):
+                yield path
+        return
+
+    tests_dir = Path("tests")
+    if not tests_dir.is_dir():
+        return
+    yield from sorted(tests_dir.rglob("test_*.py"))
+
+
+def _is_test_module(path: Path) -> bool:
+    """Return True if ``path`` is a pytest test module under ``tests/``.
+
+    Args:
+        path (Path): Candidate file path.
+
+    Returns:
+        bool: Whether the path is ``tests/**/test_*.py``.
+    """
+    try:
+        rel = Path(repo_relative_posix(path))
+    except (OSError, ValueError):
+        return False
+    return rel.parts[0] == "tests" and rel.name.startswith("test_") and rel.suffix == ".py"
+
+
+def iter_test_classes(tree: ast.AST) -> Iterator[ast.ClassDef]:
+    """Yield pytest-collected test classes from a module AST.
+
+    A test class is named ``Test*`` (pytest's default ``python_classes``)
+    and declares at least one ``test_`` method, so helper/base classes
+    without test methods are skipped.
+
+    Args:
+        tree (ast.AST): Parsed module AST.
+
+    Yields:
+        ast.ClassDef: Test class nodes.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not node.name.startswith("Test"):
+            continue
+        has_test_method = any(
+            isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_")
+            for stmt in node.body
+        )
+        if has_test_method:
+            yield node
+
+
+def docstring_span(
+    node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[str, int, int] | None:
+    """Return the docstring text and source span of a class or function.
+
+    Args:
+        node (ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef): Node
+            whose first body statement is checked for a string literal.
+
+    Returns:
+        tuple[str, int, int] | None: ``(text, lineno, end_lineno)`` of the
+        docstring (span usable for baseline fingerprinting), or None when
+        absent.
+    """
+    if not node.body:
+        return None
+    first = node.body[0]
+    if not (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)):
+        return None
+    constant = first.value
+    text = constant.value
+    if not isinstance(text, str):
+        return None
+    end_lineno = constant.end_lineno if constant.end_lineno is not None else constant.lineno
+    return text, constant.lineno, end_lineno
 
 
 def for_each_parsed_file(
