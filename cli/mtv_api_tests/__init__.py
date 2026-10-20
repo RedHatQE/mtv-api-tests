@@ -12,6 +12,7 @@ from cli.mtv_api_tests.common import (
     TEST_CATEGORIES,
     console,
 )
+from cli.mtv_api_tests.coverage import coverage_command
 from cli.mtv_api_tests.generate import generate_command
 from cli.mtv_api_tests.run import run_command
 
@@ -84,3 +85,22 @@ def run(
         test_filter=test_filter,
         job_yaml=job_yaml,
     )
+
+
+@app.command()
+def coverage(
+    keywords: list[str] | None = typer.Argument(None, help="Keywords to search (AND semantics)"),  # noqa: M511
+    missing_plans: bool = typer.Option(False, "--missing-plans", help="List classes with missing plans"),  # noqa: M511
+    as_json: bool = typer.Option(False, "--json", help="Output JSON for scripting"),  # noqa: M511
+) -> None:
+    """Answer 'is scenario X covered?' by searching test-class plan docstrings.
+
+    Args:
+        keywords: Keywords to search (case-insensitive, AND semantics).
+        missing_plans: List classes with missing/non-conforming plans instead of searching.
+        as_json: Output JSON for scripting.
+
+    Raises:
+        typer.Exit: When no keyword and no --missing-plans is given.
+    """
+    coverage_command(keywords=keywords or [], missing_plans=missing_plans, as_json=as_json)
