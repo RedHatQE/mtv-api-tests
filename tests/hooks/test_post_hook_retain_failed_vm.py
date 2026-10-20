@@ -40,7 +40,50 @@ if TYPE_CHECKING:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestPostHookRetainFailedVm:
-    """Test PostHook with VM retention - migration fails but VMs should be retained."""
+    """A migration that fails at PostHook must retain the already-created destination VM.
+
+    Purpose/Regression:
+        When a PostHook fails, the destination VM has already been created by
+        earlier pipeline stages and must be retained for inspection instead
+        of being deleted with the failed migration. The chosen failure path
+        is an intentionally failing post-migration hook: the PreHook
+        succeeds, disk transfer and VM creation succeed, and only the
+        PostHook fails, so the retained VM should still exist and validate.
+
+    Prerequisites:
+        Register and connect a source provider and an OpenShift destination
+        with MTV installed. Prepare accessible destination storage and
+        network. Use a disposable, powered-on Linux VM with guest-agent access
+        and a disk and network interface supported by both providers. Have
+        permission to create maps, hooks, and a Plan in a target namespace,
+        and a post-migration hook (e.g. an Ansible playbook) that is
+        guaranteed to fail. Use a cold migration with target power state off.
+
+    Test plan:
+        1. Prepare the disposable source VM, verify it is visible in
+           Forklift inventory, and create a succeeding PreHook and a failing
+           PostHook.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network. Confirm both are created.
+        3. Create a cold Plan for the VM that attaches both hooks and sets
+           target power state off. Check the Plan's Ready condition is True.
+        4. Run the migration and check that it fails, that every VM in the
+           migration failed at the same step, and that the failed step is
+           PostHook.
+        5. Confirm the destination VM was retained by the failed migration:
+           it exists and passes the standard VM validation (power state and
+           CPU, memory, network, and storage equivalence with the source).
+           After the checks, delete the retained destination VM; the hooks,
+           maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration fails exactly at PostHook and the destination VM
+        remains present and validates despite the failure. On failure,
+        inspect the VM's failed step in the migration CR status (a step other
+        than PostHook means the wrong failure path was exercised), the Hook
+        CR conditions and hook pod logs for the failing playbook output, and
+        the retained VM's name and state in the target namespace.
+    """
 
     storage_map: StorageMap | None = None
     network_map: NetworkMap | None = None

@@ -44,11 +44,49 @@ if TYPE_CHECKING:
 )
 @pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
 class TestWarmDIConcernsBlockMigration:
-    """Verify Critical DI concerns block warm migration.
+    """Critical Deep Inspection concerns must block a warm migration at the preflight inspection step.
 
-    Uses a VM with /dev/disk/by-path/ in fstab which triggers a Critical
-    concern during Deep Inspection. The plan starts but migration fails
-    at the PreflightInspection step with "critical concerns" error.
+    Purpose/Regression:
+        When pre-migration Deep Inspection of a warm Plan's VMs reports
+        Critical concerns, the migration must not proceed: it must fail at
+        the PreflightInspection step with an error mentioning critical
+        concerns. The failure path is induced by the VM's guest
+        configuration: an /etc/fstab entry referencing a device by
+        /dev/disk/by-path/, which Deep Inspection flags as Critical. No VM
+        is migrated.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift
+        destination with MTV installed and Deep Inspection enabled for warm
+        migrations, with accessible destination storage and network. Use a
+        disposable, powered-on Linux VM whose /etc/fstab contains a
+        /dev/disk/by-path/ device reference (this raises the Critical
+        concern), and guest access to prepare it. Have permission to create
+        maps and a Plan in a target namespace and to adjust the controller's
+        pre-copy interval if needed.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM with the by-path fstab entry
+           and wait until it appears in Forklift inventory.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network. Confirm both are created.
+        3. Create a warm Plan for the VM. Check the Plan's Ready condition
+           is True.
+        4. Run the warm migration with a cutover and check that it fails at
+           the PreflightInspection step for the VM, with the step's error
+           citing critical concerns.
+        5. Confirm on the failed migration's status that the VM's
+           PreflightInspection pipeline step carries the critical-concerns
+           error before any migration resources are cleaned up. The maps and
+           Plan are then removed with the run; no destination VM is created.
+
+    Expected result:
+        The migration is blocked at PreflightInspection with a
+        critical-concerns error for the VM, and no VM is migrated. On
+        failure, inspect the migration CR status (the VM's pipeline steps
+        and their errors), the Plan-created DeepInspection Conversion CRs'
+        inspection results for the Critical concern, and the inspection pod
+        logs.
     """
 
     storage_map: StorageMap
