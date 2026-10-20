@@ -5162,7 +5162,7 @@ class TestCopyoffloadDedicatedHostSharedPopulatorLimit(CopyoffloadDedicatedMigra
            argument, and logs identify the dedicated host. Prefer throttleHost when
            present; otherwise use --migration-host (the current controller may write the
            runtime host to sourceHost). Verify the observed active-pod peak never exceeds
-           1. During one poll, require a still-Pending PVC with a structured
+           During one poll, require a still-Pending PVC with a structured
            PopulatorThrottled event, plus a Running worker from the other source host.
            The sole configured dedicated host is the shared runtime host. Match the Event
            to the current PVC by UID and require its timestamp to be at or after the other
