@@ -123,3 +123,8 @@ repos:
         language: python
         files: ^tests/
         types: [python]
+      - id: check-agents-md-budget
+        name: AGENTS.md line budget (shrink-only)
+        entry: scripts/hooks/check_agents_md_budget.py
+        language: python
+        files: ^AGENTS\.md$

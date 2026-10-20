@@ -1,794 +1,191 @@
-# MTV API Tests - Claude Instructions
+# MTV API Tests — Agent Instructions
 
-This document provides project-specific instructions for the MTV API Tests codebase.
+## About This File
+
+This file is a **budgeted index**. Its line count is capped by the `check-agents-md-budget`
+pre-commit hook (shrink-only — growing past the cap fails the commit; raising the cap requires a
+deliberate edit of the hook's constant).
+
+- Rules live here in minimal form. Examples and encyclopedic detail live in the linked files
+  (`test_plan_schema.md`, `docs/`, hook sources) — link to them, never paste their content here.
+- No duplications: define information once, reference it elsewhere.
+- Clear, unambiguous instructions — no vague terms without definitions.
+- Update this file when an agent makes a mistake; prune stale rules — outdated rules are actively
+  harmful because agents trust them over the actual code. Changes need user approval before commit.
+
+## Commands
+
+| Task | Command |
+| --- | --- |
+| Install dependencies | `uv sync` (never pip) |
+| Lint/format gate (MUST pass before commit, never `--no-verify`) | `pre-commit run --all-files` |
+| Build container | `podman build -f Dockerfile -t mtv-api-tests` |
+| Check test coverage before writing a test | `uv run mtv-api-tests coverage <keywords>` |
+| Regenerate docs site | `uvx pi-docsite --docs-dir docs --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."` |
+
+## Stack
+
+Python 3.13, `uv`, pytest, `openshift-python-wrapper` for all OpenShift/Kubernetes interaction.
+Runtime `kubernetes` package usage is banned (hook-enforced: `check-no-kubernetes-runtime`,
+`check-no-dynamicclient-construct`). Type annotations required on all new/changed function
+signatures — built-in typing (`dict`, `list`); `Any` must be justified.
 
 ## AI Workflow
 
-1. **User Prompt** - User requests fix/new test/feature/enhancement
-2. **Create Branch** - Create a feature branch (e.g., `feat/description` or `fix/description`)
-3. **Agent Selection** - Route to appropriate specialist agent
-4. **Code Changes** - Specialist implements the changes
-5. **Code Review** - Delegate to `code-reviewer` agent after ANY code change
-6. **Review Cycle** - Repeat steps 4-5 until no more changes needed
-7. **Pre-commit** - Run `pre-commit run --all-files` and fix any failures (formatting, linting - no re-review needed)
-8. **Completion** - All changes reviewed, tests pass, ready to commit
+1. **User Prompt** — fix/new test/feature/enhancement
+2. **Branch** — feature branch (`feat/`, `fix/`, `refactor/`, `docs/`)
+3. **Agent Selection** — route to specialist agents, in parallel when possible
+4. **Code Changes** — specialist implements
+5. **Code Review** — delegate to `code-reviewer` after ANY code change; repeat 4-5 until clean
+6. **Pre-commit** — `pre-commit run --all-files`, fix failures (no re-review needed for formatting)
+7. **Completion** — reviewed, hooks green, ready to commit
 
-### Rules
+Never skip the reviewer after code changes. Do not dismiss review comments without a resolution
+comment; if out of scope, create a GitHub issue and reference it.
 
-- Run agents in PARALLEL when possible
-- Never skip code-reviewer after code changes
-- (MUST) Update README.md when code changes affect usage/requirements/installation/configuration
-- (MUST) Update CLAUDE.md when methodology or coding patterns change. Show proposed changes to user and get approval before committing
-  (These updates happen during the work, not as separate workflow steps)
-- (MUST) CLAUDE.md must have NO duplications - define information once, reference elsewhere. AI context is limited.
-- (MUST) CLAUDE.md must have clear, unambiguous instructions - avoid vague terms without definitions
-- (MUST) Do not dismiss review comments without a resolution comment. If out of scope, create a GitHub issue and reference it
-- (MUST) README and documentation must match actual code — verify examples, markers, and config references
+## Documentation Sync (MUST)
 
-### Commands Reference
+Code changes and new code MUST keep documentation in sync — drift is a bug:
 
-- **Package Installation**: `uv sync`
-- **Pre-commit**: `pre-commit run --all-files`
-- **Container Build**: `podman build -f Dockerfile -t mtv-api-tests`
-
-### Documentation Site (MUST)
-
-The `docs/` folder is a [pi-docsite](https://pypi.org/project/pi-docsite/) project and must NOT be manually edited beyond its Markdown sources.
-
-| Path | Role |
+| Change | Must update |
 | --- | --- |
-| `docs/*.md` | Sources — the only files humans edit |
-| `docs/nav.json` | Sidebar layout: groups and page order |
-| `docs/*.html`, `docs/assets/`, `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` | Generated — never hand-edit |
+| Affects usage/requirements/installation/configuration | `README.md` |
+| Changes methodology or coding patterns | This file (AGENTS.md/CLAUDE.md), user approval first |
+| Any code change or new code | The relevant `docs/*.md` page(s) |
+| Any `docs/*.md` or `docs/nav.json` edit | Regenerate the site (command above) and commit generated output together with the source change |
 
-Rebuild after any change to a `docs/*.md` file or to `docs/nav.json`:
+The `docs/` folder is a [pi-docsite](https://pypi.org/project/pi-docsite/) project:
 
-```bash
-uvx pi-docsite --docs-dir docs \
-  --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
-```
-
-Rules:
-
-- **Edit the Markdown, never the generated HTML.** Fix the source and rebuild.
-- Generated files are committed. Commit them together with the source change or the site is out of sync.
-- To add a page: write `docs/<slug>.md` with exactly one H1 (its title), add one line to `docs/nav.json`, rebuild.
-  A page missing from `nav.json` is built under a fallback group and reported by the generator — fix the JSON instead.
-- Reorder by reordering `nav.json` arrays. Never rename files to reorder; that breaks existing links.
-- A `nav.json` slug with no `.md` behind it is a build error.
-- Cross-page links target `.html`, not `.md`. pi-docsite does not rewrite link targets, so `[text](other-page.md)` renders as a dead link in the generated site.
-  The generated HTML is committed, so an `.html` target also resolves when the Markdown is read straight from the repository.
-- Search only works when `docs/` is served over HTTP (`fetch()` of `search-index.json` is blocked over `file://`).
-- Rebuild only after every `docs/*.md` edit is finished. The generator reads the directory as it is, so a build started while a page is half-edited
-  produces HTML for a state that never existed, and the next rebuild then shows unrelated churn. Verify with two consecutive builds before committing:
-  if the second build changes nothing, the committed output matches the committed Markdown.
-- The generator runs through `uvx` and is deliberately not a repository dependency, so `pyproject.toml` and `uv.lock` never change. Never hand-merge generated
-  HTML, and never edit it to silence a diff — fix the Markdown and rebuild. The generator is also deliberately unpinned, so an upstream `pi-docsite`,
-  `markdown`, `jinja2` or `pygments` release can change the output with no Markdown change at all. When that happens a rebuild touches many or all pages even though
-  you edited nothing: commit it on its own as `chore(docs): regenerate site after upstream generator release`, never mixed into a documentation change, so the churn is
-  reviewable on its own.
+- `docs/*.md` and `docs/nav.json` are the only files humans edit. `docs/*.html`, `docs/assets/`,
+  `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` are generated — never hand-edit;
+  fix the Markdown and rebuild.
+- New page: write `docs/<slug>.md` with exactly one H1, add one line to `docs/nav.json`, rebuild.
+  Reorder via `nav.json`, never by renaming files. A `nav.json` slug with no `.md` is a build error.
+- Cross-page links target `.html`, not `.md` (pi-docsite does not rewrite link targets).
+- Rebuild only after all `docs/*.md` edits are finished; verify with two consecutive identical builds.
+- Generated files are committed. The generator is deliberately unpinned — an upstream release may
+  regenerate many pages with no source change: commit that alone as
+  `chore(docs): regenerate site after upstream generator release`, never mixed into a doc change.
 
 ## Code Standards
 
-- **Type Annotations (MUST):** All new functions and functions with signature changes must have complete type annotations. Use built-in Python typing (dict, list, tuple).
-  Using `Any` must be justified — don't use it as a shortcut when the actual type is known.
-- **Package Management:** Use `uv` for all dependency management
-- **Pre-commit (MUST):** Must pass before any commit - never use `--no-verify`
-- **No Auto-Skip:** Never use `pytest.skip()` or `pytest.fail()` for validation inside fixtures or test methods.
-  Validation = checking required inputs/config exist before test execution (belongs in fixtures).
-  Assertions = verifying test outcomes (belongs in test methods).
-  Use `@pytest.mark.skipif` at class/test level for conditional skipping.
-  Provider-capability gating on configuration (e.g. `add_nic` on a non-vSphere provider) is applied at collection time in `pytest_collection_modifyitems`.
-- **Every OpenShift resource:** Must use `create_and_store_resource()` function
-- **Logging Format:** Use f-strings for logging by default.
-  Use parameterized format (`%s`) only for expensive operations (e.g., `large_object.to_json()`) where lazy evaluation matters.
+Enforced rules are marked (hook). Full reasoning for each rule lives with its enforcing hook or in
+`docs/extending-the-suite.md`.
 
-### No Inline Imports (MUST)
+- **No auto-skip:** never `pytest.skip()`/`pytest.fail()` for validation inside fixtures or tests.
+  Validation (required inputs/config) belongs in fixtures; assertions (outcomes) in test methods.
+  Conditional skipping: `@pytest.mark.skipif` at class/test level; provider-capability gating on
+  config happens at collection time in `pytest_collection_modifyitems`.
+- **No inline imports** (ruff `PLC0415`): imports at file top; type-only imports in
+  `TYPE_CHECKING` blocks are fine.
+- **DynamicClient:** never instantiate directly — `get_client()` from `ocp_utilities.infra` (hook).
+- **Use existing libraries** — do not reimplement what dependencies provide:
 
-Imports belong at the top of the file — enforced by ruff `PLC0415`, except type-only imports in a module-level `TYPE_CHECKING` block.
+| Need | Use |
+| --- | --- |
+| OpenShift resources | `ocp_resources.*` (openshift-python-wrapper) |
+| SSH commands | `python-rrmngmnt` |
+| Shell commands | `pyhelper-utils` `run_ssh_commands` |
+| VM inventory data | `ForkliftInventory` |
 
-### OpenShift/Kubernetes Resource Interactions
+  Upstream missing a feature (e.g. a Plan status)? Open a PR to the upstream library and use it
+  after merge — no hardcoded workarounds.
 
-All cluster interactions must use `openshift-python-wrapper`. Direct `kubernetes` package usage is forbidden at runtime.
+- **Function size:** single responsibility (if the docstring needs "and", split); under 50 lines
+  when possible; `_`-prefixed helpers for sub-tasks; names say WHAT (`is_warm_migration_supported`).
+- **Fail fast:** code must never let `None` propagate where it is invalid — raise with a clear
+  error. `if value is None:` for None checks; `if not value:` only when empty/False are also invalid.
+- **Pass objects over values:** functions receive objects and extract values internally (when you
+  control both signature and caller).
+- **Consistent variable types:** `actual_affinity: dict[str, Any] = vm.get("affinity") or {}`.
+- **Trust required arguments:** never check that required args were passed. "Validate at Source":
+  fixtures validate the VALUE they produce.
+- **No duplicate code:** same logic twice → extract a function. Same expression computed twice →
+  store in a variable. No abstractions for single-use or merely similar code.
+- **No unnecessary variables:** `yield create_resource()`, not `result = ...; yield result`.
+- **Exception types:** specific over generic. Invalid input/missing resource → `ValueError`; type
+  issues → `TypeError`; connection → `ConnectionError`; domain errors → custom exception class in
+  `exceptions/exceptions.py` (centralized — hook: `check-exceptions-location`). `RuntimeError` only
+  in pytest hooks for infrastructure failures (hook: `check-no-runtimeerror`).
+- **No `except Exception`** (hook: `check-no-except-exception`) — it masks bugs. Catch specific
+  exceptions; re-wrap into generic ones is also a violation. Catching to log-and-continue is a
+  violation.
+- **No fallbacks, no silent recovery:** when something is wrong, fail immediately. `except` +
+  alternative path, `LOGGER.warning` papering over a failure — all violations.
+- **No unnecessary logging:** pytest captures output. Progress logging for long operations
+  (migration, provider connection) is acceptable; redundant per-step logging is not.
+- **No dead code or useless comments:** nothing that restates the code, `# Success!`,
+  unreachable code, commented-out blocks, debug leftovers, `type: ignore` without justification.
+- **Do not mutate caller data** in-place unless documented as the purpose — work on a copy.
+- **Magic numbers/hardcoded values:** named constants with a comment (`_SERIAL_PORT_OFFSET = 4000`).
+- **`isinstance()` over `hasattr`/duck-typing** — a typo in `hasattr` silently skips logic.
+- **No removed functionality without justification** in the PR/commit message — especially
+  validations, error handling, and changed defaults.
+- **Feature-specific logic must not pollute general code:** no `if copyoffload:` branches inside
+  general-purpose functions; feature functions stay separate.
+- **Empty container defaults** for optional/nested external data
+  (`template.spec.domain.get("firmware", {})`); fail fast for required data. See also
+  "Deterministic Tests" below for our own config.
+- **Docstring format (MUST):** all new functions get docstrings — `Args` when there are params;
+  `Returns` only for a meaningful non-`None` value — **void functions omit `Returns`; never add
+  "Returns: None" to satisfy an external linter** (cite this rule in review replies); `Raises` only
+  when exceptions are raised.
+- **Context managers for cleanup:** `with ResourceEditor(node) as editor:` so cleanup is guaranteed.
 
-```python
-# Correct imports
-from ocp_resources.namespace import Namespace
-from ocp_resources.secret import Secret
-from ocp_resources.virtual_machine import VirtualMachine
-from ocp_utilities.infra import get_client
+## Where Code Lives (MUST)
 
-# Forbidden imports (runtime)
-from kubernetes import client  # Never
-from kubernetes.dynamic import DynamicClient  # Never instantiate directly
-```
+Every piece of code has exactly one correct location — misplacement is a review blocker:
 
-**DynamicClient Rules:**
+| Code type | Location |
+| --- | --- |
+| Pytest fixtures and hooks | `conftest.py` closest to the tests that use them |
+| Helper/utility functions | `utilities/<module>.py` |
+| Provider-specific logic | `libs/providers/<provider>.py` |
+| Constants | Top of the owning module, after imports |
+| Custom exceptions | `exceptions/exceptions.py` |
+| Test files | `tests/<feature>/` only — never directly under `tests/` (hook: `check-test-file-location`) |
 
-| Usage                                      | Allowed                  |
-| ------------------------------------------ | ------------------------ |
-| Import inside `TYPE_CHECKING` block        | Yes                      |
-| String annotation `"DynamicClient"`        | Yes                      |
-| Instantiate `DynamicClient(...)` directly  | No - use `get_client()`  |
-| Use in `isinstance()` or runtime checks    | No                       |
-| Import `kubernetes.dynamic.exceptions`     | Yes                      |
-| Import other `kubernetes.*` modules        | No                       |
+No unit tests, no standalone test scripts, no mocks — tests exercise MTV product behavior
+end-to-end against live infrastructure.
 
-### Use Existing Libraries (MUST)
+## Test Authoring
 
-Do not reimplement functionality that exists in project dependencies.
+### Workflow — follow in order
 
-| Need | Use | Don't |
-| --- | --- | --- |
-| OpenShift resources | `openshift-python-wrapper` (`ocp_resources.*`) | `kubernetes.client.*` |
-| SSH commands | `python-rrmngmnt` | Custom `paramiko` wrappers |
-| Shell commands | `pyhelper-utils` `run_ssh_commands` | Custom subprocess wrappers |
-| VM inventory data | `ForkliftInventory` | Direct API calls |
-| Resource constants/statuses | Contribute to `openshift-python-wrapper` upstream | Hardcode strings in test code |
+1. **Check coverage first:** `uv run mtv-api-tests coverage <keywords>` (add `--json` for machine
+   output, `--missing-plans` for the retrofit audit). If a class already covers the scenario,
+   extend it instead of adding a near-duplicate.
+2. **Config:** add a `tests_params` entry in `tests/tests_config/config.py`.
+3. **File:** `tests/<feature>/test_<feature>_migration.py`.
+4. **Class:** apply markers, then write the plan docstring **before** the methods, per
+   [`test_plan_schema.md`](test_plan_schema.md). Pre-commit enforces it
+   (`check-test-plan-docstring-schema`, no baseline, no grandfathering — any docstring edit
+   re-validates; a docless or non-conforming class fails the commit).
+5. **Methods:** match the step pattern of neighboring classes (find them with the coverage CLI).
 
-**When upstream is missing a feature** (e.g., a Plan status, a resource field):
+### Step patterns
 
-1. Open a PR to the upstream library (e.g., `openshift-python-wrapper`)
-2. Use the upstream addition in our code after the PR is merged. Do not hardcode workarounds.
+Base: `test_create_storagemap` → `test_create_networkmap` → `test_create_plan` →
+`test_migrate_vms` → `test_check_vms`. Feature variants insert their step(s) before
+`test_check_vms`:
 
-### Function Size and Responsibilities (SHOULD)
+| Pattern (marker/naming) | Steps |
+| --- | --- |
+| Shared disk, Linux (`shared_disk`) | + `test_verify_shared_disk_data` before `check_vms` |
+| Shared disk, Windows | + `test_label_shared_disk` first, then shared-disk Linux steps |
+| Copy-offload (`copyoffload`) | + `test_check_xcopy_used` before `check_vms` |
+| Copy-offload throttling | + `test_verify_populator_throttling`, then `check_xcopy_used` |
+| Copy-offload VM+populator throttling | + `test_verify_vm_inflight_throttling`, then throttling steps |
+| Copy-offload dedicated host | + `test_verify_dedicated_migration_host`, then `check_xcopy_used` |
+| LUKS | + `test_verify_luks_encryption` |
+| XFS (`xfs_compatibility: True`) | + `test_verify_xfs_version` |
+| Plan-archive PVC cleanup (`tests/plan_lifecycle/`) | migrate (expected `MigrationPlanExecError`) → `test_archive_and_delete_plan` → `test_verify_pvc_cleanup`; no `check_vms` |
+| Resume-conversion (`vsphere`) | migrate (expected fail) → `test_verify_pvcs_preserved` → `test_resume_migration` → `check_vms` |
+| Plan-readiness (4-step) | verify_\<feature\> → storagemap → networkmap → plan; no migration |
 
-- **Primary:** Single responsibility — if you need "and" to describe it in the docstring, split it
-- **Secondary:** Keep functions under 50 lines when possible. Longer functions need clear section comments
-- Extract helpers with `_` prefix for sub-tasks
-- Function names must clearly describe WHAT they do (e.g., `is_warm_migration_supported` not `is_supported`)
-
-```python
-# Wrong — migration function also creates storage map
-def migrate_vms_with_copyoffload(...):
-    storage_secret = create_storage_secret(...)
-    storage_map = get_storage_migration_map(...)  # Should not be here
-    execute_migration(...)
-
-# Correct — each function does one thing, caller orchestrates
-storage_secret = create_storage_secret(...)
-storage_map = get_storage_migration_map(...)
-execute_migration(...)
-```
-
-**What to flag:**
-
-- Functions over 50 lines (likely doing too much)
-- Functions that create AND use resources in the same body
-
-## Code Quality Rules
-
-### Fail Fast - Validate Content Not Just Existence (MUST)
-
-Code must never result in `None` when `None` is not valid. Fail early with clear errors.
-
-```python
-# Wrong - allows None to propagate
-def get_vm_firmware(template):
-    return template.spec.domain.get("firmware")
-
-
-# Correct - fail fast
-def get_vm_firmware(template):
-    firmware = template.spec.domain.get("firmware")
-    if firmware is None:
-        raise ValueError(f"Firmware not found in template '{template.name}'")
-    return firmware
-```
-
-**Note:** Validate content when applicable. Use `if value is None:` for None checks. Use `if not value:` only when empty containers and False are also invalid.
-
-### Pass Objects Over Values (SHOULD)
-
-Functions should receive objects and extract needed values internally. This improves API simplicity and maintainability.
-
-```python
-# Wrong - extracting values before passing
-def create_plan(
-    source_provider_name: str,
-    source_provider_namespace: str,
-    storage_map_name: str,
-    storage_map_namespace: str,
-): ...
-
-
-create_plan(
-    source_provider_name=provider.ocp_resource.name,
-    source_provider_namespace=provider.ocp_resource.namespace,
-    storage_map_name=storage_map.name,
-    storage_map_namespace=storage_map.namespace,
-)
-
-
-# Correct - passing objects
-def create_plan(
-    source_provider: BaseProvider,
-    storage_map: StorageMap,
-):
-    # Extract values inside the function
-    name = source_provider.ocp_resource.name
-    namespace = source_provider.ocp_resource.namespace
-    ...
-
-
-create_plan(
-    source_provider=provider,
-    storage_map=storage_map,
-)
-```
-
-**When to apply:** When you control both the function signature and caller. Existing APIs that require extracted values may accept values.
-
-### Variables Must Have Consistent Types (MUST)
+### Example class
 
 ```python
-# Wrong
-actual_affinity = vm.get("affinity")  # Could be dict, list, or None
-
-# Correct
-actual_affinity: dict[str, Any] = vm.get("affinity") or {}
-```
-
-### Trust Required Arguments (MUST)
-
-Don't check if required function arguments exist.
-
-```python
-# Wrong
-def compare_labels(expected_labels: dict, actual_labels: dict) -> bool:
-    if expected_labels and actual_labels:
-        return expected_labels == actual_labels
-    return False
-
-
-# Correct
-def compare_labels(expected_labels: dict, actual_labels: dict) -> bool:
-    return expected_labels == actual_labels
-```
-
-**Clarification:** "Trust" means don't check if required arguments were passed (they always are). "Validate at Source" means fixtures validate the VALUE they produce is valid.
-
-### No Duplicate Code (MUST)
-
-If the same logic appears twice, extract it into a function. Copy-paste is the indicator.
-Don't create abstractions for single-use or merely "similar" code.
-
-**What to flag:**
-
-- Identical code blocks in multiple test classes or functions
-- Same validation/extraction pattern repeated in different files
-- Same expression computed multiple times — store in a variable and reuse
-
-```python
-# Wrong — same check in two places
-if "copyoffload" in source_provider_data_copy:
-    provider_annotations = {FEATURE_COPY_OFFLOAD: "true"}
-# ... 50 lines later ...
-if "copyoffload" in source_provider_data_copy:
-    setup_copyoffload(...)
-
-# Correct — compute once, reuse
-is_copyoffload = "copyoffload" in source_provider_data_copy
-if is_copyoffload:
-    provider_annotations = {FEATURE_COPY_OFFLOAD: "true"}
-# ...
-if is_copyoffload:
-    setup_copyoffload(...)
-```
-
-### No Unnecessary Variables (MUST)
-
-Avoid intermediate variables that add no clarity.
-
-```python
-# Wrong
-@pytest.fixture
-def my_fixture():
-    result = create_resource()
-    yield result
-
-
-# Correct
-@pytest.fixture
-def my_fixture():
-    yield create_resource()
-```
-
-### Exception Types (MUST)
-
-Use specific exception types instead of generic `RuntimeError`. Create custom exceptions for domain-specific errors.
-
-| Instead of RuntimeError | Use                                    |
-| ----------------------- | -------------------------------------- |
-| Invalid input/config    | `ValueError`                           |
-| Missing resource        | `ValueError`                           |
-| Type issues             | `TypeError`                            |
-| Key not found           | `KeyError` (let propagate)             |
-| Connection failures     | `ConnectionError`                      |
-| Domain-specific errors  | **Custom exception class (preferred)** |
-
-**Custom exceptions are encouraged** for domain-specific errors. They provide clearer error handling and better debugging:
-
-```python
-# Custom exceptions are encouraged for domain-specific errors
-from exceptions.exceptions import MigrationTimeoutError, ProviderConnectionError
-
-# Example custom exception usage
-if not provider.is_connected():
-    raise ProviderConnectionError(f"Failed to connect to provider '{provider.name}'")
-
-if not migration.wait_for_completion(timeout=3600):
-    raise MigrationTimeoutError(f"Migration '{migration.name}' timed out after 1 hour")
-```
-
-**Location:** All custom exceptions must be defined in `exceptions/exceptions.py`, not scattered in other modules. This centralizes exception definitions for better discoverability.
-
-**Exception:** `RuntimeError` is allowed ONLY in pytest hooks for infrastructure failures (e.g., cluster unreachable, API timeout).
-Use `ValueError` for configuration errors (e.g., missing config key, invalid credentials file).
-
-### No `except Exception` (MUST)
-
-Broad exception handling masks programming bugs (`TypeError`, `AttributeError`, `KeyError`) that should crash loudly.
-
-The `check_no_except_exception` pre-commit hook enforces this, and pre-existing violations are tracked as a ratchet in
-`scripts/hooks/baselines/check_no_except_exception.txt`, grandfathered under issue #610. That baseline is the sanctioned exception: it shrinks as findings are
-fixed and is never expanded, so new code must never add an entry to it. Read the file for the current count rather than assuming one.
-
-```python
-# Wrong — swallows everything including bugs
-try:
-    vm = clone_vm(source_vm_name=name, ...)
-except Exception as clone_error:
-    raise VmNotFoundError(f"Failed to clone: {clone_error}") from clone_error
-
-# Correct — catch specific exceptions, let bugs propagate
-try:
-    vm = clone_vm(source_vm_name=name, ...)
-except vim.fault.VmConfigFault as err:
-    raise VmNotFoundError(f"Failed to clone VM '{name}': {err}") from err
-```
-
-**What to flag:**
-
-- Any `except Exception` that is not in a pytest hook
-- Catching exceptions only to log them and continue
-- Re-wrapping specific exceptions into generic ones
-
-### No Fallbacks, No Silent Recovery (MUST)
-
-Tests are deterministic. When something is wrong, fail immediately — never fall back to an alternative.
-
-```python
-# Wrong — silent fallback hides the real problem
-try:
-    resource_pool = self.get_obj([vim.ResourcePool], "Resources")
-except ValueError:
-    LOGGER.warning("Could not find resource pool, using template's pool")
-    relocate_spec.pool = source_vm.resourcePool
-
-# Correct — fail if the expected resource doesn't exist
-resource_pool = self.get_obj([vim.ResourcePool], "Resources")
-relocate_spec.pool = resource_pool
-```
-
-**What to flag:**
-
-- `except` followed by a fallback code path
-- `LOGGER.warning(...)` used to paper over a failure instead of raising
-- `try/except` with a different code path in the `except` block
-
-### No Unnecessary Logging (MUST)
-
-Pytest captures all output. Do not add redundant logging that duplicates what pytest already provides.
-Progress logging for long-running operations (migration execution, provider connections) is acceptable — flag only redundant per-step logging within those operations.
-
-**What to flag:**
-
-- Logging input parameters already visible in pytest output
-- Multiple sequential `LOGGER.info()` calls that could be one line
-- Reporter/progress logging in test methods
-- Debug logging left in production code
-
-### No Dead Code or Unnecessary Comments (MUST)
-
-Code must be clean. Remove anything that adds no value.
-
-**What to flag:**
-
-- Comments that restate what the code does (`# Create storage map` above `create_storage_map()`)
-- Comments like `# Success!`, `# Retry`, `# original behavior - unchanged`
-- Unreachable code after `return`, `raise`, or exhaustive loops
-- Debug code left in (listing all datastores, extensive logging of internal state)
-- Commented-out code blocks
-- `type: ignore` without a comment explaining why
-
-### Do Not Mutate Caller Data In-Place (SHOULD)
-
-Functions that receive dicts or lists from callers should not modify them unless that is their documented purpose.
-
-```python
-# Wrong — vm.pop() modifies the caller's data
-for vm in virtual_machines_list:
-    if migrate_shared := vm.pop("migrate_shared_disks", None):
-        vm["migrateSharedDisks"] = migrate_shared
-
-# Correct — work on a copy, collect results
-processed = []
-for vm in virtual_machines_list:
-    vm_copy = dict(vm)
-    if migrate_shared := vm_copy.pop("migrate_shared_disks", None):
-        vm_copy["migrateSharedDisks"] = migrate_shared
-    processed.append(vm_copy)
-```
-
-### Magic Numbers and Hardcoded Values (SHOULD)
-
-Numeric literals and string constants that aren't self-explanatory should be named constants with comments.
-
-```python
-# Wrong — what does 4000 mean? What does -101 mean?
-port_offset = 4000
-disk_key = -101
-
-# Correct
-_SERIAL_PORT_OFFSET = 4000  # vSphere serial port numbering starts at 4000
-_RDM_DISK_KEY = -101  # Placeholder key for RDM disk devices
-```
-
-### `hasattr` / Duck-Typing Is Fragile (SHOULD)
-
-Use `isinstance()` checks instead of `hasattr()` for method/attribute detection. A typo in `hasattr` silently skips logic.
-
-```python
-# Wrong — typo in method name silently skips
-if hasattr(source_provider, "relink_shared_disks"):
-    source_provider.relink_shared_disks(...)
-
-# Correct — type-safe, catches typos at development time
-if isinstance(source_provider, VMWareProvider):
-    source_provider.relink_shared_disks(...)
-```
-
-### No Removed Functionality Without Justification (MUST)
-
-Removing existing code (safety checks, validations, feature logic) requires explicit justification in the PR description or commit message.
-
-**What to flag:**
-
-- Removed validation/health checks without explanation
-- Removed error handling without confirming the error case no longer exists
-- Changed defaults (e.g., `clone=True` → `clone=False`) without documenting why
-
-### Feature-Specific Logic Must Not Pollute General Code (MUST)
-
-Adding a new feature (e.g., copy-offload) must not introduce feature-specific branching throughout general-purpose functions.
-
-```python
-# Wrong — copy-offload branching injected into general naming logic
-def generate_resource_name(plan, ...):
-    if plan.get("copyoffload"):
-        return f"xcopy-{base_name}"
-    return base_name
-
-# Correct — keep general functions general, add feature-specific functions
-def generate_resource_name(plan, ...):
-    return base_name  # Same for all features
-```
-
-**What to flag:**
-
-- `if copyoffload:` / `if feature_x:` branches inside general-purpose functions
-- Feature-specific parameters added to functions that serve all features
-
-### Use Empty Container Defaults (SHOULD)
-
-Use empty containers as defaults for **optional/nested** data where absence is valid.
-Fail fast (see "Fail Fast" rule) for **required** data where absence indicates a configuration error.
-**Note:** This applies to external/provider data (e.g., `template.spec`), not to our own config — see "Deterministic Tests" for config access rules.
-
-```python
-# Wrong
-firmware_spec = template.spec.domain.get("firmware")
-if firmware_spec is not None:
-    boot_order = firmware_spec.get("bootOrder")
-
-# Correct
-firmware_spec: dict[str, Any] = template.spec.domain.get("firmware", {})
-boot_order: list = firmware_spec.get("bootOrder", [])
-```
-
-### Docstring Format (MUST)
-
-All new functions must have docstrings with the standard sections as applicable:
-
-- `Args`: include when the function has parameters.
-- `Returns`: include only when returning a meaningful non-`None` value (omit for `__init__` and other void functions).
-- `Raises`: include only when exceptions are actually raised.
-
-```python
-def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
-    """Process a VM for migration.
-
-    Args:
-        vm (VirtualMachine): The VM resource to process
-        options (dict[str, Any]): Processing options
-
-    Returns:
-        MigrationResult: The result of the migration processing
-
-    Raises:
-        ValueError: If VM is in an invalid state
-    """
-```
-
-### Validate at Source (MUST)
-
-**Definition:** Validation = verifying required inputs, configuration values, or fixture dependencies are present
-and valid before test execution. This is distinct from assertions, which verify test outcomes during execution.
-
-Validation must happen in fixtures (where values originate), not in utility functions or test methods.
-
-```python
-# Wrong - validating in utility (too late)
-def apply_node_label(labeled_worker_node, ...):
-    if not labeled_worker_node:
-        raise ValueError("No worker node provided")
-
-# Wrong - validating in test method (see also: "Deterministic Tests - No Defaults for Our Config")
-def test_create_storagemap(self, source_provider, ...):
-    if not source_provider_data.get("storage_vendor_product"):
-        pytest.fail("Missing storage_vendor_product")  # Should be in fixture
-
-# Correct - validate in fixture
-@pytest.fixture
-def labeled_worker_node(worker_nodes, target_node_selector):
-    node = find_node_with_selector(worker_nodes, target_node_selector)
-    if not node:
-        raise ValueError(f"No node found matching selector {target_node_selector}")
-    return node
-```
-
-**Distinction:** Fixtures validate their own construction (is the fixture value valid?). Utility functions may validate external/provider data that varies at runtime.
-
-Test methods should never contain validation logic - if a config value is required, create a fixture that validates it.
-
-### Test Methods Must Be Tests (SHOULD)
-
-Before adding a `test_` prefixed method, consider whether it belongs as a test or as a fixture/helper.
-If the method's sole purpose is a precondition for other tests and has no value as a standalone test step, it likely belongs in a fixture.
-
-### Fixture Rules (MUST)
-
-- **Autouse sparingly:** Only the `autouse_fixtures` fixture in conftest.py uses `autouse=True`. All other fixtures must be requested explicitly via parameters or `@pytest.mark.usefixtures()`
-- **Noun names:** Fixtures are nouns (they represent state), never actions
-- **No magic skip:** See "No Auto-Skip" rule in Code Standards
-
-```python
-# Wrong
-@pytest.fixture
-def setup_provider():    # Action verb
-def validate_copyoffload_config():  # Action verb
-
-# Correct
-@pytest.fixture
-def source_provider():   # Noun — what it IS
-def copyoffload_config():  # Noun — what it IS
-```
-
-**What to flag:**
-
-- Fixture names that start with verbs (`setup_`, `validate_`, `create_`, `configure_`)
-- Function/variable names that become misleading after code changes
-- Generic names like `data`, `result`, `value`, `info` without context
-
-### Fixture Request Patterns (MUST)
-
-- **Method parameters:** Use when you need the fixture value in the test
-- **`@pytest.mark.usefixtures()`:** Use for side-effect fixtures (e.g., `cleanup_migrated_vms`) that perform setup/teardown but whose return value isn't needed by the test
-- **Never list both:** Don't request via both parameter AND usefixtures - choose one
-
-### No Unnecessary Randomness (MUST)
-
-Tests must be deterministic. Avoid random selection when order does not matter.
-
-```python
-# Wrong
-selected_node = random.choice(available_nodes)
-
-# Correct
-selected_node = available_nodes[0]
-```
-
-### Use Context Managers for Cleanup (SHOULD)
-
-Use context managers to ensure proper resource cleanup.
-
-```python
-# Wrong
-editor = ResourceEditor(node)
-editor.add_label(label)
-# Caller must remember to cleanup
-
-# Correct
-with ResourceEditor(node) as editor:
-    editor.add_label(label)
-    yield
-```
-
-## Architecture Patterns
-
-### Provider Abstraction
-
-- Base class: `BaseProvider` in `libs/base_provider.py`
-- Implementations: VMware, RHV, OpenStack, OVA, OpenShift providers
-- Context manager support for provider connections
-
-## Critical Constraints
-
-### No Rebase on PR Branches (MUST)
-
-Never rebase PR branches and never rewrite their history. To bring a PR up to date
-with main, merge main INTO the PR branch and push normally — force-push is never
-needed under this policy.
-
-Qodo anchors its review to the commit SHAs it has already reviewed. Rebasing (or
-amending) rewrites every SHA, so Qodo treats the PR as a brand-new diff and runs a
-full re-review, losing the approved state. A merge commit preserves the reviewed
-SHAs, so Qodo reviews only the delta — or skips the review entirely when the merge
-brings no new code.
-
-### Test Execution Prohibition
-
-AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live clusters, provider connections, and credentials.
-
-AI can: Read/analyze/write/fix tests, suggest improvements, review structure
-AI cannot: Execute tests, validate by running
-
-### No Module-Level Provider Loading (MUST)
-
-`load_source_providers()` must only be called within the pytest ecosystem (fixtures, hooks).
-Never call it at module level in test files — module-level code runs before pytest parses
-CLI args like `--providers-json`, causing the arg to be ignored.
-
-```python
-# Wrong - module level, ignores --providers-json
-_SOURCE_PROVIDER_TYPE = load_source_providers().get(...)
-
-# Correct - use pytest_collection_modifyitems hook
-# (see conftest.py for the documented pattern)
-```
-
-### Deterministic Tests - No Defaults for Our Config (MUST)
-
-| Data source | Access pattern | Why |
-| --- | --- | --- |
-| Our config (`py_config`, `plan`, `tests_params`) | `config["key"]` (direct access) | Fail fast with `KeyError` if missing |
-| External/provider data | `.get("key")` + validate | Provider data varies at runtime |
-| Optional feature flags | `.get("key", False)` | Explicitly optional |
-
-```python
-# Wrong — default for our config
-storage_class = py_config.get("storage_class", "default-storage")
-
-# Correct — direct access for our config
-storage_class = py_config["storage_class"]
-
-# Correct — .get() for optional feature flags (not present in every test config)
-warm_migration = plan.get("warm_migration", False)
-copyoffload = plan.get("copyoffload", False)
-xfs_compatibility = plan.get("xfs_compatibility", False)
-skip_clone = plan.get("skip_clone", False)
-per_nic_network_map = plan.get("per_nic_network_map", False)
-pre_copy_source_disks = plan.get("pre_copy_source_disks", False)
-
-# Correct — .get() with validation for external data
-vm_id = provider_data.get("vm_id")
-if not vm_id:
-    raise ValueError(f"VM ID not found for VM '{vm_name}'")
-```
-
-**What to flag:**
-
-- `.get("key", <default>)` on `py_config`, `plan`, `tests_params`, or any dict we control
-- `.get("key")` on external data without validation afterward
-- Using `False` as default when the key is always present in config
-  (exception: `warm_migration`, `copyoffload`, `enable_nested_virtualization`, `xfs_compatibility`,
-  `skip_clone`, `per_nic_network_map`, `inventory_timeout`, `clone_to_same_host`, `pin_to_non_dedicated_host`,
-  `preserve_static_ips`, `pre_copy_source_disks` and `disable_drs_for_vms` are optional flags — `.get()` with a documented default is correct.
-  `pytest_sessionstart` collects required keys with `.get()` purely to report every missing key in one `pytest.exit()` instead of dying on the first `KeyError`;
-  that is validation-then-exit, not a silent default.)
-
-### Provider Config Key Access (MUST)
-
-When accessing `.providers.json` fields in code, check `providers_schema.json` for whether the key is required or optional on the provider type:
-
-| Schema status | Access pattern | Example |
-| --- | --- | --- |
-| Required field | `data["key"]` | `source_provider_data["fqdn"]` |
-| Optional field | `data.get("key")` | `source_provider_data.get("vddk_init_image")` |
-| Conditional field | `data.get("key")` + validate | `copyoffload_config.get("ontap_svm")` |
-
-**What to flag:**
-
-- `.get()` on a field marked required in the schema
-- Direct `["key"]` access on a field marked optional in the schema
-- Adding new `.providers.json` fields without updating `providers_schema.json`
-
-### Schema and Example Maintenance (MUST)
-
-When adding, removing, or renaming any property in `.providers.json`, update **both**:
-
-1. `providers_schema.json` — required/optional status, types, enums, descriptions
-2. `.providers.json.example` — add the new field with a placeholder value and comment
-
-### Resource Creation - create_and_store_resource()
-
-Every OpenShift resource must use `utilities/resources.py:create_and_store_resource()`.
-
-```python
-def create_and_store_resource(
-    client: DynamicClient,
-    fixture_store: dict[str, Any],
-    resource: type[Resource],
-    test_name: str | None = None,
-    **kwargs: Any,
-) -> Any:
-```
-
-Features: auto-generates unique names, deploys and waits, stores in `fixture_store["teardown"]`, handles conflicts, truncates to 63 chars.
-
-```python
-# Correct
-namespace = create_and_store_resource(
-    fixture_store=fixture_store,
-    resource=Namespace,
-    client=ocp_admin_client,
-    name="my-namespace",
-)
-
-# Wrong - bypasses tracking
-namespace = Namespace(client=ocp_admin_client, name="my-namespace")
-namespace.deploy()
-```
-
-When intentionally deleting a resource mid-test (e.g., testing plan archive+delete), unregister it
-from teardown to prevent session cleanup from operating on a missing resource:
-
-```python
-# Assumes Plan, Migration, archive_plan, get_migration_for_plan are already imported
-from utilities.resources import unregister_teardown_resource
-
-plan = self.__class__.plan_resource
-migration = get_migration_for_plan(plan)
-archive_plan(plan=plan)
-plan.clean_up(wait=True)
-unregister_teardown_resource(fixture_store=fixture_store, resource=plan)
-unregister_teardown_resource(fixture_store=fixture_store, resource=migration)
-```
-
-## Test Structure Pattern
-
-Every new test class MUST have a complete, customer-readable manual product test plan in its class docstring.
-Follow every requirement and the review checklist in [`test_plan_schema.md`](test_plan_schema.md) before review.
-The example below illustrates method structure only; use the schema for the class docstring.
-
-The standard class-based test pattern has 5 base test methods; feature-specific exceptions, including the 6-step plan-archive pattern, are listed below:
-
-```python
-from pytest_testconfig import config as py_config
-from ocp_resources.network_map import NetworkMap
-from ocp_resources.storage_map import StorageMap
-from ocp_resources.migration_toolkit_virtualization import Plan
-
-from utilities.mtv_migration import (
-    create_plan_resource,
-    execute_migration,
-    get_network_migration_map,
-    get_storage_migration_map,
-)
-from utilities.post_migration import check_vms
-
-
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_name_here"])],
@@ -797,398 +194,212 @@ from utilities.post_migration import check_vms
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 @pytest.mark.incremental
-@pytest.mark.tier0  # optional: tier0, tier1, warm, remote, copyoffload
+@pytest.mark.tier0
 class TestNameHere:
-    """See test_plan_schema.md for the required manual product test plan."""
+    """[One-sentence product scenario.]
+
+    Purpose/Regression:
+        [Behavior or regression under test, why it matters, how failure is induced.]
+
+    Prerequisites:
+        [Provider registration, disposable VM characteristics, destination
+        storage/network, permissions, feature settings, isolation.]
+
+    Test plan:
+        1. [Prepare resources and confirm source inventory visibility.]
+        2. [Create StorageMap and NetworkMap; create the Plan and confirm Ready.]
+        3. [Execute the migration and observe its status.]
+        4. [Verify the migrated VMs match the expected configuration.]
+        5. [Clean up the created resources.]
+
+    Expected result:
+        [Observable pass criteria and product evidence to inspect on failure.]
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
 
-    def test_create_storagemap(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace, source_provider_inventory):
+    def test_create_storagemap(self, ...):
         """Create StorageMap resource."""
-        self.__class__.storage_map = get_storage_migration_map(...)
-        assert self.storage_map
+        ...
 
-    def test_create_networkmap(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace, source_provider_inventory, multus_network_name):
+    def test_create_networkmap(self, ...):
         """Create NetworkMap resource."""
-        self.__class__.network_map = get_network_migration_map(
-            multus_network_name=multus_network_name, ...
-        )
-        assert self.network_map
+        ...
 
-    def test_create_plan(self, prepared_plan, fixture_store, source_provider, destination_provider, ocp_admin_client, target_namespace):
+    def test_create_plan(self, ...):
         """Create MTV Plan CR resource."""
-        self.__class__.plan_resource = create_plan_resource(
-            storage_map=self.storage_map,
-            network_map=self.network_map,
-            ...
-        )
-        assert self.plan_resource
+        ...
 
-    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
+    def test_migrate_vms(self, ...):
         """Execute migration."""
-        execute_migration(
-            plan=self.plan_resource,
-            ...
-        )
+        ...
 
-    def test_check_vms(self, prepared_plan, source_provider, destination_provider, target_namespace, source_provider_data, source_vms_namespace, source_provider_inventory):
+    def test_check_vms(self, ...):
         """Validate migrated VMs."""
-        check_vms(
-            plan=prepared_plan,
-            network_map_resource=self.network_map,
-            storage_map_resource=self.storage_map,
-            ...
-        )
+        ...
 ```
 
-### Key Patterns
+The docstring above is the structural template — replace every bracketed placeholder with the real
+scenario content; placeholder brackets left as-is will not survive review. `@pytest.mark.incremental`
+gives sequential test dependencies; shared state lives on the class (`self.__class__.attribute`).
 
-- **Class-level parametrization**: Use `class_plan_config` with `indirect=True`
-- **Shared state**: Store resources on class with `self.__class__.attribute`
-- **Test ordering**: Use `@pytest.mark.incremental` at class level for sequential test dependencies
-- **4-step plan-readiness pattern**: verify_\<feature\> -> storagemap -> networkmap -> plan
-  Used when the feature under test is exercised during provider/plan creation (e.g., CA cert field
-  validation). No migration is executed — plan readiness proves the feature works.
-- **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
-- **6-step plan-archive PVC cleanup pattern**: storagemap -> networkmap -> plan -> migrate (expected fail) -> archive_and_delete -> verify_pvc_cleanup
-  Plan-archive tests induce a failed migration (typically via post-hook), archive and delete the Plan,
-  then assert leftover DataVolumes and PVCs (including `prime-*`) are gone. `test_verify_pvc_cleanup`
-  must delete the destination VM retained by the failure before polling: the VM owns a DataVolume and
-  PVC, so an unfiltered namespace poll would never empty and the step would always time out. Isolate the
-  run with `vm_target_namespace` in the plan config (see `prepared_plan`), not with a fixture that
-  overwrites `prepared_plan["_vm_target_namespace"]`. There is no `test_check_vms` step. Lives in
-  `tests/plan_lifecycle/`.
-- **6-step shared-disk pattern (Linux)**: storagemap -> networkmap -> plan -> migrate -> verify_shared_disk_data -> check_vms
-  Shared disk tests insert `test_verify_shared_disk_data` before `test_check_vms`. This step mounts,
-  writes, and reads a shared disk from both VMs to verify bidirectional access after migration.
-  Uses `verify_shared_disk_data()` from `utilities/shared_disk.py`.
-- **7-step shared-disk pattern (Windows)**: label_shared_disk -> storagemap -> networkmap -> plan -> migrate -> verify_shared_disk_data -> check_vms
-  Windows shared disk tests prepend `test_label_shared_disk` which dynamically labels the shared NTFS
-  volume on the source VM via VMware Guest Operations API before migration. Post-migration verification
-  uses `verify_shared_disk_data_windows()` from `utilities/shared_disk.py`.
-- **6-step copy-offload pattern**: storagemap -> networkmap -> plan -> migrate -> check_xcopy_used -> check_vms
-  `test_check_xcopy_used` calls `verify_xcopy_used()` from `utilities/copyoffload_migration.py`. This step
-  validates the transfer mechanism (infrastructure), not the migrated VM (application), and provides
-  clearer failure diagnostics.
+### VM configuration options (`tests_params` per-VM dicts)
 
-  **Copy-offload test implementation:**
-  - **Default approach:** Use `execute_copyoffload_migration()` from `utilities/copyoffload_migration.py`
-    for standard copy-offload tests. This function handles all orchestration: Migration CR creation,
-    plan secret waiting, log capture callback setup, and migration polling.
-  - **Populator throttling tests:** Use `execute_migration_monitoring_populator_inflight()` from
-    `utilities/copyoffload_migration.py` for tests that need to track populator concurrency during
-    migration. This function combines migration execution with populator in-flight monitoring and
-    log capture callback setup, ensuring both concurrency tracking and populate pod logs are
-    collected during migration polling.
-  - **Concurrent migrations only:** For tests running multiple migrations simultaneously (see
-    `TestSimultaneousCopyoffloadMigrations.test_migrate_vms_simultaneously` in
-    `tests/copyoffload/test_copyoffload_migration.py`), use the low-level orchestration:
-    `wait_for_copyoffload_plan_secret()`, `create_log_capture_callback()`,
-    `wait_for_dual_migration_completion()` (from `utilities/mtv_migration.py` for two-plan tests),
-    and `wait_for_migration_complate(on_status_poll=...)` to manage each migration independently.
-
-  Do not wait for plan secret in `create_plan_resource()` — Forklift creates the plan populator secret when migration starts, not at Plan Ready.
-- **7-step copy-offload throttling pattern**: storagemap -> networkmap -> plan -> migrate -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
-  Populator throttling tests insert `test_verify_populator_throttling` after `test_migrate_vms` and before
-  `test_check_xcopy_used`. This step calls `verify_populator_throttling()` from `utilities/copyoffload_migration.py`
-  to validate per-ESXi-host concurrency limits, `PopulatorThrottled` events, and `sourceHost` labels.
-  Requires the `populator_inflight_forkliftcontroller` fixture.
-- **8-step copy-offload VM+populator throttling pattern**: storagemap -> networkmap -> plan -> migrate ->
-  `verify_vm_inflight_throttling` -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
-  Combined VM and populator inflight tests (MTV-777) split verification into two steps after
-  `test_migrate_vms`: `test_verify_vm_inflight_throttling` (peak concurrent VMs per host) then
-  `test_verify_populator_throttling` (sourceHost labels, `PopulatorThrottled` events, peak populate
-  pods). With sequential VMs (`VM_INFLIGHT_LIMIT=1`), pass `min_expected_throttled` to
-  `verify_populator_throttling()` as `vm_count * max(0, disks_per_vm - limit)` instead of the default
-  `pod_count - limit`. Requires the `vm_populator_inflight_forkliftcontroller` fixture.
-- **8-step copy-offload dedicated-host pattern**: verify_source_vm_placement -> storagemap ->
-  networkmap -> plan -> migrate -> verify_dedicated_migration_host -> check_xcopy_used -> check_vms
-  Configures StorageMap `offloadPlugin.vsphereXcopyConfig.dedicatedMigrationHosts` from
-  `copyoffload.dedicated_migration_hosts` (via the `configured_dedicated_hosts` fixture) and verifies
-  XCOPY executed on configured hosts using `verify_dedicated_migration_host()` from
-  `utilities/copyoffload_migration.py`. The original `TestCopyoffloadDedicatedMigrationHost` pins
-  both VMs to non-dedicated hosts and retains multi-dedicated-host coverage with the default populator
-  limit. `TestCopyoffloadDedicatedHostSharedPopulatorLimit` configures exactly one dedicated host,
-  pins VM1 there and VM2 elsewhere, and lowers the populator limit to 1 to check the observed runtime-host
-  concurrency ceiling.
-  During migration polling, it also requires a Pending PVC with a structured
-  `PopulatorThrottled` event and a Running worker from another source host on the sole configured
-  dedicated host. It matches the Event's involved PVC by name and UID, then uses the PVC's
-  sourceHost label and the worker's runtime-host metadata. The event timestamp must be at or after
-  the worker's start time. This avoids parsing Event messages and does not depend on a fixed event
-  count or compare historical worker intervals. Reuse the populate-Pod snapshot already fetched for
-  concurrency counting; query Events on each poll and list migration PVCs only when such Events exist.
-  Both scenarios verify source placement and determine the runtime XCOPY host from `throttleHost`
-  when available, otherwise from `--migration-host` (current controllers may write that host to
-  the populate Pod's `sourceHost` label). Do not confuse Pod labels with the original host on the
-  VSphereXcopyVolumePopulator CR/PVC. The negative
-  case (an ESXi host ID absent from inventory) uses the same storagemap -> networkmap -> plan -> migrate
-  steps but expects `test_migrate_vms` to raise `MigrationPlanExecError`, then verifies the populate pod
-  failure reason with `verify_populate_pod_failure_reason()`; see
-  `TestCopyoffloadDedicatedMigrationHostInvalidId` in `tests/copyoffload/test_copyoffload_migration.py`.
-- **6-step LUKS pattern**: storagemap -> networkmap -> plan -> migrate -> verify_luks_encryption -> check_vms
-  `test_verify_luks_encryption` calls `verify_luks_encryption()` from `utilities/post_migration.py`. LUKS
-  secret setup is handled by the `luks_vm_specs` fixture in `tests/luks/conftest.py`, which resolves
-  passphrases (per-VM override → provider fallback) and creates K8s Secrets.
-- **6-step XFS pattern**: storagemap -> networkmap -> plan -> migrate -> verify_xfs_version -> check_vms
-  XFS migration tests insert `test_verify_xfs_version` before `test_check_vms`. This step executes
-  `xfs_info` on the migrated VM to verify XFS v4 filesystem compatibility (validates `crc=0` in output).
-  Uses `check_vm_command_output()` from `utilities/post_migration.py`.
-  Requires `xfs_compatibility: True` in plan config and `xfs_check` config dict.
-- **7-step resume-conversion pattern**: storagemap -> networkmap -> plan -> migrate (expected conversion failure) -> verify_pvcs_preserved -> resume_migration -> check_vms
-  Resume-conversion tests use the `vsphere` marker and keep the ineligible-resume scenario in the warm test module.
-
-**Test method naming:** Base tests: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`,
-`test_migrate_vms`, `test_check_vms`. Shared-disk Linux tests: same through `test_migrate_vms`, then
-`test_verify_shared_disk_data`, `test_check_vms`. Shared-disk Windows tests: `test_label_shared_disk`,
-then the base five through `test_migrate_vms`, then `test_verify_shared_disk_data`, `test_check_vms`. Copy-offload tests: same through `test_migrate_vms`, then
-`test_check_xcopy_used`, `test_check_vms`. Copy-offload throttling tests: same through `test_migrate_vms`, then
-`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. Copy-offload VM+populator
-throttling tests: same through `test_migrate_vms`, then `test_verify_vm_inflight_throttling`,
-`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. Copy-offload dedicated-host tests:
-`test_verify_source_vm_placement`, then the base methods through `test_migrate_vms`, followed by
-`test_verify_dedicated_migration_host`, `test_check_xcopy_used`, `test_check_vms`.
-LUKS tests: same through `test_migrate_vms`, then
-`test_verify_luks_encryption`, `test_check_vms`. XFS tests: same through `test_migrate_vms`, then
-`test_verify_xfs_version`, `test_check_vms`. Plan-archive PVC cleanup tests: same through
-`test_migrate_vms` (expects `MigrationPlanExecError`), then `test_archive_and_delete_plan`,
-`test_verify_pvc_cleanup`.
-Resume-conversion tests: same through `test_migrate_vms`, then `test_verify_pvcs_preserved`,
-`test_resume_migration`, `test_check_vms`.
-
-**Fixture parameters:** Each test method requests only the fixtures it needs. The example shows typical patterns.
-
-### Adding New Tests
-
-1. Add configuration to `tests/tests_config/config.py`:
-
-```python
-tests_params: dict = {
-    "test_my_new_test": {
-        "virtual_machines": [{"name": "vm-name", "source_vm_power": "on", "guest_agent": True}],
-        "warm_migration": False,
-    },
-}
-```
-
-1. Create the test file in the feature subdirectory described in **Test File Location (MUST)** (for example, `tests/<feature>/test_<feature>_migration.py`)
-2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
-3. Add pytest markers at class level (tier0, tier1, warm, remote, copyoffload)
-4. Implement the 5 base test methods. Some features need extra validation steps: see **Key Patterns** for the
-   6-step shared-disk (Linux), 7-step shared-disk (Windows), copy-offload, and LUKS patterns, or the 7-step
-   copy-offload throttling and copy-offload dedicated-host patterns
-
-**VM Configuration Options:**
-
-| Option                    | Required | Values                                   |
-| ------------------------- | -------- | ---------------------------------------- |
-| `name`                    | Yes      | VM name in source provider               |
-| `source_vm_power`         | No       | "on" or "off"                            |
-| `guest_agent`             | No       | True if installed                        |
-| `clone`                   | No       | True to clone before migration           |
-| `disk_type`               | No       | "thin", "thick-lazy", "thick-eager"      |
-| `luks`                    | No       | True if VM has LUKS-encrypted disk       |
-| `luks_passphrase`         | No       | Per-VM passphrase override               |
-| `migrate_shared_disks`    | No       | True for owner VM in shared disk tests   |
-| `add_nic`                 | No       | True to add a NIC (vSphere only)         |
-| `add_nic_start_connected` | Yes*     | Required when `add_nic=True`; bool       |
-| `win_os`                  | No       | Hyper-V guest OS override (bool)         |
-
-**Plan Configuration Options:**
-
-| Option                           | Required | Description                                                                                                                 |
-| -------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `warm_migration`                 | No       | True for warm migration                                                                                                     |
-| `preserve_static_ips`            | No       | True to preserve static IP addresses after migration                                                                        |
-| `copyoffload`                    | No       | True to enable copy-offload (XCOPY) migration                                                                               |
-| `xfs_compatibility`              | No       | True to enable XFS v4 filesystem compatibility                                                                              |
-| `migrate_shared_disks`           | No       | True to enable shared disk migration at plan level                                                                          |
-| `inventory_timeout`              | No       | Per-VM Forklift inventory wait timeout, in seconds                                                                          |
-| `clone_to_same_host`             | No       | True to default VM2+ to VM1's ESXi host; explicit `target_esxi_host` overrides                                              |
-| `pin_to_non_dedicated_host`      | No       | True to pin VMs without an explicit host target outside `copyoffload.dedicated_migration_hosts`                             |
-| `pin_first_vm_to_dedicated_host` | No       | Pin VM1 to the sole dedicated host; conflicts with an explicit target host                                                  |
-| `vm_inflight_limit`              | No       | Per-class VM migration limit for the shared controller fixture; defaults to 1                                               |
-| `populator_inflight_limit`       | No       | Per-class populator limit for the shared controller fixture; defaults to 2                                                  |
-| `disable_drs_for_vms`            | No       | True to disable vSphere DRS per VM after cloning; not supported for OVA; requires a VMware clone provider                   |
-| `per_nic_network_map`            | No       | True to create per-NIC network mappings (allows duplicate source network entries in NetworkMap)                             |
-| `skip_clone`                     | No       | True to skip VM cloning in prepared_plan fixture (for plan-readiness tests that use existing VMs)                           |
-| `rdm_as_lun`                     | No       | True to map RDM disks as LUN devices with SCSI bus instead of default virtio                                                |
-| `pre_copy_source_disks`          | No       | True to enable Hyper-V two-phase VHDX→raw transfer; applied only when the source provider is Hyper-V                        |
-
-**Test Verification Configuration:**
-
-| Option                      | Required | Description                                                     |
-| --------------------------- | -------- | --------------------------------------------------------------- |
-| `xfs_check`                 | Yes*     | XFS filesystem verification config. Required for XFS tests      |
-| `xfs_check.command`         | Yes*     | Command to execute. Required when `xfs_check` is present        |
-| `xfs_check.mount_point`     | Yes*     | Mount point to check. Required when `xfs_check` is present      |
-| `xfs_check.expected_output` | Yes*     | Expected string in output. Required when `xfs_check` is present |
-
-## Fixture Patterns
-
-### Test File Location (MUST)
-
-This repo tests MTV against live infrastructure. All test methods must exercise MTV product behavior through the supported
-integration/end-to-end architecture; never unit-test internal helpers or providers or use mocks. Put all test files
-under `tests/<feature>/`, not directly under `tests/`. Do not add `unit_tests/` or standalone test scripts.
-For execution restrictions, see **Test Execution Prohibition**.
-
-### conftest.py Structure and File Placement (MUST)
-
-Every piece of code has exactly one correct location. Misplaced code is a review blocker.
-
-| Code type | Correct location | Wrong location |
+| Option | Required | Values / Notes |
 | --- | --- | --- |
-| Pytest fixtures and hooks | `conftest.py` closest to tests that use them | Test files, utility modules |
-| Helper/utility functions | `utilities/<module>.py` | `conftest.py`, test files |
-| Provider-specific logic | `libs/providers/<provider>.py` | `conftest.py`, utilities |
-| Constants | Top of the module that owns them, after imports | Inline before first usage |
-| Custom exceptions | See "Exception Types (MUST)" rule | Scattered in other modules |
+| `name` | Yes | VM name in source provider |
+| `source_vm_power` | No | "on" / "off" |
+| `guest_agent` | No | True if installed |
+| `clone` | No | True to clone before migration |
+| `disk_type` | No | "thin" / "thick-lazy" / "thick-eager" |
+| `luks` / `luks_passphrase` | No | LUKS-encrypted disk; per-VM passphrase override |
+| `migrate_shared_disks` | No | True for owner VM in shared-disk tests |
+| `add_nic` | No | True to add a NIC (vSphere only) |
+| `add_nic_start_connected` | Yes* | Required when `add_nic=True`; bool |
+| `win_os` | No | Hyper-V guest OS override (bool) |
 
-**What to flag:**
+### Plan configuration options
 
-- Private helper functions (`_func`) defined in `conftest.py` — move to `utilities/`
-- Module-level constants defined in the middle of a file — move after imports
-- See also: "No Inline Imports" and "Validate at Source" rules
+| Option | Effect when `True` |
+| --- | --- |
+| `warm_migration` | Warm migration |
+| `preserve_static_ips` | Preserve static IPs after migration |
+| `copyoffload` | Copy-offload (XCOPY) migration |
+| `xfs_compatibility` | XFS v4 filesystem compatibility (requires `xfs_check` config: `command`, `mount_point`, `expected_output`) |
+| `migrate_shared_disks` | Shared disk migration at plan level |
+| `inventory_timeout` | Per-VM Forklift inventory wait timeout (seconds) |
+| `clone_to_same_host` | VM2+ default to VM1's ESXi host; explicit `target_esxi_host` overrides |
+| `pin_to_non_dedicated_host` | Pin every VM outside `copyoffload.dedicated_migration_hosts` |
+| `disable_drs_for_vms` | Disable vSphere DRS per VM after cloning (not for OVA; needs VMware clone provider) |
+| `per_nic_network_map` | Per-NIC network mappings (duplicate source networks allowed) |
+| `skip_clone` | Skip VM cloning in `prepared_plan` (plan-readiness tests on existing VMs) |
+| `rdm_as_lun` | Map RDM disks as LUN devices with SCSI bus |
+| `pre_copy_source_disks` | Hyper-V two-phase VHDX→raw transfer (Hyper-V source only) |
 
-### Fixture Scopes
+These optional flags use `plan.get("flag", False)` in code; every other key in our config
+(`py_config`, `plan`, `tests_params`) is accessed directly — see "Deterministic Tests".
 
-**Session-scoped** - shared across all tests:
+## Test-Plan Docstring Accuracy
 
-```python
-@pytest.fixture(scope="session")
-def ocp_admin_client():
-    return get_cluster_client()
-```
+Plans describe what the test **actually does** — verified against the class's config keys, the
+utilities it calls, and `check_vms()`'s provider-conditional gating (static-IP assertions run only
+for vSphere/Hyper-V; NIC-name assertions only for vSphere). Asserted is not inferred: a migration
+reporting `Succeeded` does not prove a hook ran — say which is checked and how. The full
+human-review checklist is in [`test_plan_schema.md`](test_plan_schema.md).
 
-Common: `ocp_admin_client`, `session_uuid`, `target_namespace`, `source_provider`, `destination_provider`, `fixture_store`
+## Linter Design Rules
 
-**Class-scoped** - per test class:
+- New hooks **never** get baselines or suppression lists: `--all-files` means the current state of
+  every file, always.
+- Sanctioned exception: the issue-#610 ratchets in `scripts/hooks/baselines/`
+  (`check_no_except_exception`, `check_no_kubernetes_runtime`, `check_no_runtimeerror`,
+  `check_exceptions_location`) — shrink when fixing, never expand.
+- One rule = one hook.
+- `test_plan_schema.md` is implemented twice — in
+  `scripts/hooks/check_test_plan_docstring_schema.py` and in the coverage CLI's `conforming` check
+  (`cli/mtv_api_tests/coverage.py`). Changing the schema updates all three together.
 
-Two class-scoped fixtures work together (used with `indirect=True` parametrization):
+## Critical Constraints
 
-- `class_plan_config`: Raw test configuration from `@pytest.mark.parametrize`
-- `prepared_plan`: Processed config with cloned VMs, updated names, and `source_vms_data`.
-  - Two-phase clone pattern: clone all VMs first, then batch inventory sync via
-    `wait_for_cloned_vms_in_forklift_inventory`.
-  - Applies to all non-OVA class tests with cloned VMs.
+- **No rebase on PR branches (MUST):** never rebase or rewrite history on a PR branch; force-push
+  is never needed. Bring a PR up to date by merging main INTO the branch. Qodo anchors reviews to
+  commit SHAs — a rebase forces a full re-review and loses the approved state.
+- **Test execution prohibition:** AI must NEVER run tests (`pytest`, `uv run pytest`) — they need
+  live clusters, providers, and credentials. Read/analyze/write/fix only.
+- **No module-level provider loading (MUST, hook):** `load_source_providers()` only inside the
+  pytest ecosystem (fixtures, hooks) — module-level calls run before pytest parses CLI args like
+  `--providers-json` (hook: `check-no-module-load-source-providers`).
+- **Deterministic tests — no defaults for our config:**
 
-Test methods receive `prepared_plan` which is ready to use:
+| Data source | Access pattern |
+| --- | --- |
+| Our config (`py_config`, `plan`, `tests_params`) | `config["key"]` — fail fast with `KeyError` |
+| External/provider data | `.get("key")` + validate |
+| Optional feature flags (list above) | `.get("key", False)` |
 
-```python
-@pytest.fixture(scope="class")
-def prepared_plan(class_plan_config, fixture_store, source_provider, ...):
-    plan: dict[str, Any] = deepcopy(class_plan_config)
-    # Clone VMs, update names
-    plan["source_vms_data"] = {}  # Separate storage for source VM data
-    yield plan
-    # Track for cleanup
-```
+  `pytest_sessionstart` collecting required keys with `.get()` to report all missing keys in one
+  `pytest.exit()` is validation-then-exit, not a silent default.
 
-**Function-scoped** (default) - per test method:
+- **Provider config key access (MUST):** check `providers_schema.json` for required/optional status
+  before accessing `.providers.json` fields — required: `data["key"]`; optional: `data.get("key")`;
+  conditional: `.get()` + validate. Adding/renaming `.providers.json` fields updates
+  `providers_schema.json` **and** `.providers.json.example` together.
+- **Every OpenShift resource via `create_and_store_resource()`** (from `utilities/resources.py`):
+  auto-unique names, deploy+wait, teardown tracking, 63-char truncation. Never
+  `Resource(...).deploy()` directly. When intentionally deleting a resource mid-test, unregister it
+  from teardown (`unregister_teardown_resource`) so session cleanup skips the missing resource.
 
-Function-scoped fixtures are rarely needed in this codebase. Most fixtures are session or class scoped. If you need per-test isolation, use function scope but this is uncommon.
+## Fixtures
 
-### cleanup_migrated_vms Fixture
-
-Class-scoped teardown fixture that cleans up migrated VMs after each test class completes.
-
-**Usage:** Add via `@pytest.mark.usefixtures("cleanup_migrated_vms")` at class level.
-
-**Behavior:**
-
-- Runs after all tests in the class complete (teardown-only fixture)
-- Uses `vm_obj.clean_up()` from ocp_resources for proper VM cleanup
-- Honors `--skip-teardown` flag (skips cleanup when flag is set)
-- Session-level teardown catches any leftover VMs not cleaned by class fixtures
-
-### fixture_store Structure
+- **Autouse sparingly:** only `autouse_fixtures` in conftest.py uses `autouse=True`
+  (hook: `check-autouse-fixtures`); everything else is requested explicitly.
+- **Noun names** — fixtures are state, not actions (`source_provider`, not `setup_provider`).
+- **Request pattern:** parameter when the test needs the value; `@pytest.mark.usefixtures()` for
+  side-effect-only fixtures. Never both.
+- **No unnecessary randomness:** `available_nodes[0]`, not `random.choice`.
+- **Scopes:** session (`ocp_admin_client`, `session_uuid`, `target_namespace`, providers,
+  `fixture_store`); class (`class_plan_config` raw config → `prepared_plan` processed config with
+  cloned VMs and `source_vms_data`, used with `indirect=True` parametrization); function rarely.
+  Scope changes need a comment explaining why.
+- **`cleanup_migrated_vms`:** class-scoped teardown fixture, applied via
+  `@pytest.mark.usefixtures` at class level; honors `--skip-teardown`.
+- **`fixture_store` shape:**
 
 ```python
 {
     "session_uuid": "auto-abc123",
     "base_resource_name": "auto-abc123-vsphere-8-0",
-    "teardown": {
-        "Namespace": [{"name": "ns1", ...}],
-        "VirtualMachine": [{"name": "vm1", ...}],
-    },
+    "teardown": {"Namespace": [{"name": "ns1"}], "VirtualMachine": [{"name": "vm1"}]},
 }
 ```
 
-## Test Markers
+## Markers and Naming
 
-| Marker                  | Purpose                                |
-| ----------------------- | -------------------------------------- |
-| `tier0`                 | Core functionality (smoke tests)       |
-| `tier1`                 | Extended functionality tests           |
-| `warm`                  | Warm migration tests                   |
-| `remote`                | Remote cluster tests                   |
-| `copyoffload`           | Copy-offload (XCOPY) tests             |
-| `copyoffload_sanity`    | Copy-offload sanity subset             |
-| `copyoffload_snapshots` | Copy-offload snapshot tests (vSphere)  |
-| `ca_crt`                | CA certificate field (ca.crt) tests    |
-| `vsphere`               | VMware vSphere provider-specific tests |
-| `shared_disk`           | Shared disk migration tests            |
+| Marker | Purpose |
+| --- | --- |
+| `tier0` / `tier1` | Core (smoke) / extended functionality |
+| `warm` | Warm migration |
+| `remote` | Remote cluster |
+| `copyoffload` (+`_sanity`, `_snapshots`) | Copy-offload (XCOPY) tests and sub-groups |
+| `ca_crt` | CA certificate field (ca.crt) |
+| `vsphere` | vSphere provider-specific |
+| `shared_disk` | Shared disk migration |
 
-**Marker requirements for collection-time skipping (MUST):**
+Collection-time provider-type skipping matches tests by marker in `pytest_collection_modifyitems`
+(see conftest.py for the documented pattern) — tests MUST carry the correct markers or skipping
+breaks: warm → `@pytest.mark.warm`; copy-offload snapshots → `@pytest.mark.copyoffload_snapshots`;
+CA cert → `@pytest.mark.ca_crt`.
 
-Provider-type skip logic runs in `pytest_collection_modifyitems` (in `conftest.py`) and matches tests by marker keywords. Tests MUST use the correct markers for skipping to work:
-
-- Warm migration tests → `@pytest.mark.warm`
-- Copy-offload snapshot tests → `@pytest.mark.copyoffload_snapshots`
-- CA certificate field tests → `@pytest.mark.ca_crt`
-
-See the documented hook in `conftest.py` for how to add new provider-type skip rules.
-
-**Test class naming for marker-based features (SHOULD):**
-
-Test classes for marker-gated features must include the feature name in the class name:
-
-- Warm migration → class name must contain `Warm` (e.g., `TestSanityWarmMtvMigration`)
-- Copy-offload snapshots → class name must contain both `Copyoffload` and `Snapshot` (e.g., `TestCopyoffloadThinSnapshotsMigration`)
-- Copy-offload → class name must contain `Copyoffload` (e.g., `TestCopyoffloadThinMigration`)
-- Tier1 features → class name must include the feature name (e.g., `TestLuksColdMigration`)
-
-This ensures discoverability and consistency with the markers applied to the class.
-
-```python
-@pytest.mark.tier0
-@pytest.mark.warm
-@pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote cluster")
-class TestRemoteWarmMigration: ...
-```
-
-### Fixture Scope Changes (MUST)
-
-Changing fixture scope (e.g., `session` → `function`, `class` → `session`) has performance and correctness implications.
-
-**What to flag:**
-
-- Scope changes without a comment explaining why
-- `session` → `function` scope changes (creates resources per-test instead of once)
-- `function` → `session` scope changes (may introduce shared state issues)
+Feature-gated test classes include the feature name in the class name: `Warm` for warm,
+`Copyoffload` (+`Snapshot`) for copy-offload snapshots, feature name for tier1 features
+(e.g. `TestLuksColdMigration`).
 
 ## Review Priority
 
-When multiple issues exist, address them in this order:
-
-1. **Correctness** — Wrong behavior, data loss, security issues
-2. **Architecture** — Separation of concerns, file placement, function responsibilities
-3. **Determinism** — Fallbacks, broad exceptions, `.get()` defaults on our config
-4. **Code quality** — Naming, types, duplicate code, dead code
-5. **Style** — Comments, logging, magic numbers
+When multiple issues exist, address in order: 1. **Correctness** (wrong behavior, data loss,
+security) → 2. **Architecture** (separation of concerns, placement, responsibilities) →
+3. **Determinism** (fallbacks, broad exceptions, config defaults) → 4. **Code quality** (naming,
+types, duplication, dead code) → 5. **Style** (comments, logging, magic numbers).
 
 ## Parallel Execution (pytest-xdist)
 
-Tests are parallel-safe because:
+Safe because: unique namespaces per session (`session_uuid`), isolated `fixture_store` per worker,
+unique names from `create_and_store_resource()`. Always use fixtures for namespaces (never
+hardcode); never share mutable state between tests.
 
-- Unique namespaces per session via `session_uuid`
-- Each worker has isolated `fixture_store`
-- `create_and_store_resource()` generates unique names
+## References
 
-Rules:
-
-- Always use fixtures for namespaces (never hardcode)
-- Never share mutable state between tests
+| Topic | Source |
+| --- | --- |
+| Test-plan docstring schema + accuracy checklist | [`test_plan_schema.md`](test_plan_schema.md) |
+| Plan/VM configuration in depth | `docs/test-plan-configuration.md` |
+| Pytest options, markers, collection | `docs/pytest-options-and-markers.md` |
+| Cleanup and teardown design | `docs/cleanup-and-teardown.md` |
+| Repository structure | `docs/project-structure.md` |
+| Suite architecture and workflow | `docs/architecture-and-workflow.md` |
+| Adding features to the suite | `docs/extending-the-suite.md` |
+| `.providers.json` format | `docs/provider-config-file.md` |
+| Module reference | `docs/python-module-reference.md` |
+| Enforced rules (hook sources) | `scripts/hooks/` |

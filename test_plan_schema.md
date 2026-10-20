@@ -71,3 +71,11 @@ Before review, verify every item:
   and retained VMs. Diagnostics use product-visible states and resource names rather than Python exceptions.
 - All statements match the test's real assertions. Replace template steps for plan-readiness, expected-failure,
   or other scenarios rather than inventing migration or cleanup checks.
+- Verify claims against the class's actual configuration: every check the plan describes must be driven by the
+  class's real `tests_params` entries (VM options, plan flags such as `rdm_as_lun` or `xfs_compatibility`).
+  Do not describe behavior that a missing config key disables.
+- Qualify provider-conditional checks by provider: `check_vms()` asserts static IP preservation only for
+  vSphere and Hyper-V sources and NIC names only for vSphere — plans must not claim these checks for other
+  providers.
+- Distinguish directly asserted outcomes from inferred ones: a migration reporting `Succeeded` does not prove
+  a hook ran or a disk was written — name the evidence the test actually inspects.

@@ -33,6 +33,8 @@ Current baselines:
 - `check_no_kubernetes_runtime.txt`
 - `check_no_runtimeerror.txt`
 
+Baseline file format:
+
 - Format: one `relative/posix/path:<16-char-sha256-hex>` per line, where the
   fingerprint is `sha256(span)[:16]`. Each source line is normalized by
   stripping only trailing `\n`/`\r` (leading and internal whitespace are
@@ -51,3 +53,18 @@ Current baselines:
 - **Do not expand** baselines casually; only add lines via a deliberate process
   (e.g. issue #610 grandfathering). New path/fingerprint pairs not in the
   baseline must fail the hook.
+
+## Non-baseline hooks
+
+These hooks have no baselines — `--all-files` means the current state of every
+file, always:
+
+- `check-no-dynamicclient-construct`: bans direct `DynamicClient()` construction.
+- `check-no-module-load-source-providers`: bans module-level `load_source_providers()` in `tests/`.
+- `check-test-file-location`: bans `test_*.py` directly under `tests/`.
+- `check-autouse-fixtures`: only `autouse_fixtures` may use `autouse=True`.
+- `check-test-plan-docstring-schema`: test classes must have a schema-conforming
+  test-plan docstring (see `test_plan_schema.md`).
+- `check-agents-md-budget`: fails if AGENTS.md exceeds `MAX_LINES` (420) lines.
+  AGENTS.md is a budgeted index; prune content and link to detail files instead
+  of pasting them. Raising `MAX_LINES` requires explicit justification in the PR.
