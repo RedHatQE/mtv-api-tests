@@ -49,7 +49,54 @@ LOGGER = get_logger(name=__name__)
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestUpgradeColdMigration:
-    """Cold migration with MTV operator upgrade between plan creation and execution."""
+    """Migration resources created before an MTV operator upgrade must stay valid and usable after the upgrade.
+
+    Purpose/Regression:
+        Resources created by an older MTV version (StorageMap, NetworkMap,
+        Plan) must survive an operator upgrade: the Plan must still reconcile
+        to Ready on the new version and a migration started afterwards must
+        succeed. The chosen path is an in-place operator upgrade between
+        Plan creation and migration execution; there is no induced product
+        failure — a lost or invalidated Plan, or a failed post-upgrade
+        migration, is the regression being guarded against.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift
+        destination running an MTV version eligible for upgrade, with
+        accessible destination storage and network. Have the upgrade method
+        for the target MTV version (operator subscription channel/source and
+        index image as applicable) and permission to perform the upgrade and
+        to read the installed MTV version. Use a disposable Linux VM with
+        guest-agent access and a disk and network supported by both
+        providers. Have permission to create maps and a Plan in a target
+        namespace. Run in an environment that can tolerate an MTV operator
+        upgrade.
+
+    Test plan:
+        1. Prepare the disposable source VM, verify it is visible in
+           Forklift inventory, and create a StorageMap, a NetworkMap, and a
+           cold-migration Plan for it on the pre-upgrade MTV version. Confirm
+           the Plan exists.
+        2. Upgrade the MTV operator to the target version and wait for the
+           upgrade to complete.
+        3. Check that the reported MTV version matches the target
+           major.minor version and that the pre-upgrade Plan is still present
+           and reaches Ready again within a few minutes.
+        4. Run the migration on the upgraded MTV and check it reaches
+           Succeeded.
+        5. Validate the migrated VM: power state, guest-agent presence, and
+           CPU, memory, network, and storage equivalence with the source.
+           After the checks, delete the migrated VM; the maps and Plan are
+           removed with the run.
+
+    Expected result:
+        After the upgrade the installed MTV version matches the target, the
+        pre-upgrade Plan reconciles back to Ready, the migration succeeds,
+        and the migrated VM validates. On failure, inspect the MTV operator
+        and forklift pod status and logs after the upgrade, the Plan's
+        conditions for reconciliation errors, and the migration CR status for
+        the VM's failed step.
+    """
 
     def test_upgrade_mtv(self, upgrade_script_path: str, pre_upgrade_plan_resource: Plan) -> None:
         """Upgrade the MTV operator to the target version."""

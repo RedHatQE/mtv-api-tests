@@ -42,13 +42,43 @@ if TYPE_CHECKING:
 @pytest.mark.deep_inspection
 @pytest.mark.vsphere
 class TestStandaloneDeepInspection:
-    """Standalone Deep Inspection without a migration plan.
+    """Run Deep Inspection on a vSphere VM through a standalone Conversion CR, without a migration Plan.
 
-    Creates a DeepInspection Conversion CR directly (no Plan, StorageMap,
-    or NetworkMap). The controller creates a snapshot, runs the inspection
-    pod, fetches results, and cleans up the snapshot automatically.
+    Purpose/Regression:
+        Deep Inspection must work standalone: creating a Conversion CR of
+        type DeepInspection directly — with no Plan, StorageMap, or
+        NetworkMap — must make the controller snapshot the VM, run the
+        inspection pod, publish the inspection results, and clean up the
+        snapshot. The pass signal is a Succeeded Conversion carrying OS,
+        filesystem, and check results. There is no induced failure.
 
-    No cleanup_migrated_vms: DI does not create migrated VMs.
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed. Prepare a connection Secret for the source VM
+        (endpoint URL, credentials, and certificate fingerprint) and know
+        the VDDK container image to use for the inspection pod. Use a
+        disposable Linux VM whose disks can be snapshotted (snapshots are
+        created and removed during inspection). Have permission to create a
+        Conversion CR in a target namespace.
+
+    Test plan:
+        1. Prepare the source VM and confirm it is visible in Forklift
+           inventory; note its inventory ID.
+        2. Create a DeepInspection Conversion CR for the VM, referencing the
+           connection Secret and the VDDK image. Confirm the CR is created.
+        3. Wait for the inspection pipeline to complete and check the
+           Conversion reaches Succeeded.
+        4. Verify the inspection results on the Conversion CR: OS name and
+           version, filesystem entries, and an allChecksPassed verdict are
+           all present. The inspection snapshot is removed from the source
+           VM as part of the pipeline, and the Conversion CR is removed
+           with the run.
+
+    Expected result:
+        The Conversion succeeds with a populated inspectionResult (osInfo,
+        filesystems, allChecksPassed). On failure, inspect the Conversion
+        CR's phase and conditions and the inspection pod's logs in the
+        target namespace.
     """
 
     conversion: Conversion
@@ -86,11 +116,47 @@ class TestStandaloneDeepInspection:
 @pytest.mark.deep_inspection
 @pytest.mark.vsphere
 class TestStandaloneDICancel:
-    """Cancel a running standalone Deep Inspection and re-run.
+    """Cancel a running standalone Deep Inspection, verify cleanup, and re-run it on the same VM.
 
-    Verifies the cancel mechanism: patch status.phase to Canceled,
-    controller deletes the pod and cleans up snapshots. Then creates
-    a new DI for the same VM and verifies it succeeds.
+    Purpose/Regression:
+        A running Deep Inspection must be cancellable: setting the
+        Conversion CR's status phase to Canceled must stop the inspection
+        pod and remove the inspection snapshot from the source VM, and a new
+        inspection of the same VM started afterwards must complete normally.
+        The chosen failure path is the cancellation itself; the re-run proves
+        no stale state blocks later inspections.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed. Prepare a connection Secret for the source VM
+        (endpoint URL, credentials, and certificate fingerprint) and know
+        the VDDK container image for the inspection pod. Use a disposable
+        Linux VM whose disks can be snapshotted, and expect the inspection to
+        run long enough to be caught in the Running phase. Have permission to
+        create and patch Conversion CRs in a target namespace.
+
+    Test plan:
+        1. Prepare the source VM and confirm it is visible in Forklift
+           inventory.
+        2. Create a DeepInspection Conversion CR for the VM. Wait until it
+           reaches the Running phase, the inspection snapshot exists on the
+           source VM, and the inspection pod is running.
+        3. Cancel the Conversion by setting its status phase to Canceled.
+           Check that the Conversion ends in the Canceled phase (not
+           Succeeded) and that the inspection pod is removed.
+        4. Confirm the inspection snapshot is removed from the source VM
+           after cancellation.
+        5. Create a new DeepInspection Conversion CR for the same VM, wait
+           for it to complete, and check it reaches Succeeded with valid
+           inspection results (OS info, filesystems, allChecksPassed).
+           The Conversion CRs are removed with the run.
+
+    Expected result:
+        The canceled Conversion stops cleanly — Canceled phase, no inspection
+        pod, no leftover snapshot — and the re-run inspection succeeds with
+        complete results. On failure, inspect the Conversion CRs' phases and
+        conditions, the inspection pod's logs, and the source VM's snapshot
+        list for a leftover inspection snapshot.
     """
 
     conversion: Conversion
@@ -180,11 +246,38 @@ class TestStandaloneDICancel:
 @pytest.mark.deep_inspection
 @pytest.mark.vsphere
 class TestStandaloneDIValidation:
-    """Validation errors for standalone Deep Inspection.
+    """A DeepInspection Conversion missing its VDDK image must be rejected with a Critical condition.
 
-    Creates a Conversion CR with missing vddkImage (required for
-    DeepInspection type). The controller sets a Critical condition
-    (VDDKImageNotSet) and blocks the pipeline.
+    Purpose/Regression:
+        Creating a DeepInspection Conversion CR without the required
+        vddkImage field must not run the inspection: the controller must set
+        a Critical condition (VDDKImageNotSet) and keep the Conversion out of
+        Running and Succeeded phases. The failure path is the missing field
+        itself — validation must block the pipeline.
+
+    Prerequisites:
+        Register a vSphere source provider and an OpenShift destination with
+        MTV installed. Prepare a connection Secret for the source VM
+        (endpoint URL, credentials, and certificate fingerprint). Use a
+        disposable Linux VM visible in Forklift inventory. Have permission
+        to create a Conversion CR in a target namespace.
+
+    Test plan:
+        1. Prepare the source VM and confirm it is visible in Forklift
+           inventory.
+        2. Create a DeepInspection Conversion CR for the VM that omits the
+           vddkImage field. Confirm the CR is created.
+        3. Wait for the controller's validation and check that the
+           Conversion has a Critical VDDKImageNotSet condition and that its
+           phase, sampled when the Critical condition appears, is neither
+           Running nor Succeeded. The Conversion CR is removed with the
+           run.
+
+    Expected result:
+        The Conversion is blocked with a Critical VDDKImageNotSet condition
+        and has not reached Running or Succeeded at that point. On failure,
+        inspect the Conversion CR's conditions and phase and the forklift
+        controller logs for the validation decision.
     """
 
     conversion: Conversion

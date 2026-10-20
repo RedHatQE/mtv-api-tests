@@ -169,10 +169,48 @@ class LuksColdMigrationBase:
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 @pytest.mark.incremental
 class TestLuksColdMigration(LuksColdMigrationBase):
-    """Cold migration with correct LUKS disk decryption passphrase.
+    """Cold-migrate a VM with a LUKS-encrypted disk using the correct passphrase and verify encryption survives.
 
-    Validates that LUKS-encrypted VMs migrate successfully when the correct
-    passphrase is provided, and that disk encryption remains active post-migration.
+    Purpose/Regression:
+        A VM with a LUKS-encrypted partition must migrate when the correct
+        decryption passphrase is supplied to the Plan, and the disk must
+        remain LUKS-encrypted on the destination. The pass signal is a
+        successful migration plus an active crypto_LUKS device inside the
+        migrated guest. There is no induced failure.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift
+        destination with MTV installed, with accessible destination storage
+        and network. Use a disposable RHEL (or similar) VM with a
+        LUKS-encrypted partition (e.g. crypto_LUKS on the root or a data
+        partition) and a key file configured in /etc/crypttab so the VM
+        boots unattended, with SSH access and known guest credentials. Know
+        the partition's correct LUKS passphrase. Have permission to create
+        a per-VM passphrase Secret, maps, and a Plan in a target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM, wait until it appears in Forklift
+           inventory, and create a Kubernetes Secret holding the VM's correct
+           LUKS passphrase for the Plan to reference.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network. Confirm both are created.
+        3. Create a cold Plan for the VM referencing the passphrase Secret.
+           Check the Plan's Ready condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Log in to the migrated VM and confirm a device with filesystem
+           type crypto_LUKS is present (e.g. via lsblk), proving the
+           encryption survived the migration.
+        6. Run the standard VM validation: power state, connectivity, and
+           CPU, memory, network, and storage equivalence with the source.
+           After the checks, delete the migrated VM; the passphrase Secret,
+           maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds with the correct passphrase, and the migrated
+        VM still has an active LUKS-encrypted device and validates against
+        the source. On failure, inspect the migration CR status for the
+        failed step, the Plan's referenced passphrase Secret, and the guest's
+        block device layout (lsblk) for the crypto_LUKS entry.
     """
 
     def test_migrate_vms(
@@ -275,7 +313,44 @@ class TestLuksColdMigration(LuksColdMigrationBase):
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 @pytest.mark.incremental
 class TestLuksColdMigrationWrongKey(LuksColdMigrationBase):
-    """Cold migration with incorrect LUKS passphrase — expects failure at ImageConversion."""
+    """Cold-migrating a LUKS-encrypted VM with a wrong passphrase must fail at the image conversion step.
+
+    Purpose/Regression:
+        Supplying an incorrect LUKS passphrase in the Plan's Secret must not
+        produce a broken or unencrypted migrated VM: the migration must fail
+        at the ImageConversion step, where the disk is decrypted during
+        conversion. The chosen failure path is the wrong passphrase itself.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift
+        destination with MTV installed, with accessible destination storage
+        and network. Use a disposable RHEL (or similar) VM with a
+        LUKS-encrypted partition (the VM may be a clone so the original is
+        untouched). Have an incorrect passphrase to supply in the Plan's
+        Secret, and permission to create the Secret, maps, and a Plan in a
+        target namespace.
+
+    Test plan:
+        1. Prepare the disposable VM, wait until it appears in Forklift
+           inventory, and create a Kubernetes Secret holding an incorrect
+           LUKS passphrase for the Plan to reference.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network. Confirm both are created.
+        3. Create a cold Plan for the VM referencing the wrong-passphrase
+           Secret. Check the Plan's Ready condition is True.
+        4. Run the migration and check that it fails, with the VM's failed
+           pipeline step reported as ImageConversion (the decryption
+           failure). After the check, the failed migration resources,
+           Secret, maps, and Plan are removed with the run.
+
+    Expected result:
+        The migration fails at the ImageConversion step rather than
+        completing with an undecryptable or unencrypted disk. On failure of
+        the expectation (migration succeeds or fails at another step),
+        inspect the migration CR status for the VM's failed step and error,
+        the conversion pod logs for the LUKS decryption error, and the
+        passphrase Secret actually referenced by the Plan.
+    """
 
     def test_migrate_vms(
         self,

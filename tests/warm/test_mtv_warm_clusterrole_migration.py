@@ -33,7 +33,48 @@ from utilities.utils import get_value_from_py_config, populate_vm_ids
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestClusterroleWarmMtvMigration:
-    """Verify ClusterRole (forklift-migrator-role) without SCC fails warm migration."""
+    """Warm migration to a remote cluster via a token provider bound only to forklift-migrator-role must fail (MTV-3129).
+
+    Purpose/Regression:
+        A destination OpenShift provider registered with a token whose
+        ServiceAccount is bound only to the forklift-migrator-role ClusterRole
+        lacks the SecurityContextConstraints permissions warm migration
+        needs, so the migration must fail rather than half-complete
+        (MTV-3129). The chosen failure path is the missing SCC binding; the
+        migration is expected to fail and no destination VM is validated.
+
+    Prerequisites:
+        A remote OpenShift cluster with MTV installed and accessible storage
+        and network, registered from the main MTV cluster as a token-based
+        destination provider: create a ServiceAccount in the MTV operator
+        namespace, bind it only to the existing forklift-migrator-role
+        ClusterRole, and use its token for the Provider CR. Register and
+        connect a vSphere source provider. Use a disposable, powered-on
+        Linux VM with guest-agent access and disks whose changes can be
+        captured incrementally. Have permission to create maps and a Plan.
+        The destination must NOT have the forklift-controller SCC bound to
+        the migration namespace's default ServiceAccount.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM, wait until it appears in
+           Forklift inventory, and register the remote destination provider
+           with the migrator-role-only token.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network against the remote destination. Confirm both are created.
+        3. Create a warm Plan for the VM. Check the Plan's Ready condition
+           is True.
+        4. Run the warm migration with a cutover and check that it fails
+           (the migration pods cannot run with the required security
+           context on the remote cluster). The failed migration resources,
+           maps, and Plan are removed with the run.
+
+    Expected result:
+        The warm migration fails rather than completing, because the
+        token-bound provider lacks SCC permissions. On failure of the
+        expectation (the migration succeeds), inspect the migration CR
+        status for the failed step and the forklift controller logs on the
+        remote cluster for security-context admission errors.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -148,7 +189,53 @@ class TestClusterroleWarmMtvMigration:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestClusterroleWarmWithSccMigration:
-    """Verify ClusterRole (forklift-migrator-role) with SCC binding succeeds warm migration."""
+    """Warm migration to a remote cluster via a token provider succeeds once the forklift-controller SCC is bound (MTV-3129).
+
+    Purpose/Regression:
+        The positive counterpart to the migrator-role-only failure: when the
+        migration namespace's default ServiceAccount on the remote
+        destination is additionally granted the forklift-controller
+        SecurityContextConstraints (via a ClusterRole and RoleBinding), the
+        same token-based provider setup must complete a warm migration
+        successfully (MTV-3129). There is no induced failure.
+
+    Prerequisites:
+        A remote OpenShift cluster with MTV installed and accessible storage
+        and network, registered from the main MTV cluster as a token-based
+        destination provider: create a ServiceAccount in the MTV operator
+        namespace, bind it to the forklift-migrator-role ClusterRole, and use
+        its token for the Provider CR. Grant the forklift-controller SCC to
+        the migration namespace's default ServiceAccount (e.g. with an SCC
+        ClusterRole and RoleBinding, equivalent to
+        ``oc adm policy add-scc-to-user forklift-controller-scc -z default``).
+        Register and connect a vSphere source provider. Use a disposable,
+        powered-on Linux VM with guest-agent access. Have permission to
+        create maps, a Plan, and the SCC binding.
+
+    Test plan:
+        1. Prepare the disposable powered-on VM, wait until it appears in
+           Forklift inventory, register the remote destination provider with
+           the token, and create the SCC binding for the migration
+           namespace.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network against the remote destination. Confirm both are created.
+        3. Create a warm Plan for the VM. Check the Plan's Ready condition
+           is True.
+        4. Run the warm migration with a cutover and check it reaches
+           Succeeded.
+        5. Validate the migrated VM on the remote cluster: power state,
+           guest-agent presence, connectivity, and CPU, memory, network,
+           and storage equivalence with the source. After the checks, delete
+           the migrated VM; the SCC binding, provider, maps, and Plan are
+           removed with the run.
+
+    Expected result:
+        The warm migration completes successfully with the SCC binding in
+        place, and the migrated VM validates. On failure, inspect the
+        migration CR status for the failed step, the SCC RoleBinding in the
+        migration namespace, and the forklift controller logs on the remote
+        cluster for security-context admission errors.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
