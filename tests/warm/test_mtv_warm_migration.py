@@ -40,7 +40,8 @@ class TestSanityWarmMtvMigration:
     Purpose/Regression:
         Basic end-to-end warm migration sanity: a powered-on VM is copied
         incrementally and finalized at cutover, with its static IP
-        configuration preserved on the destination. On a vSphere source the
+        configuration preserved on the destination (verified for vSphere
+        and Hyper-V sources). On a vSphere source the
         scenario also verifies the warm-migration Deep Inspection results
         captured during pre-copy. There is no induced failure.
 
@@ -68,12 +69,13 @@ class TestSanityWarmMtvMigration:
            Check it reaches Succeeded. On a vSphere source, the inspection
            data captured during the migration is recorded.
         5. Validate the migrated VM: power state, guest-agent presence,
-           connectivity, static IP/subnet/gateway preservation, NIC name
-           preservation, and CPU, memory, network, and storage equivalence
-           with the source. On a vSphere source, also verify the captured
-           warm-migration Deep Inspection results are present and complete.
-           After the checks, delete the migrated VM; the maps and Plan are
-           removed with the run.
+           connectivity, and CPU, memory, network, and storage equivalence
+           with the source. When migrating from vSphere or Hyper-V, also
+           verify static IP/subnet/gateway preservation; on vSphere, also
+           NIC name preservation. On a vSphere source, also verify the
+           captured warm-migration Deep Inspection results are present and
+           complete. After the checks, delete the migrated VM; the maps and
+           Plan are removed with the run.
 
     Expected result:
         The warm migration completes through cutover, the migrated VM keeps

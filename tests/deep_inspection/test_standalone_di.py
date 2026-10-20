@@ -70,15 +70,15 @@ class TestStandaloneDeepInspection:
            Conversion reaches Succeeded.
         4. Verify the inspection results on the Conversion CR: OS name and
            version, filesystem entries, and an allChecksPassed verdict are
-           all present. Confirm the inspection snapshot was removed from the
-           source VM. The Conversion CR is removed with the run.
+           all present. The inspection snapshot is removed from the source
+           VM as part of the pipeline, and the Conversion CR is removed
+           with the run.
 
     Expected result:
         The Conversion succeeds with a populated inspectionResult (osInfo,
-        filesystems, allChecksPassed) and no leftover snapshot on the source
-        VM. On failure, inspect the Conversion CR's phase and conditions, the
-        inspection pod's logs in the target namespace, and the source VM's
-        snapshot list.
+        filesystems, allChecksPassed). On failure, inspect the Conversion
+        CR's phase and conditions and the inspection pod's logs in the
+        target namespace.
     """
 
     conversion: Conversion
@@ -269,14 +269,15 @@ class TestStandaloneDIValidation:
            vddkImage field. Confirm the CR is created.
         3. Wait for the controller's validation and check that the
            Conversion has a Critical VDDKImageNotSet condition and that its
-           phase never reaches Running or Succeeded. The Conversion CR is
-           removed with the run.
+           phase, sampled when the Critical condition appears, is neither
+           Running nor Succeeded. The Conversion CR is removed with the
+           run.
 
     Expected result:
         The Conversion is blocked with a Critical VDDKImageNotSet condition
-        and stays out of Running/Succeeded. On failure, inspect the
-        Conversion CR's conditions and phase and the forklift controller
-        logs for the validation decision.
+        and has not reached Running or Succeeded at that point. On failure,
+        inspect the Conversion CR's conditions and phase and the forklift
+        controller logs for the validation decision.
     """
 
     conversion: Conversion

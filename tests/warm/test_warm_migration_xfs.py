@@ -42,31 +42,30 @@ if TYPE_CHECKING:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms", "precopy_interval_forkliftcontroller")
 class TestWarmMigrationXfs:
-    """Warm-migrate a running vSphere Linux VM with XFS v4 (non-CRC) filesystems and confirm they stay intact.
+    """Warm-migrate a running vSphere Linux VM whose root filesystem is XFS v4 (non-CRC) and confirm it stays intact.
 
     Purpose/Regression:
-        Warm migration of disks holding XFS version-4 filesystems (created
-        without metadata checksums, ``crc=0``) must not corrupt or alter
-        them through the incremental copies and cutover. The scenario guards
-        against silent on-disk format changes during warm transfer; there is
-        no induced failure — the filesystem must remain readable with its
-        original geometry after cutover.
+        Warm migration of a VM whose root filesystem is XFS version-4
+        (created without metadata checksums, ``crc=0``) must not corrupt
+        or alter it through the incremental copies and cutover. The
+        scenario guards against silent on-disk format changes during warm
+        transfer; there is no induced failure — the filesystem must remain
+        readable with its original geometry after cutover.
 
     Prerequisites:
         Register and connect a vSphere source provider and an OpenShift
         destination with MTV installed. Prepare destination storage and
         network accessible to the migrated VM. Use a disposable RHEL (or
-        similar) VM, powered on before migration, with at least two disks
-        where an additional data disk is formatted with XFS v4 (``crc=0``)
-        and mounted (e.g. at ``/sdb1``), with guest-agent access, SSH access
-        for post-migration inspection, and disks whose changes can be
-        captured incrementally. Have permission to create maps, a Plan, and
-        a target namespace, and to adjust the controller's pre-copy
+        similar) VM, powered on before migration, whose root filesystem is
+        formatted with XFS v4 (``crc=0``), with guest-agent access, SSH
+        access for post-migration inspection, and disks whose changes can
+        be captured incrementally. Have permission to create maps, a Plan,
+        and a target namespace, and to adjust the controller's pre-copy
         interval.
 
     Test plan:
-        1. Prepare the disposable powered-on VM with the XFS v4 data disk
-           mounted and wait until it appears in Forklift inventory.
+        1. Prepare the disposable powered-on VM with its XFS v4 root
+           filesystem and wait until it appears in Forklift inventory.
         2. Create a StorageMap for the VM's disks and a NetworkMap for its
            network. Confirm both are created.
         3. Create a warm Plan for the VM with target power state on and XFS
@@ -74,9 +73,9 @@ class TestWarmMigrationXfs:
            is True.
         4. Run the warm migration with a cutover time and check it reaches
            Succeeded.
-        5. Verify the filesystem on the migrated VM: run ``xfs_info`` on the
-           data-disk mount point and confirm the output still reports
-           ``crc=0`` (XFS v4).
+        5. Verify the filesystem on the migrated VM: run ``xfs_info`` on
+           the root mount point (``/``) and confirm the output still
+           reports ``crc=0`` (XFS v4).
         6. Run the standard VM validation: power state, connectivity, and
            CPU, memory, network, and storage equivalence with the source.
            After the checks, delete the migrated VM; the maps and Plan are
@@ -84,11 +83,11 @@ class TestWarmMigrationXfs:
 
     Expected result:
         The warm migration completes through cutover, the VM is powered on
-        and reachable, and ``xfs_info`` on the migrated data disk still
-        reports ``crc=0``, proving the XFS v4 filesystem was transferred
-        unmodified. On failure, inspect the migration CR status for the
-        failed stage, the VM's disk attachments and mount state inside the
-        guest, and mount errors on the migrated VM.
+        and reachable, and ``xfs_info`` on the migrated root filesystem
+        still reports ``crc=0``, proving the XFS v4 filesystem was
+        transferred unmodified. On failure, inspect the migration CR status
+        for the failed stage, the VM's disk attachments and mount state
+        inside the guest, and mount errors on the migrated VM.
     """
 
     storage_map: StorageMap

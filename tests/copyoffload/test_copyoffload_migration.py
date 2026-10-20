@@ -2418,15 +2418,14 @@ class TestCopyoffloadRdmPhysicalDiskMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadWarmRdmVirtualDiskMigration:
-    """Warm copy-offload migration of a running VM with a virtual-mode RDM disk, verified as a SCSI LUN with XCOPY (MTV-597).
+    """Warm copy-offload migration of a running VM with a virtual-mode RDM disk, transferred with XCOPY (MTV-597).
 
     Purpose/Regression:
         Warm (incremental, with cutover) copy-offload migration must also
         handle a VM with a virtual (dependent) RDM disk attached (MTV-597):
         the incremental passes and cutover must complete with the disk
-        transferred via hardware-assisted copy, and with rdmAsLun=true the
-        RDM disk must appear on the destination VM as a LUN device on a SCSI
-        bus. There is no induced failure.
+        transferred via hardware-assisted copy. There is no induced
+        failure.
 
     Prerequisites:
         Register a vSphere source provider and an OpenShift destination with
@@ -2449,25 +2448,23 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
         2. Create a StorageMap that maps all disks to the block-volume
            storage class and carries the vsphereXcopyConfig offload plugin.
            Create a NetworkMap for the VM's network. Confirm both are created.
-        3. Create a warm Plan for the VM with copy-offload and rdmAsLun
-           enabled. Check the Plan's Ready condition is True.
+        3. Create a warm Plan for the VM with copy-offload enabled. Check
+           the Plan's Ready condition is True.
         4. Run the warm migration with a cutover and check it reaches
            Succeeded.
         5. Verify XCOPY acceleration was used: the populate pod logs and the
            Plan task annotations report xcopyUsed for the RDM disk.
         6. Validate the migrated VM: power state, connectivity, resource
-           equivalence with the source, the same disk count as the source,
-           and that the RDM disk is present as a LUN device with SCSI bus.
-           After the checks, delete the migrated VM; the secret, maps, and
-           Plan are removed with the run.
+           equivalence with the source, and the same disk count as the
+           source. After the checks, delete the migrated VM; the secret,
+           maps, and Plan are removed with the run.
 
     Expected result:
         The warm migration completes through cutover with XCOPY used, and the
-        migrated VM carries the RDM disk as a SCSI-bus LUN with the expected
-        disk count. On failure, inspect the migration CR status for the
+        migrated VM has the expected disk count and validates against
+        the source. On failure, inspect the migration CR status for the
         failed step (preflight or cutover), the populate pod logs for the
-        xcopyUsed value, and the migrated VM's disk devices for
-        lun.bus=scsi.
+        xcopyUsed value, and the migrated VM's disk devices.
     """
 
     storage_map: StorageMap
@@ -5161,7 +5158,7 @@ class TestCopyoffloadDedicatedHostSharedPopulatorLimit(CopyoffloadDedicatedMigra
         3. Migrate both VMs. Confirm each populate pod's runtime-host metadata, worker
            argument, and logs identify the dedicated host. Prefer throttleHost when
            present; otherwise use --migration-host (the current controller may write the
-           runtime host to sourceHost). Verify the observed active-pod peak never exceeds
+           runtime host to sourceHost). Verify the observed active-pod peak never exceeds 1.
            During one poll, require a still-Pending PVC with a structured
            PopulatorThrottled event, plus a Running worker from the other source host.
            The sole configured dedicated host is the shared runtime host. Match the Event
@@ -6701,7 +6698,7 @@ class TestSimultaneousCopyoffloadMigrations:
 @pytest.mark.usefixtures(
     "vmware_cloud_init_ready_both_plans", "copyoffload_config", "copyoffload_ssh_key", "cleanup_migrated_vms"
 )
-class TestConcurrentXcopyVddkMigration:
+class TestCopyoffloadConcurrentXcopyVddkMigration:
     """An XCOPY copy-offload Plan and a standard VDDK Plan must run concurrently and both succeed.
 
     Purpose/Regression:

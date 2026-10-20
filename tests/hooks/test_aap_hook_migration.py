@@ -83,18 +83,20 @@ class TestAapHookMigration:
            PreHook AWX job completed before disk transfer and the PostHook
            AWX job completed after VM creation.
         5. Validate the retained destination VM (power state and resource
-           equivalence with the source), and in AWX confirm both job
-           templates ran to successful completion. After the checks, delete
-           the migrated VM; the hooks, maps, and Plan are removed with the
-           run.
+           equivalence with the source). Both AWX jobs having completed is
+           inferred from the migration reaching Succeeded — Forklift gates
+           the pipeline on hook completion — rather than checked in AWX.
+           After the checks, delete the migrated VM; the hooks, maps, and
+           Plan are removed with the run.
 
     Expected result:
-        The migration completes successfully with both AWX jobs launched at
-        their pipeline stages and finishing successfully, and the migrated
-        VM validates. On failure, inspect the VM's failed step in the
-        migration CR status (PreHook or PostHook), the Hook CR conditions,
-        the AWX job run records and their output, and the forklift
-        controller pod logs for AAP API errors.
+        The migration completes successfully, meaning both AWX jobs were
+        launched at their pipeline stages and completed (inferred from the
+        migration reaching Succeeded; job records are not queried
+        directly), and the migrated VM validates. On failure, inspect the
+        VM's failed step in the migration CR status (PreHook or PostHook),
+        the Hook CR conditions, the AWX job run records and their output,
+        and the forklift controller pod logs for AAP API errors.
     """
 
     storage_map: StorageMap

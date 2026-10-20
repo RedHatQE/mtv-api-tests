@@ -82,18 +82,20 @@ class TestWarmMigrationComprehensive:
            disabled. Check the Plan's Ready condition is True.
         4. Run the warm migration with a cutover time and check it reaches
            Succeeded.
-        5. Verify on the destination VM: it is powered on; its static IP,
-           subnet mask and gateway match the source; interface names are
-           preserved; guest connectivity works; CPU and memory match the
-           source; NICs and disks match the maps; each PVC is named according
-           to the template (with generated suffixes); the target labels are
+        5. Verify on the destination VM: it is powered on; guest
+           connectivity works; CPU and memory match the source; NICs and
+           disks match the maps; each PVC is named according to the
+           template (with generated suffixes); the target labels are
            present; the affinity rule matches; and CPU features vmx/svm are
-           disabled. After the checks, delete the migrated VM; the maps and
-           Plan are removed with the run.
+           disabled. When migrating from vSphere or Hyper-V, also check the
+           static IP, subnet mask and gateway match the source; on vSphere,
+           also that interface names are preserved. After the checks, delete
+           the migrated VM; the maps and Plan are removed with the run.
 
     Expected result:
         The warm migration completes through cutover and every configured
-        option is visible on the migrated VM: static network configuration,
+        option is visible on the migrated VM: static network configuration
+        (verified for vSphere and Hyper-V sources),
         template-derived PVC names, target labels, affinity, placement in
         the dedicated namespace, and disabled nested-virtualization CPU
         features. On failure, inspect the migration CR status for the failed
