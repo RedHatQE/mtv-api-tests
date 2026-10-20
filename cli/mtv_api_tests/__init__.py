@@ -89,7 +89,7 @@ def run(
 
 @app.command()
 def coverage(
-    keywords: list[str] = typer.Argument(None, help="Keywords to search (AND semantics)"),  # noqa: M511
+    keywords: list[str] | None = typer.Argument(None, help="Keywords to search (AND semantics)"),  # noqa: M511
     missing_plans: bool = typer.Option(False, "--missing-plans", help="List classes with missing plans"),  # noqa: M511
     as_json: bool = typer.Option(False, "--json", help="Output JSON for scripting"),  # noqa: M511
 ) -> None:
@@ -103,4 +103,4 @@ def coverage(
     Raises:
         typer.Exit: When no keyword and no --missing-plans is given.
     """
-    coverage_command(keywords=keywords, missing_plans=missing_plans, as_json=as_json)
+    coverage_command(keywords=keywords or [], missing_plans=missing_plans, as_json=as_json)

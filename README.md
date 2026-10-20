@@ -699,7 +699,7 @@ on demand with AST — no test modules are imported and no index is stored — s
 are the single source of truth.
 
 When a scenario or regression comes in, the workflow is: search what covers it → copy the
-`-k` selector from the output → check the CI status of that test instead of running it manually.
+pytest node ID from the output → check the CI status of that test instead of running it manually.
 
 ```bash
 # Search keywords (case-insensitive, partial match; quoting and multiple
@@ -717,7 +717,7 @@ uv run mtv-api-tests coverage --json "shared disk"
 ```
 
 Each match shows the class name, one-sentence scenario summary, pytest markers, `file:line`,
-the `-k` selector that runs the class, and the matching docstring line. Keywords match across
+the pytest node ID that runs exactly that class, and the matching docstring line. Keywords match across
 the whole docstring, the class name, and the markers (`shared disk` matches the `shared_disk`
 marker); matches in classes whose docstring does not follow the schema yet are still listed,
 marked with a note. **No matches exits 0** with a "not covered" message, so scripts can chain

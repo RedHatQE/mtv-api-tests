@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import ast
 import json
+import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
+from rich.markup import escape
 
 from cli.mtv_api_tests.common import console
 
@@ -15,6 +18,7 @@ TESTS_DIR = Path(__file__).resolve().parents[2] / "tests"
 
 PLAN_SECTIONS = ("Purpose/Regression", "Prerequisites", "Test plan", "Expected result")
 _SECTION_HEADERS = {f"{section}:" for section in PLAN_SECTIONS}
+_NUMBERED_STEP = re.compile(r"^\s*(\d+)\.\s")
 
 
 @dataclass
@@ -41,13 +45,28 @@ class TestPlan:
 
     @property
     def conforming(self) -> bool:
-        """Whether the docstring contains all four schema sections."""
-        return set(PLAN_SECTIONS) <= set(self.sections)
+        """Whether the docstring follows the full test-plan schema.
+
+        Requires a non-empty summary, all four sections in schema order with
+        non-empty bodies, and strictly consecutive numbered steps in the plan.
+        """
+        if not self.summary:
+            return False
+        if list(self.sections) != list(PLAN_SECTIONS):
+            return False
+        if any(not body.strip() for body in self.sections.values()):
+            return False
+        steps = [
+            int(match.group(1))
+            for line in self.sections["Test plan"].splitlines()
+            if (match := _NUMBERED_STEP.match(line))
+        ]
+        return bool(steps) and steps == list(range(1, len(steps) + 1))
 
     @property
     def selector(self) -> str:
-        """The pytest ``-k`` selector that runs this class."""
-        return f"-k {self.class_name}"
+        """The pytest node ID (``file::ClassName``) that runs exactly this class."""
+        return f"{self.file}::{self.class_name}"
 
 
 def _parse_docstring(docstring: str) -> tuple[str, dict[str, str]]:
@@ -66,6 +85,7 @@ def _parse_docstring(docstring: str) -> tuple[str, dict[str, str]]:
     body: list[str] = []
 
     def _flush() -> None:
+        """Store the accumulated body lines under the current section header."""
         if header:
             sections[header] = "\n".join(body).strip()
 
@@ -103,19 +123,31 @@ def _mark_name(decorator: ast.expr) -> str | None:
     return None
 
 
-def _has_test_method(node: ast.ClassDef) -> bool:
-    """Check whether a class defines at least one ``test_`` method.
+def _has_test_method(node: ast.ClassDef, classes: dict[str, ast.ClassDef]) -> bool:
+    """Check whether a class declares or inherits at least one ``test_`` method.
+
+    Inheritance is resolved through same-module base classes. A base that
+    cannot be resolved (defined in another module) is conservatively treated
+    as test-bearing, so runnable classes are never dropped from coverage.
 
     Args:
         node: The class definition node.
+        classes: Class definitions of the same module, by name.
 
     Returns:
-        True when the class has a ``test_`` method.
+        True when the class has (or may have) a ``test_`` method.
     """
-    return any(
+    if any(
         isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test_")
         for item in node.body
-    )
+    ):
+        return True
+    for base in node.bases:
+        if isinstance(base, ast.Name):
+            base_node = classes.get(base.id)
+            if base_node is None or _has_test_method(base_node, classes):
+                return True
+    return False
 
 
 def _build_plan(node: ast.ClassDef, path: Path, repo_root: Path) -> TestPlan:
@@ -143,30 +175,34 @@ def _build_plan(node: ast.ClassDef, path: Path, repo_root: Path) -> TestPlan:
     )
 
 
-def parse_test_plans(tests_dir: Path) -> list[TestPlan]:
+def parse_test_plans(tests_dir: Path) -> tuple[list[TestPlan], list[str]]:
     """Parse every ``Test*`` class with a test method under the tests directory.
 
-    Files with syntax errors are reported and skipped; classes with missing or
-    non-conforming docstrings are included and flagged via ``conforming``.
+    Classes with missing or non-conforming docstrings are included and flagged
+    via ``conforming``. Modules that cannot be parsed do not vanish silently:
+    they are reported as errors so callers can fail closed.
 
     Args:
         tests_dir: Directory scanned recursively for ``test_*.py`` modules.
 
     Returns:
-        Parsed test plans sorted by file path and class line number.
+        Tuple of (plans, errors): parsed plans sorted by file path and class
+        line number, and human-readable errors for unparsable modules.
     """
     plans: list[TestPlan] = []
+    errors: list[str] = []
     repo_root = tests_dir.parent
     for path in sorted(tests_dir.rglob("test_*.py")):
         try:
             tree = ast.parse(source=path.read_text(), filename=str(path))
         except SyntaxError as exc:
-            console.print(f"[yellow]Skipping {path}: syntax error: {exc}[/yellow]")
+            errors.append(f"{path}: syntax error: {exc}")
             continue
+        classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
         for node in tree.body:
-            if isinstance(node, ast.ClassDef) and node.name.startswith("Test") and _has_test_method(node):
+            if isinstance(node, ast.ClassDef) and node.name.startswith("Test") and _has_test_method(node, classes):
                 plans.append(_build_plan(node, path, repo_root))
-    return plans
+    return plans, errors
 
 
 def _normalize(text: str) -> str:
@@ -276,7 +312,7 @@ def _report_missing(plans: list[TestPlan], as_json: bool) -> None:
     console.print(f"[bold]Classes with missing or non-conforming test plans ({len(missing)}):[/bold]\n")
     for plan in missing:
         note = "" if plan.docstring else "  [red](no docstring)[/red]"
-        console.print(f"  {plan.class_name}  [dim]{plan.file}:{plan.line}[/dim]{note}")
+        console.print(f"  {escape(plan.class_name)}  [dim]{escape(plan.file)}:{plan.line}[/dim]{note}")
 
 
 def _report_matches(results: list[tuple[TestPlan, list[str]]], keywords: list[str], as_json: bool) -> None:
@@ -295,22 +331,22 @@ def _report_matches(results: list[tuple[TestPlan, list[str]]], keywords: list[st
         print(json.dumps(payload, indent=2))
         return
     if not results:
-        query = " ".join(keywords)
+        query = escape(" ".join(keywords))
         console.print(f"[yellow]'{query}' is not covered by any test class.[/yellow]")
         console.print(
             "[dim]Coverage is parsed from test-class docstrings; try other keywords or --missing-plans.[/dim]"
         )
         return
-    console.print(f"[bold]{len(results)} test class(es) cover '{' '.join(keywords)}':[/bold]\n")
+    console.print(f"[bold]{len(results)} test class(es) cover '{escape(' '.join(keywords))}':[/bold]\n")
     for plan, contexts in results:
-        summary = plan.summary or "[red](no docstring)[/red]"
-        console.print(f"[bold]{plan.class_name}[/bold]")
+        summary = escape(plan.summary) or "[red](no docstring)[/red]"
+        console.print(f"[bold]{escape(plan.class_name)}[/bold]")
         console.print(f"  Summary:  {summary}")
-        console.print(f"  Markers:  {', '.join(plan.markers) or '(none)'}")
-        console.print(f"  Location: {plan.file}:{plan.line}")
+        console.print(f"  Markers:  {', '.join(escape(marker) for marker in plan.markers) or '(none)'}")
+        console.print(f"  Location: {escape(plan.file)}:{plan.line}")
         console.print(f"  Run:      uv run pytest {plan.selector}")
         for context in contexts:
-            console.print(f"  Matched:  {context}")
+            console.print(f"  Matched:  {escape(context)}")
         if not plan.conforming:
             console.print("  [dim](docstring does not follow the test-plan schema yet)[/dim]")
         console.print("")
@@ -330,14 +366,26 @@ def coverage_command(keywords: list[str], missing_plans: bool, as_json: bool) ->
         as_json: When True, output JSON for scripting.
 
     Raises:
-        typer.Exit: When no keyword and no --missing-plans is given.
+        typer.Exit: When no keyword and no --missing-plans is given, when the
+            test sources are not available, or when a test module cannot be
+            parsed (fail closed; diagnostics go to stderr so stdout stays
+            parseable in --json mode).
     """
-    words = [word for keyword in (keywords or []) for word in keyword.split()]
+    words = [word for keyword in keywords for word in keyword.split()]
     if not words and not missing_plans:
-        console.print("[red]Error: provide at least one keyword, or use --missing-plans[/red]")
+        print("Error: provide at least one keyword, or use --missing-plans", file=sys.stderr)
         raise typer.Exit(code=1)
-
-    plans = parse_test_plans(TESTS_DIR)
+    if not TESTS_DIR.is_dir():
+        print(
+            f"Error: test sources not found at {TESTS_DIR}; the coverage command requires a repository checkout.",
+            file=sys.stderr,
+        )
+        raise typer.Exit(code=1)
+    plans, errors = parse_test_plans(TESTS_DIR)
+    if errors:
+        for error in errors:
+            print(f"Error: unparsable test module: {error}", file=sys.stderr)
+        raise typer.Exit(code=1)
     if missing_plans:
         _report_missing(plans, as_json)
         return
