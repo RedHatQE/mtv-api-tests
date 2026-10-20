@@ -348,12 +348,48 @@ def _is_test_module(path: Path) -> bool:
     return rel.parts[0] == "tests" and rel.name.startswith("test_") and rel.suffix == ".py"
 
 
+def _declares_or_inherits_test_method(node: ast.ClassDef, classes: dict[str, ast.ClassDef]) -> bool:
+    """Return True if ``node`` has a ``test_`` method, own or inherited in-module.
+
+    Pytest collects inherited test methods, so a ``Test*`` subclass with no
+    own ``test_`` methods is still collected when its base declares them.
+    Bases are resolved by name within the same module. Unresolvable bases
+    (imported or attribute-accessed) count as declaring tests so such
+    classes are never silently skipped.
+
+    Args:
+        node (ast.ClassDef): Candidate test class.
+        classes (dict[str, ast.ClassDef]): Class name to node map for the
+            module.
+
+    Returns:
+        bool: Whether the class declares or inherits a ``test_`` method.
+    """
+    has_own_test_method = any(
+        isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_")
+        for stmt in node.body
+    )
+    if has_own_test_method:
+        return True
+    for base in node.bases:
+        if not isinstance(base, ast.Name):
+            return True
+        base_node = classes.get(base.id)
+        if base_node is None:
+            return True
+        if _declares_or_inherits_test_method(base_node, classes):
+            return True
+    return False
+
+
 def iter_test_classes(tree: ast.AST) -> Iterator[ast.ClassDef]:
     """Yield pytest-collected test classes from a module AST.
 
     A test class is named ``Test*`` (pytest's default ``python_classes``)
-    and declares at least one ``test_`` method, so helper/base classes
-    without test methods are skipped.
+    and declares or inherits at least one ``test_`` method, so helper/base
+    classes without test methods are skipped. Inherited methods are
+    resolved through same-module bases; unresolvable bases are treated
+    conservatively as declaring tests.
 
     Args:
         tree (ast.AST): Parsed module AST.
@@ -361,16 +397,11 @@ def iter_test_classes(tree: ast.AST) -> Iterator[ast.ClassDef]:
     Yields:
         ast.ClassDef: Test class nodes.
     """
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef):
-            continue
+    classes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+    for node in classes.values():
         if not node.name.startswith("Test"):
             continue
-        has_test_method = any(
-            isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_")
-            for stmt in node.body
-        )
-        if has_test_method:
+        if _declares_or_inherits_test_method(node, classes):
             yield node
 
 

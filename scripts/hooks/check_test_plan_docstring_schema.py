@@ -6,7 +6,6 @@ from __future__ import annotations
 import ast
 import re
 import sys
-from collections import Counter
 from pathlib import Path
 
 from _ast_utils import (
@@ -17,7 +16,6 @@ from _ast_utils import (
     main_runner,
     parse_file,
 )
-from baseline import is_baselined, load_baseline_for_check
 
 _SECTION_NAMES: tuple[str, ...] = (
     "Purpose/Regression",
@@ -102,39 +100,35 @@ def _validate_docstring(docstring: str) -> list[str]:
     return problems
 
 
-def _check_file(
-    path: Path,
-    tree: ast.AST,
-    collector: FindingCollector,
-    baseline: Counter[tuple[str, str]],
-) -> None:
-    """Flag test classes whose docstring does not follow the schema.
+def _check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+    """Flag test classes with a missing or non-conforming plan docstring.
 
-    Docless classes are skipped here: docstring presence is owned by the
-    check_test_plan_docstring_presence hook.
+    There is no baseline and no suppression: the check always reflects the
+    current state of the files.
 
     Args:
         path (Path): Source file path.
         tree (ast.AST): Parsed AST.
         collector (FindingCollector): Finding sink.
-        baseline (Counter[tuple[str, str]]): Grandfathered path/fingerprint
-            occurrence counts.
     """
     for node in iter_test_classes(tree):
         span = docstring_span(node)
         if span is None:
+            collector.report(
+                path,
+                node.lineno,
+                f"test class '{node.name}' must have a class docstring with its "
+                "product test plan (test_plan_schema.md)",
+            )
             continue
-        text, lineno, end_lineno = span
+        text, lineno, _ = span
         problems = _validate_docstring(text)
-        if not problems:
-            continue
-        if is_baselined(path, lineno, baseline, end_lineno=end_lineno):
-            continue
-        collector.report(
-            path,
-            lineno,
-            f"test class '{node.name}' test plan does not follow test_plan_schema.md: " + "; ".join(problems),
-        )
+        if problems:
+            collector.report(
+                path,
+                lineno,
+                f"test class '{node.name}' test plan does not follow test_plan_schema.md: " + "; ".join(problems),
+            )
 
 
 def run_check(paths: list[str], collector: FindingCollector) -> None:
@@ -144,15 +138,11 @@ def run_check(paths: list[str], collector: FindingCollector) -> None:
         paths (list[str]): File paths from pre-commit (empty = scan tests/).
         collector (FindingCollector): Finding sink.
     """
-    baseline = load_baseline_for_check("check_test_plan_docstring_schema", collector.report)
-    if baseline is None:
-        return
-
     for path in iter_test_module_files(paths):
         tree = parse_file(path, collector)
         if tree is None:
             continue
-        _check_file(path, tree, collector, baseline)
+        _check_file(path, tree, collector)
 
 
 if __name__ == "__main__":

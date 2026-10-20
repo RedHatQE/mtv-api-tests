@@ -4,11 +4,11 @@ Every new pytest test class MUST put its complete product test plan in its **cla
 A customer must be able to understand and repeat the scenario manually without reading Python,
 repository configuration, or automation instructions. Describe the product, not the test runner.
 
-The structural part of this schema is enforced by pre-commit hooks: `check-test-plan-docstring-presence`
-(requires a docstring) and `check-test-plan-docstring-schema` (requires the sections below, in order,
-with a summary line and consecutively numbered steps). Legacy violations are grandfathered in
-`scripts/hooks/baselines/check_test_plan_docstring_schema.txt` and shrink as plans are retrofitted;
-the content-quality checklist below remains human-review scope.
+The structural part of this schema is enforced by the `check-test-plan-docstring-schema` pre-commit
+hook: every test class must have a docstring, and it must contain the sections below, in order, with
+a summary line and consecutively numbered steps. There is no baseline and no suppression - the hook
+always reflects the current state of the files. The content-quality checklist below remains
+human-review scope.
 
 ## Required content
 
