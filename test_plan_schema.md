@@ -26,7 +26,9 @@ Use these four sections in this order:
    (including those automation creates), source inventory readiness, maps, hooks, Plan settings and Ready
    condition when applicable, migration/feature action, expected status or failed step, proof that the
    condition under test exists *before* cleanup, and deletion of every created resource (including source
-   network attachments). State timeouts if they affect an observable check.
+   network attachments). State timeouts if they affect an observable check. Write each step as `N. text`
+   at one indentation level; wrap long steps as deeper-indented continuation lines. Standalone unnumbered
+   actions are not allowed — a non-step line must be a continuation of the numbered step above it.
 4. **Expected result:** State product-visible pass criteria and where to inspect failure: resource
    conditions/status, VM migration step, relevant events/logs, and names of leftover resources.
    Do not substitute a pytest exception for a product outcome or claim assertions that the test does not make.

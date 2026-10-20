@@ -24,7 +24,8 @@ _SECTION_NAMES: tuple[str, ...] = (
     "Expected result",
 )
 _SECTION_RE = re.compile(r"^\s*(?:" + "|".join(re.escape(name) for name in _SECTION_NAMES) + r"):\s*$")
-_NUMBERED_STEP_RE = re.compile(r"^\s*(\d+)\.\s")
+_NUMBERED_STEP_RE = re.compile(r"^(\s*)(\d+)\.\s+(\S.*)$")
+_HEADING_RE = re.compile(r"^\s*[A-Za-z][\w /-]*:\s*$")
 
 
 def _section_content_range(lines: list[str], header_positions: dict[str, int]) -> dict[str, tuple[int, int]]:
@@ -44,6 +45,48 @@ def _section_content_range(lines: list[str], header_positions: dict[str, int]) -
         end = ordered[idx + 1][1] if idx + 1 < len(ordered) else len(lines)
         ranges[name] = (position + 1, end)
     return ranges
+
+
+def _validate_test_plan(lines: list[str]) -> list[str]:
+    """Validate the numbered-step structure of a Test plan section.
+
+    The first nonblank line must be a numbered step (``N. text``); its
+    indentation defines the step level. Later nonblank lines must be
+    numbered steps at that level or continuations indented deeper.
+    Unnumbered standalone actions, malformed markers (``2.Do``), and empty
+    markers (``1.`` with no text) are schema violations.
+
+    Args:
+        lines (list[str]): Content lines of the Test plan section.
+
+    Returns:
+        list[str]: Human-readable problems; empty when the section conforms.
+    """
+    problems: list[str] = []
+    step_indent: int | None = None
+    numbers: list[int] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip())
+        if step_indent is not None and line_indent > step_indent:
+            continue
+        match = _NUMBERED_STEP_RE.match(line)
+        if match is None:
+            problems.append(f"test plan line is not a numbered step or a continuation: {line.strip()!r}")
+            continue
+        indent, number = match.group(1), int(match.group(2))
+        if step_indent is None:
+            step_indent = len(indent)
+        elif len(indent) != step_indent:
+            problems.append(f"test plan step {number} is not at the step indentation level: {line.strip()!r}")
+            continue
+        numbers.append(number)
+    if not numbers:
+        problems.append("section 'Test plan' has no numbered steps")
+    elif numbers != list(range(1, len(numbers) + 1)):
+        problems.append("section 'Test plan' steps are not consecutively numbered from 1")
+    return problems
 
 
 def _validate_docstring(docstring: str) -> list[str]:
@@ -81,26 +124,22 @@ def _validate_docstring(docstring: str) -> list[str]:
     first_nonempty = next((idx for idx, line in enumerate(lines) if line.strip()), None)
     if first_nonempty is None:
         problems.append("docstring is empty")
-    elif first_nonempty in header_positions.values():
+    elif first_nonempty in header_positions.values() or _HEADING_RE.match(lines[first_nonempty]):
         problems.append("missing one-sentence scenario summary before the first section")
 
     for name, (start, end) in _section_content_range(lines, header_positions).items():
-        content = [line for line in lines[start:end] if line.strip()]
+        content = [line for line in lines[start:end] if line.strip() and not _HEADING_RE.match(line)]
         if not content:
             problems.append(f"section '{name}' has no content")
             continue
         if name != "Test plan":
             continue
-        steps = [int(match.group(1)) for match in (_NUMBERED_STEP_RE.match(line) for line in lines[start:end]) if match]
-        if not steps:
-            problems.append("section 'Test plan' has no numbered steps")
-        elif steps != list(range(1, len(steps) + 1)):
-            problems.append("section 'Test plan' steps are not consecutively numbered from 1")
+        problems.extend(_validate_test_plan(lines[start:end]))
 
     return problems
 
 
-def _check_file(path: Path, tree: ast.AST, collector: FindingCollector) -> None:
+def _check_file(path: Path, tree: ast.Module, collector: FindingCollector) -> None:
     """Flag test classes with a missing or non-conforming plan docstring.
 
     There is no baseline and no suppression: the check always reflects the

@@ -104,7 +104,7 @@ def _walk_py_files(root: Path) -> Iterator[Path]:
                 yield Path(dirpath) / filename
 
 
-def parse_file(path: Path, collector: FindingCollector) -> ast.AST | None:
+def parse_file(path: Path, collector: FindingCollector) -> ast.Module | None:
     """Parse a Python file into an AST, reporting read/parse failures as findings.
 
     Args:
@@ -112,7 +112,7 @@ def parse_file(path: Path, collector: FindingCollector) -> ast.AST | None:
         collector (FindingCollector): Finding sink for parse failures.
 
     Returns:
-        ast.AST | None: Parsed module AST, or None if the file could not be
+        ast.Module | None: Parsed module AST, or None if the file could not be
         read or has a syntax error (failures are recorded as findings).
     """
     try:
@@ -348,19 +348,24 @@ def _is_test_module(path: Path) -> bool:
     return rel.parts[0] == "tests" and rel.name.startswith("test_") and rel.suffix == ".py"
 
 
-def _declares_or_inherits_test_method(node: ast.ClassDef, classes: dict[str, ast.ClassDef]) -> bool:
+def _declares_or_inherits_test_method(
+    node: ast.ClassDef, classes: dict[str, ast.ClassDef], _visited: frozenset[str] | None = None
+) -> bool:
     """Return True if ``node`` has a ``test_`` method, own or inherited in-module.
 
     Pytest collects inherited test methods, so a ``Test*`` subclass with no
     own ``test_`` methods is still collected when its base declares them.
     Bases are resolved by name within the same module. Unresolvable bases
     (imported or attribute-accessed) count as declaring tests so such
-    classes are never silently skipped.
+    classes are never silently skipped. Cyclic same-module base references
+    are broken by a visited set.
 
     Args:
         node (ast.ClassDef): Candidate test class.
         classes (dict[str, ast.ClassDef]): Class name to node map for the
             module.
+        _visited (frozenset[str]): Class names already visited on this
+            recursion path (cycle guard).
 
     Returns:
         bool: Whether the class declares or inherits a ``test_`` method.
@@ -371,33 +376,39 @@ def _declares_or_inherits_test_method(node: ast.ClassDef, classes: dict[str, ast
     )
     if has_own_test_method:
         return True
+    visited = _visited or frozenset()
+    if node.name in visited:
+        return False
+    visited = visited | {node.name}
     for base in node.bases:
         if not isinstance(base, ast.Name):
             return True
         base_node = classes.get(base.id)
         if base_node is None:
             return True
-        if _declares_or_inherits_test_method(base_node, classes):
+        if _declares_or_inherits_test_method(base_node, classes, visited):
             return True
     return False
 
 
-def iter_test_classes(tree: ast.AST) -> Iterator[ast.ClassDef]:
+def iter_test_classes(tree: ast.Module) -> Iterator[ast.ClassDef]:
     """Yield pytest-collected test classes from a module AST.
 
     A test class is named ``Test*`` (pytest's default ``python_classes``)
     and declares or inherits at least one ``test_`` method, so helper/base
-    classes without test methods are skipped. Inherited methods are
-    resolved through same-module bases; unresolvable bases are treated
-    conservatively as declaring tests.
+    classes without test methods are skipped. Only module-level classes
+    are considered — pytest does not collect nested classes — and the
+    name map used for inheritance resolution is likewise built from
+    module-level definitions, so a nested class can never shadow a
+    module-level base or drop it from the check.
 
     Args:
-        tree (ast.AST): Parsed module AST.
+        tree (ast.Module): Parsed module AST.
 
     Yields:
         ast.ClassDef: Test class nodes.
     """
-    classes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     for node in classes.values():
         if not node.name.startswith("Test"):
             continue
