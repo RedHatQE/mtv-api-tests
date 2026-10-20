@@ -472,6 +472,11 @@ definitions.</p>
 <td>Per-VM LUKS passphrase. Overrides the provider-level <code>luks_passphrase</code>.</td>
 </tr>
 <tr>
+<td><code>exclude_disks</code></td>
+<td>No</td>
+<td>vSphere bus addresses of disks to exclude from migration (e.g. <code>["scsi0:1"]</code>). Serialized to the Plan <code>spec.vms[].excludeDisks</code> field; the excluded disks are neither copied nor attached to the migrated VM.</td>
+</tr>
+<tr>
 <td><code>migrate_shared_disks</code></td>
 <td>No</td>
 <td><code>True</code> for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM.</td>
