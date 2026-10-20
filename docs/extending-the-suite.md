@@ -539,9 +539,9 @@ That leads to a practical workflow for new suite extensions:
 - Run `uv run pytest --collect-only` first. It is also the default `CMD` in the `Dockerfile`, which makes test discovery a first-class check in this repo.
 - Run `uv run pytest --setup-plan` or `tox -e pytest-check` to catch setup and collection issues before trying a full migration run.
 - Run `pre-commit run --all-files` before you send changes out. Besides `flake8`, `ruff`, `ruff-format`, `mypy`, `detect-secrets`, `gitleaks`, and `markdownlint-cli2`, the config
-includes eight local `repo: local` hooks in `scripts/hooks/` that enforce the AGENTS.md rules: `check-no-kubernetes-runtime`, `check-no-dynamicclient-construct`,
-`check-no-except-exception`, `check-no-module-load-source-providers`, `check-exceptions-location`, `check-test-file-location`, `check-autouse-fixtures`, and
-`check-no-runtimeerror`. See the [development workflow](development-workflow.html) page for what each one bans.
+includes ten local `repo: local` hooks in `scripts/hooks/` that enforce the AGENTS.md rules: `check-no-kubernetes-runtime`, `check-no-dynamicclient-construct`,
+`check-no-except-exception`, `check-no-module-load-source-providers`, `check-exceptions-location`, `check-test-file-location`, `check-autouse-fixtures`,
+`check-no-runtimeerror`, `check-test-plan-docstring-schema`, and `check-agents-md-budget`. See the [development workflow](development-workflow.html) page for what each one bans.
 - Keep using the existing markers unless you truly need a new one.
 
 > **Warning:** `pytest.ini` enables `--strict-markers`. If you introduce a new marker and do not add it to `pytest.ini`, collection will fail.

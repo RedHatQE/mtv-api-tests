@@ -132,7 +132,7 @@ pre-commit run check-no-except-exception --all-files
 
 ## AGENTS Rules Enforced By Local Hooks
 
-Eight hooks under `repo: local` in `.pre-commit-config.yaml` run AST-based checks from `scripts/hooks/`. They exist because several `AGENTS.md` rules are easy to state and easy to
+Ten hooks under `repo: local` in `.pre-commit-config.yaml` run AST-based or text-based checks from `scripts/hooks/`. They exist because several `AGENTS.md` rules are easy to state and easy to
 violate silently.
 
 | Hook id | Bans or requires |
@@ -145,6 +145,8 @@ violate silently.
 | `check-exceptions-location` | `Exception` subclasses defined anywhere other than `exceptions/exceptions.py` |
 | `check-test-file-location` | `tests/test_*.py` directly under `tests/`; test modules must live in a feature subdirectory |
 | `check-autouse-fixtures` | `autouse=True` on any fixture other than `autouse_fixtures` in `conftest.py` |
+| `check-test-plan-docstring-schema` | Test classes without a schema-conforming test-plan docstring (see `test_plan_schema.md`); no baseline — every docstring edit re-validates |
+| `check-agents-md-budget` | `AGENTS.md` exceeding `MAX_LINES` (420). `AGENTS.md` is a budgeted index — prune content and link to detail files instead of pasting them; raising the cap requires explicit justification |
 
 `scripts/hooks/README.md` documents how to run a single check directly:
 

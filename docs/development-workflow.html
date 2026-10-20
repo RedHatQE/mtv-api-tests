@@ -418,7 +418,7 @@ pre-commit<span class="w"> </span>run<span class="w"> </span>check-no-except-exc
 though the project itself supports Python 3.12.</p>
 </blockquote>
 <h2 id="agents-rules-enforced-by-local-hooks">AGENTS Rules Enforced By Local Hooks</h2>
-<p>Eight hooks under <code>repo: local</code> in <code>.pre-commit-config.yaml</code> run AST-based checks from <code>scripts/hooks/</code>. They exist because several <code>AGENTS.md</code> rules are easy to state and easy to
+<p>Ten hooks under <code>repo: local</code> in <code>.pre-commit-config.yaml</code> run AST-based or text-based checks from <code>scripts/hooks/</code>. They exist because several <code>AGENTS.md</code> rules are easy to state and easy to
 violate silently.</p>
 <div class="table-wrap"><table>
 <thead>
@@ -459,6 +459,14 @@ violate silently.</p>
 <tr>
 <td><code>check-autouse-fixtures</code></td>
 <td><code>autouse=True</code> on any fixture other than <code>autouse_fixtures</code> in <code>conftest.py</code></td>
+</tr>
+<tr>
+<td><code>check-test-plan-docstring-schema</code></td>
+<td>Test classes without a schema-conforming test-plan docstring (see <code>test_plan_schema.md</code>); no baseline — every docstring edit re-validates</td>
+</tr>
+<tr>
+<td><code>check-agents-md-budget</code></td>
+<td><code>AGENTS.md</code> exceeding <code>MAX_LINES</code> (420). <code>AGENTS.md</code> is a budgeted index — prune content and link to detail files instead of pasting them; raising the cap requires explicit justification</td>
 </tr>
 </tbody>
 </table></div>

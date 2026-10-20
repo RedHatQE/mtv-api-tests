@@ -94,10 +94,13 @@ Enforced rules are marked (hook). Full reasoning for each rule lives with its en
 - **Function size:** single responsibility (if the docstring needs "and", split); under 50 lines
   when possible; `_`-prefixed helpers for sub-tasks; names say WHAT (`is_warm_migration_supported`).
 - **Fail fast:** code must never let `None` propagate where it is invalid — raise with a clear
-  error. `if value is None:` for None checks; `if not value:` only when empty/False are also invalid.
+  error. `if firmware is None:` for None checks; `if not labels:` only when empty or False are
+  also invalid.
 - **Pass objects over values:** functions receive objects and extract values internally (when you
   control both signature and caller).
-- **Consistent variable types:** `actual_affinity: dict[str, Any] = vm.get("affinity") or {}`.
+- **Consistent variable types:** `actual_affinity: dict[str, Any] = vm.get("affinity") or {}` —
+  the container type is fixed, but an external provider's value shape is not, which is the
+  justified use of `Any` here.
 - **Trust required arguments:** never check that required args were passed. "Validate at Source":
   fixtures validate the VALUE they produce.
 - **No duplicate code:** same logic twice → extract a function. Same expression computed twice →
@@ -242,8 +245,10 @@ class TestNameHere:
 ```
 
 The docstring above is the structural template — replace every bracketed placeholder with the real
-scenario content; placeholder brackets left as-is will not survive review. `@pytest.mark.incremental`
-gives sequential test dependencies; shared state lives on the class (`self.__class__.attribute`).
+scenario content; placeholder brackets left as-is will not survive review. Method signatures and
+imports are elided (`...`) — request only the fixtures each method needs.
+`@pytest.mark.incremental` gives sequential test dependencies; shared state lives on the class
+(`self.__class__.attribute`).
 
 ### VM configuration options (`tests_params` per-VM dicts)
 
@@ -278,8 +283,11 @@ gives sequential test dependencies; shared state lives on the class (`self.__cla
 | `rdm_as_lun` | Map RDM disks as LUN devices with SCSI bus |
 | `pre_copy_source_disks` | Hyper-V two-phase VHDX→raw transfer (Hyper-V source only) |
 
-These optional flags use `plan.get("flag", False)` in code; every other key in our config
-(`py_config`, `plan`, `tests_params`) is accessed directly — see "Deterministic Tests".
+The boolean flags in this table use `plan.get("flag", False)` in code. Exceptions:
+`inventory_timeout` is numeric and defaults via `plan.get("inventory_timeout", 300)`;
+`rdm_as_lun` is accessed directly (`prepared_plan["rdm_as_lun"]`) in the tests that set it.
+Every other key in our config (`py_config`, `plan`, `tests_params`) is accessed directly — see
+"Deterministic Tests".
 
 ## Test-Plan Docstring Accuracy
 
@@ -297,9 +305,11 @@ human-review checklist is in [`test_plan_schema.md`](test_plan_schema.md).
   (`check_no_except_exception`, `check_no_kubernetes_runtime`, `check_no_runtimeerror`,
   `check_exceptions_location`) — shrink when fixing, never expand.
 - One rule = one hook.
-- `test_plan_schema.md` is implemented twice — in
-  `scripts/hooks/check_test_plan_docstring_schema.py` and in the coverage CLI's `conforming` check
-  (`cli/mtv_api_tests/coverage.py`). Changing the schema updates all three together.
+- `test_plan_schema.md`'s **machine-checkable structure** (sections, order, numbered steps) is
+  implemented twice — in `scripts/hooks/check_test_plan_docstring_schema.py` and in the coverage
+  CLI's `conforming` check (`cli/mtv_api_tests/coverage.py`). Changing the structure updates all
+  three together. The accuracy checklist in the same file is human-review scope by design — it is
+  not mechanically enforceable.
 
 ## Critical Constraints
 

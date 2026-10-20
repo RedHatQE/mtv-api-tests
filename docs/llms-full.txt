@@ -7354,10 +7354,10 @@ paired with the plan-config key it reads.
 | `TestCopyoffloadWarmMigration` | `test_copyoffload_warm_migration` | Live warm migration with a cutover value |
 | `TestCopyoffloadScaleMigration` | `test_copyoffload_scale_migration` | Five thick-lazy VMs in one plan |
 | `TestSimultaneousCopyoffloadMigrations` | `test_simultaneous_copyoffload_migrations` | Two copy-offload plans executing simultaneously |
-| `TestConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
+| `TestCopyoffloadConcurrentXcopyVddkMigration` | `test_concurrent_xcopy_vddk_migration` | One copy-offload plan and one VDDK plan running together |
 
-`TestConcurrentXcopyVddkMigration` carries `@pytest.mark.copyoffload` and exercises a mixed XCOPY-and-VDDK scenario, so its name describes the pair rather than the
-feature. Marker selection and the collection-time vSphere gate both key off `@pytest.mark.copyoffload`, so `-m copyoffload` still collects it.
+`TestCopyoffloadConcurrentXcopyVddkMigration` carries `@pytest.mark.copyoffload` and exercises a mixed XCOPY-and-VDDK scenario.
+Marker selection and the collection-time vSphere gate both key off `@pytest.mark.copyoffload`, so `-m copyoffload` still collects it.
 
 ### Snapshot Scenarios
 
@@ -12708,9 +12708,9 @@ That leads to a practical workflow for new suite extensions:
 - Run `uv run pytest --collect-only` first. It is also the default `CMD` in the `Dockerfile`, which makes test discovery a first-class check in this repo.
 - Run `uv run pytest --setup-plan` or `tox -e pytest-check` to catch setup and collection issues before trying a full migration run.
 - Run `pre-commit run --all-files` before you send changes out. Besides `flake8`, `ruff`, `ruff-format`, `mypy`, `detect-secrets`, `gitleaks`, and `markdownlint-cli2`, the config
-includes eight local `repo: local` hooks in `scripts/hooks/` that enforce the AGENTS.md rules: `check-no-kubernetes-runtime`, `check-no-dynamicclient-construct`,
-`check-no-except-exception`, `check-no-module-load-source-providers`, `check-exceptions-location`, `check-test-file-location`, `check-autouse-fixtures`, and
-`check-no-runtimeerror`. See the [development workflow](development-workflow.html) page for what each one bans.
+includes ten local `repo: local` hooks in `scripts/hooks/` that enforce the AGENTS.md rules: `check-no-kubernetes-runtime`, `check-no-dynamicclient-construct`,
+`check-no-except-exception`, `check-no-module-load-source-providers`, `check-exceptions-location`, `check-test-file-location`, `check-autouse-fixtures`,
+`check-no-runtimeerror`, `check-test-plan-docstring-schema`, and `check-agents-md-budget`. See the [development workflow](development-workflow.html) page for what each one bans.
 - Keep using the existing markers unless you truly need a new one.
 
 > **Warning:** `pytest.ini` enables `--strict-markers`. If you introduce a new marker and do not add it to `pytest.ini`, collection will fail.
@@ -12861,7 +12861,7 @@ Or rerun a single hook while iterating on one kind of issue:
 
 ## AGENTS Rules Enforced By Local Hooks
 
-Eight hooks under `repo: local` in `.pre-commit-config.yaml` run AST-based checks from `scripts/hooks/`. They exist because several `AGENTS.md` rules are easy to state and easy to
+Ten hooks under `repo: local` in `.pre-commit-config.yaml` run AST-based or text-based checks from `scripts/hooks/`. They exist because several `AGENTS.md` rules are easy to state and easy to
 violate silently.
 
 | Hook id | Bans or requires |
@@ -12874,6 +12874,8 @@ violate silently.
 | `check-exceptions-location` | `Exception` subclasses defined anywhere other than `exceptions/exceptions.py` |
 | `check-test-file-location` | `tests/test_*.py` directly under `tests/`; test modules must live in a feature subdirectory |
 | `check-autouse-fixtures` | `autouse=True` on any fixture other than `autouse_fixtures` in `conftest.py` |
+| `check-test-plan-docstring-schema` | Test classes without a schema-conforming test-plan docstring (see `test_plan_schema.md`); no baseline — every docstring edit re-validates |
+| `check-agents-md-budget` | `AGENTS.md` exceeding `MAX_LINES` (420). `AGENTS.md` is a budgeted index — prune content and link to detail files instead of pasting them; raising the cap requires explicit justification |
 
 `scripts/hooks/README.md` documents how to run a single check directly:
 
