@@ -39,19 +39,65 @@ if TYPE_CHECKING:
 @pytest.mark.incremental
 @pytest.mark.tier0
 class TestColdMigrationComprehensive:
-    """Comprehensive cold migration test covering multiple features.
+    """Cold-migrate a Windows VM exercising many Plan settings at once and verify each took effect.
 
-    This test validates:
-    - Static IP preservation
-    - PVC name template functionality
-    - PVC generateName support
-    - Target node selector configuration
-    - Target VM labels
-    - Target VM affinity rules
-    - Custom target namespace for VMs
-    - Nested virtualization disabled (vmx/svm CPU features)
-    - VBS (Virtualization Based Security) verification
-    - Hyper-V two-phase disk transfer (preCopySourceDisks) and SMB max channels
+    Purpose/Regression:
+        Broad regression coverage for cold-migration Plan options in a single
+        scenario: static IP preservation, PVC naming via a name template,
+        target node scheduling via node selector, target VM labels, VM
+        affinity rules, a dedicated VM target namespace, target power state,
+        and nested virtualization left disabled. There is no induced failure;
+        the test passes only when every option is observable on the migrated
+        VM.
+
+    Prerequisites:
+        Register and connect a source provider and an OpenShift destination
+        with MTV installed. Prepare destination storage and a network the
+        migrated VM can use (for a pod-network-mapped NIC the network must
+        also be reachable across namespaces when the NetworkAttachmentDefinition
+        lives in another namespace). Use a disposable Windows Server VM with
+        several disks (e.g. three), VMware/Hyper-V guest tools or an equivalent
+        agent reporting interface IP configuration, powered on before
+        migration so static IP details are reported, with at least one NIC
+        configured with a static IP (address, subnet, gateway). Have permission
+        to label a worker node, create maps and a Plan, and create a dedicated
+        target namespace for the migrated VM.
+
+    Test plan:
+        1. Prepare the disposable Windows VM powered on and wait until it
+           appears in Forklift inventory. Choose a worker node and label it
+           with a unique label for target scheduling.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           networks. Confirm both are created.
+        3. Create a cold Plan for the VM with: target power state on;
+           preserve static IPs; a PVC name template (using the VM and disk
+           names) with explicit name (not generateName); the labeled node as
+           target node selector; target VM labels; a pod-affinity rule on a
+           chosen label; a dedicated VM target namespace; and nested
+           virtualization disabled. Check the Plan's Ready condition is True.
+           (When migrating from Hyper-V, two-phase disk transfer with
+           pre-copy of source disks may additionally be enabled.)
+        4. Run the migration and check it reaches Succeeded.
+        5. Verify on the destination VM: it is powered on; its static IP,
+           subnet mask and gateway match the source; interface names are
+           preserved; guest connectivity over the mapped network works; CPU and memory match the
+           source; NICs and disks match the maps; each PVC is named according
+           to the template; the VM runs on the labeled node; the target labels
+           are present; the affinity rule matches; CPU features vmx/svm are
+           disabled; and Virtualization Based Security is not running. After
+           the checks, delete the migrated VM and the labeled node label;
+           the maps and Plan are removed with the run.
+
+    Expected result:
+        The migration succeeds and every configured option is visible on the
+        migrated VM: correct static network configuration and connectivity,
+        template-derived PVC names, scheduling on the labeled node, target
+        labels, affinity, placement in the dedicated namespace, and disabled
+        nested-virtualization CPU features. On failure, inspect the migration
+        CR status and its VM entries for the failed step, the Plan conditions,
+        the VM spec (labels, affinity, node selector, CPU features), the PVC
+        names in the VM target namespace, and guest network configuration
+        inside the VM.
     """
 
     storage_map: StorageMap

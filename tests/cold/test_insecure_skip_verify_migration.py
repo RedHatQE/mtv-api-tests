@@ -41,21 +41,40 @@ if TYPE_CHECKING:
     ids=["MTV-664"],
 )
 class TestInsecureSkipVerifyColdMigration:
-    """Verify provider with insecureSkipVerify=true reaches plan readiness.
+    """A provider registered with insecureSkipVerify=true must connect and produce a Ready Plan (MTV-664).
 
-    Test scenario:
-    1. A source provider is created with insecureSkipVerify=true in its Secret, bypassing
-       TLS certificate verification for the provider connection
-    2. The provider secret is verified to contain insecureSkipVerify set to "true"
-    3. StorageMap and NetworkMap resources are created using the insecure provider
-    4. A migration Plan is created using the insecure provider's StorageMap and NetworkMap
+    Purpose/Regression:
+        Registering a source provider with TLS certificate verification
+        disabled (``insecureSkipVerify=true`` in the provider Secret) must
+        still allow Forklift to connect and validate a migration Plan. The
+        failure path is provider connectivity and Plan validation: the
+        setting must be honored, not rejected. No migration is executed.
+
+    Prerequisites:
+        Register an OpenShift destination with MTV installed and accessible
+        destination storage and network. Have a source provider (vSphere,
+        OpenStack, or ESXi) whose endpoint certificate is not trusted or not
+        supplied, and register it storing ``insecureSkipVerify=true`` in its
+        Secret instead of a CA certificate. Use a disposable Linux VM with a
+        disk and network supported by both providers. Have permission to
+        create maps and a Plan in a target namespace. Only use this mode on
+        isolated, trusted infrastructure.
+
+    Test plan:
+        1. Inspect the Secret referenced by the registered source provider
+           and confirm ``insecureSkipVerify`` is set to ``true``.
+        2. Create a StorageMap for the VM's disks. Confirm it is created.
+        3. Create a NetworkMap for the VM's network. Confirm it is created.
+        4. Create a Plan for the VM using both maps, and check that the
+           provider stays connected and the Plan's Ready condition becomes
+           True. After the check, the maps and Plan are removed with the run.
 
     Expected result:
-    - Provider connects successfully to the source infrastructure with TLS verification disabled
-    - Plan reaches Ready status, confirming that the insecureSkipVerify flag is properly
-      propagated and honored by Forklift
-
-    This is a 4-step plan-readiness validation test (no migration executed).
+        The provider Secret carries ``insecureSkipVerify=true``, the provider
+        remains connected to the source, and the Plan reaches Ready without
+        TLS verification errors. On failure, inspect the provider resource's
+        conditions for connection errors and the forklift controller pod
+        logs for TLS handshake failures.
     """
 
     storage_map: StorageMap
@@ -168,24 +187,42 @@ class TestInsecureSkipVerifyColdMigration:
     ids=["MTV-664-rhv"],
 )
 class TestInsecureSkipVerifyRhvColdMigration:
-    """Verify provider with insecureSkipVerify=true reaches plan readiness (RHV).
+    """An RHV provider registered with insecureSkipVerify=true must connect and produce a Ready Plan (MTV-664).
 
-    RHV variant without skip_clone — RHV uses template names that require cloning
-    to produce VMs visible in the Forklift inventory.
+    Purpose/Regression:
+        Same behavior as the vSphere/OpenStack/ESXi variant of this scenario,
+        exercised against Red Hat Virtualization: a source provider whose
+        Secret stores ``insecureSkipVerify=true`` must connect and validate a
+        migration Plan. The RHV-specific angle is inventory visibility: the
+        source VM must be discoverable through the insecure connection. No
+        migration is executed.
 
-    Test scenario:
-    1. A source provider is created with insecureSkipVerify=true in its Secret, bypassing
-       TLS certificate verification for the provider connection
-    2. The provider secret is verified to contain insecureSkipVerify set to "true"
-    3. StorageMap and NetworkMap resources are created using the insecure provider
-    4. A migration Plan is created using the insecure provider's StorageMap and NetworkMap
+    Prerequisites:
+        Register an OpenShift destination with MTV installed and accessible
+        destination storage and network. Have an RHV source whose endpoint
+        certificate is not trusted or not supplied, and register it storing
+        ``insecureSkipVerify=true`` in its Secret. Use a disposable RHV VM
+        (created from a template so it is visible in Forklift inventory) with
+        a disk and network supported by both providers. Have permission to
+        create maps and a Plan in a target namespace. Only use this mode on
+        isolated, trusted infrastructure.
+
+    Test plan:
+        1. Inspect the Secret referenced by the registered RHV provider and
+           confirm ``insecureSkipVerify`` is set to ``true``.
+        2. Create a StorageMap for the VM's disks. Confirm it is created.
+        3. Create a NetworkMap for the VM's network. Confirm it is created.
+        4. Create a Plan for the VM using both maps, and check that the
+           provider stays connected, the VM is visible in Forklift inventory,
+           and the Plan's Ready condition becomes True. After the check, the
+           maps and Plan are removed with the run.
 
     Expected result:
-    - Provider connects successfully to the source infrastructure with TLS verification disabled
-    - Plan reaches Ready status, confirming that the insecureSkipVerify flag is properly
-      propagated and honored by Forklift
-
-    This is a 4-step plan-readiness validation test (no migration executed).
+        The provider Secret carries ``insecureSkipVerify=true``, the RHV
+        provider remains connected with the VM visible in inventory, and the
+        Plan reaches Ready. On failure, inspect the provider resource's
+        conditions for connection errors and the forklift controller pod logs
+        for TLS handshake failures.
     """
 
     storage_map: StorageMap

@@ -41,7 +41,46 @@ if TYPE_CHECKING:
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestOvaColdMigration:
-    """OVA cold migration test with destination-side validation."""
+    """Cold-migrate a VM imported from an OVA file and verify it runs on the destination with the configured labels and affinity.
+
+    Purpose/Regression:
+        OVA is a file-based source with no live source inventory stats, so
+        the scenario verifies the destination side only: the VM must be
+        created from the OVA, powered on per the Plan, reachable, and carry
+        the configured target labels and affinity rules. There is no induced
+        failure.
+
+    Prerequisites:
+        Register and connect an OVA source provider (an accessible OVA file
+        containing a Windows or Linux VM with several disks) and an OpenShift
+        destination with MTV installed. Prepare destination storage and a
+        network reachable by the migrated VM (e.g. the pod network or a
+        NetworkAttachmentDefinition). Have permission to create maps, a Plan,
+        and a target namespace, and SSH or equivalent access to the migrated
+        VM for connectivity checks.
+
+    Test plan:
+        1. Make the OVA VM visible in Forklift inventory through the OVA
+           provider.
+        2. Create a StorageMap for the VM's disks and a NetworkMap for its
+           network. Confirm both are created.
+        3. Create a cold Plan for the VM with target power state on, target
+           VM labels, and a pod-affinity rule. Check the Plan's Ready
+           condition is True.
+        4. Run the migration and check it reaches Succeeded.
+        5. Validate the migrated VM: it is powered on, guest connectivity
+           works, and the target labels and affinity rule are present on the
+           VM. (Source-side equivalence checks do not apply to OVA sources.)
+           After the checks, delete the migrated VM; the maps and Plan are
+           removed with the run.
+
+    Expected result:
+        The OVA VM is migrated and powered on with working connectivity, and
+        its metadata carries the configured target labels and affinity. On
+        failure, inspect the migration CR status for the VM's failed step, the
+        VM's spec and events in the target namespace, and the OVA provider
+        resource's conditions.
+    """
 
     storage_map: StorageMap
     network_map: NetworkMap
