@@ -1032,6 +1032,9 @@ def prepared_plan(
     # Override VM names from provider config if specified
     apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
 
+    if plan.get("disable_drs_for_vms", False) and source_provider.type == Provider.ProviderType.OVA:
+        raise ValueError("disable_drs_for_vms is not supported for OVA providers")
+
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
 
@@ -1064,6 +1067,11 @@ def prepared_plan(
         # Use vCenter clone provider if configured (e.g., for ESXi sources that can't clone directly)
         clone_provider = vcenter_clone_provider or source_provider
 
+        if plan.get("disable_drs_for_vms", False) and not isinstance(clone_provider, VMWareProvider):
+            raise ValueError(
+                f"disable_drs_for_vms requires a VMware clone provider, got '{type(clone_provider).__name__}'"
+            )
+
         if plan.get("preserve_static_ips"):
             for vm in virtual_machines:
                 if vm.get("source_vm_power") != "on":
@@ -1072,8 +1080,16 @@ def prepared_plan(
                         "Guest tools must be running to collect static IP and NIC name data."
                     )
 
+        first_vm_esxi_host: str | None = None
+
         for vm in virtual_machines:
             clone_options = {**vm, "enable_ctk": warm_migration}
+
+            # Pin VM2+ to same ESXi host as VM1 (required for per-host inflight throttling).
+            # Uses setdefault to respect any explicit per-VM target_esxi_host override.
+            if plan.get("clone_to_same_host", False) and first_vm_esxi_host:
+                clone_options.setdefault("target_esxi_host", first_vm_esxi_host)
+
             provider_vm_api = clone_provider.get_vm_by_name(
                 query=vm["name"],
                 vm_name_suffix=vm_name_suffix,
@@ -1081,6 +1097,21 @@ def prepared_plan(
                 session_uuid=fixture_store["session_uuid"],
                 clone_options=clone_options,
             )
+
+            # Capture first VM's ESXi hostname for subsequent same-host clones.
+            if plan.get("clone_to_same_host", False) and first_vm_esxi_host is None:
+                runtime_host = provider_vm_api.runtime.host
+                if runtime_host is None or not runtime_host.name:
+                    raise ValueError(
+                        f"clone_to_same_host=True but could not determine ESXi host "
+                        f"for VM '{vm['name']}'. Cannot pin subsequent clones."
+                    )
+                first_vm_esxi_host = runtime_host.name
+                LOGGER.info(f"Same-host cloning: pinning subsequent VMs to ESXi host '{first_vm_esxi_host}'")
+
+            # Disable DRS per VM to prevent relocation after cloning.
+            if plan.get("disable_drs_for_vms", False) and isinstance(clone_provider, VMWareProvider):
+                clone_provider.disable_drs_for_vm(provider_vm_api)
 
             # Power state control: "on" = start VM, "off" = stop VM, not set = leave unchanged
             source_vm_power = vm.get("source_vm_power")  # Optional - if not set, VM power state unchanged
