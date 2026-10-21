@@ -307,11 +307,13 @@ Plan CR is created.
 | `network_map_overrides` | No | Requirement-based NetworkMap destinations: each entry matches a source network by its guest IP configuration. |
 
 `network_map_overrides` entries carry a `source_ip_config` requirement (`dhcp`, `static`, or
-`static-multiple`) and a `destination` (`pod`, `multus`, or `ignored`), plus an optional
-`network_ip_mode` for Multus targets. Requirements are resolved against guest IP origins collected
-from the source VMs, so tests never hardcode network names; `resolve_network_map_overrides()` in
-`utilities/utils.py` performs the matching and raises when no unused source network satisfies a
-requirement.
+`static-multiple`) and a `destination` mapping whose `type` is `pod`, `multus`, or `ignored`, plus an
+optional `network_ip_mode` (`preserve`, `dhcp`, or `none`). `network_ip_mode` is allowed on `pod` and
+`multus` destinations and rejected on `ignored` ones. Requirements are resolved against guest IP
+origins collected from the source VMs, so tests never hardcode network names;
+`resolve_network_map_overrides()` in `utilities/utils.py` performs the matching and raises when no
+unused source network satisfies a requirement. The overrides must also cover every source network
+of the VMs exactly once, otherwise NetworkMap generation raises `ValueError`.
 
 `pin_to_non_dedicated_host` needs `copyoffload.dedicated_migration_hosts` in the provider entry. Without it, the code raises a `ValueError`.
 

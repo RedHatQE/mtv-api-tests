@@ -342,8 +342,8 @@
 </tr>
 <tr>
 <td><code>utilities/guest_ip_mode.py</code></td>
-<td>per-network guest IP mode verification (<code>pod</code>/<code>none</code>/<code>dhcp</code>/<code>preserve</code>) on migrated VMs, Windows and Linux</td>
-<td><code>verify_network_ip_modes()</code></td>
+<td>per-network guest IP mode verification on migrated VMs: <code>dhcp</code> (Windows and Linux) and <code>none</code> (Linux only); NetworkMap and DNS-data checks for overrides. <code>preserve</code> is verified by <code>check_static_ip_preservation()</code></td>
+<td><code>verify_network_ip_modes()</code>, <code>verify_network_map_network_ip_mode()</code>, <code>verify_preserve_mode_dns_data()</code></td>
 </tr>
 <tr>
 <td><code>utilities/copyoffload_migration.py</code></td>

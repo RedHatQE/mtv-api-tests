@@ -573,29 +573,38 @@ def _verify_gateway(interface_name: str, expected_gateway: str, matching_interfa
 
 
 def _verify_dns_servers(
-    interface_name: str, expected_dns_servers: list[str], matching_interface: dict[str, Any]
+    interface_name: str,
+    expected_dns_servers: list[str],
+    matching_interface: dict[str, Any],
+    is_windows: bool,
 ) -> None:
     """
-    Verify that the destination interface's DNS servers come from the source VM's DNS set.
+    Verify that the destination interface's DNS servers match the source VM's DNS set.
 
-    VMware Tools reports the guest's system-wide DNS resolver list, not per-NIC
-    configuration, so per-NIC DNS preservation cannot be verified — the check only
-    catches DNS servers invented or changed on the destination.
+    On Linux, DNS is collected per NIC from NetworkManager profiles, so the sets
+    must match exactly. VMware Tools reports Windows' system-wide DNS resolver
+    list, not per-NIC configuration, so only DNS servers missing from the
+    source set indicate a change on the destination.
 
     Args:
         interface_name (str): Name of the network interface
         expected_dns_servers (list[str]): DNS servers reported by the source VM (empty skips verification)
         matching_interface (dict[str, Any]): Current interface configuration from destination VM
+        is_windows (bool): Whether the guest is Windows (system-wide DNS union instead of per-NIC DNS)
 
     Raises:
-        AssertionError: If the destination reports a DNS server the source VM never had
+        AssertionError: If the destination DNS set is empty or differs from the source VM's
     """
     if not expected_dns_servers:
         return
 
     actual_dns_servers = matching_interface.get("dns_servers", [])
-    unknown = [dns_server for dns_server in actual_dns_servers if dns_server not in expected_dns_servers]
-    assert not unknown, (
+    difference = (
+        set(actual_dns_servers) - set(expected_dns_servers)
+        if is_windows
+        else set(actual_dns_servers) ^ set(expected_dns_servers)
+    )
+    assert actual_dns_servers and not difference, (
         f"DNS servers not preserved for interface {interface_name}: source VM DNS set "
         f"{expected_dns_servers}, got {actual_dns_servers}"
     )
@@ -858,7 +867,7 @@ def check_static_ip_preservation(
 
         _verify_gateway(interface_name, expected_gateway, matched)
 
-        _verify_dns_servers(interface_name, expected_dns_servers, matched)
+        _verify_dns_servers(interface_name, expected_dns_servers, matched, is_windows)
 
         LOGGER.info(f"Static IP {interface['ip_address']} verified for interface {interface_name}")
 

@@ -64,9 +64,10 @@ class TestColdNetworkIpModeMigration:
         four NICs:
 
         - one on a network served by DHCP
-        - one with a single static IPv4 address
+        - two with a single static IPv4 address each, on different networks
+          (assigned in NIC order: the first is mapped with guest IP mode
+          DHCP, and the second is mapped to the ignored destination)
         - one with multiple static IPv4 addresses (address, gateway and DNS set)
-        - one whose network will be ignored
 
         Have permission to create maps and a Plan in the target namespace.
 

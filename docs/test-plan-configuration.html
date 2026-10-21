@@ -806,11 +806,13 @@ where the test-created NetworkAttachmentDefinitions live.</p>
 </tbody>
 </table></div>
 <p><code>network_map_overrides</code> entries carry a <code>source_ip_config</code> requirement (<code>dhcp</code>, <code>static</code>, or
-<code>static-multiple</code>) and a <code>destination</code> (<code>pod</code>, <code>multus</code>, or <code>ignored</code>), plus an optional
-<code>network_ip_mode</code> for Multus targets. Requirements are resolved against guest IP origins collected
-from the source VMs, so tests never hardcode network names; <code>resolve_network_map_overrides()</code> in
-<code>utilities/utils.py</code> performs the matching and raises when no unused source network satisfies a
-requirement.</p>
+<code>static-multiple</code>) and a <code>destination</code> mapping whose <code>type</code> is <code>pod</code>, <code>multus</code>, or <code>ignored</code>, plus an
+optional <code>network_ip_mode</code> (<code>preserve</code>, <code>dhcp</code>, or <code>none</code>). <code>network_ip_mode</code> is allowed on <code>pod</code> and
+<code>multus</code> destinations and rejected on <code>ignored</code> ones. Requirements are resolved against guest IP
+origins collected from the source VMs, so tests never hardcode network names;
+<code>resolve_network_map_overrides()</code> in <code>utilities/utils.py</code> performs the matching and raises when no
+unused source network satisfies a requirement. The overrides must also cover every source network
+of the VMs exactly once, otherwise NetworkMap generation raises <code>ValueError</code>.</p>
 <p><code>pin_to_non_dedicated_host</code> needs <code>copyoffload.dedicated_migration_hosts</code> in the provider entry. Without it, the code raises a <code>ValueError</code>.</p>
 <p><code>skip_clone</code> has its own validation. It is rejected when the provider does not support skipping clones, and it is incompatible with <code>disable_drs_for_vms</code>, <code>clone_to_same_host</code>,
 <code>migrate_shared_disks</code>, and <code>add_nic</code>, plus <code>preserve_static_ips</code> on every provider except Hyper-V. Because skipped VMs are real and shared, the fixture restores their original

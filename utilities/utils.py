@@ -435,7 +435,7 @@ def _validate_network_map_overrides(
     if duplicated_networks:
         raise ValueError(
             f"network_map_overrides must not repeat a source network: {duplicated_networks}. "
-            "Map multiple NICs of one network with per_nic_network_map instead."
+            "network_map_overrides cannot express several NICs on one source network."
         )
 
     for override in network_map_overrides:

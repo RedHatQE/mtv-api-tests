@@ -17,7 +17,7 @@ Most test authors never import these modules directly. They consume them through
 | `utilities/resources.py` | tracked creation of every OpenShift/MTV resource | `create_and_store_resource()`, `unregister_teardown_resource()`, `get_or_create_namespace()` |
 | `utilities/mtv_migration.py` | storage maps, network maps, plans, migrations | `get_storage_migration_map()`, `get_network_migration_map()`, `create_plan_resource()`, `execute_migration()`, `wait_for_migration_complate()` |
 | `utilities/post_migration.py` | end-to-end and focused VM validation | `check_vms()` plus the `check_*` / `verify_*` helpers |
-| `utilities/guest_ip_mode.py` | per-network guest IP mode verification (`pod`/`none`/`dhcp`/`preserve`) on migrated VMs, Windows and Linux | `verify_network_ip_modes()` |
+| `utilities/guest_ip_mode.py` | per-network guest IP mode verification on migrated VMs: `dhcp` (Windows and Linux) and `none` (Linux only); NetworkMap and DNS-data checks for overrides. `preserve` is verified by `check_static_ip_preservation()` | `verify_network_ip_modes()`, `verify_network_map_network_ip_mode()`, `verify_preserve_mode_dns_data()` |
 | `utilities/copyoffload_migration.py` | copy-offload orchestration and XCOPY verification | `execute_copyoffload_migration()`, `verify_xcopy_used()`, `verify_populator_throttling()`, `verify_dedicated_migration_host()` |
 | `utilities/deep_inspection.py` | Deep Inspection `Conversion` CR lifecycle | `create_conversion_resource()`, `wait_for_conversion_complete()`, `verify_di_results()` |
 | `utilities/shared_disk.py` | shared-disk verification on migrated VMs | `verify_shared_disk_data()`, `label_shared_disk_on_source_windows()`, `verify_shared_disk_data_windows()` |
