@@ -12,6 +12,7 @@ from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.image_digest_mirror_set import ImageDigestMirrorSet
 from ocp_resources.exceptions import ClientWithBasicAuthError
 from ocp_resources.plan import Plan
+from ocp_resources.resource import Resource
 from ocp_resources.subscription import Subscription
 from pyhelper_utils.shell import run_command
 from pytest_testconfig import py_config
@@ -176,16 +177,47 @@ def _get_csv_must_gather_image(mtv_csv: ClusterServiceVersion) -> str:
     return image
 
 
+def _is_missing_resource_api(ex: NotImplementedError, resource: type[Resource]) -> bool:
+    """Check whether a NotImplementedError is the wrapper's missing-API error for one resource.
+
+    The ``ocp_resources`` wrapper raises a bare ``NotImplementedError`` from
+    ``_get_api_version`` when a resource kind is absent from the cluster's API
+    discovery, with no dedicated exception type; the raise origin and message
+    are the only discriminators.
+
+    Args:
+        ex (NotImplementedError): The exception to classify.
+        resource (type[Resource]): Resource class the caller attempted to reach.
+
+    Returns:
+        bool: True when the exception is the wrapper's missing-API error for ``resource``.
+    """
+    origin = ex.__traceback__
+    while origin is not None and origin.tb_next is not None:
+        origin = origin.tb_next
+    if (
+        origin is None
+        or origin.tb_frame.f_globals.get("__name__") != "ocp_resources.resource"
+        or origin.tb_frame.f_code.co_name != "_get_api_version"
+    ):
+        return False
+    return str(ex) == f"Couldn't find {resource.kind} in {resource.api_group} api group"
+
+
 def _resolve_must_gather_image(
     ocp_admin_client: DynamicClient,
     mtv_subs: Subscription,
     mtv_csv: ClusterServiceVersion,
 ) -> str:
-    """Resolve the must-gather image via IDMS.
+    """Resolve the MTV must-gather image, using the channel-derived IDMS as an optional mirror.
 
-    Extracts the must-gather image from the CSV, builds the IDMS resource name
-    from the Subscription channel, retrieves the mirror URL, extracts the SHA
-    from the CSV image, and combines them.
+    The image is always the MTV one from the CSV's ``MUST_GATHER_IMAGE``: the plan-targeted
+    gather script is a feature of that image only, so no other must-gather image may ever be
+    substituted. When the channel-derived IDMS exists, its mirror URL replaces the registry
+    prefix and the CSV digest is kept (needed on devel clusters without direct
+    ``registry.redhat.io`` access). When the IDMS resource is absent (GA/brew clusters) or its
+    API is unavailable (older OpenShift), the fully-qualified CSV image is returned verbatim —
+    any cluster with direct registry access can pull it.
 
     Args:
         ocp_admin_client (DynamicClient): The OpenShift admin client.
@@ -202,18 +234,29 @@ def _resolve_must_gather_image(
             is found in the IDMS, or the CSV image has no digest separator.
     """
     csv_image = _get_csv_must_gather_image(mtv_csv=mtv_csv)
-    channel = mtv_subs.instance.spec.channel
-    idms_name = _get_idms_name(channel=channel)
-    LOGGER.info(f"Looking up IDMS '{idms_name}' for must-gather mirror")
-
-    idms = ImageDigestMirrorSet(client=ocp_admin_client, name=idms_name, ensure_exists=True)
-    must_gather_mirror_url = _get_must_gather_mirror_url(idms=idms)
-
     if "@" not in csv_image:
         raise MustGatherImageError(f"CSV image '{csv_image}' does not contain a digest separator '@'")
     sha = csv_image.split("@")[1]
     if not sha:
         raise MustGatherImageError(f"CSV image '{csv_image}' has an empty digest after '@'")
+    channel = mtv_subs.instance.spec.channel
+    idms_name = _get_idms_name(channel=channel)
+    LOGGER.info(f"Looking up IDMS '{idms_name}' for must-gather mirror")
+
+    try:
+        idms = ImageDigestMirrorSet(client=ocp_admin_client, name=idms_name, ensure_exists=True)
+    except (ResourceNotFoundError, NotImplementedError) as ex:
+        if isinstance(ex, NotImplementedError) and not _is_missing_resource_api(ex, ImageDigestMirrorSet):
+            raise
+        # Optional accelerator: without the channel-derived IDMS, the fully-qualified CSV image
+        # is pulled directly; a pull failure stays a retryable command error.
+        LOGGER.info(
+            f"IDMS '{idms_name}' unavailable on this cluster ({ex}); "
+            f"using the CSV must-gather image directly: {csv_image}"
+        )
+        return csv_image
+
+    must_gather_mirror_url = _get_must_gather_mirror_url(idms=idms)
     resolved_image = f"{must_gather_mirror_url}@{sha}"
     LOGGER.info(f"Resolved must-gather image from IDMS: {resolved_image}")
     return resolved_image
@@ -223,8 +266,9 @@ def run_must_gather(data_collector_path: Path) -> bool:
     """Run ``oc adm must-gather`` to collect the full MTV diagnostic bundle.
 
     Used where there is no plan to scope by: session teardown after leftovers, and an item whose
-    test class carries no ``plan_resource``. Resolves the must-gather image by looking up the IDMS
-    mirror URL and combining it with the SHA from the installed CSV. Known operational failures
+    test class carries no ``plan_resource``. Resolves the must-gather image from the installed
+    MTV operator CSV, using the channel-derived IDMS as an optional mirror; when that IDMS is
+    absent or its API is unavailable, the CSV image is used verbatim. Known operational failures
     return False for retry; programming and configuration errors propagate.
 
     Args:
@@ -243,7 +287,8 @@ def run_plan_must_gather(data_collector_path: Path, plan: dict[str, str]) -> boo
 
     A different gather script from :func:`run_must_gather`: it runs ``/usr/bin/targeted`` with the
     plan's name and namespace as env, so the artifact holds that plan's VMs, networks and events
-    instead of a full-cluster snapshot. Image resolution is shared with the full collection.
+    instead of a full-cluster snapshot. Image resolution is shared with the full collection,
+    including the CSV-image fallback when the channel-derived IDMS is absent.
 
     Args:
         data_collector_path (Path): Directory where must-gather output is written.
@@ -299,20 +344,10 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         return success
     except NotImplementedError as ex:
         # API unavailability: the wrapper has no dedicated missing-API exception, so match its
-        # discovery origin and message before treating it as a gather that cannot run.
-        origin = ex.__traceback__
-        while origin is not None and origin.tb_next is not None:
-            origin = origin.tb_next
-        if (
-            origin is None
-            or origin.tb_frame.f_globals.get("__name__") != "ocp_resources.resource"
-            or origin.tb_frame.f_code.co_name != "_get_api_version"
-        ):
-            raise
-        if str(ex) not in {
-            f"Couldn't find {resource.kind} in {resource.api_group} api group"
-            for resource in (Subscription, ClusterServiceVersion, ImageDigestMirrorSet)
-        }:
+        # discovery origin and message before treating it as a gather that cannot run. Only the
+        # Subscription and CSV kinds remain here — IDMS API-unavailability is handled inside
+        # image resolution as a fallback to the CSV image, not a gather that cannot run.
+        if not any(_is_missing_resource_api(ex, resource) for resource in (Subscription, ClusterServiceVersion)):
             raise
         LOGGER.exception(f"Must-gather resource API is unavailable. {ex}")
         return False
