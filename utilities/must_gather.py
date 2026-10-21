@@ -234,6 +234,11 @@ def _resolve_must_gather_image(
             is found in the IDMS, or the CSV image has no digest separator.
     """
     csv_image = _get_csv_must_gather_image(mtv_csv=mtv_csv)
+    if "@" not in csv_image:
+        raise MustGatherImageError(f"CSV image '{csv_image}' does not contain a digest separator '@'")
+    sha = csv_image.split("@")[1]
+    if not sha:
+        raise MustGatherImageError(f"CSV image '{csv_image}' has an empty digest after '@'")
     channel = mtv_subs.instance.spec.channel
     idms_name = _get_idms_name(channel=channel)
     LOGGER.info(f"Looking up IDMS '{idms_name}' for must-gather mirror")
@@ -252,11 +257,6 @@ def _resolve_must_gather_image(
         return csv_image
 
     must_gather_mirror_url = _get_must_gather_mirror_url(idms=idms)
-    if "@" not in csv_image:
-        raise MustGatherImageError(f"CSV image '{csv_image}' does not contain a digest separator '@'")
-    sha = csv_image.split("@")[1]
-    if not sha:
-        raise MustGatherImageError(f"CSV image '{csv_image}' has an empty digest after '@'")
     resolved_image = f"{must_gather_mirror_url}@{sha}"
     LOGGER.info(f"Resolved must-gather image from IDMS: {resolved_image}")
     return resolved_image
