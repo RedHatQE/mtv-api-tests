@@ -1339,7 +1339,8 @@ brew install gcc libxml2 curl openssl
 
 - uv package manager (manages Python automatically)
 - oc CLI
-- virtctl
+- virtctl (optional — the suite downloads a cluster-matched binary; a `virtctl` installed on `PATH` is
+  ignored so the version always matches the cluster)
 
 > **Note**: uv will automatically download and manage the appropriate Python version. If you encounter HTTPS failures
 > with Python 3.13, the issue is **urllib3 2.4.0+** (released April 2025) rejecting non-RFC-compliant certificates
