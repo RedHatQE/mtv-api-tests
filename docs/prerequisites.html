@@ -332,7 +332,7 @@ Some scenarios also clone source VMs, change source power state, add disks, and 
 <li>Python 3.12 or 3.13, and <a href="https://docs.astral.sh/uv/"><code>uv</code></a> for environment and test execution.</li>
 <li><code>oc</code> for cluster inspection, and for the <code>oc adm must-gather</code> call the data collector makes on failures.</li>
 <li>Podman or Docker if you run the suite from the container image.</li>
-<li><code>virtctl</code> is not required. The suite downloads it from the cluster when it is missing from <code>PATH</code>.</li>
+<li><code>virtctl</code> is not required. The suite downloads it from the cluster; a <code>virtctl</code> installed on <code>PATH</code> is ignored so the binary always matches the cluster version.</li>
 </ul>
 <blockquote>
 <p><strong>Note:</strong> Jenkins and rootcoz are optional. Jenkins orchestration is used by the project team, but nothing in the

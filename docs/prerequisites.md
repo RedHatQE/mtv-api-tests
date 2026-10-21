@@ -33,7 +33,7 @@ Choose source VMs that match the scenario you plan to run. Do not point the suit
 - Python 3.12 or 3.13, and [`uv`](https://docs.astral.sh/uv/) for environment and test execution.
 - `oc` for cluster inspection, and for the `oc adm must-gather` call the data collector makes on failures.
 - Podman or Docker if you run the suite from the container image.
-- `virtctl` is not required. The suite downloads it from the cluster when it is missing from `PATH`.
+- `virtctl` is not required. The suite downloads it from the cluster; a `virtctl` installed on `PATH` is ignored so the binary always matches the cluster version.
 
 > **Note:** Jenkins and rootcoz are optional. Jenkins orchestration is used by the project team, but nothing in the
 > suite requires it. rootcoz is only used by the optional `--analyze-with-ai` flag; without it the suite logs a

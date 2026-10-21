@@ -592,7 +592,7 @@ volume on the source through the VMware Guest Operations API before migration, a
 <p>SSH into migrated VMs through <code>virtctl</code> port-forward plus <code>python-rrmngmnt</code>, so it works when cluster nodes have no external IPs. <code>VMSSHConnection</code> wraps a connection,
 <code>SSHConnectionManager</code> manages one connection per VM for fixtures, <code>create_vm_ssh_connection()</code> builds a single connection, and <code>run_cmd_in_vm()</code> runs a command in the guest.</p>
 <h3 id="utilitiesvirtctlpy"><code>utilities/virtctl.py</code></h3>
-<p><code>download_virtctl_from_cluster()</code> fetches the matching <code>virtctl</code> binary and <code>add_to_path()</code> puts it on <code>PATH</code> for the session.</p>
+<p><code>download_virtctl_from_cluster()</code> fetches the matching <code>virtctl</code> binary — a <code>virtctl</code> already on <code>PATH</code> is never reused, only a previously downloaded binary in the cluster-versioned cache — and <code>add_to_path()</code> puts the downloaded directory on <code>PATH</code> for the session.</p>
 <h3 id="utilitiesvmware_guest_operationspy"><code>utilities/vmware_guest_operations.py</code></h3>
 <p>Commands executed inside vSphere guests via the Guest Operations API: <code>run_command_in_vmware_guest()</code>, <code>detect_vmware_ip_origins_via_guest_ops()</code>, <code>detect_guest_nic_names()</code>,
 <code>create_data_integrity_marker()</code>.</p>

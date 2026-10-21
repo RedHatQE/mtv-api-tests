@@ -328,8 +328,8 @@ cmd = [
 
 In practice, the `virtctl` flow works like this:
 
-- If `virtctl` is already on `PATH`, the suite reuses it
-- If not, it checks a shared cache under the system temp directory
+- A `virtctl` installed on `PATH` is **deliberately ignored** — the suite uses only the binary it downloads from the cluster, so the version always matches the cluster (issue #770)
+- It checks a shared cache under the system temp directory, keyed by cluster version
 - If there is no cached binary, it reads the cluster `ConsoleCLIDownload` named `virtctl-clidownloads-kubevirt-hyperconverged`
 - It picks the download URL that matches the local host OS and architecture
 - It downloads the archive, extracts the `virtctl` binary, makes it executable, and prepends its directory to `PATH`
@@ -344,8 +344,8 @@ parallel `pytest-xdist` workers do not all fetch the same binary at once.
 
 > **Warning:** Windows hosts are not covered by the current `virtctl` auto-detection logic. The downloader only maps `linux` and `darwin`.
 
-> **Tip:** If you want to force a fresh `virtctl` download, remove the `pytest-shared-virtctl/<cluster-version>` directory under your system temp directory, or place a different
-> `virtctl` earlier in `PATH`.
+> **Tip:** If you want to force a fresh `virtctl` download, remove the `pytest-shared-virtctl/<cluster-version>` directory under your system temp directory. A `virtctl` earlier in
+> `PATH` no longer overrides the downloaded binary — the cache directory is the only source.
 
 ## Optional but useful local tools
 

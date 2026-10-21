@@ -2368,7 +2368,7 @@ Choose source VMs that match the scenario you plan to run. Do not point the suit
 - Python 3.12 or 3.13, and [`uv`](https://docs.astral.sh/uv/) for environment and test execution.
 - `oc` for cluster inspection, and for the `oc adm must-gather` call the data collector makes on failures.
 - Podman or Docker if you run the suite from the container image.
-- `virtctl` is not required. The suite downloads it from the cluster when it is missing from `PATH`.
+- `virtctl` is not required. The suite downloads it from the cluster; a `virtctl` installed on `PATH` is ignored so the binary always matches the cluster version.
 
 > **Note:** Jenkins and rootcoz are optional. Jenkins orchestration is used by the project team, but nothing in the
 > suite requires it. rootcoz is only used by the optional `--analyze-with-ai` flag; without it the suite logs a
@@ -3198,8 +3198,8 @@ The first step is to reuse an existing binary if one is already present:
 
 In practice, the `virtctl` flow works like this:
 
-- If `virtctl` is already on `PATH`, the suite reuses it
-- If not, it checks a shared cache under the system temp directory
+- A `virtctl` installed on `PATH` is **deliberately ignored** — the suite uses only the binary it downloads from the cluster, so the version always matches the cluster (issue #770)
+- It checks a shared cache under the system temp directory, keyed by cluster version
 - If there is no cached binary, it reads the cluster `ConsoleCLIDownload` named `virtctl-clidownloads-kubevirt-hyperconverged`
 - It picks the download URL that matches the local host OS and architecture
 - It downloads the archive, extracts the `virtctl` binary, makes it executable, and prepends its directory to `PATH`
@@ -3214,8 +3214,8 @@ parallel `pytest-xdist` workers do not all fetch the same binary at once.
 
 > **Warning:** Windows hosts are not covered by the current `virtctl` auto-detection logic. The downloader only maps `linux` and `darwin`.
 
-> **Tip:** If you want to force a fresh `virtctl` download, remove the `pytest-shared-virtctl/<cluster-version>` directory under your system temp directory, or place a different
-> `virtctl` earlier in `PATH`.
+> **Tip:** If you want to force a fresh `virtctl` download, remove the `pytest-shared-virtctl/<cluster-version>` directory under your system temp directory. A `virtctl` earlier in
+> `PATH` no longer overrides the downloaded binary — the cache directory is the only source.
 
 ## Optional but useful local tools
 
@@ -11218,7 +11218,7 @@ SSH into migrated VMs through `virtctl` port-forward plus `python-rrmngmnt`, so 
 
 ### `utilities/virtctl.py`
 
-`download_virtctl_from_cluster()` fetches the matching `virtctl` binary and `add_to_path()` puts it on `PATH` for the session.
+`download_virtctl_from_cluster()` fetches the matching `virtctl` binary — a `virtctl` already on `PATH` is never reused, only a previously downloaded binary in the cluster-versioned cache — and `add_to_path()` puts the downloaded directory on `PATH` for the session.
 
 ### `utilities/vmware_guest_operations.py`
 

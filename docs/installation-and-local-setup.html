@@ -584,8 +584,8 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
 
 <p>In practice, the <code>virtctl</code> flow works like this:</p>
 <ul>
-<li>If <code>virtctl</code> is already on <code>PATH</code>, the suite reuses it</li>
-<li>If not, it checks a shared cache under the system temp directory</li>
+<li>A <code>virtctl</code> installed on <code>PATH</code> is <strong>deliberately ignored</strong> — the suite uses only the binary it downloads from the cluster, so the version always matches the cluster (issue #770)</li>
+<li>It checks a shared cache under the system temp directory, keyed by cluster version</li>
 <li>If there is no cached binary, it reads the cluster <code>ConsoleCLIDownload</code> named <code>virtctl-clidownloads-kubevirt-hyperconverged</code></li>
 <li>It picks the download URL that matches the local host OS and architecture</li>
 <li>It downloads the archive, extracts the <code>virtctl</code> binary, makes it executable, and prepends its directory to <code>PATH</code></li>
@@ -599,8 +599,8 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
 parallel <code>pytest-xdist</code> workers do not all fetch the same binary at once.</p>
 <blockquote>
 <p><strong>Warning:</strong> Windows hosts are not covered by the current <code>virtctl</code> auto-detection logic. The downloader only maps <code>linux</code> and <code>darwin</code>.</p>
-<p><strong>Tip:</strong> If you want to force a fresh <code>virtctl</code> download, remove the <code>pytest-shared-virtctl/&lt;cluster-version&gt;</code> directory under your system temp directory, or place a different
-<code>virtctl</code> earlier in <code>PATH</code>.</p>
+<p><strong>Tip:</strong> If you want to force a fresh <code>virtctl</code> download, remove the <code>pytest-shared-virtctl/&lt;cluster-version&gt;</code> directory under your system temp directory. A <code>virtctl</code> earlier in
+<code>PATH</code> no longer overrides the downloaded binary — the cache directory is the only source.</p>
 </blockquote>
 <h2 id="optional-but-useful-local-tools">Optional but useful local tools</h2>
 <p><code>oc</code> is not how the suite discovers <code>virtctl</code>, and it is not required just to create the Python environment.

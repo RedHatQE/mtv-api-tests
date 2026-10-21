@@ -1,6 +1,5 @@
 import os
 import platform
-import shutil
 import ssl
 import tarfile
 import urllib.request
@@ -15,21 +14,18 @@ LOGGER = get_logger(__name__)
 
 
 def _check_existing_virtctl(download_dir: Path) -> Path | None:
-    """Check if virtctl is already available.
+    """Check if a previously downloaded virtctl exists in the download directory.
+
+    PATH-installed virtctl binaries are deliberately ignored: only the
+    cluster-downloaded binary in download_dir counts, so the cache stays
+    valid per cluster version.
 
     Args:
-        download_dir: Directory where virtctl might be downloaded
+        download_dir: Directory where virtctl is downloaded from the cluster
 
     Returns:
-        Path to existing virtctl binary, or None if not found
+        Path to the cached virtctl binary, or None if not found
     """
-    # Check if virtctl is in PATH
-    existing_virtctl = shutil.which("virtctl")
-    if existing_virtctl:
-        LOGGER.info(f"virtctl already available in PATH at {existing_virtctl}")
-        return Path(existing_virtctl)
-
-    # Check if previously downloaded
     virtctl_binary = download_dir / "virtctl"
     if virtctl_binary.exists() and os.access(virtctl_binary, os.X_OK):
         LOGGER.info(f"virtctl already exists at {virtctl_binary}")
@@ -211,10 +207,12 @@ def add_to_path(virtctl_dir: str) -> None:
 def download_virtctl_from_cluster(client: DynamicClient, download_dir: Path) -> Path:
     """Download virtctl binary from the OpenShift cluster.
 
-    This function retrieves the ConsoleCLIDownload resource from the cluster,
-    automatically detects the current OS and architecture, extracts the matching
-    download URL, downloads the virtctl binary, extracts it (handles both .tar.gz
-    for Linux and .zip for Mac), makes it executable, and adds it to PATH.
+    This function checks for a previously downloaded binary in download_dir
+    (PATH is never consulted), retrieves the ConsoleCLIDownload resource from
+    the cluster, automatically detects the current OS and architecture,
+    extracts the matching download URL, downloads the virtctl binary, extracts
+    it (handles both .tar.gz for Linux and .zip for Mac), makes it executable,
+    and adds it to PATH.
 
     Supports:
         - OS: Linux, macOS (Darwin)

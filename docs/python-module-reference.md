@@ -177,7 +177,7 @@ SSH into migrated VMs through `virtctl` port-forward plus `python-rrmngmnt`, so 
 
 ### `utilities/virtctl.py`
 
-`download_virtctl_from_cluster()` fetches the matching `virtctl` binary and `add_to_path()` puts it on `PATH` for the session.
+`download_virtctl_from_cluster()` fetches the matching `virtctl` binary — a `virtctl` already on `PATH` is never reused, only a previously downloaded binary in the cluster-versioned cache — and `add_to_path()` puts the downloaded directory on `PATH` for the session.
 
 ### `utilities/vmware_guest_operations.py`
 
