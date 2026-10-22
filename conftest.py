@@ -40,12 +40,17 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
-    GuestCommandError,
     MissingProvidersFileError,
     MtvOperatorNotInstalledError,
     RemoteClusterAndLocalCluterNamesError,
 )
-from libs.base_provider import _PROVIDER_TEST_MARKERS, BaseProvider, supports_add_nic
+from libs.base_provider import (
+    _PROVIDER_TEST_MARKERS,
+    BaseProvider,
+    is_direct_esxi_connection,
+    supports_add_nic,
+    supports_ipv6_migration,
+)
 from libs.forklift_inventory import ForkliftInventory, create_forklift_inventory
 from libs.providers.openshift import OCPProvider
 from libs.providers.rhv import OvirtProvider
@@ -110,7 +115,7 @@ from utilities.utils import (
     resolve_providers_json_path,
 )
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
-from utilities.vmware_guest_operations import detect_guest_nic_names, detect_vmware_ip_origins_via_guest_ops
+from utilities.vmware_guest_operations import collect_linux_guest_static_ip_metadata
 from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
 
 RESULTS_PATH = Path("./.xdist_results/")
@@ -119,7 +124,6 @@ LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 _STANDALONE_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 _CLASS_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
-
 
 # Pytest start
 
@@ -518,9 +522,8 @@ def pytest_collection_modifyitems(session, config, items):
         # in which case provider-type gating is silently skipped. In pool mode the provider key is
         # unresolved at collection time (the latency fixture runs later), so the pool's
         # type key drives the gating instead.
-        source_provider_type = providers.get(py_config.get("source_provider", ""), {}).get("type") or py_config.get(
-            "source_provider_type"
-        )
+        source_provider_data = providers.get(py_config.get("source_provider", ""), {})
+        source_provider_type = source_provider_data.get("type") or py_config.get("source_provider_type")
 
         if source_provider_type:
             # Skip warm migration tests for providers that do not support warm migration.
@@ -574,6 +577,16 @@ def pytest_collection_modifyitems(session, config, items):
                     # collection run with a clear KeyError instead of a later fixture error.
                     if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
                         item.add_marker(add_nic_skip)
+
+            # Skip IPv6 tests unless the source provider supports the IPv6 migration scenario (the
+            # provider layer owns that decision). The provider config is only known here for an
+            # explicitly configured provider; in pool mode the member is selected after collection,
+            # so the `ipv6_esxi_host_required` fixture gates at runtime using the selected member.
+            if py_config.get("source_provider") and not supports_ipv6_migration(source_provider_data):
+                ipv6_skip = pytest.mark.skip(reason="IPv6 migration is only supported against an IPv6 ESXi host")
+                for item in items:
+                    if "ipv6" in item.keywords:
+                        item.add_marker(ipv6_skip)
 
     # In pool mode the provider is unresolved at collection time; the pool type labels the items.
     provider_label = py_config.get("source_provider") or py_config.get("source_provider_type")
@@ -1124,6 +1137,22 @@ def source_provider_data(
     _source_provider = source_providers[requested_provider]
     fixture_store["source_provider_data"] = _source_provider
     return _source_provider
+
+
+@pytest.fixture(scope="class")
+def ipv6_esxi_host_required(source_provider_data: dict[str, Any]) -> None:
+    """Skip IPv6 tests unless the selected source provider supports the IPv6 migration scenario.
+
+    The provider layer owns the capability decision (`supports_ipv6_migration`). An explicitly
+    configured provider is gated at collection time (`pytest_collection_modifyitems`); in pool mode
+    the member is chosen after collection, so this fixture gates on the selected member once
+    `source_provider_data` has resolved it.
+
+    Args:
+        source_provider_data (dict[str, Any]): Resolved source provider configuration.
+    """
+    if not supports_ipv6_migration(source_provider_data):
+        pytest.skip("IPv6 migration is only supported against an IPv6 ESXi host")
 
 
 @pytest.fixture(scope="session")
@@ -1696,7 +1725,10 @@ def prepared_plan(
                 "pin_to_non_dedicated_host",
                 "pin_first_vm_to_dedicated_host",
             ]
-            if source_provider.type != Provider.ProviderType.HYPERV:
+            # Only ESXi provider supports IPv6 currently, but it doesn't support VM cloning
+            # Allow skip_clone: true to work with ESXi provider
+            is_esxi_vsphere = is_direct_esxi_connection(source_provider_data)
+            if not (is_esxi_vsphere or source_provider.type == Provider.ProviderType.HYPERV):
                 skip_clone_incompatible.append("preserve_static_ips")
             conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]
             if has_shared_disk_config:
@@ -1731,6 +1763,21 @@ def prepared_plan(
                     elif source_vm_power == "off":
                         source_provider.stop_vm(provider_vm_api)
 
+                    # Skip-clone bypasses the clone path that enables Change Block Tracking (CBT),
+                    # the only path that turns it on for vSphere sources. Warm migration cannot
+                    # track changes without it, so fail early with a clear prerequisite error
+                    # rather than letting the migration fail opaquely later.
+                    if (
+                        warm_migration
+                        and source_provider.type == Provider.ProviderType.VSPHERE
+                        and not source_provider.is_cbt_enabled(provider_vm_api)
+                    ):
+                        raise ValueError(
+                            f"Warm skip-clone migration requires Change Block Tracking (CBT) enabled on "
+                            f"VM '{vm['name']}' and all its disks, but it is not. Enable CBT on the source "
+                            "VM before running this test."
+                        )
+
                 if plan.get("preserve_static_ips", False):
                     source_vm_details = source_provider.vm_dict(
                         provider_vm_api=provider_vm_api,
@@ -1739,6 +1786,18 @@ def prepared_plan(
                         clone_options=vm,
                     )
                     plan["source_vms_data"][vm["name"]] = source_vm_details
+
+                    # Skip-clone omits the cloning path's guest-operations detection, so run it
+                    # here too: Linux guests need IP origins and NIC names collected or static-IP
+                    # preservation validation fails (open-vm-tools does not report IP origin).
+                    if source_provider.type == Provider.ProviderType.VSPHERE:
+                        collect_linux_guest_static_ip_metadata(
+                            source_provider=source_provider,
+                            vm=provider_vm_api,
+                            source_provider_data=fixture_store["source_provider_data"],
+                            vm_details=source_vm_details,
+                            preserve_static_ips=True,
+                        )
 
         if not skip_clone:
             for vm_index, vm in enumerate(virtual_machines):
@@ -1849,36 +1908,16 @@ def prepared_plan(
                         vm["disconnected_nic_mac" if not connected else "connected_nic_mac"] = mac
                         added_nic_expected_counts[vm["name"]] = nic_count_before + 1
 
-                # Detect IP origins via Guest Operations for Linux VMs where VMware doesn't report origin
-                # (known open-vm-tools limitation: https://github.com/vmware/open-vm-tools/issues/694)
-                if source_provider.type == Provider.ProviderType.VSPHERE and not source_vm_details.get("win_os"):
-                    try:
-                        detect_vmware_ip_origins_via_guest_ops(
-                            source_provider=source_provider,
-                            vm=provider_vm_api,
-                            source_provider_data=fixture_store["source_provider_data"],
-                            vm_details=source_vm_details,
-                        )
-                    except ValueError:
-                        raise
-                    except (GuestCommandError, vim.fault.VimFault, TimeoutExpiredError, OSError) as e:
-                        if plan.get("preserve_static_ips", False):
-                            raise ValueError(
-                                f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
-                                "IP origin detection is required when preserve_static_ips is enabled."
-                            ) from e
-                        LOGGER.warning(
-                            f"Failed to detect IP origins via Guest Operations for VM {vm['name']}: {e}. "
-                            "Static IP verification may not work for this VM."
-                        )
-
-                    if plan.get("preserve_static_ips", False):
-                        detect_guest_nic_names(
-                            source_provider=source_provider,
-                            vm=provider_vm_api,
-                            source_provider_data=fixture_store["source_provider_data"],
-                            vm_details=source_vm_details,
-                        )
+                # Detect IP origins (and NIC names when preserving static IPs) for Linux guests,
+                # which VMware does not report natively (open-vm-tools limitation).
+                if source_provider.type == Provider.ProviderType.VSPHERE:
+                    collect_linux_guest_static_ip_metadata(
+                        source_provider=source_provider,
+                        vm=provider_vm_api,
+                        source_provider_data=fixture_store["source_provider_data"],
+                        vm_details=source_vm_details,
+                        preserve_static_ips=plan.get("preserve_static_ips", False),
+                    )
 
             # Phase 2: wait for all cloned VMs in Forklift inventory after every clone completes.
             # Sequential per-VM wait during cloning causes inventory sync failures on VM2+.

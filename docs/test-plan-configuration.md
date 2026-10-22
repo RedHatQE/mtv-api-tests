@@ -499,7 +499,11 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
                     "VMs must be cloned from templates."
                 )
             skip_clone_incompatible = ["disable_drs_for_vms", "clone_to_same_host"]
-            if source_provider.type != Provider.ProviderType.HYPERV:
+            is_esxi_vsphere = (
+                source_provider.type == Provider.ProviderType.VSPHERE
+                and source_provider_data.get("endpoint_type") == VSPHERE_ESXI_ENDPOINT_TYPE
+            )
+            if not (is_esxi_vsphere or source_provider.type == Provider.ProviderType.HYPERV):
                 skip_clone_incompatible.append("preserve_static_ips")
             conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]
             if has_shared_disk_config:

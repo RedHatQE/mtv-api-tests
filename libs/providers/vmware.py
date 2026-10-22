@@ -31,6 +31,16 @@ if TYPE_CHECKING:
 
 LOGGER = get_logger(__name__)
 
+# Disk-controller types mapped to the extraConfig key prefix vSphere uses for a disk's per-disk
+# CBT flag (e.g. scsi0:0.ctkEnabled, nvme0:0.ctkEnabled). Covers every bus type a disk can hang off
+# so CBT verification is not restricted to SCSI-attached disks.
+_DISK_CONTROLLER_CBT_PREFIXES: tuple[tuple[type[vim.vm.device.VirtualController], str], ...] = (
+    (vim.vm.device.VirtualSCSIController, "scsi"),
+    (vim.vm.device.VirtualSATAController, "sata"),
+    (vim.vm.device.VirtualNVMEController, "nvme"),
+    (vim.vm.device.VirtualIDEController, "ide"),
+)
+
 
 def _resolve_nic_gateway_from_routes(
     vm: vim.VirtualMachine, nic_label: str, ipv4_addresses: list[vim.net.NetIpConfigInfoIpAddress]
@@ -384,6 +394,41 @@ class VMWareProvider(BaseProvider):
             bool: True if the VM is powered on, False otherwise
         """
         return bool(vm.runtime.powerState == vm.runtime.powerState.poweredOn)
+
+    def is_cbt_enabled(self, vm: vim.VirtualMachine) -> bool:
+        """Report whether Change Block Tracking (CBT) is enabled for a VM and all its disks.
+
+        Warm migration requires CBT. The clone path enables it via extraConfig (VM-level
+        `ctkEnabled` plus a per-disk `<bus>:<unit>.ctkEnabled` for every virtual disk, where the
+        bus prefix depends on the controller type — scsi, sata, nvme, or ide); skip-clone reuses an
+        existing VM, so CBT must already be present on it.
+
+        Args:
+            vm (vim.VirtualMachine): The VM to inspect.
+
+        Returns:
+            bool: True when VM-level CBT and every virtual disk's per-disk CBT are enabled.
+        """
+        extra_config: dict[str, str] = {option.key: str(option.value) for option in (vm.config.extraConfig or [])}
+        if extra_config.get("ctkEnabled", "").lower() != "true":
+            return False
+
+        devices = vm.config.hardware.device or []
+        # Map each disk controller's key to its per-disk CBT prefix (e.g. "scsi0", "nvme0").
+        controller_cbt_prefixes: dict[int, str] = {}
+        for device in devices:
+            for controller_type, prefix in _DISK_CONTROLLER_CBT_PREFIXES:
+                if isinstance(device, controller_type):
+                    controller_cbt_prefixes[device.key] = f"{prefix}{device.busNumber}"
+                    break
+
+        for disk in (device for device in devices if isinstance(device, vim.vm.device.VirtualDisk)):
+            controller_prefix = controller_cbt_prefixes.get(disk.controllerKey)
+            if controller_prefix is None:
+                return False
+            if extra_config.get(f"{controller_prefix}:{disk.unitNumber}.ctkEnabled", "").lower() != "true":
+                return False
+        return True
 
     def disable_drs_for_vm(self, vm: vim.VirtualMachine) -> None:
         """Disable DRS for a specific VM to prevent relocation after cloning.

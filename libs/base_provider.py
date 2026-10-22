@@ -39,6 +39,47 @@ def supports_add_nic(provider_type: str) -> bool:
     return provider_type == Provider.ProviderType.VSPHERE
 
 
+# Value of the vSphere provider's optional `endpoint_type` field (providers_schema.json enum
+# ["vcenter", "esxi"]) that marks a direct ESXi host connection rather than vCenter Server.
+VSPHERE_ESXI_ENDPOINT_TYPE = "esxi"
+
+
+def is_direct_esxi_connection(provider_data: dict[str, Any]) -> bool:
+    """Report whether a source provider config is a direct vSphere ESXi host connection.
+
+    A direct ESXi connection (vs. vCenter Server) is marked by the vSphere provider's
+    ``endpoint_type`` field. Centralizing this check in the provider layer keeps the
+    endpoint-type literal out of general test scaffolding.
+
+    Args:
+        provider_data (dict[str, Any]): Source provider configuration from the providers JSON.
+
+    Returns:
+        bool: True when the provider is vSphere connected directly to an ESXi host.
+    """
+    return (
+        provider_data.get("type") == Provider.ProviderType.VSPHERE
+        and provider_data.get("endpoint_type") == VSPHERE_ESXI_ENDPOINT_TYPE
+    )
+
+
+def supports_ipv6_migration(provider_data: dict[str, Any]) -> bool:
+    """Report whether a source provider config supports an IPv6-reachable migration endpoint.
+
+    IPv6 migration is currently supported only for a direct vSphere ESXi host connection, not
+    vCenter Server. The decision lives here, in the provider layer, so the collection hook and
+    fixtures only apply the result: a provider (e.g. a future vCenter release) gaining IPv6
+    support is a one-line change here with no edits to general test scaffolding.
+
+    Args:
+        provider_data (dict[str, Any]): Source provider configuration from the providers JSON.
+
+    Returns:
+        bool: True when the provider configuration supports the IPv6 migration scenario.
+    """
+    return is_direct_esxi_connection(provider_data)
+
+
 class BaseProvider(abc.ABC):
     # Unified Representation of a VM of All Provider Types
     VIRTUAL_MACHINE_TEMPLATE: dict[str, Any] = {

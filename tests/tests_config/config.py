@@ -1000,6 +1000,18 @@ tests_params: dict = {
         ],
         "warm_migration": True,
     },
+    "test_warm_migration_ipv6": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-win2019-ipv6",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+        "target_power_state": "on",
+        "skip_clone": True,
+    },
 }
 
 for _dir in dir():

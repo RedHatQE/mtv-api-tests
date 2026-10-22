@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from pyVmomi import vim
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutSampler
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import GuestCommandError
 
@@ -334,6 +334,68 @@ def detect_guest_nic_names(
                 break
         else:
             LOGGER.warning(f"VM {vm.name}: NIC {nic_name} not found in vm_details")
+
+
+def collect_linux_guest_static_ip_metadata(
+    source_provider: VMWareProvider,
+    vm: vim.VirtualMachine,
+    source_provider_data: dict[str, Any],
+    vm_details: dict[str, Any],
+    preserve_static_ips: bool,
+) -> None:
+    """Detect IP origins and, when preserving static IPs, NIC names for a Linux vSphere guest.
+
+    VMware's open-vm-tools does not report IP origin for Linux guests
+    (https://github.com/vmware/open-vm-tools/issues/694), so origins are detected through Guest
+    Operations. Windows guests (``win_os``) are skipped — their origins are reported natively.
+    When ``preserve_static_ips`` is enabled, IP-origin detection is mandatory (a failure raises)
+    and guest NIC names are collected too. Updates ``vm_details`` in place.
+
+    Both the cloning and ESXi skip-clone preparation paths call this so static-IP preservation
+    validation sees identical source metadata regardless of how the VM was prepared.
+
+    Args:
+        source_provider (VMWareProvider): VMware provider instance.
+        vm (vim.VirtualMachine): VMware VM object (powered on, VMware Tools running).
+        source_provider_data (dict[str, Any]): Provider config containing guest credentials.
+        vm_details (dict[str, Any]): VM details dict from vm_dict(), updated in place.
+        preserve_static_ips (bool): Whether the plan preserves static IPs; makes IP-origin
+            detection mandatory and triggers NIC-name collection.
+
+    Raises:
+        ValueError: If IP-origin detection fails while preserve_static_ips is enabled, or guest
+            credentials are missing.
+    """
+    if vm_details.get("win_os"):
+        return
+
+    try:
+        detect_vmware_ip_origins_via_guest_ops(
+            source_provider=source_provider,
+            vm=vm,
+            source_provider_data=source_provider_data,
+            vm_details=vm_details,
+        )
+    except ValueError:
+        raise
+    except (GuestCommandError, vim.fault.VimFault, TimeoutExpiredError, OSError) as e:
+        if preserve_static_ips:
+            raise ValueError(
+                f"Failed to detect IP origins via Guest Operations for VM {vm_details['name']}: {e}. "
+                "IP origin detection is required when preserve_static_ips is enabled."
+            ) from e
+        LOGGER.warning(
+            f"Failed to detect IP origins via Guest Operations for VM {vm_details['name']}: {e}. "
+            "Static IP verification may not work for this VM."
+        )
+
+    if preserve_static_ips:
+        detect_guest_nic_names(
+            source_provider=source_provider,
+            vm=vm,
+            source_provider_data=source_provider_data,
+            vm_details=vm_details,
+        )
 
 
 def create_data_integrity_marker(
