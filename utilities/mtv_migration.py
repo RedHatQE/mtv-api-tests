@@ -33,8 +33,10 @@ LOGGER = get_logger(__name__)
 _VM_DICT_TEST_ONLY_KEYS: frozenset[str] = frozenset({
     "add_nic",
     "add_nic_start_connected",
+    "clone_name",
     "connected_nic_mac",
     "disconnected_nic_mac",
+    "preserve_name_format",
     "snapshots_before_migration",
 })
 
@@ -214,6 +216,7 @@ def create_plan_resource(
     run_preflight_inspection: bool | None = None,
     rdm_as_lun: bool | None = None,
     pre_copy_source_disks: bool = False,
+    convertor_node_selector: dict[str, str] | None = None,
 ) -> Plan:
     """Create MTV Plan CR resource.
 
@@ -256,6 +259,8 @@ def create_plan_resource(
             on the target VM. Only applies to vSphere source providers. Defaults to None.
         pre_copy_source_disks (bool): Enable two-phase Hyper-V disk transfer (VHDX to raw via
             qemu-img, then in-place virt-v2v). Only applies to Hyper-V migrations. Defaults to False.
+        convertor_node_selector (dict[str, str] | None): Optional selector for virt-v2v conversion and vSphere
+            warm-migration CDI importer pods. Defaults to None.
 
     Returns:
         Plan: The created Plan CR resource.
@@ -331,6 +336,9 @@ def create_plan_resource(
     if pre_copy_source_disks:
         plan_kwargs["pre_copy_source_disks"] = pre_copy_source_disks
 
+    if convertor_node_selector is not None:
+        plan_kwargs["convertor_node_selector"] = convertor_node_selector
+
     # Add copy-offload specific parameters if enabled
     if copyoffload:
         # Set PVC naming template for copy-offload migrations
@@ -385,7 +393,37 @@ def execute_migration(
     Raises:
         MigrationPlanExecError: If migration fails or times out.
     """
-    create_and_store_resource(
+    create_migration_resource(
+        ocp_admin_client=ocp_admin_client,
+        fixture_store=fixture_store,
+        plan=plan,
+        target_namespace=target_namespace,
+        cut_over=cut_over,
+    )
+
+    wait_for_migration_complate(plan=plan, on_status_poll=on_status_poll)
+
+
+def create_migration_resource(
+    ocp_admin_client: DynamicClient,
+    fixture_store: dict[str, Any],
+    plan: Plan,
+    target_namespace: str,
+    cut_over: datetime | None = None,
+) -> Migration:
+    """Create and track the Migration CR for a Plan.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        fixture_store (dict[str, Any]): Fixture store for resource tracking and cleanup.
+        plan (Plan): Plan CR that the Migration executes.
+        target_namespace (str): Namespace where the Migration CR is created.
+        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+
+    Returns:
+        Migration: The created Migration CR.
+    """
+    return create_and_store_resource(
         client=ocp_admin_client,
         fixture_store=fixture_store,
         resource=Migration,
@@ -394,8 +432,6 @@ def execute_migration(
         plan_namespace=plan.namespace,
         cut_over=cut_over,
     )
-
-    wait_for_migration_complate(plan=plan, on_status_poll=on_status_poll)
 
 
 def get_vm_suffix(warm_migration: bool, ocp_version: str) -> str:

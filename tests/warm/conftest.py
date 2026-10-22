@@ -7,19 +7,96 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from ocp_resources.cluster_role import ClusterRole
 from ocp_resources.cluster_role_binding import ClusterRoleBinding
+from ocp_resources.node import Node
 from ocp_resources.provider import Provider
 from ocp_resources.role_binding import RoleBinding
+from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from ocp_resources.service_account import ServiceAccount
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from libs.providers.openshift import OCPProvider
 from utilities.resources import create_and_store_resource
+from utilities.warm_migration_scheduling import ConvertorNodeSelectorTarget
+from utilities.worker_node_selection import (
+    get_node_labels,
+    get_ready_schedulable_worker_nodes,
+    get_session_unique_label_key,
+)
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
+    from libs.base_provider import BaseProvider
+
 FORKLIFT_MIGRATOR_ROLE_NAME = "forklift-migrator-role"
+
+
+@pytest.fixture(scope="class")
+def convertor_node_selector_target(
+    class_plan_config: dict[str, Any],
+    fixture_store: dict[str, Any],
+    source_provider: "BaseProvider",
+    ocp_admin_client: "DynamicClient",
+) -> Generator[ConvertorNodeSelectorTarget, None, None]:
+    """Prepare a selector and candidate workers for the dedicated vSphere recovery test.
+
+    Args:
+        class_plan_config (dict[str, Any]): Heterogeneous, provider-specific test plan configuration.
+        fixture_store (dict[str, Any]): Heterogeneous resource registry containing the unique session ID.
+        source_provider (BaseProvider): Source provider for the current migration.
+        ocp_admin_client (DynamicClient): OpenShift admin client used to inspect worker Nodes.
+
+    Yields:
+        Generator[ConvertorNodeSelectorTarget, None, None]: Selector and candidate workers.
+
+    Raises:
+        ValueError: If selector coverage is configured for a non-vSphere provider, the selector is invalid, or no
+            Ready, schedulable worker exists.
+    """
+    if source_provider.type != Provider.ProviderType.VSPHERE:
+        raise ValueError("ConvertorNodeSelector coverage requires a vSphere source provider")
+
+    configured_selector = class_plan_config["convertor_node_selector"]
+    if not isinstance(configured_selector, dict):
+        raise ValueError("convertor_node_selector must be a mapping for vSphere selector coverage")
+    if len(configured_selector) != 1:
+        raise ValueError(f"convertor_node_selector must contain exactly one label, got {len(configured_selector)}")
+
+    base_label_key, configured_value = next(iter(configured_selector.items()))
+    if not isinstance(base_label_key, str) or (configured_value is not None and not isinstance(configured_value, str)):
+        raise ValueError("convertor_node_selector must map a string label key to a string or None")
+
+    session_uuid: str = fixture_store["session_uuid"]
+    label_key = get_session_unique_label_key(label_key=base_label_key, session_uuid=session_uuid)
+    label_value = session_uuid if configured_value is None else configured_value
+    selector = {label_key: label_value}
+    nodes = list(Node.get(client=ocp_admin_client))
+    nodes_with_label_key = [node.name for node in nodes if label_key in get_node_labels(node=node)]
+    if nodes_with_label_key:
+        raise ValueError(
+            f"Session-unique ConvertorNodeSelector label key already exists on nodes: {nodes_with_label_key}"
+        )
+
+    schedulable_worker_nodes = get_ready_schedulable_worker_nodes(ocp_client=ocp_admin_client, nodes=nodes)
+    if not schedulable_worker_nodes:
+        raise ValueError("ConvertorNodeSelector recovery requires a Ready, schedulable worker")
+
+    target = ConvertorNodeSelectorTarget(
+        selector=selector,
+        candidate_worker_nodes=schedulable_worker_nodes,
+    )
+    yield target
+
+    if target.label_editor is not None:
+        target.label_editor.restore()
+        assert target.worker_node is not None
+        restored_worker = next(
+            node for node in Node.get(client=ocp_admin_client) if node.name == target.worker_node.name
+        )
+        assert label_key not in get_node_labels(node=restored_worker), (
+            f"Temporary ConvertorNodeSelector label {label_key!r} remains on worker '{target.worker_node.name}'"
+        )
 
 
 @pytest.fixture(scope="session")

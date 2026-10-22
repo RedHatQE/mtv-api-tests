@@ -111,7 +111,11 @@ from utilities.utils import (
 )
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
 from utilities.vmware_guest_operations import detect_guest_nic_names, detect_vmware_ip_origins_via_guest_ops
-from utilities.worker_node_selection import get_worker_nodes, select_node_by_available_memory
+from utilities.worker_node_selection import (
+    get_session_unique_label_key,
+    get_worker_nodes,
+    select_node_by_available_memory,
+)
 
 RESULTS_PATH = Path("./.xdist_results/")
 RESULTS_PATH.mkdir(exist_ok=True)
@@ -452,6 +456,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
         try:
             reporter = session.config.pluginmanager.get_plugin("terminalreporter")
             reporter.summary_stats()
+            selector_coverage_notes = _session_store.get("selector_coverage_not_run", [])
+            if selector_coverage_notes:
+                reporter.write_sep("=", "ConvertorNodeSelector coverage not exercised")
+                for note in selector_coverage_notes:
+                    reporter.write_line(note)
         finally:
             if session.config.getoption("analyze_with_ai"):
                 if exitstatus == 0:
@@ -2076,13 +2085,7 @@ def labeled_worker_node(
     # to prevent parallel execution conflicts (two sessions on same node would overwrite each other's label)
     if config_value is None:
         session_uuid = fixture_store["session_uuid"]
-        suffix = f"-{session_uuid}"
-        # For qualified keys (prefix/name), only truncate the name segment
-        if "/" in base_label_key:
-            prefix, name = base_label_key.split("/", 1)
-            label_key = f"{prefix}/{name[: 63 - len(suffix)]}{suffix}"
-        else:
-            label_key = f"{base_label_key[: 63 - len(suffix)]}{suffix}"
+        label_key = get_session_unique_label_key(label_key=base_label_key, session_uuid=session_uuid)
         label_value = session_uuid
     else:
         label_key = base_label_key

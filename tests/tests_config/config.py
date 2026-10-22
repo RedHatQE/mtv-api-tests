@@ -26,6 +26,18 @@ tests_params: dict = {
         "warm_migration": True,
         "preserve_static_ips": True,
     },
+    "test_warm_mtv_convertor_node_selector": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": True,
+        "preserve_static_ips": True,
+        "convertor_node_selector": {"mtv-warm-test": None},
+    },
     "test_mtv_migration_warm_2disks2nics": {
         "virtual_machines": [
             {
