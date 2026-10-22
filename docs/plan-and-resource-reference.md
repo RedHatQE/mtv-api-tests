@@ -512,6 +512,7 @@ From `tests/tests_config/config.py`:
 | `migrate_shared_disks` | `spec.migrateSharedDisks` | Plan-level default for all VMs |
 | `enable_nested_virtualization` | `spec.enableNestedVirtualization` | |
 | `xfs_compatibility` | `spec.xfsCompatibility` | XFS v4 virt-v2v image |
+| `skip_guest_conversion` | `spec.skipGuestConversion` | Skip the guest-conversion pipeline stages |
 | `run_preflight_inspection` | `spec.runPreflightInspection` | Warm Deep Inspection gate |
 | `rdm_as_lun` | `spec.rdmAsLun` | vSphere only; RDM disks as `lun.bus: scsi` |
 | `copyoffload` | `spec.pvcNameTemplate: "pvc"` | The volume populator framework requires this fixed template |

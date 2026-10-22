@@ -664,6 +664,11 @@ become per-test clone names even when the raw plan entry does not set <code>clon
 <td><code>True</code> to request XFS v4 filesystem compatibility on the Plan CR.</td>
 </tr>
 <tr>
+<td><code>skip_guest_conversion</code></td>
+<td>No</td>
+<td><code>True</code> to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination.</td>
+</tr>
+<tr>
 <td><code>rdm_as_lun</code></td>
 <td>No</td>
 <td><code>True</code> to map RDM disks as LUN devices with a SCSI bus instead of the default virtio.</td>
@@ -1096,7 +1101,8 @@ runtime name:</p>
 
 <p><code>create_plan_resource()</code> accepts only the flags that map onto the Plan CR: <code>warm_migration</code>, <code>copyoffload</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>,
 <code>pvc_name_template_use_generate_name</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>, <code>vm_target_namespace</code>, <code>migrate_shared_disks</code>, <code>target_power_state</code>,
-<code>enable_nested_virtualization</code>, <code>xfs_compatibility</code>, <code>run_preflight_inspection</code>, and <code>rdm_as_lun</code>. Everything else is consumed by fixtures or by post-migration checks.</p>
+<code>enable_nested_virtualization</code>, <code>xfs_compatibility</code>, <code>run_preflight_inspection</code>, and <code>rdm_as_lun</code>. Additional Plan constructor fields can be passed through
+<code>additional_plan_options</code>; everything else is consumed by fixtures or by post-migration checks.</p>
 <h2 id="runtime-fields-added-during-preparation">Runtime Fields Added During Preparation</h2>
 <p>These fields are derived at runtime. You do <strong>not</strong> write them yourself in <code>tests_params</code>.</p>
 <div class="table-wrap"><table>
