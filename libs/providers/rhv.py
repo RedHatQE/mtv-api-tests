@@ -330,7 +330,15 @@ class OvirtProvider(BaseProvider):
 
         LOGGER.info(f"Deleting VM '{vm_name}' and its disks...")
 
-        def _remove_vm():
+        def _remove_vm() -> bool:
+            """Attempt VM removal.
+
+            Returns:
+                True after removal; False when a snapshot conflict requires a retry.
+
+            Raises:
+                ovirtsdk4.Error: Removal failed for another reason.
+            """
             try:
                 vm_service.remove()
                 return True
