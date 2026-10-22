@@ -311,6 +311,11 @@ class OvirtProvider(BaseProvider):
     def delete_vm(self, vm_name: str) -> None:
         """
         Finds a VM by name, powers it off if necessary, and deletes it.
+
+        oVirt rejects VM removal with a transient HTTP 409 conflict while the VM is
+        performing a snapshot operation (e.g. MTV warm-migration snapshot cleanup that
+        continues on the source provider after the migration already succeeded).
+        The removal is retried until the in-flight snapshot operation finishes.
         """
         LOGGER.info(f"Attempting to delete VM '{vm_name}'")
         try:
@@ -324,7 +329,23 @@ class OvirtProvider(BaseProvider):
             self.stop_vm(vm)
 
         LOGGER.info(f"Deleting VM '{vm_name}' and its disks...")
-        vm_service.remove()
+
+        def _remove_vm():
+            try:
+                vm_service.remove()
+                return True
+            except ovirtsdk4.Error as exc:
+                # Transient snapshot conflict — the sampler retries until it clears.
+                if exc.code == 409 and "snapshot" in str(exc).lower():
+                    LOGGER.warning(f"VM '{vm_name}' is performing an operation on a Snapshot, retrying deletion: {exc}")
+                    return False
+                raise
+
+        self._wait_for_condition(
+            entity_name=vm_name,
+            action_name="Deletion",
+            condition_func=_remove_vm,
+        )
 
         def _check_vm_deleted():
             try:
