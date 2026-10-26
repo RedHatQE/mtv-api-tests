@@ -30,6 +30,8 @@ from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
     POPULATOR_THROTTLED_EVENT_REASON,
     SOURCE_HOST_LABEL,
+    VM_INFLIGHT_LIMIT,
+    VM_POPULATOR_INFLIGHT_LIMIT,
 )
 from utilities.copyoffload_plan_secret import wait_for_copyoffload_plan_secret
 from utilities.mtv_migration import get_migration_for_plan, wait_for_migration_complate
@@ -41,6 +43,7 @@ from libs.providers.vmware import VMWareProvider
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
 
@@ -53,6 +56,8 @@ PVC_NAME_LABEL = "pvcName"
 # Populate pod log caching constants
 _POPULATE_POD_LOGS_CACHE_KEY = "populate_pod_logs"
 _POPULATE_POD_NAME_PREFIX = "populate-"
+# Phases where the vSphere copy-offload scheduler assigns cost=0 to a VM.
+_ZERO_COST_VM_PHASES = frozenset({"CreateVM", "PostHook", "Completed", "Canceled"})
 
 
 def apply_copyoffload_vm_name_override(
@@ -1408,6 +1413,7 @@ def _verify_throttled_events_on_pod_logs(
     migration_uid: str,
     pod_logs: list[PopulatePodLogData],
     max_populator_inflight: int,
+    min_expected_throttled: int | None = None,
 ) -> None:
     """Verify PopulatorThrottled events on PVCs using cached pod log data.
 
@@ -1420,13 +1426,18 @@ def _verify_throttled_events_on_pod_logs(
         migration_uid (str): Migration UID for PVC label selector and error messages.
         pod_logs (list[PopulatePodLogData]): Cached populate pod log data.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        min_expected_throttled (int | None): Minimum expected PVCs with PopulatorThrottled
+            events. When None, defaults to ``pod_count - max_populator_inflight`` (parallel
+            disks). Pass an explicit value for sequential-VM migrations where the default
+            over-counts (e.g. MTV-777).
 
     Raises:
-        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
-            PopulatorThrottled events.
+        ValueError: If the minimum expected throttled count is not positive, or too few PVCs
+            have PopulatorThrottled events.
     """
     pod_count = len(pod_logs)
-    min_expected_throttled = pod_count - max_populator_inflight
+    if min_expected_throttled is None:
+        min_expected_throttled = pod_count - max_populator_inflight
     if min_expected_throttled <= 0:
         raise ValueError(
             f"Expected more populate pods ({pod_count}) than in-flight limit "
@@ -1473,6 +1484,7 @@ def verify_populator_throttling(
     max_concurrent_by_host: dict[str, int],
     fixture_store: dict[str, Any],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+    min_expected_throttled: int | None = None,
 ) -> str:
     """Verify MTV-696 populator throttling: labels, events, and peak concurrency.
 
@@ -1488,6 +1500,10 @@ def verify_populator_throttling(
             observed during migration.
         fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        min_expected_throttled (int | None): Minimum expected PVCs with PopulatorThrottled
+            events. When None, defaults to ``pod_count - max_populator_inflight``. Pass an
+            explicit value for sequential-VM migrations (e.g. MTV-777) where the default
+            over-counts.
 
     Returns:
         str: The shared sourceHost label value from all populate pods.
@@ -1509,13 +1525,14 @@ def verify_populator_throttling(
         migration_uid=migration_uid,
         pod_logs=pod_logs,
         max_populator_inflight=max_populator_inflight,
+        min_expected_throttled=min_expected_throttled,
     )
     if source_host not in max_concurrent_by_host:
         raise ValueError(
             f"No populator monitoring data for sourceHost {source_host!r}; "
             f"observed during migration: {sorted(max_concurrent_by_host)}"
         )
-    _verify_populator_inflight_observed(
+    verify_populator_inflight_observed(
         max_concurrent_by_host={source_host: max_concurrent_by_host[source_host]},
         max_populator_inflight=max_populator_inflight,
         disk_count=len(pod_logs),
@@ -1523,12 +1540,15 @@ def verify_populator_throttling(
     return source_host
 
 
-def _verify_populator_inflight_observed(
+def verify_populator_inflight_observed(
     max_concurrent_by_host: dict[str, int],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
     disk_count: int | None = None,
 ) -> None:
-    """Verify observed peak populator concurrency respects the configured in-flight limit.
+    """Verify observed peak concurrent populate pods per host respect the in-flight limit.
+
+    Peak-only check: validates concurrency ceilings (and optional minimum peak when
+    ``disk_count`` is set). Does not verify PopulatorThrottled events or sourceHost labels.
 
     When ``disk_count`` is provided, also verifies the limit was exercised: peak concurrency
     must reach ``min(max_populator_inflight, disk_count)``. For example, 5 disks with limit 2
@@ -1562,3 +1582,299 @@ def _verify_populator_inflight_observed(
                 f"(limit={max_populator_inflight}, disks={disk_count})"
             )
         LOGGER.info(f"Host '{source_host}': peak populator concurrency {peak_count}/{max_populator_inflight} (PASS)")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# MTV-6088 / MTV-777: controller_max_vm_inflight monitoring and verification
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def _get_vm_esxi_host(vm_data: dict[str, Any], vm_name: str) -> str:
+    """Extract the ESXi host identifier from a Forklift inventory VM response.
+
+    Args:
+        vm_data (dict[str, Any]): VM detail dict from ForkliftInventory.get_vm().
+        vm_name (str): VM name, used in error messages.
+
+    Returns:
+        str: ESXi host identifier string.
+
+    Raises:
+        ValueError: If the ``host`` field is absent or empty.
+        TypeError: If the ``host`` field has an unexpected type.
+    """
+    host_value = vm_data.get("host")
+    if not host_value:
+        raise ValueError(f"VM '{vm_name}' has no 'host' field in Forklift inventory response")
+    if isinstance(host_value, str):
+        return host_value
+    if isinstance(host_value, dict):
+        host_id = host_value.get("id")
+        if not host_id:
+            raise ValueError(f"VM '{vm_name}' 'host' dict has no 'id' field: {host_value!r}")
+        return host_id
+    raise TypeError(f"VM '{vm_name}' 'host' field has unexpected type {type(host_value).__name__!r}: {host_value!r}")
+
+
+def _build_vm_host_map(
+    vm_names: list[str],
+    source_provider_inventory: ForkliftInventory,
+) -> dict[str, str]:
+    """Build a mapping of VM name/id to ESXi host identifier from the Forklift inventory.
+
+    Keys include each VM's inventory name and, when present, its inventory id so Plan
+    status lookups can resolve a host by either field.
+
+    Args:
+        vm_names (list[str]): VM names to resolve.
+        source_provider_inventory (ForkliftInventory): Inventory API client.
+
+    Returns:
+        dict[str, str]: Mapping of VM name (and id when available) to ESXi host identifier.
+
+    Raises:
+        ValueError: If any VM is missing a 'host' field in the inventory response.
+    """
+    vm_host_map: dict[str, str] = {}
+    for vm_name in vm_names:
+        vm_data = source_provider_inventory.get_vm(vm_name)
+        host = _get_vm_esxi_host(vm_data=vm_data, vm_name=vm_name)
+        vm_host_map[vm_name] = host
+        vm_id = vm_data.get("id")
+        if vm_id:
+            vm_host_map[str(vm_id)] = host
+        LOGGER.info(f"VM '{vm_name}' is on ESXi host '{host}'")
+    return vm_host_map
+
+
+def _count_active_vms_by_host(
+    plan: Plan,
+    vm_host_map: dict[str, str],
+) -> dict[str, int]:
+    """Count VMs in active disk-transfer state per ESXi host from Plan status.
+
+    Mirrors the vSphere scheduler cost function for copy-offload migrations:
+    cost=1 during disk transfer phases, cost=0 for CreateVM/PostHook/Completed/Canceled.
+    Resolves each active VM's host from ``vm_host_map`` by Plan status name first,
+    then by status id.
+
+    Args:
+        plan (Plan): The Plan CR resource (read live each poll).
+        vm_host_map (dict[str, str]): Pre-built mapping of VM name/id to ESXi host.
+
+    Returns:
+        dict[str, int]: Count of in-flight VMs per ESXi host.
+
+    Raises:
+        ValueError: If an active VM cannot be resolved to a host in ``vm_host_map``.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    migration_status = getattr(plan.instance.status, "migration", None)
+    if migration_status is None:
+        return {}
+    for vm_status in migration_status.vms or []:
+        name = getattr(vm_status, "name", "")
+        vm_id = getattr(vm_status, "id", "")
+        started = getattr(vm_status, "started", None)
+        completed = getattr(vm_status, "completed", None)
+        phase = getattr(vm_status, "phase", "")
+        if not started or completed or phase in _ZERO_COST_VM_PHASES:
+            continue
+        host = vm_host_map.get(name) or vm_host_map.get(vm_id)
+        if not host:
+            raise ValueError(
+                f"Active VM status name={name!r} id={vm_id!r} could not be resolved "
+                f"to an ESXi host in vm_host_map. Known keys: {sorted(vm_host_map)}"
+            )
+        counts[host] += 1
+    return dict(counts)
+
+
+class _VmConcurrencyTracker:
+    """Track peak concurrent VM migrations per ESXi host during migration polling."""
+
+    def __init__(
+        self,
+        plan: Plan,
+        vm_host_map: dict[str, str],
+        max_vm_inflight: int,
+    ) -> None:
+        """Initialize tracker state for one migration execution.
+
+        Args:
+            plan (Plan): The Plan CR resource defining the migration configuration.
+            vm_host_map (dict[str, str]): Pre-built mapping of VM name/id to ESXi host.
+            max_vm_inflight (int): Expected ForkliftController VM in-flight limit.
+        """
+        self._plan = plan
+        self._vm_host_map = vm_host_map
+        self._max_vm_inflight = max_vm_inflight
+        self._max_concurrent_by_host: dict[str, int] = defaultdict(int)
+
+    def poll(self, _status: str) -> None:
+        """Update peak VM concurrency counters for one migration status poll.
+
+        Args:
+            _status (str): Current migration status from ``wait_for_migration_complate``.
+        """
+        active_by_host = _count_active_vms_by_host(
+            plan=self._plan,
+            vm_host_map=self._vm_host_map,
+        )
+        for host, active_count in active_by_host.items():
+            self._max_concurrent_by_host[host] = max(self._max_concurrent_by_host[host], active_count)
+            if active_count > self._max_vm_inflight:
+                LOGGER.warning(f"VM concurrency for host '{host}' is {active_count} (limit={self._max_vm_inflight})")
+
+    @property
+    def results(self) -> dict[str, int]:
+        """Peak concurrent in-flight VMs observed per ESXi host.
+
+        Returns:
+            dict[str, int]: Peak active VM count per ESXi host.
+        """
+        return dict(self._max_concurrent_by_host)
+
+
+def execute_migration_monitoring_vm_and_populator_inflight(
+    ocp_admin_client: DynamicClient,
+    fixture_store: dict[str, Any],
+    plan: Plan,
+    target_namespace: str,
+    source_provider_inventory: ForkliftInventory,
+    vm_names: list[str],
+    max_vm_inflight: int = VM_INFLIGHT_LIMIT,
+    max_populator_inflight: int = VM_POPULATOR_INFLIGHT_LIMIT,
+    cut_over: datetime | None = None,
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Execute a copy-offload migration monitoring both VM and populator concurrency.
+
+    Runs a single migration with three active callbacks:
+    - VM concurrency tracker: counts Running VMs per ESXi host
+    - Populator concurrency tracker: counts active populate pods per ESXi host
+    - Log capture: caches populate pod logs for post-migration xcopy verification
+
+    Requires all VMs to be on the same ESXi host so that the per-host VM inflight
+    limit is exercised. Ensure ``copyoffload.esxi_host`` is set in providers.json
+    to the vCenter-registered ESXi hostname so that clone placement targets the
+    correct host.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        fixture_store (dict[str, Any]): Fixture store for resource tracking and log caching.
+        plan (Plan): The Plan CR resource defining the migration configuration.
+        target_namespace (str): Target namespace for the Migration CR.
+        source_provider_inventory (ForkliftInventory): Inventory API client for ESXi host lookup.
+        vm_names (list[str]): VM names in the Plan (as they appear in Plan status).
+        max_vm_inflight (int): Expected ForkliftController VM in-flight limit.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+
+    Returns:
+        tuple[dict[str, int], dict[str, int]]: Peak concurrent VMs per host and peak
+            concurrent populate pods per host, respectively.
+
+    Raises:
+        MigrationPlanExecError: If migration fails or times out.
+        TimeoutError: If a copy-offload plan populator secret is not created in time.
+        ValueError: If any VM is missing a 'host' field in the inventory response.
+        ValueError: If VMs are on different ESXi hosts (throttling would not be exercised).
+    """
+    vm_host_map = _build_vm_host_map(
+        vm_names=vm_names,
+        source_provider_inventory=source_provider_inventory,
+    )
+    unique_hosts = set(vm_host_map.values())
+    if len(unique_hosts) > 1:
+        raise ValueError(
+            f"VM inflight throttling test requires all VMs on the same ESXi host. "
+            f"Got: {vm_host_map}. "
+            f"Ensure 'copyoffload.esxi_host' in providers.json points to the correct ESXi host."
+        )
+
+    _start_copyoffload_migration(
+        ocp_admin_client=ocp_admin_client,
+        fixture_store=fixture_store,
+        plan=plan,
+        target_namespace=target_namespace,
+        cut_over=cut_over,
+    )
+
+    vm_tracker = _VmConcurrencyTracker(
+        plan=plan,
+        vm_host_map=vm_host_map,
+        max_vm_inflight=max_vm_inflight,
+    )
+    populator_tracker = _PopulatorConcurrencyTracker(
+        plan=plan,
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        max_populator_inflight=max_populator_inflight,
+    )
+    log_capture: Callable[[str], None] = create_log_capture_callback(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        plan=plan,
+        fixture_store=fixture_store,
+    )
+
+    def _combined_callback(status: str) -> None:
+        """Run all three monitors for one migration status poll.
+
+        Args:
+            status (str): Current migration status from migration polling.
+        """
+        try:
+            vm_tracker.poll(status)
+        except ApiException as err:
+            LOGGER.warning(f"VM concurrency tracking failed during poll: {err}")
+        try:
+            populator_tracker.poll(status)
+        except (ApiException, ValueError) as err:
+            LOGGER.warning(f"Populator concurrency tracking failed during poll: {err}")
+        log_capture(status)
+
+    wait_for_migration_complate(plan=plan, on_status_poll=_combined_callback)
+    return vm_tracker.results, populator_tracker.results
+
+
+def verify_vm_inflight_throttling(
+    max_concurrent_by_host: dict[str, int],
+    vm_count: int,
+    max_vm_inflight: int = VM_INFLIGHT_LIMIT,
+) -> None:
+    """Verify observed peak VM concurrency respects the configured in-flight limit.
+
+    Validates two invariants:
+    1. Peak concurrent VMs per host did not exceed ``max_vm_inflight`` (limit enforced).
+    2. Peak concurrent VMs per host reached ``min(max_vm_inflight, vm_count)``
+       (limit was actually exercised).
+
+    Args:
+        max_concurrent_by_host (dict[str, int]): Peak concurrent in-flight VMs per ESXi host,
+            as returned by execute_migration_monitoring_vm_and_populator_inflight().
+        vm_count (int): Total number of VMs in the migration plan.
+        max_vm_inflight (int): Expected ForkliftController VM in-flight limit.
+
+    Raises:
+        ValueError: If no VM activity was observed, peak exceeds the limit, or peak is
+            below the expected minimum.
+    """
+    if not max_concurrent_by_host:
+        raise ValueError("No VM inflight activity observed during migration monitoring")
+
+    min_expected_peak = min(max_vm_inflight, vm_count)
+
+    for host, peak_count in max_concurrent_by_host.items():
+        if peak_count > max_vm_inflight:
+            raise ValueError(
+                f"Peak VM concurrency for host '{host}' was {peak_count}, exceeding limit {max_vm_inflight}"
+            )
+        if peak_count < min_expected_peak:
+            raise ValueError(
+                f"Peak VM concurrency for host '{host}' was {peak_count}, "
+                f"expected at least {min_expected_peak} "
+                f"(limit={max_vm_inflight}, vms={vm_count}). "
+                "VM inflight throttling may not have been exercised."
+            )
+        LOGGER.info(f"Host '{host}': peak VM concurrency {peak_count}/{max_vm_inflight} (PASS)")
