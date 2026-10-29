@@ -186,6 +186,10 @@ Base: `test_create_storagemap` → `test_create_networkmap` → `test_create_pla
 | Resume-conversion (`vsphere`) | migrate (expected fail) → `test_verify_pvcs_preserved` → `test_resume_migration` → `check_vms` |
 | Plan-readiness (4-step) | verify_\<feature\> → storagemap → networkmap → plan; no migration |
 
+Warm sanity overlay verification (MTV-5644): `TestSanityWarmMtvMigration`'s `test_migrate_vms`
+additionally calls `verify_overlay_lifecycle()` from `utilities/overlay.py` for vSphere sources
+(in-place mode, created/committed overlay filename sets, no discarded overlays) — see `README.md`.
+
 ### Example class
 
 ```python

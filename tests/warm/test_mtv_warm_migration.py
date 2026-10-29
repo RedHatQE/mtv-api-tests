@@ -15,6 +15,7 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
+from utilities.overlay import OverlayLogCapture, verify_overlay_lifecycle
 from utilities.post_migration import check_vms
 from utilities.utils import get_value_from_py_config, populate_vm_ids
 from utilities.warm_migration_scheduling import ConvertorNodeSelectorTarget, ConvertorPodPlacementObserver
@@ -54,7 +55,8 @@ class TestSanityWarmMtvMigration:
         configuration preserved on the destination (verified for vSphere
         and Hyper-V sources). On a vSphere source the
         scenario also verifies the warm-migration Deep Inspection results
-        captured during pre-copy. There is no induced failure.
+        captured during pre-copy and the qcow2 overlay lifecycle reported
+        by the virt-v2v conversion pods. There is no induced failure.
 
     Prerequisites:
         Register and connect a source provider (vSphere or RHV) and an
@@ -78,23 +80,30 @@ class TestSanityWarmMtvMigration:
         4. Run the warm migration with a cutover time: incremental copies
            run while the VM stays on, the migration finalizes at cutover.
            Check it reaches Succeeded. On a vSphere source, the inspection
-           data captured during the migration is recorded.
+           data captured during the migration is recorded, and the logs of
+           terminated virt-v2v conversion containers are captured for
+           overlay lifecycle verification.
         5. Validate the migrated VM: power state, guest-agent presence,
            connectivity, and CPU, memory, network, and storage equivalence
            with the source. When migrating from vSphere or Hyper-V, also
            verify static IP/subnet/gateway preservation; on vSphere, also
            NIC name preservation. On a vSphere source, also verify the
            captured warm-migration Deep Inspection results are present and
-           complete. After the checks, delete the migrated VM; the maps and
+           complete, and that the conversion logs confirm virt-v2v-in-place
+           mode with every created qcow2 overlay committed and none
+           discarded. After the checks, delete the migrated VM; the maps and
            Plan are removed with the run.
 
     Expected result:
         The warm migration completes through cutover, the migrated VM keeps
         its static network configuration and connectivity, and (on vSphere)
-        the inspection results captured during pre-copy are complete. On
-        failure, inspect the migration CR status for the failed stage
-        (pre-copy or cutover), the guest network configuration inside the
-        migrated VM, and the Plan-created DeepInspection Conversions' results.
+        the inspection results captured during pre-copy are complete and
+        the overlay lifecycle is healthy: in-place conversion mode,
+        matching created and committed overlay sets, and no discarded
+        overlays. On failure, inspect the migration CR status for the failed
+        stage (pre-copy or cutover), the guest network configuration inside
+        the migrated VM, and the Plan-created DeepInspection Conversions'
+        results.
     """
 
     storage_map: StorageMap
@@ -232,20 +241,29 @@ class TestSanityWarmMtvMigration:
         target_namespace,
         source_provider,
     ):
-        """Execute warm migration with cutover.
+        """Execute warm migration with cutover and verify vSphere overlay lifecycle.
 
         Args:
             fixture_store (dict[str, Any]): Fixture store for resource tracking.
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (Namespace): Target namespace for migration.
-            source_provider (BaseProvider): Source provider, used to gate DI capture to vSphere.
+            source_provider (BaseProvider): Source provider, used to gate DI capture and overlay checks to vSphere.
 
         Returns:
             None
         """
+        is_vsphere = source_provider.type == Provider.ProviderType.VSPHERE
         di_callback = (
-            create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store)
-            if source_provider.type == Provider.ProviderType.VSPHERE
+            create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store) if is_vsphere else None
+        )
+        overlay_capture = (
+            OverlayLogCapture(
+                ocp_admin_client=ocp_admin_client,
+                plan=self.__class__.plan_resource,
+                target_namespace=target_namespace,
+                on_status_poll=di_callback,
+            )
+            if is_vsphere
             else None
         )
         execute_migration(
@@ -254,8 +272,11 @@ class TestSanityWarmMtvMigration:
             plan=self.plan_resource,
             target_namespace=target_namespace,
             cut_over=get_cutover_value(),
-            on_status_poll=di_callback,
+            on_status_poll=overlay_capture.capture if overlay_capture is not None else di_callback,
         )
+        if overlay_capture is not None:
+            overlay_capture.wait_for_complete_logs()
+            verify_overlay_lifecycle(capture=overlay_capture)
 
     def test_check_vms(
         self,
@@ -281,253 +302,6 @@ class TestSanityWarmMtvMigration:
             source_vms_namespace (str): Namespace of source VMs.
             source_provider_inventory (ForkliftInventory): Source provider inventory.
             vm_ssh_connections (dict[str, Any]): SSH connections to migrated VMs.
-
-        Returns:
-            None
-        """
-        check_vms(
-            plan=prepared_plan,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            network_map_resource=self.network_map,
-            storage_map_resource=self.storage_map,
-            source_provider_data=source_provider_data,
-            source_vms_namespace=source_vms_namespace,
-            source_provider_inventory=source_provider_inventory,
-            vm_ssh_connections=vm_ssh_connections,
-            plan_resource=self.plan_resource,
-            di_results=fixture_store.get(DI_RESULTS_KEY),
-        )
-
-
-@pytest.mark.vsphere
-@pytest.mark.tier1
-@pytest.mark.warm
-@pytest.mark.incremental
-@pytest.mark.parametrize(
-    "class_plan_config",
-    [pytest.param(py_config["tests_params"]["test_warm_mtv_convertor_node_selector"])],
-    indirect=True,
-    ids=["rhel8 warm ConvertorNodeSelector"],
-)
-@pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
-class TestWarmMtvConvertorNodeSelector:
-    """Recover a warm migration after its ConvertorNodeSelector leaves importer pods unschedulable.
-
-    Purpose/Regression:
-        Verify MTV copies a Plan's ConvertorNodeSelector to warm CDI importer and virt-v2v conversion pods, and that
-        a migration recovers after a matching worker label is added.
-
-    Prerequisites:
-        Register and connect a vSphere source provider and an OpenShift destination with MTV 5.0 or later, accessible
-        storage, and destination networks. Use a disposable, powered-on RHEL 8 VM with a guest agent, disks that
-        support incremental warm copies, and a statically configured NIC mapped to a Multus network. Enable
-        changed-block tracking, make warm Deep Inspection available, and provide at least one Ready, schedulable
-        worker that can satisfy CDI's normal importer placement requirements.
-
-    Test plan:
-        1. Prepare the VM and confirm it appears in source inventory. Create storage and network mappings and confirm
-           the maps are ready.
-        2. Create a warm Plan with a selector that matches no worker and confirm the Plan is Ready and contains it.
-        3. Start the Migration with a future cutover time. Confirm at least one CDI importer pod inherits the selector
-           and becomes Pending with PodScheduled=Unschedulable. Add the matching label to a compatible worker, then
-           confirm the initially unschedulable importer pods recover, importer and virt-v2v pods inherit the selector
-           and run on that worker, and the Migration succeeds.
-        4. Verify the migrated VM is powered on and reachable, its static IP, subnet, and gateway are preserved, and
-           its NIC name and captured warm Deep Inspection results are preserved.
-        5. Remove the temporary worker label and remove the migrated VM, Plan, StorageMap, and NetworkMap.
-
-    Expected result:
-        At least one importer is observed Pending with PodScheduled=Unschedulable. After the matching worker label is
-        added, each importer observed unschedulable and each virt-v2v pod schedules on that worker, and the warm
-        migration completes through cutover. The migrated guest retains its static network configuration, and the test
-        captures complete Deep Inspection results. The worker label is removed after the migration.
-    """
-
-    storage_map: StorageMap
-    network_map: NetworkMap
-    plan_resource: Plan
-
-    def test_create_storagemap(
-        self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        source_provider: "BaseProvider",
-        destination_provider: "BaseProvider",
-        source_provider_inventory: "ForkliftInventory",
-        target_namespace: str,
-    ) -> None:
-        """Create StorageMap resource for migration.
-
-        Args:
-            prepared_plan (dict[str, Any]): The prepared migration plan.
-            fixture_store (dict[str, Any]): Fixture store for resource tracking.
-            ocp_admin_client (DynamicClient): OpenShift admin client.
-            source_provider (BaseProvider): Source provider instance.
-            destination_provider (BaseProvider): Destination provider instance.
-            source_provider_inventory (ForkliftInventory): Source provider inventory.
-            target_namespace (str): Target namespace for migration.
-
-        Returns:
-            None
-        """
-        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
-        self.__class__.storage_map = get_storage_migration_map(
-            fixture_store=fixture_store,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            source_provider_inventory=source_provider_inventory,
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            vms=vms,
-        )
-        assert self.storage_map, "StorageMap creation failed"
-
-    def test_create_networkmap(
-        self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        source_provider: "BaseProvider",
-        destination_provider: "BaseProvider",
-        source_provider_inventory: "ForkliftInventory",
-        target_namespace: str,
-        multus_network_name: dict[str, str],
-    ) -> None:
-        """Create NetworkMap resource for migration.
-
-        Args:
-            prepared_plan (dict[str, Any]): The prepared migration plan.
-            fixture_store (dict[str, Any]): Fixture store for resource tracking.
-            ocp_admin_client (DynamicClient): OpenShift admin client.
-            source_provider (BaseProvider): Source provider instance.
-            destination_provider (BaseProvider): Destination provider instance.
-            source_provider_inventory (ForkliftInventory): Source provider inventory.
-            target_namespace (str): Target namespace for migration.
-            multus_network_name (dict[str, str]): Multus network name and namespace.
-
-        Returns:
-            None
-        """
-        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
-        self.__class__.network_map = get_network_migration_map(
-            fixture_store=fixture_store,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            source_provider_inventory=source_provider_inventory,
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            multus_network_name=multus_network_name,
-            vms=vms,
-        )
-        assert self.network_map, "NetworkMap creation failed"
-
-    def test_create_plan(
-        self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        source_provider: "BaseProvider",
-        destination_provider: "OCPProvider",
-        target_namespace: str,
-        source_provider_inventory: "ForkliftInventory",
-        convertor_node_selector_target: ConvertorNodeSelectorTarget,
-    ) -> None:
-        """Create a warm Plan with a selector that currently matches no worker.
-
-        Args:
-            prepared_plan (dict[str, Any]): The prepared migration plan.
-            fixture_store (dict[str, Any]): Fixture store for resource tracking.
-            ocp_admin_client (DynamicClient): OpenShift admin client.
-            source_provider (BaseProvider): vSphere source provider.
-            destination_provider (OCPProvider): OpenShift destination provider.
-            target_namespace (str): Target namespace for migration.
-            source_provider_inventory (ForkliftInventory): Source provider inventory.
-            convertor_node_selector_target (ConvertorNodeSelectorTarget): Selector and eligible workers.
-
-        Returns:
-            None
-        """
-        populate_vm_ids(plan=prepared_plan, inventory=source_provider_inventory)
-        self.__class__.plan_resource = create_plan_resource(
-            ocp_admin_client=ocp_admin_client,
-            fixture_store=fixture_store,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            storage_map=self.storage_map,
-            network_map=self.network_map,
-            virtual_machines_list=prepared_plan["virtual_machines"],
-            target_namespace=target_namespace,
-            warm_migration=prepared_plan.get("warm_migration", False),
-            preserve_static_ips=prepared_plan.get("preserve_static_ips", False),
-            convertor_node_selector=convertor_node_selector_target.selector,
-        )
-        assert self.plan_resource, "Plan creation failed"
-        plan_spec: dict[str, Any] = self.plan_resource.instance.to_dict()["spec"]
-        assert plan_spec.get("convertorNodeSelector") == convertor_node_selector_target.selector, (
-            f"Plan convertorNodeSelector is {plan_spec.get('convertorNodeSelector')}, "
-            f"expected {convertor_node_selector_target.selector}"
-        )
-
-    def test_migrate_vms(
-        self,
-        fixture_store: dict[str, Any],
-        ocp_admin_client: "DynamicClient",
-        target_namespace: str,
-        convertor_node_selector_target: ConvertorNodeSelectorTarget,
-    ) -> None:
-        """Recover importer scheduling and verify converter pod placement during warm migration.
-
-        Args:
-            fixture_store (dict[str, Any]): Fixture store for resource tracking and DI results.
-            ocp_admin_client (DynamicClient): OpenShift admin client.
-            target_namespace (str): Target namespace for migrated VMs.
-            convertor_node_selector_target (ConvertorNodeSelectorTarget): Selector and worker used for recovery.
-
-        Returns:
-            None
-        """
-        di_callback = create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store)
-        placement_observer = ConvertorPodPlacementObserver(
-            plan=self.plan_resource,
-            target=convertor_node_selector_target,
-            on_status_poll=di_callback,
-        )
-        execute_migration(
-            ocp_admin_client=ocp_admin_client,
-            fixture_store=fixture_store,
-            plan=self.plan_resource,
-            target_namespace=target_namespace,
-            cut_over=get_cutover_value(),
-            on_status_poll=placement_observer,
-        )
-        placement_observer.assert_placements_observed()
-
-    def test_check_vms(
-        self,
-        fixture_store: dict[str, Any],
-        prepared_plan: dict[str, Any],
-        source_provider: "BaseProvider",
-        destination_provider: "BaseProvider",
-        source_provider_data: dict[str, Any],
-        target_namespace: str,
-        source_vms_namespace: str | None,
-        source_provider_inventory: "ForkliftInventory",
-        vm_ssh_connections: "SSHConnectionManager",
-    ) -> None:
-        """Validate migrated VMs.
-
-        Args:
-            fixture_store (dict[str, Any]): Fixture store for DI result retrieval.
-            prepared_plan (dict[str, Any]): The prepared migration plan.
-            source_provider (BaseProvider): Source provider instance.
-            destination_provider (BaseProvider): Destination provider instance.
-            source_provider_data (dict[str, Any]): Source provider configuration data.
-            target_namespace (str): Target namespace for migration.
-            source_vms_namespace (str | None): Namespace of source VMs, if configured.
-            source_provider_inventory (ForkliftInventory): Source provider inventory.
-            vm_ssh_connections (SSHConnectionManager): SSH connections to migrated VMs.
 
         Returns:
             None
@@ -1056,6 +830,253 @@ class TestWarmRemoteOcp:
             plan=prepared_plan,
             source_provider=source_provider,
             destination_provider=destination_ocp_provider,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+            plan_resource=self.plan_resource,
+            di_results=fixture_store.get(DI_RESULTS_KEY),
+        )
+
+
+@pytest.mark.vsphere
+@pytest.mark.tier1
+@pytest.mark.warm
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_warm_mtv_convertor_node_selector"])],
+    indirect=True,
+    ids=["rhel8 warm ConvertorNodeSelector"],
+)
+@pytest.mark.usefixtures("precopy_interval_forkliftcontroller", "cleanup_migrated_vms")
+class TestWarmMtvConvertorNodeSelector:
+    """Recover a warm migration after its ConvertorNodeSelector leaves importer pods unschedulable.
+
+    Purpose/Regression:
+        Verify MTV copies a Plan's ConvertorNodeSelector to warm CDI importer and virt-v2v conversion pods, and that
+        a migration recovers after a matching worker label is added.
+
+    Prerequisites:
+        Register and connect a vSphere source provider and an OpenShift destination with MTV 5.0 or later, accessible
+        storage, and destination networks. Use a disposable, powered-on RHEL 8 VM with a guest agent, disks that
+        support incremental warm copies, and a statically configured NIC mapped to a Multus network. Enable
+        changed-block tracking, make warm Deep Inspection available, and provide at least one Ready, schedulable
+        worker that can satisfy CDI's normal importer placement requirements.
+
+    Test plan:
+        1. Prepare the VM and confirm it appears in source inventory. Create storage and network mappings and confirm
+           the maps are ready.
+        2. Create a warm Plan with a selector that matches no worker and confirm the Plan is Ready and contains it.
+        3. Start the Migration with a future cutover time. Confirm at least one CDI importer pod inherits the selector
+           and becomes Pending with PodScheduled=Unschedulable. Add the matching label to a compatible worker, then
+           confirm the initially unschedulable importer pods recover, importer and virt-v2v pods inherit the selector
+           and run on that worker, and the Migration succeeds.
+        4. Verify the migrated VM is powered on and reachable, its static IP, subnet, and gateway are preserved, and
+           its NIC name and captured warm Deep Inspection results are preserved.
+        5. Remove the temporary worker label and remove the migrated VM, Plan, StorageMap, and NetworkMap.
+
+    Expected result:
+        At least one importer is observed Pending with PodScheduled=Unschedulable. After the matching worker label is
+        added, each importer observed unschedulable and each virt-v2v pod schedules on that worker, and the warm
+        migration completes through cutover. The migrated guest retains its static network configuration, and the test
+        captures complete Deep Inspection results. The worker label is removed after the migration.
+    """
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    def test_create_storagemap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: "BaseProvider",
+        destination_provider: "BaseProvider",
+        source_provider_inventory: "ForkliftInventory",
+        target_namespace: str,
+    ) -> None:
+        """Create StorageMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace for migration.
+
+        Returns:
+            None
+        """
+        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            vms=vms,
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: "BaseProvider",
+        destination_provider: "BaseProvider",
+        source_provider_inventory: "ForkliftInventory",
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource for migration.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace for migration.
+            multus_network_name (dict[str, str]): Multus network name and namespace.
+
+        Returns:
+            None
+        """
+        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            multus_network_name=multus_network_name,
+            vms=vms,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        source_provider: "BaseProvider",
+        destination_provider: "OCPProvider",
+        target_namespace: str,
+        source_provider_inventory: "ForkliftInventory",
+        convertor_node_selector_target: ConvertorNodeSelectorTarget,
+    ) -> None:
+        """Create a warm Plan with a selector that currently matches no worker.
+
+        Args:
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): vSphere source provider.
+            destination_provider (OCPProvider): OpenShift destination provider.
+            target_namespace (str): Target namespace for migration.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            convertor_node_selector_target (ConvertorNodeSelectorTarget): Selector and eligible workers.
+
+        Returns:
+            None
+        """
+        populate_vm_ids(plan=prepared_plan, inventory=source_provider_inventory)
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            preserve_static_ips=prepared_plan.get("preserve_static_ips", False),
+            convertor_node_selector=convertor_node_selector_target.selector,
+        )
+        assert self.plan_resource, "Plan creation failed"
+        plan_spec: dict[str, Any] = self.plan_resource.instance.to_dict()["spec"]
+        assert plan_spec.get("convertorNodeSelector") == convertor_node_selector_target.selector, (
+            f"Plan convertorNodeSelector is {plan_spec.get('convertorNodeSelector')}, "
+            f"expected {convertor_node_selector_target.selector}"
+        )
+
+    def test_migrate_vms(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: "DynamicClient",
+        target_namespace: str,
+        convertor_node_selector_target: ConvertorNodeSelectorTarget,
+    ) -> None:
+        """Recover importer scheduling and verify converter pod placement during warm migration.
+
+        Args:
+            fixture_store (dict[str, Any]): Fixture store for resource tracking and DI results.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Target namespace for migrated VMs.
+            convertor_node_selector_target (ConvertorNodeSelectorTarget): Selector and worker used for recovery.
+
+        Returns:
+            None
+        """
+        di_callback = create_di_capture_callback(plan=self.plan_resource, fixture_store=fixture_store)
+        placement_observer = ConvertorPodPlacementObserver(
+            plan=self.plan_resource,
+            target=convertor_node_selector_target,
+            on_status_poll=di_callback,
+        )
+        execute_migration(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            cut_over=get_cutover_value(),
+            on_status_poll=placement_observer,
+        )
+        placement_observer.assert_placements_observed()
+
+    def test_check_vms(
+        self,
+        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],
+        source_provider: "BaseProvider",
+        destination_provider: "BaseProvider",
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str | None,
+        source_provider_inventory: "ForkliftInventory",
+        vm_ssh_connections: "SSHConnectionManager",
+    ) -> None:
+        """Validate migrated VMs.
+
+        Args:
+            fixture_store (dict[str, Any]): Fixture store for DI result retrieval.
+            prepared_plan (dict[str, Any]): The prepared migration plan.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (BaseProvider): Destination provider instance.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            target_namespace (str): Target namespace for migration.
+            source_vms_namespace (str | None): Namespace of source VMs, if configured.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (SSHConnectionManager): SSH connections to migrated VMs.
+
+        Returns:
+            None
+        """
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
             network_map_resource=self.network_map,
             storage_map_resource=self.storage_map,
             source_provider_data=source_provider_data,

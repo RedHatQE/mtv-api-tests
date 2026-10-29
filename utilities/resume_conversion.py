@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
 _DISK_TRANSFER_STEP_NAME: str = "DiskTransfer"
-_CONVERSION_POD_LABEL_SELECTOR: str = "forklift.app=virt-v2v"
+CONVERSION_POD_LABEL_SELECTOR: str = "forklift.app=virt-v2v"
 
 LOGGER = get_logger(__name__)
 
@@ -195,7 +195,7 @@ def _wait_for_conversion_pod(
     Raises:
         TimeoutExpiredError: If no conversion pod appears within timeout.
     """
-    LOGGER.info(f"Waiting for conversion pod ({_CONVERSION_POD_LABEL_SELECTOR})")
+    LOGGER.info(f"Waiting for conversion pod ({CONVERSION_POD_LABEL_SELECTOR})")
     for sample in TimeoutSampler(
         func=_find_conversion_pod,
         sleep=5,
@@ -241,7 +241,7 @@ def _find_conversion_pod(
     for pod in Pod.get(
         client=ocp_admin_client,
         namespace=target_namespace,
-        label_selector=f"{_CONVERSION_POD_LABEL_SELECTOR},migration={migration_uid}",
+        label_selector=f"{CONVERSION_POD_LABEL_SELECTOR},migration={migration_uid}",
     ):
         try:
             if pod.instance.status and pod.instance.status.phase == Pod.Status.RUNNING:
