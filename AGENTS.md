@@ -273,6 +273,7 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `preserve_static_ips` | Preserve static IPs after migration |
 | `copyoffload` | Copy-offload (XCOPY) migration |
 | `xfs_compatibility` | XFS v4 filesystem compatibility (requires `xfs_check` config: `command`, `mount_point`, `expected_output`) |
+| `skip_guest_conversion` | Skip guest-conversion pipeline stages on the Plan |
 | `migrate_shared_disks` | Shared disk migration at plan level |
 | `inventory_timeout` | Per-VM Forklift inventory wait timeout (seconds) |
 | `clone_to_same_host` | VM2+ default to VM1's ESXi host; explicit `target_esxi_host` overrides |

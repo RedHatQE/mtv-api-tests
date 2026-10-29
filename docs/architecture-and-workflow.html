@@ -378,7 +378,8 @@ the normal workflow and most optional features.</p>
 such as <code>warm_migration</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>, <code>target_labels</code>, <code>target_affinity</code>, <code>target_node_selector</code>,
 <code>vm_target_namespace</code>, <code>enable_nested_virtualization</code>, and <code>guest_agent_timeout</code>. <code>AGENTS.md</code> carries the complete plan-option
 table, which also includes <code>copyoffload</code>, <code>xfs_compatibility</code>, <code>migrate_shared_disks</code>, <code>inventory_timeout</code>, <code>clone_to_same_host</code>,
-<code>pin_to_non_dedicated_host</code>, <code>disable_drs_for_vms</code>, <code>per_nic_network_map</code>, <code>skip_clone</code>, and <code>rdm_as_lun</code>.</p>
+<code>pin_to_non_dedicated_host</code>, <code>disable_drs_for_vms</code>, <code>per_nic_network_map</code>, <code>skip_clone</code>, <code>rdm_as_lun</code>, and
+<code>skip_guest_conversion</code>.</p>
 <h2 id="the-standard-test-shape">The Standard Test Shape</h2>
 <p>Most migration tests follow the same five-step pattern: create storage map, create network map, create plan, execute migration,
 validate VMs. Condensed from <code>tests/cold/test_mtv_cold_migration.py:19-147</code>:</p>
@@ -757,11 +758,14 @@ features become an MTV <code>Plan</code> custom resource.</p>
     <span class="n">xfs_compatibility</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">run_preflight_inspection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">rdm_as_lun</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">pre_copy_source_disks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">convertor_node_selector</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">additional_plan_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Plan</span><span class="p">:</span>
 </code></pre></div>
 
 <p>The excerpt above shows the signature only. The function itself carries a full docstring documenting every argument, the returned <code>Plan</code>, and the <code>ValueError</code>
-cases it raises — read <code>utilities/mtv_migration.py:216-240</code> for that contract.</p>
+cases it raises — read <code>utilities/mtv_migration.py:219-269</code> for that contract.</p>
 <p>The two <code>Any</code> types are deliberate, not laziness:</p>
 <ul>
 <li>
@@ -829,6 +833,15 @@ narrowly as its content allows.</p>
 
     <span class="k">if</span> <span class="n">run_preflight_inspection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">"run_preflight_inspection"</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_preflight_inspection</span>
+
+    <span class="k">if</span> <span class="n">additional_plan_options</span><span class="p">:</span>
+        <span class="n">duplicate_options</span> <span class="o">=</span> <span class="n">plan_kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">additional_plan_options</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">duplicate_options</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Additional Plan options cannot override options already set by create_plan_resource: "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">duplicate_options</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">plan_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">additional_plan_options</span><span class="p">)</span>
 </code></pre></div>
 
 <p>A few things to notice:</p>
@@ -836,7 +849,7 @@ narrowly as its content allows.</p>
 <li>The <code>Plan</code> resource itself lives in the test namespace, but the VMs can still target a separate <code>vm_target_namespace</code>.</li>
 <li>
 <p>Hooks, labels, affinity, target power state, PVC naming, static IP preservation, nested virtualization, XFS compatibility,
-  shared-disk migration, RDM-as-LUN, and preflight inspection are all Plan-time features in this suite.</p>
+  shared-disk migration, RDM-as-LUN, guest-conversion skip, and preflight inspection are all Plan-time features in this suite.</p>
 </li>
 <li>
 <p>Per-VM <code>migrate_shared_disks</code> in the config is renamed to the camelCase <code>migrateSharedDisks</code> API field here, and test-only VM
@@ -929,6 +942,9 @@ for up to 120 seconds until no DataVolumes or PVCs remain.</p>
 contains a wrong-passphrase class that expects the migration to fail.</p>
 <p><strong>XFS compatibility</strong> is covered by <code>tests/cold/test_cold_migration_xfs.py</code> and <code>tests/warm/test_warm_migration_xfs.py</code>. Both set
 <code>xfs_compatibility: True</code> on the Plan and then run <code>xfs_info</code> inside the migrated guest to validate the filesystem version.</p>
+<p><strong>Skip guest conversion</strong> is covered by <code>tests/cold/test_cold_migration_skip_guest_conversion.py</code>. The test sets
+<code>skip_guest_conversion: True</code> through <code>additional_plan_options</code>, verifies no Plan-labeled <code>virt-v2v</code> pod appears during migration, and checks that the
+destination guest boots and accepts SSH connections.</p>
 <p><strong>Shared disks</strong> are covered by <code>tests/shared_disk/</code>. The Linux test mounts, writes, and reads a marker from both migrated VMs. The
 Windows test first labels the shared NTFS volume on the source VM through the VMware Guest Operations API, then verifies
 bidirectional access on the destination.</p>

@@ -664,6 +664,11 @@ become per-test clone names even when the raw plan entry does not set <code>clon
 <td><code>True</code> to request XFS v4 filesystem compatibility on the Plan CR.</td>
 </tr>
 <tr>
+<td><code>skip_guest_conversion</code></td>
+<td>No</td>
+<td><code>True</code> to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination.</td>
+</tr>
+<tr>
 <td><code>rdm_as_lun</code></td>
 <td>No</td>
 <td><code>True</code> to map RDM disks as LUN devices with a SCSI bus instead of the default virtio.</td>
@@ -1021,7 +1026,11 @@ exists, that <code>storage_hostname</code>, <code>storage_username</code>, and <
                     <span class="s2">"VMs must be cloned from templates."</span>
                 <span class="p">)</span>
             <span class="n">skip_clone_incompatible</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"disable_drs_for_vms"</span><span class="p">,</span> <span class="s2">"clone_to_same_host"</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">:</span>
+            <span class="n">is_esxi_vsphere</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">VSPHERE</span>
+                <span class="ow">and</span> <span class="n">source_provider_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"endpoint_type"</span><span class="p">)</span> <span class="o">==</span> <span class="n">VSPHERE_ESXI_ENDPOINT_TYPE</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_esxi_vsphere</span> <span class="ow">or</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">):</span>
                 <span class="n">skip_clone_incompatible</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"preserve_static_ips"</span><span class="p">)</span>
             <span class="n">conflicting</span> <span class="o">=</span> <span class="p">[</span><span class="n">flag</span> <span class="k">for</span> <span class="n">flag</span> <span class="ow">in</span> <span class="n">skip_clone_incompatible</span> <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">flag</span><span class="p">)]</span>
             <span class="k">if</span> <span class="n">has_shared_disk_config</span><span class="p">:</span>
@@ -1096,7 +1105,8 @@ runtime name:</p>
 
 <p><code>create_plan_resource()</code> accepts only the flags that map onto the Plan CR: <code>warm_migration</code>, <code>copyoffload</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>,
 <code>pvc_name_template_use_generate_name</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>, <code>vm_target_namespace</code>, <code>migrate_shared_disks</code>, <code>target_power_state</code>,
-<code>enable_nested_virtualization</code>, <code>xfs_compatibility</code>, <code>run_preflight_inspection</code>, and <code>rdm_as_lun</code>. Everything else is consumed by fixtures or by post-migration checks.</p>
+<code>enable_nested_virtualization</code>, <code>xfs_compatibility</code>, <code>run_preflight_inspection</code>, and <code>rdm_as_lun</code>. Additional Plan constructor fields can be passed through
+<code>additional_plan_options</code>; everything else is consumed by fixtures or by post-migration checks.</p>
 <h2 id="runtime-fields-added-during-preparation">Runtime Fields Added During Preparation</h2>
 <p>These fields are derived at runtime. You do <strong>not</strong> write them yourself in <code>tests_params</code>.</p>
 <div class="table-wrap"><table>

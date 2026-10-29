@@ -119,6 +119,18 @@ tests_params: dict = {
         "warm_migration": False,
         "per_nic_network_map": True,
     },
+    "test_cold_migration_skip_guest_conversion": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
+        "skip_guest_conversion": True,
+    },
     "test_cold_remote_ocp": {
         "virtual_machines": [
             {"name": "mtv-tests-rhel8"},

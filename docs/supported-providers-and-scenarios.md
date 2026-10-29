@@ -413,6 +413,8 @@ multi-datastore, mixed datastore, 10 mixed disks, warm copy-offload, and the 5-V
   `.providers.json`, with a per-VM override in the scenario.
 - **XFS.** `tests/cold/test_cold_migration_xfs.py` and `tests/warm/test_warm_migration_xfs.py` set `xfs_compatibility: True`
   and verify the guest filesystem with an `xfs_check` command, expecting `crc=0` in `xfs_info` output.
+- **Skip guest conversion.** `tests/cold/test_cold_migration_skip_guest_conversion.py` sets `skip_guest_conversion: True`, verifies
+  that no Plan-labeled `virt-v2v` pod appears during migration, and checks the destination guest.
 - **Shared disk.** `tests/shared_disk/` migrates an owner VM with `migrateSharedDisks: True` and a consumer VM with it
   `False`, then verifies the shared disk data on both.
 - **Deep inspection.** `tests/deep_inspection/` drives Forklift `Conversion` resources: standalone conversion with cancel

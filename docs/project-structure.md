@@ -293,7 +293,8 @@ For example, the comprehensive cold scenario defines advanced feature coverage d
 
 The complete plan-option vocabulary is documented in `AGENTS.md` under "Plan Configuration Options". It covers `warm_migration`,
 `preserve_static_ips`, `copyoffload`, `xfs_compatibility`, `migrate_shared_disks`, `inventory_timeout`, `clone_to_same_host`,
-`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, and `rdm_as_lun`.
+`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, `rdm_as_lun`, and
+`skip_guest_conversion`.
 
 > **Tip:** When you want to understand a scenario quickly, start with its entry in `tests/tests_config/config.py`, then read the
 > matching class in `tests/<feature>/`, and only then follow the shared helpers it imports.

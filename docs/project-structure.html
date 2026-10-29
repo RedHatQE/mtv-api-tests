@@ -571,7 +571,8 @@ per-scenario settings.</p>
 
 <p>The complete plan-option vocabulary is documented in <code>AGENTS.md</code> under "Plan Configuration Options". It covers <code>warm_migration</code>,
 <code>preserve_static_ips</code>, <code>copyoffload</code>, <code>xfs_compatibility</code>, <code>migrate_shared_disks</code>, <code>inventory_timeout</code>, <code>clone_to_same_host</code>,
-<code>pin_to_non_dedicated_host</code>, <code>disable_drs_for_vms</code>, <code>per_nic_network_map</code>, <code>skip_clone</code>, and <code>rdm_as_lun</code>.</p>
+<code>pin_to_non_dedicated_host</code>, <code>disable_drs_for_vms</code>, <code>per_nic_network_map</code>, <code>skip_clone</code>, <code>rdm_as_lun</code>, and
+<code>skip_guest_conversion</code>.</p>
 <blockquote>
 <p><strong>Tip:</strong> When you want to understand a scenario quickly, start with its entry in <code>tests/tests_config/config.py</code>, then read the
 matching class in <code>tests/&lt;feature&gt;/</code>, and only then follow the shared helpers it imports.</p>

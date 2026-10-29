@@ -706,7 +706,8 @@ For example, the comprehensive cold scenario defines advanced feature coverage d
 
 The complete plan-option vocabulary is documented in `AGENTS.md` under "Plan Configuration Options". It covers `warm_migration`,
 `preserve_static_ips`, `copyoffload`, `xfs_compatibility`, `migrate_shared_disks`, `inventory_timeout`, `clone_to_same_host`,
-`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, and `rdm_as_lun`.
+`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, `rdm_as_lun`, and
+`skip_guest_conversion`.
 
 > **Tip:** When you want to understand a scenario quickly, start with its entry in `tests/tests_config/config.py`, then read the
 > matching class in `tests/<feature>/`, and only then follow the shared helpers it imports.
@@ -1192,7 +1193,8 @@ That single config entry already tells you a lot about the architecture. The sam
 such as `warm_migration`, `preserve_static_ips`, `pvc_name_template`, `target_labels`, `target_affinity`, `target_node_selector`,
 `vm_target_namespace`, `enable_nested_virtualization`, and `guest_agent_timeout`. `AGENTS.md` carries the complete plan-option
 table, which also includes `copyoffload`, `xfs_compatibility`, `migrate_shared_disks`, `inventory_timeout`, `clone_to_same_host`,
-`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, and `rdm_as_lun`.
+`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, `rdm_as_lun`, and
+`skip_guest_conversion`.
 
 ## The Standard Test Shape
 
@@ -1513,7 +1515,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:216:utilities/mtv_migration.py
+```187:218:utilities/mtv_migration.py
     def create_plan_resource(
         ocp_admin_client: DynamicClient,
         fixture_store: dict[str, Any],
@@ -1543,11 +1545,14 @@ features become an MTV `Plan` custom resource.
         xfs_compatibility: bool = False,
         run_preflight_inspection: bool | None = None,
         rdm_as_lun: bool | None = None,
+        pre_copy_source_disks: bool = False,
+        convertor_node_selector: dict[str, str] | None = None,
+        additional_plan_options: dict[str, Any] | None = None,
     ) -> Plan:
 ```
 
 The excerpt above shows the signature only. The function itself carries a full docstring documenting every argument, the returned `Plan`, and the `ValueError`
-cases it raises — read `utilities/mtv_migration.py:216-240` for that contract.
+cases it raises — read `utilities/mtv_migration.py:219-269` for that contract.
 
 The two `Any` types are deliberate, not laziness:
 
@@ -1585,7 +1590,7 @@ narrowly as its content allows.
 
 Optional features are only added when requested, so an unset flag never lands on the `Plan` CR:
 
-```307:341:utilities/mtv_migration.py
+```307:358:utilities/mtv_migration.py
         if target_node_selector:
             plan_kwargs["target_node_selector"] = target_node_selector
 
@@ -1616,13 +1621,22 @@ Optional features are only added when requested, so an unset flag never lands on
 
         if run_preflight_inspection is not None:
             plan_kwargs["run_preflight_inspection"] = run_preflight_inspection
+
+        if additional_plan_options:
+            duplicate_options = plan_kwargs.keys() & additional_plan_options.keys()
+            if duplicate_options:
+                raise ValueError(
+                    f"Additional Plan options cannot override options already set by create_plan_resource: "
+                    f"{sorted(duplicate_options)}"
+                )
+            plan_kwargs.update(additional_plan_options)
 ```
 
 A few things to notice:
 
 - The `Plan` resource itself lives in the test namespace, but the VMs can still target a separate `vm_target_namespace`.
 - Hooks, labels, affinity, target power state, PVC naming, static IP preservation, nested virtualization, XFS compatibility,
-  shared-disk migration, RDM-as-LUN, and preflight inspection are all Plan-time features in this suite.
+  shared-disk migration, RDM-as-LUN, guest-conversion skip, and preflight inspection are all Plan-time features in this suite.
 - Per-VM `migrate_shared_disks` in the config is renamed to the camelCase `migrateSharedDisks` API field here, and test-only VM
   keys are stripped, so the serialized VM list stays valid for the CR.
 - Copy-offload reuses the same overall path, but changes how the storage map is built and forces a fixed `pvc_name_template`
@@ -1722,6 +1736,10 @@ contains a wrong-passphrase class that expects the migration to fail.
 
 **XFS compatibility** is covered by `tests/cold/test_cold_migration_xfs.py` and `tests/warm/test_warm_migration_xfs.py`. Both set
 `xfs_compatibility: True` on the Plan and then run `xfs_info` inside the migrated guest to validate the filesystem version.
+
+**Skip guest conversion** is covered by `tests/cold/test_cold_migration_skip_guest_conversion.py`. The test sets
+`skip_guest_conversion: True` through `additional_plan_options`, verifies no Plan-labeled `virt-v2v` pod appears during migration, and checks that the
+destination guest boots and accepts SSH connections.
 
 **Shared disks** are covered by `tests/shared_disk/`. The Linux test mounts, writes, and reads a marker from both migrated VMs. The
 Windows test first labels the shared NTFS volume on the source VM through the VMware Guest Operations API, then verifies
@@ -2288,6 +2306,8 @@ multi-datastore, mixed datastore, 10 mixed disks, warm copy-offload, and the 5-V
   `.providers.json`, with a per-VM override in the scenario.
 - **XFS.** `tests/cold/test_cold_migration_xfs.py` and `tests/warm/test_warm_migration_xfs.py` set `xfs_compatibility: True`
   and verify the guest filesystem with an `xfs_check` command, expecting `crc=0` in `xfs_info` output.
+- **Skip guest conversion.** `tests/cold/test_cold_migration_skip_guest_conversion.py` sets `skip_guest_conversion: True`, verifies
+  that no Plan-labeled `virt-v2v` pod appears during migration, and checks the destination guest.
 - **Shared disk.** `tests/shared_disk/` migrates an owner VM with `migrateSharedDisks: True` and a consumer VM with it
   `False`, then verifies the shared disk data on both.
 - **Deep inspection.** `tests/deep_inspection/` drives Forklift `Conversion` resources: standalone conversion with cancel
@@ -5099,6 +5119,7 @@ plan for later validation:
 | `guest_agent_timeout` | No | Guest-info wait timeout in seconds. Defaults to `120` where used. |
 | `migrate_shared_disks` | No | `True` to enable shared disk migration at plan level. Individual VMs can override. |
 | `xfs_compatibility` | No | `True` to request XFS v4 filesystem compatibility on the Plan CR. |
+| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. |
 | `rdm_as_lun` | No | `True` to map RDM disks as LUN devices with a SCSI bus instead of the default virtio. |
 | `enable_nested_virtualization` | No | `False` disables the `vmx` and `svm` CPU features. |
 | `run_preflight_inspection` | No | `False` disables the Plan CR preflight inspection step. |
@@ -5355,7 +5376,11 @@ Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags ar
                         "VMs must be cloned from templates."
                     )
                 skip_clone_incompatible = ["disable_drs_for_vms", "clone_to_same_host"]
-                if source_provider.type != Provider.ProviderType.HYPERV:
+                is_esxi_vsphere = (
+                    source_provider.type == Provider.ProviderType.VSPHERE
+                    and source_provider_data.get("endpoint_type") == VSPHERE_ESXI_ENDPOINT_TYPE
+                )
+                if not (is_esxi_vsphere or source_provider.type == Provider.ProviderType.HYPERV):
                     skip_clone_incompatible.append("preserve_static_ips")
                 conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]
                 if has_shared_disk_config:
@@ -5439,7 +5464,8 @@ Right before creating the MTV `Plan`, the tests add VM IDs from the Forklift inv
 
 `create_plan_resource()` accepts only the flags that map onto the Plan CR: `warm_migration`, `copyoffload`, `preserve_static_ips`, `pvc_name_template`,
 `pvc_name_template_use_generate_name`, `target_node_selector`, `target_labels`, `target_affinity`, `vm_target_namespace`, `migrate_shared_disks`, `target_power_state`,
-`enable_nested_virtualization`, `xfs_compatibility`, `run_preflight_inspection`, and `rdm_as_lun`. Everything else is consumed by fixtures or by post-migration checks.
+`enable_nested_virtualization`, `xfs_compatibility`, `run_preflight_inspection`, and `rdm_as_lun`. Additional Plan constructor fields can be passed through
+`additional_plan_options`; everything else is consumed by fixtures or by post-migration checks.
 
 ## Runtime Fields Added During Preparation
 
@@ -8365,13 +8391,14 @@ This page covers three layers:
 | Layer | Where it lives | Examples |
 | --- | --- | --- |
 | VM-level options | one entry per item in `virtual_machines` | `luks`, `disk_type`, `add_nic`, `migrate_shared_disks` |
-| Plan-level options | top level of a `tests_params` entry | `preserve_static_ips`, `xfs_compatibility`, `per_nic_network_map` |
+| Plan-level options | top level of a `tests_params` entry | `preserve_static_ips`, `xfs_compatibility`, `skip_guest_conversion` |
 | Test-verification options | top level, consumed by the post-migration step | `xfs_check` |
 
-> **Note:** Plan-level keys are read with `plan.get(...)` in the preparation fixtures, but only a subset of them is forwarded as an explicit
-> keyword argument to `create_plan_resource()`. Preparation-only options such as `inventory_timeout`, `clone_to_same_host`,
-> `pin_to_non_dedicated_host` and `disable_drs_for_vms` are consumed while building the plan and never reach the MTV `Plan` CR, so passing them to
-> `create_plan_resource()` raises `TypeError`. An option only affects the Plan when the test class passes it explicitly.
+> **Note:** Plan-level keys are read with `plan.get(...)` in the preparation fixtures. Plan fields supported directly by
+> `create_plan_resource()` are forwarded as named arguments; additional Plan constructor fields can be passed through
+> `additional_plan_options`. Preparation-only options such as `inventory_timeout`, `clone_to_same_host`,
+> `pin_to_non_dedicated_host` and `disable_drs_for_vms` are consumed while building the plan and do not belong in
+> `additional_plan_options`. Passing them as direct keywords to `create_plan_resource()` raises `TypeError`. An option only affects the Plan when the test class passes it explicitly.
 
 ## Plan-level options
 
@@ -8389,6 +8416,7 @@ This page covers three layers:
 | `target_affinity` | Affinity rules applied to the migrated VM | Plan CR field | `{"podAffinity": {...}}` |
 | `migrate_shared_disks` | Enable shared-disk migration for every VM by default | Plan CR field | `True` |
 | `xfs_compatibility` | Use the XFS-compatible virt-v2v image | Plan CR field | `True` |
+| `skip_guest_conversion` | Skip the guest-conversion pipeline stages | Plan CR field via `additional_plan_options` | `True` |
 | `rdm_as_lun` | Map RDM disks as SCSI LUN devices instead of virtio | Plan CR field | `True` |
 | `copyoffload` | Enable copy-offload (XCOPY) handling; forces `pvc_name_template` to `"pvc"` | Plan CR field | `True` |
 | `run_preflight_inspection` | Enable Forklift preflight Deep Inspection on warm migrations | Plan CR field | `False` |
@@ -8400,6 +8428,19 @@ This page covers three layers:
 | `per_nic_network_map` | One NetworkMap entry per NIC instead of per distinct network | `get_network_migration_map()` | `True` |
 | `skip_clone` | Skip the cloning phase and migrate the existing VMs | `prepared_plan` fixture | `True` |
 | `warm_migration` | Run a warm migration | Plan CR field | `True` |
+
+## Skip guest conversion
+
+`additional_plan_options={"skip_guest_conversion": True}` sets `spec.skipGuestConversion` on the Plan. Forklift then omits the guest-conversion
+pipeline stages and does not create a `virt-v2v` pod for that Plan. On vSphere, the Plan default
+`useCompatibilityMode: true` still selects SATA disks, E1000E NICs, and USB input devices to help the guest boot.
+Setting `useCompatibilityMode: false` instead selects VirtIO devices, which requires VirtIO drivers to be installed
+in the guest already.
+
+`tests/cold/test_cold_migration_skip_guest_conversion.py` covers this behavior as a separate vSphere Tier 1 cold
+migration. It follows the standard five-step flow, checks the Plan field, watches for Plan-labeled `virt-v2v` pods during
+migration, and validates the destination VM with the guest agent and SSH. It leaves `useCompatibilityMode` unset and
+checks the Plan API default of `true`. Existing default-mode tests continue to cover the regular conversion path.
 
 > **Warning:** `disable_drs_for_vms` raises `ValueError` for OVA providers and for any clone provider that is not
 > `VMWareProvider`. `skip_clone` raises `ValueError` on providers whose `supports_skip_clone()` is `False` (RHV, whose
@@ -10204,6 +10245,7 @@ From `tests/tests_config/config.py`:
 | `migrate_shared_disks` | `spec.migrateSharedDisks` | Plan-level default for all VMs |
 | `enable_nested_virtualization` | `spec.enableNestedVirtualization` | |
 | `xfs_compatibility` | `spec.xfsCompatibility` | XFS v4 virt-v2v image |
+| `skip_guest_conversion` | `spec.skipGuestConversion` | Skip the guest-conversion pipeline stages |
 | `run_preflight_inspection` | `spec.runPreflightInspection` | Warm Deep Inspection gate |
 | `rdm_as_lun` | `spec.rdmAsLun` | vSphere only; RDM disks as `lun.bus: scsi` |
 | `copyoffload` | `spec.pvcNameTemplate: "pvc"` | The volume populator framework requires this fixed template |
@@ -12320,7 +12362,8 @@ A few patterns are worth knowing up front:
 - VM-level keys such as `source_vm_power`, `guest_agent`, `clone`, `disk_type`, `add_nic`, `add_nic_start_connected`, `add_disks`, `snapshots`, and `clone_name` are already used by
 existing tests.
 - Plan-level keys such as `target_power_state`, `preserve_static_ips`, `pvc_name_template`, `vm_target_namespace`, `target_node_selector`, `target_labels`, `target_affinity`,
-`pre_hook`, `post_hook`, and `copyoffload` are already supported by the shared helpers.
+`pre_hook`, `post_hook`, and `copyoffload` are supported by the shared helpers. Pass additional Plan constructor fields such as `skip_guest_conversion` through
+`additional_plan_options` when creating the Plan.
 
 > **Tip:** In `target_node_selector` and `target_labels`, a value of `None` does not mean "missing". The fixtures replace it with the current `session_uuid`, which makes it easy to
 create unique labels safely.
