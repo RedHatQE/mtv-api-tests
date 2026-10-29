@@ -40,6 +40,11 @@ _VM_DICT_TEST_ONLY_KEYS: frozenset[str] = frozenset({
     "snapshots_before_migration",
 })
 
+# Test-config keys renamed to their Kubernetes API spec field names.
+_VM_CONFIG_TO_SPEC_KEY_RENAMES: dict[str, str] = {
+    "migrate_shared_disks": "migrateSharedDisks",
+}
+
 
 def get_migration_for_plan(plan: Plan) -> Migration:
     """Find Migration CR for Plan.
@@ -275,14 +280,15 @@ def create_plan_resource(
     if not destination_provider.ocp_resource:
         raise ValueError("destination_provider.ocp_resource is not set")
 
-    # Convert per-VM migrate_shared_disks (snake_case config) to migrateSharedDisks (camelCase API)
+    # Convert per-VM snake_case config keys to camelCase API fields.
     # The Plan class passes virtual_machines_list directly to spec.vms, so any key in the
-    # VM dict ends up in the CR. We rename here to match the Kubernetes API field name.
+    # VM dict ends up in the CR. We rename here to match the Kubernetes API field names.
     # Work on copies to avoid mutating the caller's prepared_plan data.
     vms_for_plan = [dict(vm) for vm in virtual_machines_list]
     for vm in vms_for_plan:
-        if "migrate_shared_disks" in vm:
-            vm["migrateSharedDisks"] = vm.pop("migrate_shared_disks")
+        for config_key, spec_key in _VM_CONFIG_TO_SPEC_KEY_RENAMES.items():
+            if config_key in vm:
+                vm[spec_key] = vm.pop(config_key)
         for key in _VM_DICT_TEST_ONLY_KEYS:
             vm.pop(key, None)
 

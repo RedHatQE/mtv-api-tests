@@ -4979,6 +4979,7 @@ Each item in `virtual_machines` describes one source VM or template.
 | `rootDisk` | No | Root disk path for this VM, passed through as the Plan API field `spec.vms[].rootDisk` (for example, `/dev/sdb2`). Use the API spelling and casing. Tests may set it on `prepared_plan` at runtime after source inspection when the path is discovered dynamically. |
 | `luks` | No | `True` when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference. |
 | `luks_passphrase` | No | Per-VM LUKS passphrase. Overrides the provider-level `luks_passphrase`. |
+| `exclude_disks` | No | vSphere bus addresses of disks to exclude from migration (e.g. `["scsi0:1"]`). The exclusion test renames this key to the Plan `spec.vms[].excludeDisks` field before plan creation (the shared plan builder passes VM keys through unchanged); the excluded disks are neither copied nor attached to the migrated VM. |
 | `migrate_shared_disks` | No | `True` for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM. |
 | `add_nic` | No | `True` to add an extra NIC. vSphere only. |
 | `add_nic_start_connected` | Yes* | Required when `add_nic` is `True`. Must be a `bool`. |
@@ -6024,6 +6025,9 @@ Other cold classes extend the pattern with extra verification steps. The pattern
 - **6-step XFS pattern** in `tests/cold/test_cold_migration_xfs.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_xfs_version` -> check_vms
 - **6-step root-disk selection pattern** in `tests/cold/test_cold_migration_root_disk.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_selected_root_os` -> check_vms
 - **6-step LUKS pattern** in `tests/luks/test_luks_cold_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_luks_encryption` -> check_vms
+- **6-step exclude-disks pattern** in `tests/cold/test_cold_migration_exclude_disks.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_excluded_disks`
+  -> check_vms. The Plan excludes individual source disks by bus address (`spec.vms[].excludeDisks`); the verify step confirms the migrated VM has exactly the
+  non-excluded disks attached and no PVC exists for the excluded ones in the dedicated VM namespace.
 - **6-step shared-disk pattern (Linux)** in `tests/shared_disk/test_shared_disk_rhel_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_shared_disk_data`
   -> check_vms
 - **7-step shared-disk pattern (Windows)** in `tests/shared_disk/test_shared_disk_windows_migration.py`: `test_label_shared_disk` -> storagemap -> networkmap -> plan -> migrate
