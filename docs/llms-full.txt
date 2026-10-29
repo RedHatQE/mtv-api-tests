@@ -7260,6 +7260,16 @@ The two fallback classes assert the transfer mechanism in opposite ways, which i
   cross-checks populate pod logs against the `xcopyUsed` annotation on each `DiskTransfer` task of
   the `Plan` CR.
 
+Every `test_check_xcopy_used` step also verifies the storage-offload observability annotations
+Forklift propagates from the volume populator to the `DiskTransfer` tasks of the `Plan` CR
+([MTV-6086](https://redhat.atlassian.net/browse/MTV-6086)): `result` must be `success`,
+`copyDurationSeconds` and `provisionedBytes` must be positive numbers, `allocatedBytes` must not be
+negative, and `storageVendor`, `cloneMethod`, and `storageProtocol` must be present. Forklift reports
+these on both XCOPY and software-fallback copies, so the fallback classes rely on the same checks.
+These annotations were introduced by the MTV-6086 epic; the checks require an MTV release that
+propagates them (2.12.6 and newer, including MTV 5.0.0) and are skipped automatically on older
+releases via a cluster MTV version check.
+
 > **Warning:** `non_xcopy_datastore_id` must point to a real datastore that does not support XCOPY/VAAI. If it is missing, the `mixed_datastore_config` fixture fails the class
 > before migration starts.
 
@@ -7468,7 +7478,7 @@ When you run copy-offload scenarios through `mtv-api-tests`, the project handles
 - It patches `esxiCloneMethod` to `ssh` when you choose SSH cloning.
 - It waits for Forklift to create the plan-specific copy-offload secret once the migration starts.
 - It forces `pvc_name_template` to `pvc` for copy-offload plans.
-- It captures populate pod logs during the migration so `test_check_xcopy_used` can verify `xcopyUsed` after MTV has already deleted the pods.
+- It captures populate pod logs during the migration so `test_check_xcopy_used` can verify `xcopyUsed` and the storage-offload observability annotations after MTV has already deleted the pods.
 
 That is why the user-facing setup is mostly about getting the provider config, datastore IDs, storage array credentials, and clone method right.
 
