@@ -15,6 +15,7 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
+from utilities.naming import resolve_destination_vm_name
 from utilities.post_migration import check_vms
 from utilities.utils import populate_vm_ids
 
@@ -31,6 +32,7 @@ ProviderData = dict[str, Any]
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from ocp_resources.virtual_machine import VirtualMachine
 
     from libs.base_provider import BaseProvider
     from libs.forklift_inventory import ForkliftInventory
@@ -80,15 +82,19 @@ class TestColdMigrationSkipGuestConversion:
         4. Start the migration; confirm Succeeded within 3600 seconds and no
            Plan-labeled virt-v2v pod is present at any status poll.
         5. Confirm the VM is powered on, the guest agent responds, and SSH works.
-           Delete the Migration, Plan, maps, destination VM, temporary NADs, and
-           target namespace.
+           Verify the compatibility-mode device models on the destination VM
+           (sata disks, e1000e interfaces, usb tablet input) and the
+           guestConverted="false" label. Delete the Migration, Plan, maps,
+           destination VM, temporary NADs, and target namespace.
 
     Expected result:
         The Plan has skipGuestConversion=true and useCompatibilityMode=true;
         migration succeeds with no Plan-labeled virt-v2v pod found at sampled status
-        polls, and the destination VM passes power, guest-agent, and SSH checks. On
-        failure, inspect Plan and Migration conditions, the failed VM migration
-        step, events, and Plan-labeled pods before cleanup.
+        polls, and the destination VM passes power, guest-agent, and SSH checks. The
+        destination VM uses compatibility-mode devices (disk.bus "sata", interface
+        model "e1000e", tablet input bus "usb") and carries label
+        guestConverted="false". On failure, inspect Plan and Migration conditions,
+        the failed VM migration step, events, and Plan-labeled pods before cleanup.
     """
 
     storage_map: StorageMap
@@ -297,6 +303,10 @@ class TestColdMigrationSkipGuestConversion:
             source_vms_namespace: Namespace used for source VM inventory lookups.
             source_provider_inventory: Inventory containing the source VM.
             vm_ssh_connections: SSH connection manager for the migrated VM.
+
+        Raises:
+            AssertionError: If a migrated VM fails post-migration, device-model, or
+                guestConverted-label checks.
         """
         check_vms(
             plan=prepared_plan,
@@ -308,4 +318,78 @@ class TestColdMigrationSkipGuestConversion:
             source_vms_namespace=source_vms_namespace,
             source_provider_inventory=source_provider_inventory,
             vm_ssh_connections=vm_ssh_connections,
+        )
+
+        # check_vms validated the guest; re-fetch the same destination VM dict (via
+        # the shared OCPProvider.vm_dict helper) to inspect the KubeVirt spec and
+        # labels set by the Forklift skipGuestConversion contract.
+        for vm in prepared_plan["virtual_machines"]:
+            destination_vm = destination_provider.vm_dict(
+                name=resolve_destination_vm_name(vm),
+                namespace=prepared_plan["_vm_target_namespace"],
+            )
+            self._check_destination_vm_device_models(destination_vm=destination_vm)
+            self._check_guest_converted_label(destination_vm=destination_vm)
+
+    def _check_destination_vm_device_models(self, destination_vm: ProviderData) -> None:
+        """Verify compatibility-mode device models on the migrated destination VM.
+
+        With skipGuestConversion=true (and useCompatibilityMode=true), Forklift's
+        vSphere builder emits source-compatible devices instead of virtio: every
+        disk on the sata bus, every interface with model e1000e, and a tablet
+        input device on the usb bus.
+
+        Args:
+            destination_vm: Destination VM dict from OCPProvider.vm_dict; its
+                "provider_vm_api" entry is the KubeVirt VirtualMachine resource.
+
+        Raises:
+            AssertionError: If any disk bus, interface model, or input bus differs
+                from the compatibility-mode contract, or a device list is empty.
+        """
+        vm_name: str = destination_vm["name"]
+        vm_resource: "VirtualMachine" = destination_vm["provider_vm_api"]
+        devices: dict[str, Any] = vm_resource.instance.spec.template.spec.domain.devices
+
+        disks: list[dict[str, Any]] = devices.get("disks") or []
+        assert disks, f"Destination VM '{vm_name}' has no disks in its spec"
+        disk_buses = [disk.get("disk", {}).get("bus") for disk in disks]
+        assert all(bus == "sata" for bus in disk_buses), (
+            f"Destination VM '{vm_name}' expected all disks on bus 'sata', got {disk_buses}"
+        )
+
+        interfaces: list[dict[str, Any]] = devices.get("interfaces") or []
+        assert interfaces, f"Destination VM '{vm_name}' has no interfaces in its spec"
+        interface_models = [interface.get("model") for interface in interfaces]
+        assert all(model == "e1000e" for model in interface_models), (
+            f"Destination VM '{vm_name}' expected all interfaces with model 'e1000e', got {interface_models}"
+        )
+
+        inputs: list[dict[str, Any]] = devices.get("inputs") or []
+        assert inputs, f"Destination VM '{vm_name}' has no input devices in its spec"
+        input_buses = [input_device.get("bus") for input_device in inputs]
+        assert all(bus == "usb" for bus in input_buses), (
+            f"Destination VM '{vm_name}' expected all input devices on bus 'usb', got {input_buses}"
+        )
+
+    def _check_guest_converted_label(self, destination_vm: ProviderData) -> None:
+        """Verify the guestConverted label on the migrated destination VM.
+
+        Forklift labels each destination VM "guestConverted" with the inverse of
+        the Plan's skipGuestConversion, so a skipped-conversion migration must
+        carry guestConverted="false" on the VirtualMachine metadata.
+
+        Args:
+            destination_vm: Destination VM dict from OCPProvider.vm_dict; its
+                "provider_vm_api" entry is the KubeVirt VirtualMachine resource.
+
+        Raises:
+            AssertionError: If the guestConverted label is missing or not "false".
+        """
+        vm_name: str = destination_vm["name"]
+        vm_resource: "VirtualMachine" = destination_vm["provider_vm_api"]
+        labels: dict[str, Any] = vm_resource.instance.metadata.labels or {}
+        assert labels.get("guestConverted") == "false", (
+            f"Destination VM '{vm_name}' expected label guestConverted='false', got "
+            f"{labels.get('guestConverted')!r} (labels: {labels})"
         )
