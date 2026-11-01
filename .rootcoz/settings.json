@@ -1,0 +1,34 @@
+{
+  "ai_provider": "EnMaaS",
+  "ai_model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "ai_call_timeout": 90,
+  "max_concurrent_ai_calls": 3,
+  "peer_ai_configs": [
+    {
+      "ai_provider": "EnMaaS",
+      "ai_model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
+    },
+    {
+      "ai_provider": "EnMaaS",
+      "ai_model": "rits/zai-org/glm-5-3"
+    }
+  ],
+  "peer_analysis_max_rounds": 2,
+  "additional_repos": [
+    {
+      "name": "mtv_product_code",
+      "url": "https://github.com/kubev2v/forklift",
+      "ref": "main"
+    },
+    {
+      "name": "mtv_deploy_code",
+      "url": "https://gitlab.cee.redhat.com/migrationqe/mtv-autodeploy",
+      "ref": "master"
+    },
+    {
+      "name": "mtv_jenkins_code",
+      "url": "https://gitlab.cee.redhat.com/ccit/jenkins-csb-customers/mtv-qe-casc-main",
+      "ref": "main"
+    }
+  ]
+}
