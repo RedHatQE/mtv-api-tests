@@ -24,18 +24,20 @@ class-scoped and incremental: one broken class cascades into everything after it
    more than the target namespace:
    - **Target cluster**: namespaces, Plan/Migration/StorageMap/NetworkMap/Provider CRs,
      VMs, PVCs, DataVolumes, and migration pods left behind by a failed cleanup
-   - **Source vSphere**: per-VM DRS is disabled (`disable_drs_for_vms`) and VMs may be
-     pinned to a specific ESXi host; a teardown that never ran leaves DRS off and VMs
-     pinned, which changes scheduling for every later migration
+   - **Source vSphere**: per-VM DRS is disabled (`disable_drs_for_vms`) for the cloned VM, and
+     the clone may be placed on a specific ESXi host and datastore (`target_esxi_host`,
+     `target_datastore_id`). A teardown that never ran leaves DRS off for those VMs and leaves
+     the cloned VMs on the source, so the next run sees duplicate or locked source VMs
    - **Copy-offload**: populator pods; a stuck populator holds storage paths and makes
      the next XCOPY run fail
    - **Guest-level changes**: hooks that run inside the guest, extra disks added by
      `add_disks`, and cloned VMs that still exist on the source
    - **Expected-failure tests**: a test may declare `expected_migration_result` expecting the
-     migration to fail, and then deliberately leave the failed `Plan` and `Migration` in
-     place — that state is the test's subject, not a leftover to blame on the next test.
-     A PVC still present after teardown is NOT expected, unless the test failed before
-     reaching its cleanup step.
+     migration to fail, and keep that failed `Plan` and `Migration` around for its own
+     assertions until teardown runs. They are still registered for teardown like every other
+     resource, so one that survives cleanup is a teardown failure to investigate — not
+     expected state. A PVC still present after teardown is likewise NOT expected, unless the
+     test failed before reaching its cleanup step.
 3. **Check whether the current symptom matches that un-reverted state.** Examples:
    migration stuck in `CopyingPods` because a leftover populator pod holds the volume;
    `Plan` stuck `NotReady` because the source VM is already locked by a stale migration;
