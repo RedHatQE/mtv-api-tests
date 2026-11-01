@@ -7,9 +7,11 @@ from ocp_resources.pod import Pod
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 
+from exceptions.exceptions import MigrationNotFoundError
 from utilities.mtv_migration import (
     create_plan_resource,
     execute_migration,
+    get_migration_for_plan,
     get_network_migration_map,
     get_storage_migration_map,
 )
@@ -234,19 +236,34 @@ class TestColdMigrationSkipGuestConversion:
         def assert_no_guest_conversion_pod(_status: str) -> None:
             """Assert this Plan has no guest-conversion pod at the current poll.
 
+            Conversion pods are selected by both the Plan and the Migration labels,
+            matching the selectors used by the rest of the suite (see
+            utilities/resume_conversion.py, utilities/copyoffload_migration.py),
+            so a virt-v2v pod carrying only one of the labels is still detected.
+
             Args:
                 _status: Current Plan migration status sample.
 
             Raises:
                 AssertionError: If a guest-conversion pod is found.
             """
-            conversion_pods = list(
-                Pod.get(
+            label_selectors = [f"forklift.app=virt-v2v,plan={plan_uid}"]
+            try:
+                migration_uid = get_migration_for_plan(plan=self.__class__.plan_resource).instance.metadata.uid
+                label_selectors.append(f"forklift.app=virt-v2v,migration={migration_uid}")
+            except MigrationNotFoundError:
+                # No Migration CR exists yet, so no migration-labeled pod can exist either.
+                pass
+
+            conversion_pods = [
+                pod
+                for label_selector in label_selectors
+                for pod in Pod.get(
                     client=ocp_admin_client,
                     namespace=plan_namespace,
-                    label_selector=f"forklift.app=virt-v2v,plan={plan_uid}",
+                    label_selector=label_selector,
                 )
-            )
+            ]
             assert not conversion_pods, (
                 f"Guest conversion pod(s) present at a migration status poll for Plan '{self.__class__.plan_resource.name}': "
                 f"{[pod.name for pod in conversion_pods]}"
