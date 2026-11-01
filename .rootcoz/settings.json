@@ -18,7 +18,7 @@
     {
       "name": "mtv_product_code",
       "url": "https://github.com/kubev2v/forklift",
-      "ref": "main"
+      "ref": "release-2.12"
     },
     {
       "name": "mtv_deploy_code",
