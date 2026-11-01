@@ -1,4 +1,4 @@
-# MTV API Tests Job Insight Prompt
+# MTV API Tests rootcoz Analysis Prompt
 
 ## 1. Project Context
 
