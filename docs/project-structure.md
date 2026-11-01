@@ -493,8 +493,12 @@ The `tools/` directory currently contains `tools/clean_cluster.py`, a recovery h
 A few other support files are worth knowing about:
 
 - `junit_report_example.xml` shows the JUnit-style output shape emitted by `pytest`
-- `.rootcoz/ROOTCOZ_PROMPT.md` contains instructions for automated job/failure analysis tooling
-  (rootcoz discovers this path inside the cloned repo)
+- `.rootcoz/` holds everything the rootcoz failure-analysis tooling reads from this repo:
+  `ROOTCOZ_PROMPT.md` (analysis doctrine), `ROOTCOZ_HISTORY_PROMPT.md` (pre-classification
+  check for failures caused by an earlier test's failed teardown), and `agents/*.md` — the
+  project agents rootcoz advertises at STEP 0 and copies to `.pi/agents/` in the analysis
+  workspace (`must-gather-analyzer`, `regression-detector`, `code-path-scanner`,
+  `cross-domain-resolver`)
 - `OWNERS` lists repository approvers and reviewers
 
 > **Tip:** `tools/clean_cluster.py` pairs naturally with the resource tracking written by `utilities/pytest_utils.py`, which stores created resources in a JSON file when data collection is enabled.
