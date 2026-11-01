@@ -320,6 +320,11 @@ omit the line silently.
 
 ### Artifact Triage and Log Priority (MANDATORY)
 
+Attached artifacts are advertised in a `BUILD ARTIFACTS (MANDATORY)` prompt section and
+reachable as `build-artifacts/`; `AVAILABLE RESOURCES` lists repositories only. If no such
+section exists for this run, no artifacts were attached — record that as a missing-information
+case rather than assuming a bundle exists.
+
 This suite collects artifacts on failure: `pytest-tests.log` (the run log, including
 fixture teardown), enriched JUnit XML, and a must-gather bundle collected per Plan
 (`utilities/must_gather.py`). Test configuration lives in `.providers.json` — never quote
@@ -503,7 +508,7 @@ use their output as evidence — do not redo their investigation.
 
 | Agent | Answers | Use when |
 | --- | --- | --- |
-| `must-gather-analyzer` | What do the collected logs actually say, and how deep did the evidence reach? | Must-gather artifacts are advertised in AVAILABLE RESOURCES |
+| `must-gather-analyzer` | What do the collected logs actually say, and how deep did the evidence reach? | A `BUILD ARTIFACTS` section advertises an artifacts directory |
 | `regression-detector` | Is this a regression, with which version boundary? | Failure looks recent-onset or behavioural |
 | `code-path-scanner` | Which code paths produced this failure, and which dependency versions are pinned? | A shared helper, fixture, or wrapper is implicated |
 | `cross-domain-resolver` | Which product domains are involved, and what Jira keywords find them? | Classifying as `PRODUCT BUG` |

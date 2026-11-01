@@ -11,20 +11,27 @@ failure. You report evidence; you do not classify.
 
 ## Early exit
 
-The analysis workspace may contain nothing but repository files and the failure-details file
-— must-gather output is not guaranteed to be attached to this run. Check `AVAILABLE
-RESOURCES` first: if no artifacts directory or must-gather path is advertised there, return
-exactly:
+Must-gather output is not guaranteed to be attached to a run, so establish whether it is
+there before doing anything else. Attached artifacts are announced in a dedicated
+`BUILD ARTIFACTS (MANDATORY)` section of the prompt, which names the directory and notes it
+is also reachable as `build-artifacts/`. `AVAILABLE RESOURCES` lists repositories only and
+can be empty while a bundle is attached — do not use it as the signal.
+
+- **`BUILD ARTIFACTS` section present** → explore it with `ls`/`find`/`read`. Must-gather
+  usually sits in a subdirectory (look for `must-gather*`, or the data-collector output
+  referenced in `pytest-tests.log`). Read what is there before concluding anything.
+- **No `BUILD ARTIFACTS` section and no artifacts entry anywhere in the prompt** → return
+  exactly:
 
 ```markdown
-Must-gather: NOT AVAILABLE — no artifacts advertised for this run.
+Must-gather: NOT AVAILABLE — no artifacts attached to this run.
 ```
 
-and stop. Only when a path is advertised, use `ls`/`find` to locate the bundle
-(directories named `must-gather*`, or the data-collector output referenced in
-`pytest-tests.log`). If the advertised path exists but holds no must-gather, return the
-same `NOT AVAILABLE` block. Do not guess at logs that are not there; say so and let the
-main analysis report insufficient evidence.
+and stop.
+
+If the artifacts directory exists but genuinely holds no must-gather, return the same
+`NOT AVAILABLE` block and name what it does contain. Do not guess at logs that are not
+there; say so and let the main analysis report insufficient evidence.
 
 A per-Plan bundle is produced by the **targeted** gather (`/usr/bin/targeted`), which keeps
 that plan's VMs, networks and events rather than a full-cluster snapshot. If the bundle is
