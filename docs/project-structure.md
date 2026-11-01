@@ -593,10 +593,12 @@ A few other support files are worth knowing about:
 - `AGENTS.md` is the authoritative rules document for this repository: commands, code standards, architecture patterns, test
   structure, markers, and fixture rules.
 - `test_plan_schema.md` defines the required class docstring (a manual product test plan) that every new test class must carry.
-- `JOB_INSIGHT_PROMPT.md` contains instructions for automated job/failure analysis tooling.
+- `.rootcoz/ROOTCOZ_PROMPT.md` contains instructions for automated job/failure analysis tooling
+  (rootcoz discovers this path inside the cloned repo).
 - `OWNERS` lists repository approvers and reviewers.
 - `.rootcoz/settings.json` configures the rootcoz analysis server, including the additional repositories it reads for this
-  project: the `forklift` product repo, the `mtv-autodeploy` deployment repo, and the MTV Jenkins job repo.
+  project: the `forklift` product repo, the `mtv-autodeploy` deployment repo, the MTV Jenkins job repo,
+  and the `openshift-python-wrapper` repo behind `ocp_resources`.
 - `junit_report_example.xml` shows the JUnit-style output shape emitted by `pytest`.
 
 > **Tip:** `tools/clean_cluster.py` pairs naturally with the resource tracking written by `utilities/pytest_utils.py`, which
