@@ -276,14 +276,27 @@ rules in two steps — impact first, then scope — so the same bug cannot land 
 - `low` - cosmetic or diagnostic-only: misleading status message, wrong condition reason, log
   noise, documentation gap in CR status
 
-#### Step 2 — scope (never escalates severity, only confirms it)
+#### Step 2 — scope (adjusts `high` only; never touches `critical`, `medium` or `low`)
 
-- Affects every configuration of that feature → keep the impact-based severity.
-- Affects only one provider, storage backend, or plan configuration → keep the impact-based
-  severity only if the user has no workaround at all; otherwise drop one level.
+- `critical` always stands. Data loss, VM corruption, a security vulnerability or a
+  cluster-wide disruption is `critical` even when it only reproduces on one provider, storage
+  backend or plan configuration — severity describes the consequence, not the blast radius.
+- `high` — if the failure is confined to one provider, storage backend or plan configuration
+  **and** a documented workaround exists, report `medium`. Otherwise keep `high`.
+- `medium` stays `medium` regardless of scope, and is never lowered to `low`.
+- `low` is cosmetic or diagnostic-only by definition and is not affected by scope.
 
-Worked example: a migration that always fails on one storage backend but succeeds on others,
-with a documented alternative backend → `medium`. The same failure on every backend → `high`.
+There is no level below `low`: never lower a severity below the value its impact earned, and
+never lower `high` by more than the one step above. Scope can only turn `high` into `medium`.
+
+Worked examples:
+
+- Migration always fails on one storage backend, succeeds elsewhere, alternative backend
+  documented → `high` becomes `medium`.
+- The same failure on every storage backend → `high`.
+- VM disk corruption on one storage backend only → `critical` (impact decides, not scope).
+- A misleading status message on one provider, with a workaround → `low`.
+
 "Intermittent" is not a severity — describe the impact of the failures it produces.
 
 ### Code Fix Suggestions for Code Issues
@@ -384,11 +397,13 @@ agents and rootcoz's own failure history together:
 - `code-path-scanner` — the code paths implicated, plus the dependency versions actually
   pinned in the workspace. It has no shell and no git: additional repos are depth-1 clones,
   so it cannot produce commit history. Do not ask it for "what changed".
-- **Failure history** — a strong signal, not proof: the backend derives a test's earlier
-  passes from job-level results, so a test that was skipped or never ran can look like a pass.
-  When history shows the same test passing in earlier runs, treat it as a regression candidate
-  unless the agents found a contradiction — and say which run and which previous result you
-  relied on. If the test was absent from earlier runs, say so instead of calling it a pass.
+- **Failure history** — a strong signal, not proof. The history tool exposes recorded failure
+  runs for a test plus an aggregate, job-level pass estimate; it cannot name a specific earlier
+  run where the test passed. So cite what the tool actually returned — for example "no earlier
+  recorded failure for this test; passes are an aggregate estimate" — and never claim a
+  particular run passed. When there are no earlier failure records, treat the test as a
+  likely-pass candidate for regression purposes and say the evidence is an estimate, so a
+  reviewer can weigh it.
 
 Put the regression evidence inside `details`. Keep `pattern` as `NEW` at this stage; the
 pattern classification step consumes your evidence. If the investigation found nothing,
