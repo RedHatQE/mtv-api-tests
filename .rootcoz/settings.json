@@ -29,6 +29,11 @@
       "name": "mtv_jenkins_code",
       "url": "https://gitlab.cee.redhat.com/ccit/jenkins-csb-customers/mtv-qe-casc-main",
       "ref": "main"
+    },
+    {
+      "name": "openshift_python_wrapper_code",
+      "url": "https://github.com/RedHatQE/openshift-python-wrapper",
+      "ref": "main"
     }
   ]
 }
