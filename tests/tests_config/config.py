@@ -907,6 +907,29 @@ tests_params: dict = {
         ],
         "warm_migration": False,
     },
+    "test_exclude_disks_cold_migration": {
+        "virtual_machines": [
+            {
+                "name": "mtv-func-rhel8-2disks",
+                "source_vm_power": "on",
+                "guest_agent": True,
+                "add_disks": [{"size_gb": 4, "provision_type": "thin", "disk_mode": "persistent"}],
+                # Disk layout: the VM's boot disk is the first disk on the SCSI controller
+                # (scsi0:0, 16 GB, kept); its native 4 GB data disk sits at scsi0:1 (EXCLUDED);
+                # the clone-time added 4 GB disk takes the next free unit (scsi0:2, kept). The
+                # kept and excluded 4 GB disks have EQUAL capacity deliberately — capacities
+                # alone cannot tell them apart, so verification relies on disk serial
+                # provenance (the source disk UUID preserved as the destination disk serial).
+                # Keeping the boot disk first in bus order matters: when the conversion
+                # reports no boot disk, forklift assigns boot order to the first volume,
+                # which must be the OS disk.
+                "exclude_disks": ["scsi0:1"],
+            },
+        ],
+        "warm_migration": False,
+        "vm_target_namespace": f"mtv-vms-exclude-disks-{uuid.uuid4().hex[:4]}",
+        "multus_namespace": default_multus_namespace,  # Cross-namespace NAD access
+    },
     "test_shared_disk_windows_migration": {
         "virtual_machines": [
             {
