@@ -43,8 +43,10 @@ class-scoped and incremental: one broken class cascades into everything after it
      cleanup reached PVC deletion and that deletion failed or timed out, which leaves the PVC
      behind and must be treated as the teardown failure it is. Two benign cases: a test that
      failed before its cleanup step ran at all, and a run started with `--skip-teardown`, which
-     bypasses session and fixture cleanup by configuration, so its leftovers are expected and
-     must not be blamed for later failures.
+     bypasses session and fixture cleanup by configuration. That second case is narrower than it
+     looks: such leftovers are not themselves a teardown failure, but the session keeps running
+     and later tests do observe them, so still check whether a retained PVC or other resource
+     explains a later failure — and say so when it does.
 3. **Check whether the current symptom matches that un-reverted state.** Examples:
    migration stuck in `CopyingPods` because a leftover populator pod holds the volume;
    `Plan` stuck `NotReady` because the source VM is already locked by a stale migration;
