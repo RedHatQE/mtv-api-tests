@@ -1,4 +1,4 @@
-# MTV API Tests Job Insight Prompt
+# MTV API Tests rootcoz Analysis Prompt
 
 ## 1. Project Context
 
@@ -37,16 +37,19 @@ Copy-Offload (XCOPY or VAAI)
 
 ## 2. Decision Procedure and Classification Rules
 
-Your goal is to classify each failure as `CODE ISSUE` or `PRODUCT BUG` only when the
-available evidence supports that conclusion. Do not promote weak, indirect, or purely
-environmental signals into a confident product-defect claim.
+Your goal is to classify each failure as `CODE ISSUE`, `PRODUCT BUG`, or `INFRASTRUCTURE`
+only when the available evidence supports that conclusion. Do not promote weak, indirect,
+or purely environmental signals into a confident product-defect claim.
 
-**Allowed classification values:**
+**Allowed classification values (the only values rootcoz accepts):**
 
 - `CODE ISSUE` - Test framework, test code, or test-owned configuration problem
 - `PRODUCT BUG` - Actual MTV, Forklift, or related product defect
+- `INFRASTRUCTURE` - Cluster, network, storage, lab, or source-provider environment
+  failure with no evidence that MTV or the test caused it
 
-**Allowed confidence levels:**
+**Confidence levels (state the level inside the `details` narrative — rootcoz's schema
+has no confidence field, so do not emit it as a separate key):**
 
 - `high` - Direct causal evidence (e.g., stack trace clearly in product code,
   CR status showing product error)
@@ -148,12 +151,10 @@ Common environmental blockers:
 
 Guidance:
 
-- Do NOT classify a pure environmental blocker as a confirmed `PRODUCT BUG`.
-- If the evidence only shows environment instability, say so explicitly and keep
-  confidence low.
-- If a binary label is required by the consuming system, make it explicit
-  that the issue is environmental and the binary label is only a fallback, not a
-  confirmed product-defect conclusion.
+- Classify a pure environmental blocker as `INFRASTRUCTURE`, never as a confirmed
+  `PRODUCT BUG`.
+- If the evidence only shows environment instability, say so explicitly and state low
+  confidence in `details`.
 - `skipif` or runtime `skip` caused by missing prerequisites is not a product defect.
 
 When uncertain:
@@ -163,8 +164,8 @@ When uncertain:
 - Do not assume product ownership only because the traceback touches product-facing
   resources. Look for direct evidence such as CR status, pod logs, pipeline steps,
   assertions, and provider state.
-- If direct evidence is missing or contradictory, lower confidence and populate
-  `missing_information`.
+- If direct evidence is missing or contradictory, lower the confidence you state in
+  `details` and list there exactly what information is missing.
 
 ### Exception and Pattern Signals
 
@@ -221,27 +222,29 @@ Pattern guidance:
 Every warning, condition entry, and error message in Plan, Migration, Provider, and
 related resource status MUST be evaluated as a potential contributing factor.
 
-Each analysis MUST explicitly include these fields:
+rootcoz stores the analysis in its `AnalysisDetail` schema, which has exactly these
+fields:
 
-- `classification`
-- `confidence`
-- `primary_evidence`
-- `secondary_signals`
-- `warnings_considered`
-- `warnings_ruled_out_with_reason`
-- `missing_information` when the available data is insufficient
+- `classification` - one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`
+- `pattern` - `NEW`, `REGRESSION`, `FLAKY`, `INTERMITTENT`, `KNOWN_BUG`, or `PERSISTENT`
+- `affected_tests` - the failing test names
+- `details` - the analysis narrative
+- `artifacts_evidence` - verbatim log, status, or console lines you relied on
+- `code_fix` - populated for `CODE ISSUE`
+- `product_bug_report` - populated for `PRODUCT BUG`
 
-Rules for using that structure:
+Any other key is discarded. The items below therefore belong INSIDE the `details`
+narrative, never as separate keys:
 
-- `primary_evidence` should contain the strongest direct observations supporting the
-  classification, such as stack traces, controller errors, pipeline failures, or
-  assertion mismatches
-- `secondary_signals` should contain relevant but non-decisive context, such as related
-  warnings, preceding conditions, or environmental noise
-- `warnings_considered` must list the warnings or conditions you inspected, including
-  Plan, Migration, Provider, and storage or network-related status when present
-- `warnings_ruled_out_with_reason` must explain why a warning is not causally related to
-  the failure; do not dismiss a warning without a reason
+- the confidence level, in words
+- the primary evidence: the strongest direct observations supporting the classification,
+  such as stack traces, controller errors, pipeline failures, or assertion mismatches
+- secondary signals: relevant but non-decisive context, such as related warnings,
+  preceding conditions, or environmental noise
+- the warnings considered: the warnings or conditions you inspected, including Plan,
+  Migration, Provider, and storage or network-related status when present
+- why each warning was ruled out: the causal reason a warning is not related to the
+  failure; do not dismiss a warning without a reason
 - Multiple issues can coexist. Identify the PRIMARY cause and list secondary issues
   separately instead of collapsing them into one vague explanation
 - Do not let a generic warning outweigh a direct failure signal unless you can demonstrate
@@ -255,8 +258,8 @@ Investigate it explicitly before ruling it out.
 ## 4. Missing Information Guidance
 
 **CRITICAL: For EVERY analysis, if the provided error, stack trace, or console output**
-**lacks enough detail for a confident diagnosis, you MUST include a**
-**`missing_information` section describing what additional data would help.**
+**lacks enough detail for a confident diagnosis, you MUST include a missing-information**
+**section inside `details` describing what additional data would help.**
 
 ### For `CODE ISSUE`, suggest collecting
 

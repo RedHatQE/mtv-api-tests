@@ -942,11 +942,17 @@ scenarios. It lives in <code>guides/</code>, not in <code>docs/</code>.</p>
 <li>
 <p><code>test_plan_schema.md</code> defines the required class docstring (a manual product test plan) that every new test class must carry.</p>
 </li>
-<li><code>JOB_INSIGHT_PROMPT.md</code> contains instructions for automated job/failure analysis tooling.</li>
-<li><code>OWNERS</code> lists repository approvers and reviewers.</li>
+<li>
+<p><code>.rootcoz/ROOTCOZ_PROMPT.md</code> contains instructions for automated job/failure analysis tooling
+  (rootcoz discovers this path inside the cloned repo).</p>
+</li>
+<li>
+<p><code>OWNERS</code> lists repository approvers and reviewers.</p>
+</li>
 <li>
 <p><code>.rootcoz/settings.json</code> configures the rootcoz analysis server, including the additional repositories it reads for this
-  project: the <code>forklift</code> product repo, the <code>mtv-autodeploy</code> deployment repo, and the MTV Jenkins job repo.</p>
+  project: the <code>forklift</code> product repo, the <code>mtv-autodeploy</code> deployment repo, the MTV Jenkins job repo,
+  and the <code>openshift-python-wrapper</code> repo behind <code>ocp_resources</code>.</p>
 </li>
 <li>
 <p><code>junit_report_example.xml</code> shows the JUnit-style output shape emitted by <code>pytest</code>.</p>
