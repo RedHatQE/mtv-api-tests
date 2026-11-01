@@ -272,8 +272,9 @@ rules in two steps — impact first, then scope — so the same bug cannot land 
 - `high` - the migration cannot complete; the VM cannot start; post-migration validation cannot
   be performed at all (VM or VMI missing, it never boots, the cluster API errors); PVC or data is
   inaccessible; or an upgrade path is blocked
-- `medium` - the migration completes and validation runs but the result is wrong (wrong disks,
-  network, CPU or memory), or the feature is degraded with a workaround available
+- `medium` - the migration completes, the VM remains startable and validatable, but validation
+  finds the result wrong (wrong disks, network, CPU or memory), or the feature is degraded with a
+  workaround available
 - `low` - cosmetic or diagnostic-only: misleading status message, wrong condition reason, log
   noise, documentation gap in CR status
 
