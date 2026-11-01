@@ -386,7 +386,7 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | Marker | What It Tests | When to Use |
 | ------ | ------------- | ----------- |
 | `tier0` | Smoke tests - critical paths | First run, quick validation |
-| `tier1` | Extended functionality tests | Broader coverage beyond smoke |
+| `tier1` | Extended functionality tests | Broader coverage beyond smoke, including skip guest conversion |
 | `copyoffload` | Fast migrations via shared storage | Testing storage arrays |
 | `copyoffload_sanity` | Copy-offload sanity subset (see below) | Quick copy-offload validation |
 | `warm` | Warm migrations (VMs stay running) | Specific scenario testing |

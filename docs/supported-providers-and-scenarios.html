@@ -828,6 +828,10 @@ multi-datastore, mixed datastore, 10 mixed disks, warm copy-offload, and the 5-V
   and verify the guest filesystem with an <code>xfs_check</code> command, expecting <code>crc=0</code> in <code>xfs_info</code> output.</p>
 </li>
 <li>
+<p><strong>Skip guest conversion.</strong> <code>tests/cold/test_cold_migration_skip_guest_conversion.py</code> sets <code>skip_guest_conversion: True</code>, verifies
+  that no Plan-labeled <code>virt-v2v</code> pod appears during migration, and checks the destination guest.</p>
+</li>
+<li>
 <p><strong>Shared disk.</strong> <code>tests/shared_disk/</code> migrates an owner VM with <code>migrateSharedDisks: True</code> and a consumer VM with it
   <code>False</code>, then verifies the shared disk data on both.</p>
 </li>

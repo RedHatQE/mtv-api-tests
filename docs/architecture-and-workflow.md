@@ -75,7 +75,8 @@ That single config entry already tells you a lot about the architecture. The sam
 such as `warm_migration`, `preserve_static_ips`, `pvc_name_template`, `target_labels`, `target_affinity`, `target_node_selector`,
 `vm_target_namespace`, `enable_nested_virtualization`, and `guest_agent_timeout`. `AGENTS.md` carries the complete plan-option
 table, which also includes `copyoffload`, `xfs_compatibility`, `migrate_shared_disks`, `inventory_timeout`, `clone_to_same_host`,
-`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, and `rdm_as_lun`.
+`pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, `rdm_as_lun`, and
+`skip_guest_conversion`.
 
 ## The Standard Test Shape
 
@@ -396,7 +397,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:216:utilities/mtv_migration.py
+```187:218:utilities/mtv_migration.py
 def create_plan_resource(
     ocp_admin_client: DynamicClient,
     fixture_store: dict[str, Any],
@@ -426,11 +427,14 @@ def create_plan_resource(
     xfs_compatibility: bool = False,
     run_preflight_inspection: bool | None = None,
     rdm_as_lun: bool | None = None,
+    pre_copy_source_disks: bool = False,
+    convertor_node_selector: dict[str, str] | None = None,
+    additional_plan_options: dict[str, Any] | None = None,
 ) -> Plan:
 ```
 
 The excerpt above shows the signature only. The function itself carries a full docstring documenting every argument, the returned `Plan`, and the `ValueError`
-cases it raises — read `utilities/mtv_migration.py:216-240` for that contract.
+cases it raises — read `utilities/mtv_migration.py:219-269` for that contract.
 
 The two `Any` types are deliberate, not laziness:
 
@@ -468,7 +472,7 @@ narrowly as its content allows.
 
 Optional features are only added when requested, so an unset flag never lands on the `Plan` CR:
 
-```307:341:utilities/mtv_migration.py
+```307:358:utilities/mtv_migration.py
     if target_node_selector:
         plan_kwargs["target_node_selector"] = target_node_selector
 
@@ -499,13 +503,22 @@ Optional features are only added when requested, so an unset flag never lands on
 
     if run_preflight_inspection is not None:
         plan_kwargs["run_preflight_inspection"] = run_preflight_inspection
+
+    if additional_plan_options:
+        duplicate_options = plan_kwargs.keys() & additional_plan_options.keys()
+        if duplicate_options:
+            raise ValueError(
+                f"Additional Plan options cannot override options already set by create_plan_resource: "
+                f"{sorted(duplicate_options)}"
+            )
+        plan_kwargs.update(additional_plan_options)
 ```
 
 A few things to notice:
 
 - The `Plan` resource itself lives in the test namespace, but the VMs can still target a separate `vm_target_namespace`.
 - Hooks, labels, affinity, target power state, PVC naming, static IP preservation, nested virtualization, XFS compatibility,
-  shared-disk migration, RDM-as-LUN, and preflight inspection are all Plan-time features in this suite.
+  shared-disk migration, RDM-as-LUN, guest-conversion skip, and preflight inspection are all Plan-time features in this suite.
 - Per-VM `migrate_shared_disks` in the config is renamed to the camelCase `migrateSharedDisks` API field here, and test-only VM
   keys are stripped, so the serialized VM list stays valid for the CR.
 - Copy-offload reuses the same overall path, but changes how the storage map is built and forces a fixed `pvc_name_template`
@@ -605,6 +618,10 @@ contains a wrong-passphrase class that expects the migration to fail.
 
 **XFS compatibility** is covered by `tests/cold/test_cold_migration_xfs.py` and `tests/warm/test_warm_migration_xfs.py`. Both set
 `xfs_compatibility: True` on the Plan and then run `xfs_info` inside the migrated guest to validate the filesystem version.
+
+**Skip guest conversion** is covered by `tests/cold/test_cold_migration_skip_guest_conversion.py`. The test sets
+`skip_guest_conversion: True` through `additional_plan_options`, verifies no Plan-labeled `virt-v2v` pod appears during migration, and checks that the
+destination guest boots and accepts SSH connections.
 
 **Shared disks** are covered by `tests/shared_disk/`. The Linux test mounts, writes, and reads a marker from both migrated VMs. The
 Windows test first labels the shared NTFS volume on the source VM through the VMware Guest Operations API, then verifies

@@ -9,13 +9,14 @@ This page covers three layers:
 | Layer | Where it lives | Examples |
 | --- | --- | --- |
 | VM-level options | one entry per item in `virtual_machines` | `luks`, `disk_type`, `add_nic`, `migrate_shared_disks` |
-| Plan-level options | top level of a `tests_params` entry | `preserve_static_ips`, `xfs_compatibility`, `per_nic_network_map` |
+| Plan-level options | top level of a `tests_params` entry | `preserve_static_ips`, `xfs_compatibility`, `skip_guest_conversion` |
 | Test-verification options | top level, consumed by the post-migration step | `xfs_check` |
 
-> **Note:** Plan-level keys are read with `plan.get(...)` in the preparation fixtures, but only a subset of them is forwarded as an explicit
-> keyword argument to `create_plan_resource()`. Preparation-only options such as `inventory_timeout`, `clone_to_same_host`,
-> `pin_to_non_dedicated_host` and `disable_drs_for_vms` are consumed while building the plan and never reach the MTV `Plan` CR, so passing them to
-> `create_plan_resource()` raises `TypeError`. An option only affects the Plan when the test class passes it explicitly.
+> **Note:** Plan-level keys are read with `plan.get(...)` in the preparation fixtures. Plan fields supported directly by
+> `create_plan_resource()` are forwarded as named arguments; additional Plan constructor fields can be passed through
+> `additional_plan_options`. Preparation-only options such as `inventory_timeout`, `clone_to_same_host`,
+> `pin_to_non_dedicated_host` and `disable_drs_for_vms` are consumed while building the plan and do not belong in
+> `additional_plan_options`. Passing them as direct keywords to `create_plan_resource()` raises `TypeError`. An option only affects the Plan when the test class passes it explicitly.
 
 ## Plan-level options
 
@@ -33,6 +34,7 @@ This page covers three layers:
 | `target_affinity` | Affinity rules applied to the migrated VM | Plan CR field | `{"podAffinity": {...}}` |
 | `migrate_shared_disks` | Enable shared-disk migration for every VM by default | Plan CR field | `True` |
 | `xfs_compatibility` | Use the XFS-compatible virt-v2v image | Plan CR field | `True` |
+| `skip_guest_conversion` | Skip the guest-conversion pipeline stages | Plan CR field via `additional_plan_options` | `True` |
 | `rdm_as_lun` | Map RDM disks as SCSI LUN devices instead of virtio | Plan CR field | `True` |
 | `copyoffload` | Enable copy-offload (XCOPY) handling; forces `pvc_name_template` to `"pvc"` | Plan CR field | `True` |
 | `run_preflight_inspection` | Enable Forklift preflight Deep Inspection on warm migrations | Plan CR field | `False` |
@@ -44,6 +46,19 @@ This page covers three layers:
 | `per_nic_network_map` | One NetworkMap entry per NIC instead of per distinct network | `get_network_migration_map()` | `True` |
 | `skip_clone` | Skip the cloning phase and migrate the existing VMs | `prepared_plan` fixture | `True` |
 | `warm_migration` | Run a warm migration | Plan CR field | `True` |
+
+## Skip guest conversion
+
+`additional_plan_options={"skip_guest_conversion": True}` sets `spec.skipGuestConversion` on the Plan. Forklift then omits the guest-conversion
+pipeline stages and does not create a `virt-v2v` pod for that Plan. On vSphere, the Plan default
+`useCompatibilityMode: true` still selects SATA disks, E1000E NICs, and USB input devices to help the guest boot.
+Setting `useCompatibilityMode: false` instead selects VirtIO devices, which requires VirtIO drivers to be installed
+in the guest already.
+
+`tests/cold/test_cold_migration_skip_guest_conversion.py` covers this behavior as a separate vSphere Tier 1 cold
+migration. It follows the standard five-step flow, checks the Plan field, watches for Plan-labeled `virt-v2v` pods during
+migration, and validates the destination VM with the guest agent and SSH. It leaves `useCompatibilityMode` unset and
+checks the Plan API default of `true`. Existing default-mode tests continue to cover the regular conversion path.
 
 > **Warning:** `disable_drs_for_vms` raises `ValueError` for OVA providers and for any clone provider that is not
 > `VMWareProvider`. `skip_clone` raises `ValueError` on providers whose `supports_skip_clone()` is `False` (RHV, whose

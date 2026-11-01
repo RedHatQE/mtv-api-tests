@@ -137,7 +137,8 @@ A few patterns are worth knowing up front:
 - VM-level keys such as `source_vm_power`, `guest_agent`, `clone`, `disk_type`, `add_nic`, `add_nic_start_connected`, `add_disks`, `snapshots`, and `clone_name` are already used by
 existing tests.
 - Plan-level keys such as `target_power_state`, `preserve_static_ips`, `pvc_name_template`, `vm_target_namespace`, `target_node_selector`, `target_labels`, `target_affinity`,
-`pre_hook`, `post_hook`, and `copyoffload` are already supported by the shared helpers.
+`pre_hook`, `post_hook`, and `copyoffload` are supported by the shared helpers. Pass additional Plan constructor fields such as `skip_guest_conversion` through
+`additional_plan_options` when creating the Plan.
 
 > **Tip:** In `target_node_selector` and `target_labels`, a value of `None` does not mean "missing". The fixtures replace it with the current `session_uuid`, which makes it easy to
 create unique labels safely.
