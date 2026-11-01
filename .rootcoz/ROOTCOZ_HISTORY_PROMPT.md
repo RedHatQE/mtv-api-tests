@@ -27,15 +27,15 @@ class-scoped and incremental: one broken class cascades into everything after it
    - **Source vSphere**: per-VM DRS is disabled (`disable_drs_for_vms`) and VMs may be
      pinned to a specific ESXi host; a teardown that never ran leaves DRS off and VMs
      pinned, which changes scheduling for every later migration
-   - **Copy-offload**: dedicated migration hosts and populator pods; a stuck populator
-     holds storage paths and makes the next XCOPY run fail
+   - **Copy-offload**: populator pods; a stuck populator holds storage paths and makes
+     the next XCOPY run fail
    - **Guest-level changes**: hooks that run inside the guest, extra disks added by
      `add_disks`, and cloned VMs that still exist on the source
-   - **Lifecycle tests**: `tests/plan_lifecycle/` archives and deletes Plans on purpose,
-     and a resume-conversion test keeps the destination PVCs only between the failed
-     conversion and the resume Migration — it deletes them at teardown. A PVC still present
-     after teardown is therefore NOT expected, unless the test failed before reaching its
-     cleanup step.
+   - **Expected-failure tests**: a test may declare `expected_migration_result` expecting the
+     migration to fail, and then deliberately leave the failed `Plan` and `Migration` in
+     place — that state is the test's subject, not a leftover to blame on the next test.
+     A PVC still present after teardown is NOT expected, unless the test failed before
+     reaching its cleanup step.
 3. **Check whether the current symptom matches that un-reverted state.** Examples:
    migration stuck in `CopyingPods` because a leftover populator pod holds the volume;
    `Plan` stuck `NotReady` because the source VM is already locked by a stale migration;

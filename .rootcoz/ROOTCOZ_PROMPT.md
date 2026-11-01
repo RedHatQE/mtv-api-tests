@@ -345,9 +345,10 @@ in the missing-information section rather than papered over:
 
 - **No must-gather for this run** — say `must-gather: not collected` and proceed with what exists.
 - **Plan-scoped bundle with no component logs** — per-Plan collection runs the targeted
-gather (`/usr/bin/targeted`, `utilities/must_gather.py:run_plan_must_gather`), which keeps
-that plan's VMs, networks and events rather than a full-cluster snapshot. A targeted bundle
-that simply does not contain controller logs is expected; say
+gather (`/usr/bin/targeted`, selected through the `plan` argument of
+`utilities/must_gather.py:run_must_gather`), which keeps that plan's VMs, networks and
+events rather than a full-cluster snapshot. A targeted bundle that simply does not contain
+controller logs is expected; say
 `targeted bundle — component logs not in scope` and proceed.
 - **Full gather present** — then layer 1 exists and citing only layers 2-5 is a failed analysis.
 
