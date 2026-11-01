@@ -269,10 +269,11 @@ rules in two steps — impact first, then scope — so the same bug cannot land 
 #### Step 1 — impact
 
 - `critical` - data loss, VM corruption, cluster-wide disruption, security vulnerability
-- `high` - the migration cannot complete, the VM cannot start or be validated, PVC or data is
-  inaccessible, or an upgrade path is blocked
-- `medium` - the migration completes but the result is wrong, or the feature is degraded with a
-  workaround available
+- `high` - the migration cannot complete; the VM cannot start; post-migration validation cannot
+  be performed at all (VM or VMI missing, it never boots, the cluster API errors); PVC or data is
+  inaccessible; or an upgrade path is blocked
+- `medium` - the migration completes and validation runs but the result is wrong (wrong disks,
+  network, CPU or memory), or the feature is degraded with a workaround available
 - `low` - cosmetic or diagnostic-only: misleading status message, wrong condition reason, log
   noise, documentation gap in CR status
 
@@ -400,9 +401,11 @@ agents and rootcoz's own failure history together:
   runs for a test plus an aggregate, job-level pass estimate; it cannot name a specific earlier
   run where the test passed. So cite what the tool actually returned — for example "no earlier
   recorded failure for this test; passes are an aggregate estimate" — and never claim a
-  particular run passed. When there are no earlier failure records, treat the test as a
-  likely-pass candidate for regression purposes and say the evidence is an estimate, so a
-  reviewer can weigh it.
+  particular run passed. Distinguish the two cases the tool actually reports: an aggregate pass
+  estimate alongside no recorded failure for this test is weak evidence of an earlier pass, and
+  may be cited as an estimate; an empty history — zero runs and no estimate — means the prior
+  result is UNKNOWN, because the tool does not know whether the test ran. Never turn an unknown
+  prior result into regression evidence.
 
 Put the regression evidence inside `details`. Keep `pattern` as `NEW` at this stage; the
 pattern classification step consumes your evidence. If the investigation found nothing,
@@ -417,8 +420,11 @@ If the data needed for the assessment is missing, state
    `regression-detector`, `code-path-scanner`, `cross-domain-resolver` — and apply the ones
    whose question matches this failure?
 3. Is `classification` exactly one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`?
-4. If `PRODUCT BUG`: did you reach layer-1 component evidence, or state that it was not
-   collected? Did you fill `product_bug_report.jira_search_keywords` with 3-5 keywords?
+4. If `PRODUCT BUG`: did you reach layer-1 component evidence — or state one of the three
+   honest alternatives: logs were never collected, the bundle is targeted and excludes them, or
+   the logs were collected and contain no error for this path (a silent defect, where assertion
+   and object state carry the evidence)? Did you fill
+   `product_bug_report.jira_search_keywords` with 3-5 keywords?
 5. If `CODE ISSUE`: does `code_fix` name a file, a line, and the change?
 6. Did you evaluate every warning, condition, and error you saw, and give a reason for each
    one you ruled out?
