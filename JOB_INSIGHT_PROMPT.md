@@ -346,6 +346,6 @@ Key product and runtime components to inspect:
 [forklift-docs]: https://github.com/kubev2v/forklift-documentation
 [xcopy-populator]: https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator
 [opw-repo]: https://github.com/RedHatQE/openshift-python-wrapper
-[opw-docs]: https://openshift-python-wrapper.readthedocs.io/en/latest/
+[opw-docs]: https://redhatqe.github.io/openshift-python-wrapper/
 [forklift-crds]: https://github.com/kubev2v/forklift/tree/main/operator/config/crd/bases
 [hooks-docs]: https://github.com/kubev2v/forklift/blob/main/docs/hooks.md
