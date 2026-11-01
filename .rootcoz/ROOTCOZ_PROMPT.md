@@ -263,16 +263,41 @@ the final keywords.
 
 ### Severity Definitions for Product Bugs
 
-When classifying as `PRODUCT BUG`, set severity in `product_bug_report.severity` based on
-impact:
+When classifying as `PRODUCT BUG`, set severity in `product_bug_report.severity`. Read the
+rules in two steps — impact first, then scope — so the same bug cannot land in two buckets:
+
+#### Step 1 — impact
 
 - `critical` - data loss, VM corruption, cluster-wide disruption, security vulnerability
-- `high` - VM cannot migrate, start, or be validated at all; PVC or data inaccessible;
-  upgrade path blocked
-- `medium` - feature degraded but a workaround exists; failure limited to a specific
-  provider, storage backend, or plan configuration; intermittent under defined conditions
-- `low` - cosmetic or diagnostic-only: misleading status message, wrong condition reason,
-  log noise, documentation gap in CR status
+- `high` - the migration cannot complete, the VM cannot start or be validated, PVC or data is
+  inaccessible, or an upgrade path is blocked
+- `medium` - the migration completes but the result is wrong, or the feature is degraded with a
+  workaround available
+- `low` - cosmetic or diagnostic-only: misleading status message, wrong condition reason, log
+  noise, documentation gap in CR status
+
+#### Step 2 — scope (adjusts `high` only; never touches `critical`, `medium` or `low`)
+
+- `critical` always stands. Data loss, VM corruption, a security vulnerability or a
+  cluster-wide disruption is `critical` even when it only reproduces on one provider, storage
+  backend or plan configuration — severity describes the consequence, not the blast radius.
+- `high` — if the failure is confined to one provider, storage backend or plan configuration
+  **and** a documented workaround exists, report `medium`. Otherwise keep `high`.
+- `medium` stays `medium` regardless of scope, and is never lowered to `low`.
+- `low` is cosmetic or diagnostic-only by definition and is not affected by scope.
+
+There is no level below `low`: never lower a severity below the value its impact earned, and
+never lower `high` by more than the one step above. Scope can only turn `high` into `medium`.
+
+Worked examples:
+
+- Migration always fails on one storage backend, succeeds elsewhere, alternative backend
+  documented → `high` becomes `medium`.
+- The same failure on every storage backend → `high`.
+- VM disk corruption on one storage backend only → `critical` (impact decides, not scope).
+- A misleading status message on one provider, with a workaround → `low`.
+
+"Intermittent" is not a severity — describe the impact of the failures it produces.
 
 ### Code Fix Suggestions for Code Issues
 
@@ -349,7 +374,15 @@ gather (`/usr/bin/targeted`, `utilities/must_gather.py:run_plan_must_gather`), w
 that plan's VMs, networks and events rather than a full-cluster snapshot. A targeted bundle
 that simply does not contain controller logs is expected; say
 `targeted bundle — component logs not in scope` and proceed.
-- **Full gather present** — then layer 1 exists and citing only layers 2-5 is a failed analysis.
+- **Full gather present** — search it for layer-1 evidence before concluding. If the component
+  logs are there, cite them; if a truncated or partial bundle has no component log for the
+  failing path, say which layers you searched and which were empty.
+
+A missing layer-1 log does not by itself invalidate the analysis. Some product defects are
+silent: the migration completes and produces a wrong VM — wrong disks, network, CPU or memory —
+with no component ERROR line anywhere. Assertion and object state are legitimate evidence in
+that case; say that no component logged an error rather than claiming the analysis is
+incomplete.
 
 Do not demand logs that were never collected, and do not treat a targeted bundle's silence
 as evidence that the component was healthy.
@@ -363,9 +396,13 @@ agents and rootcoz's own failure history together:
 - `code-path-scanner` — the code paths implicated, plus the dependency versions actually
   pinned in the workspace. It has no shell and no git: additional repos are depth-1 clones,
   so it cannot produce commit history. Do not ask it for "what changed".
-- **Failure history** — the authoritative signal for whether this test passed before. If the
-  same test passed in earlier runs, treat it as a regression candidate regardless of what
-  the agents reported.
+- **Failure history** — a strong signal, not proof. The history tool exposes recorded failure
+  runs for a test plus an aggregate, job-level pass estimate; it cannot name a specific earlier
+  run where the test passed. So cite what the tool actually returned — for example "no earlier
+  recorded failure for this test; passes are an aggregate estimate" — and never claim a
+  particular run passed. When there are no earlier failure records, treat the test as a
+  likely-pass candidate for regression purposes and say the evidence is an estimate, so a
+  reviewer can weigh it.
 
 Put the regression evidence inside `details`. Keep `pattern` as `NEW` at this stage; the
 pattern classification step consumes your evidence. If the investigation found nothing,
@@ -376,8 +413,9 @@ If the data needed for the assessment is missing, state
 ### Self-Verification (MANDATORY — before submitting any analysis or revision)
 
 1. Does `details` start with `Environment:` and list every version line?
-2. Did you read and apply the STEP 0 project agents whose question applies to this failure
-   (must-gather, regression, recent changes, cross-domain)?
+2. Did you read every STEP 0 project agent file — `must-gather-analyzer`,
+   `regression-detector`, `code-path-scanner`, `cross-domain-resolver` — and apply the ones
+   whose question matches this failure?
 3. Is `classification` exactly one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`?
 4. If `PRODUCT BUG`: did you reach layer-1 component evidence, or state that it was not
    collected? Did you fill `product_bug_report.jira_search_keywords` with 3-5 keywords?
@@ -503,8 +541,9 @@ Key product and runtime components to inspect:
 
 rootcoz advertises these as STEP 0 project agents under `.rootcoz/agents/` and copies them
 to `.pi/agents/` in the analysis workspace. They are not separate processes: they are
-instructions you must read and apply. Read the ones whose question matches the failure, and
-use their output as evidence — do not redo their investigation.
+instructions you must read and apply. Read every advertised agent file before analysing —
+rootcoz's STEP 0 gate requires it — then apply the ones whose question matches this failure and
+use their output as evidence; do not redo their investigation.
 
 | Agent | Answers | Use when |
 | --- | --- | --- |
