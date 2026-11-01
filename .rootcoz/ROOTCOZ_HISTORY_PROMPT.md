@@ -34,8 +34,13 @@ class-scoped and incremental: one broken class cascades into everything after it
    - **Lifecycle tests**: `tests/plan_lifecycle/` archives and deletes Plans on purpose,
      and a resume-conversion test keeps the destination PVCs only between the failed
      conversion and the resume Migration — it deletes them at teardown. A PVC still present
-     after teardown is therefore NOT expected, unless the test failed before reaching its
-     cleanup step.
+     after teardown is therefore NOT expected — including when cleanup reached PVC deletion and
+     that deletion failed or timed out. Two benign cases: a test that failed before its cleanup
+     step ran at all, and a run started with `--skip-teardown`, which bypasses session and
+     fixture cleanup by configuration. That second case is narrower than it looks: such
+     leftovers are not themselves a teardown failure, but the session keeps running and later
+     tests do observe them, so still check whether a retained PVC explains a later failure —
+     and say so when it does.
 3. **Check whether the current symptom matches that un-reverted state.** Examples:
    migration stuck in `CopyingPods` because a leftover populator pod holds the volume;
    `Plan` stuck `NotReady` because the source VM is already locked by a stale migration;
