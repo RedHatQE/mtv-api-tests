@@ -136,7 +136,6 @@ tests_params: dict = {
             {
                 "name": "mtv-win2019-79",
                 "source_vm_power": "on",
-                "guest_agent": True,
             },
         ],
         "warm_migration": False,
