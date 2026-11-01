@@ -33,10 +33,13 @@ class-scoped and incremental: one broken class cascades into everything after it
      `add_disks`, and cloned VMs that still exist on the source
    - **Expected-failure tests**: a test may declare `expected_migration_result` expecting the
      migration to fail, and keep that failed `Plan` and `Migration` around for its own
-     assertions until teardown runs. They are still registered for teardown like every other
-     resource, so one that survives cleanup is a teardown failure to investigate — not
-     expected state. A PVC still present after teardown is likewise NOT expected, unless the
-     test failed before reaching its cleanup step.
+     assertions until teardown runs. A resource is registered for teardown only after its
+     creation succeeds (`create_and_store_resource` deploys first, then records it), so
+     separate the two cases: an object that exists and survived cleanup is a teardown failure
+     to investigate, while a Plan or Migration whose creation itself failed was never
+     registered and leaves nothing to clean up — investigate its creation path instead.
+     A PVC still present after teardown is likewise NOT expected, unless the test failed
+     before reaching its cleanup step.
 3. **Check whether the current symptom matches that un-reverted state.** Examples:
    migration stuck in `CopyingPods` because a leftover populator pod holds the volume;
    `Plan` stuck `NotReady` because the source VM is already locked by a stale migration;
