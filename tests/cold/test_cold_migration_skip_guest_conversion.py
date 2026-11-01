@@ -49,25 +49,35 @@ if TYPE_CHECKING:
         pytest.param(
             py_config["tests_params"]["test_cold_migration_skip_guest_conversion"],
             id="skip-guest-conversion-cold",
-        )
+        ),
+        pytest.param(
+            py_config["tests_params"]["test_cold_migration_skip_guest_conversion_win"],
+            id="skip-guest-conversion-cold-win",
+        ),
     ],
     indirect=True,
 )
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 class TestColdMigrationSkipGuestConversion:
-    """Cold-migrate a vSphere RHEL VM with guest conversion skipped.
+    """Cold-migrate vSphere VMs (RHEL and Windows) with guest conversion skipped.
 
     Purpose/Regression:
         Verify no Plan-labeled virt-v2v pod is found at sampled migration status
         polls while migration still produces a usable VM. The Plan API default
-        useCompatibilityMode=true must be preserved.
+        useCompatibilityMode=true must be preserved. The Windows param additionally
+        exercises the WindowsWaitForGuestReboot pipeline stage being skipped
+        (forklift gates it on "!SkipGuestConversion", pkg/controller/plan/migrator/
+        base/migrator.go) — Windows raw copy is the primary customer scenario for
+        skipGuestConversion.
 
     Prerequisites:
         Register vSphere source and OpenShift Virtualization destination providers
         on a healthy MTV cluster. Provide accessible destination storage and
         network, plus permission to create migration resources and target-namespace
-        NADs. Use an isolated, disposable, powered-on RHEL 8 VM with a boot disk,
-        NIC, guest agent, and SSH access. For extra source networks, provide
+        NADs. Use an isolated, disposable, powered-on VM with a boot disk, NIC, guest
+        agent, and SSH access (RHEL 8 param), or a powered-on Windows Server 2019
+        VM with a boot disk, NIC, guest agent, and Windows guest credentials in the
+        provider config (guest_vm_win_user/guest_vm_win_password; Windows param). For extra source networks, provide
         matching NADs in the target namespace. An equivalent guest is acceptable;
         do not use a shared or production VM.
 
