@@ -152,7 +152,7 @@ Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven 
 
 ### `utilities/post_migration.py`
 
-Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used by `test_check_vms`; everything else is a focused check it composes.
+Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used by `test_check_vms`; everything else is a focused check it composes. `verify_excluded_disks()` orchestrates the disk-exclusion verification (per-VM kept-disk loop plus the namespace PVC-count assertion) and delegates per-VM disk-identity verification to the vSphere provider module `libs.providers.vmware.verify_kept_disks_attached`, since exclude_disks uses vSphere bus addresses.
 
 | Area | Functions |
 | --- | --- |
@@ -183,7 +183,9 @@ SSH into migrated VMs through `virtctl` port-forward plus `python-rrmngmnt`, so 
 ### `utilities/vmware_guest_operations.py`
 
 Commands executed inside vSphere guests via the Guest Operations API: `run_command_in_vmware_guest()`, `detect_vmware_ip_origins_via_guest_ops()`, `detect_guest_nic_names()`,
-`create_data_integrity_marker()`.
+`create_data_integrity_marker()`, and `find_alternate_linux_os_root()`. The latter requires a Linux guest and root Guest Operations credentials, reads the active OS identity and `lsblk` device inventory in separate Guest Operations calls, and inspects supported ext/XFS single-letter `/dev/sd` partitions read-only. Partition inspection and `umount` use guest-side timeouts; an EXIT trap also attempts to remove the temporary mount directory. It uses `lsblk --pairs`, available in util-linux 2.23.2; JSON output was added in util-linux 2.27. The helper returns a `LinuxOSRoot` with the unique alternate device path, OS ID, and version. The current Forklift vSphere mapper does not translate NVMe or LVM paths to the corresponding disk index.
+
+`run_command_in_vmware_guest()` terminates a Guest Operations process that exceeds its timeout. Callers may provide a timeout cleanup command for guest resources that need explicit cleanup after process termination.
 
 ### `utilities/worker_node_selection.py`
 
@@ -251,7 +253,7 @@ is `connect()`, `disconnect()`, `test`, `vm_dict`, `clone_vm()`, `delete_vm()`, 
 | `ova.py` | `OVAProvider` | OVA import over NFS |
 | `hyperv.py` | `HyperVProvider` | PowerShell Remoting (PSRP) |
 
-`vmware.py` also exposes `format_insufficient_capacity_message()` and `format_capacity_validation_log()`; module constant `VSPHERE_NIC_DEVICE_KEY_OFFSET` documents the vSphere
+`vmware.py` also exposes `format_insufficient_capacity_message()`, `format_capacity_validation_log()`, and `verify_kept_disks_attached()` (vSphere-source per-VM kept-disk verification for disk exclusion: bus-address partitioning, source disk UUID serial prefixes, volume-mode-aware capacity checks); module constant `VSPHERE_NIC_DEVICE_KEY_OFFSET` documents the vSphere
 device-key space used when adding NICs.
 
 ### `libs/forklift_inventory.py`

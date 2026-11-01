@@ -49,7 +49,11 @@ mtv-api-tests/
 ├── .pr_agent.toml
 ├── .flake8
 ├── .markdownlint.yaml
-├── .rootcoz/settings.json
+├── .rootcoz/
+│   ├── settings.json
+│   ├── ROOTCOZ_PROMPT.md
+│   ├── ROOTCOZ_HISTORY_PROMPT.md
+│   └── agents/*.md
 ├── AGENTS.md
 ├── test_plan_schema.md
 ├── README.md
@@ -594,10 +598,19 @@ A few other support files are worth knowing about:
 - `AGENTS.md` is the authoritative rules document for this repository: commands, code standards, architecture patterns, test
   structure, markers, and fixture rules.
 - `test_plan_schema.md` defines the required class docstring (a manual product test plan) that every new test class must carry.
-- `JOB_INSIGHT_PROMPT.md` contains instructions for automated job/failure analysis tooling.
+- `.rootcoz/` holds everything the rootcoz failure-analysis tooling reads from this repo
+  (rootcoz only discovers files under `.rootcoz/` inside the cloned repo, never at the repo root):
+  - `ROOTCOZ_PROMPT.md` — the analysis doctrine: classification rules, upstream causality chain,
+    artifact triage, severity and Jira keyword guidance.
+  - `ROOTCOZ_HISTORY_PROMPT.md` — the pre-classification check for failures caused by an earlier
+    test's failed teardown rather than an independent defect.
+  - `agents/*.md` — project agents rootcoz advertises at STEP 0 and copies to `.pi/agents/` in the
+    analysis workspace: `must-gather-analyzer`, `regression-detector`, `code-path-scanner`,
+    `cross-domain-resolver`.
+  - `settings.json` — models, peer reviewers, and the additional repositories rootcoz clones for
+    context: the `forklift` product repo, the `mtv-autodeploy` deployment repo, the MTV Jenkins job
+    repo, and the `openshift-python-wrapper` repo behind `ocp_resources`.
 - `OWNERS` lists repository approvers and reviewers.
-- `.rootcoz/settings.json` configures the rootcoz analysis server, including the additional repositories it reads for this
-  project: the `forklift` product repo, the `mtv-autodeploy` deployment repo, and the MTV Jenkins job repo.
 - `junit_report_example.xml` shows the JUnit-style output shape emitted by `pytest`.
 
 > **Tip:** `tools/clean_cluster.py` pairs naturally with the resource tracking written by `utilities/pytest_utils.py`, which

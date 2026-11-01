@@ -393,21 +393,35 @@ class OCPProvider(BaseProvider):
                 "guest_interface_name": interface.get("interfaceName") or "",
             })
 
+        # Serial is the source disk UUID prefix set by forklift, keyed by volume name.
+        serials_by_name = {}
+        for disk in cnv_vm.vmi.instance.spec.domain.devices.disks:
+            serial = disk.get("serial")
+            if serial is not None and not isinstance(serial, str):
+                raise ValueError(f"Malformed serial on destination disk '{disk.name}': {serial!r}")
+            serials_by_name[disk.name] = serial or ""
+
         disk_idx = 0
-        for pvc in cnv_vm.vmi.instance.spec.volumes:
+        for volume in cnv_vm.vmi.instance.spec.volumes:
             if not _source:
-                name = pvc.persistentVolumeClaim.claimName
+                name = volume.persistentVolumeClaim.claimName
             else:
-                if pvc.name in ("cloudinitdisk", "cloudInitNoCloud", "cloudinit"):
+                if volume.name in ("cloudinitdisk", "cloudInitNoCloud", "cloudinit"):
                     continue
 
-                name = pvc.dataVolume.name
+                name = volume.dataVolume.name
 
             _pvc = PersistentVolumeClaim(
                 namespace=cnv_vm.namespace,
                 name=name,
                 client=dynamic_client,
             )
+            volume_mode = _pvc.instance.spec.get("volumeMode")
+            if volume_mode is None:
+                # Kubernetes defaults volumeMode to Filesystem when unset
+                volume_mode = "Filesystem"
+            elif volume_mode not in ("Block", "Filesystem"):
+                raise ValueError(f"Unsupported volumeMode '{volume_mode}' on PVC '{_pvc.name}'")
             result_vm_info["disks"].append({
                 "name": _pvc.name,
                 "size_in_kb": int(
@@ -419,6 +433,9 @@ class OCPProvider(BaseProvider):
                 },
                 "device_key": _pvc.name,  # PVC name as unique identifier
                 "unit_number": disk_idx,  # Order in volumes list (excluding cloud-init)
+                # Empty when absent — never matches a source disk UUID prefix
+                "serial": serials_by_name.get(volume.name, ""),
+                "volume_mode": volume_mode,
             })
             disk_idx += 1
 

@@ -550,7 +550,7 @@ helpers <code>ensure_secure_shared_lock_dir()</code>, <code>get_forkliftcontroll
 <p><code>run_mtv_upgrade()</code> runs the MTV operator upgrade used by the <code>upgrade</code> suite, with process-group timeouts so a stuck upgrade cannot hang the run.</p>
 <h2 id="validation">Validation</h2>
 <h3 id="utilitiespost_migrationpy"><code>utilities/post_migration.py</code></h3>
-<p>Validation of migrated VMs (2083 lines). <code>check_vms()</code> is the entry point used by <code>test_check_vms</code>; everything else is a focused check it composes.</p>
+<p>Validation of migrated VMs (2083 lines). <code>check_vms()</code> is the entry point used by <code>test_check_vms</code>; everything else is a focused check it composes. <code>verify_excluded_disks()</code> orchestrates the disk-exclusion verification (per-VM kept-disk loop plus the namespace PVC-count assertion) and delegates per-VM disk-identity verification to the vSphere provider module <code>libs.providers.vmware.verify_kept_disks_attached</code>, since exclude_disks uses vSphere bus addresses.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -600,7 +600,8 @@ volume on the source through the VMware Guest Operations API before migration, a
 <p><code>download_virtctl_from_cluster()</code> fetches the matching <code>virtctl</code> binary — a <code>virtctl</code> already on <code>PATH</code> is never reused, only a previously downloaded binary in the cluster-versioned cache — and <code>add_to_path()</code> puts the downloaded directory on <code>PATH</code> for the session.</p>
 <h3 id="utilitiesvmware_guest_operationspy"><code>utilities/vmware_guest_operations.py</code></h3>
 <p>Commands executed inside vSphere guests via the Guest Operations API: <code>run_command_in_vmware_guest()</code>, <code>detect_vmware_ip_origins_via_guest_ops()</code>, <code>detect_guest_nic_names()</code>,
-<code>create_data_integrity_marker()</code>.</p>
+<code>create_data_integrity_marker()</code>, and <code>find_alternate_linux_os_root()</code>. The latter requires a Linux guest and root Guest Operations credentials, reads the active OS identity and <code>lsblk</code> device inventory in separate Guest Operations calls, and inspects supported ext/XFS single-letter <code>/dev/sd</code> partitions read-only. Partition inspection and <code>umount</code> use guest-side timeouts; an EXIT trap also attempts to remove the temporary mount directory. It uses <code>lsblk --pairs</code>, available in util-linux 2.23.2; JSON output was added in util-linux 2.27. The helper returns a <code>LinuxOSRoot</code> with the unique alternate device path, OS ID, and version. The current Forklift vSphere mapper does not translate NVMe or LVM paths to the corresponding disk index.</p>
+<p><code>run_command_in_vmware_guest()</code> terminates a Guest Operations process that exceeds its timeout. Callers may provide a timeout cleanup command for guest resources that need explicit cleanup after process termination.</p>
 <h3 id="utilitiesworker_node_selectionpy"><code>utilities/worker_node_selection.py</code></h3>
 <p>Target worker node selection for placement tests: <code>get_worker_nodes()</code>, <code>parse_prometheus_value()</code>, <code>parse_prometheus_memory_metrics()</code>, <code>select_node_by_available_memory()</code>.</p>
 <h3 id="utilitiesesxipy"><code>utilities/esxi.py</code></h3>
@@ -682,7 +683,7 @@ is <code>connect()</code>, <code>disconnect()</code>, <code>test</code>, <code>v
 </tr>
 </tbody>
 </table></div>
-<p><code>vmware.py</code> also exposes <code>format_insufficient_capacity_message()</code> and <code>format_capacity_validation_log()</code>; module constant <code>VSPHERE_NIC_DEVICE_KEY_OFFSET</code> documents the vSphere
+<p><code>vmware.py</code> also exposes <code>format_insufficient_capacity_message()</code>, <code>format_capacity_validation_log()</code>, and <code>verify_kept_disks_attached()</code> (vSphere-source per-VM kept-disk verification for disk exclusion: bus-address partitioning, source disk UUID serial prefixes, volume-mode-aware capacity checks); module constant <code>VSPHERE_NIC_DEVICE_KEY_OFFSET</code> documents the vSphere
 device-key space used when adding NICs.</p>
 <h3 id="libsforklift_inventorypy"><code>libs/forklift_inventory.py</code></h3>
 <p><code>create_forklift_inventory(client, mtv_namespace, provider)</code> returns the inventory implementation matching the provider type: <code>VsphereForkliftInventory</code>, <code>OvirtForkliftInventory</code>,

@@ -181,6 +181,7 @@ Base: `test_create_storagemap` → `test_create_networkmap` → `test_create_pla
 | Copy-offload VM+populator throttling | + `test_verify_vm_inflight_throttling`, then throttling steps |
 | Copy-offload dedicated host | + `test_verify_dedicated_migration_host`, then `check_xcopy_used` |
 | LUKS | + `test_verify_luks_encryption` |
+| Exclude-disks (`exclude_disks`, vSphere) | + `test_verify_excluded_disks` (disk exclusion by bus address) |
 | XFS (`xfs_compatibility: True`) | + `test_verify_xfs_version` |
 | Plan-archive PVC cleanup (`tests/plan_lifecycle/`) | migrate (expected `MigrationPlanExecError`) → `test_archive_and_delete_plan` → `test_verify_pvc_cleanup`; no `check_vms` |
 | Resume-conversion (`vsphere`) | migrate (expected fail) → `test_verify_pvcs_preserved` → `test_resume_migration` → `check_vms` |
@@ -260,6 +261,8 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `clone` | No | True to clone before migration |
 | `disk_type` | No | "thin" / "thick-lazy" / "thick-eager" |
 | `luks` / `luks_passphrase` | No | LUKS-encrypted disk; per-VM passphrase override |
+| `add_disks` | No | Extra disks to attach to the VM clone |
+| `exclude_disks` | No | vSphere bus addresses to exclude |
 | `migrate_shared_disks` | No | True for owner VM in shared-disk tests |
 | `add_nic` | No | True to add a NIC (vSphere only) |
 | `add_nic_start_connected` | Yes* | Required when `add_nic=True`; bool |

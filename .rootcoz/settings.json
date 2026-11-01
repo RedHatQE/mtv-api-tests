@@ -1,12 +1,12 @@
 {
   "ai_provider": "EnMaaS",
-  "ai_model": "rits/zai-org/glm-5-3",
+  "ai_model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
   "ai_call_timeout": 90,
   "max_concurrent_ai_calls": 3,
   "peer_ai_configs": [
     {
       "ai_provider": "EnMaaS",
-      "ai_model": "rits/zai-org/glm-5-3"
+      "ai_model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
     },
     {
       "ai_provider": "EnMaaS",
@@ -28,6 +28,11 @@
     {
       "name": "mtv_jenkins_code",
       "url": "https://gitlab.cee.redhat.com/ccit/jenkins-csb-customers/mtv-qe-casc-main",
+      "ref": "main"
+    },
+    {
+      "name": "openshift_python_wrapper_code",
+      "url": "https://github.com/RedHatQE/openshift-python-wrapper",
       "ref": "main"
     }
   ]

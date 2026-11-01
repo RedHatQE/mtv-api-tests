@@ -1,4 +1,4 @@
-# MTV API Tests Job Insight Prompt
+# MTV API Tests rootcoz Analysis Prompt
 
 ## 1. Project Context
 
@@ -37,16 +37,19 @@ Copy-Offload (XCOPY or VAAI)
 
 ## 2. Decision Procedure and Classification Rules
 
-Your goal is to classify each failure as `CODE ISSUE` or `PRODUCT BUG` only when the
-available evidence supports that conclusion. Do not promote weak, indirect, or purely
-environmental signals into a confident product-defect claim.
+Your goal is to classify each failure as `CODE ISSUE`, `PRODUCT BUG`, or `INFRASTRUCTURE`
+only when the available evidence supports that conclusion. Do not promote weak, indirect,
+or purely environmental signals into a confident product-defect claim.
 
-**Allowed classification values:**
+**Allowed classification values (the only values rootcoz accepts):**
 
 - `CODE ISSUE` - Test framework, test code, or test-owned configuration problem
 - `PRODUCT BUG` - Actual MTV, Forklift, or related product defect
+- `INFRASTRUCTURE` - Cluster, network, storage, lab, or source-provider environment
+  failure with no evidence that MTV or the test caused it
 
-**Allowed confidence levels:**
+**Confidence levels (state the level inside the `details` narrative — rootcoz's schema
+has no confidence field, so do not emit it as a separate key):**
 
 - `high` - Direct causal evidence (e.g., stack trace clearly in product code,
   CR status showing product error)
@@ -148,12 +151,10 @@ Common environmental blockers:
 
 Guidance:
 
-- Do NOT classify a pure environmental blocker as a confirmed `PRODUCT BUG`.
-- If the evidence only shows environment instability, say so explicitly and keep
-  confidence low.
-- If a binary label is required by the consuming system, make it explicit
-  that the issue is environmental and the binary label is only a fallback, not a
-  confirmed product-defect conclusion.
+- Classify a pure environmental blocker as `INFRASTRUCTURE`, never as a confirmed
+  `PRODUCT BUG`.
+- If the evidence only shows environment instability, say so explicitly and state low
+  confidence in `details`.
 - `skipif` or runtime `skip` caused by missing prerequisites is not a product defect.
 
 When uncertain:
@@ -163,8 +164,40 @@ When uncertain:
 - Do not assume product ownership only because the traceback touches product-facing
   resources. Look for direct evidence such as CR status, pod logs, pipeline steps,
   assertions, and provider state.
-- If direct evidence is missing or contradictory, lower confidence and populate
-  `missing_information`.
+- If direct evidence is missing or contradictory, lower the confidence you state in
+  `details` and list there exactly what information is missing.
+
+### Upstream Causality Chain (MANDATORY for timeout, migration, and network failures)
+
+A `TimeoutExpiredError` waiting on a migration phase, a pod status, or SSH connectivity is
+SECONDARY. The timeout says WHAT did not happen; you must say WHY it did not happen.
+
+Required investigation order:
+
+1. **Identify the timed-out condition.** Which wait timed out, on which object, and between
+   which two timestamps. Quote the wait target from the test (`Plan` status, `Migration`
+   phase, `VirtualMachine` ready, SSH port open).
+2. **Identify the component responsible for producing that condition.** `forklift-controller`
+   for plan/migration orchestration, `forklift-inventory` for provider data, conversion pods
+   for disk conversion, CDI/populator pods for transfer, `virt-launcher` for VM start.
+3. **Read that component's ERROR logs inside the failure window** (operation start to
+   observed failure). Use the `must-gather-analyzer` agent output when must-gather exists.
+4. **Follow the chain upstream.** A layer-2 symptom (Kubernetes event: `connection reset`,
+   `failed to create pod`, `context deadline exceeded`) is still a symptom. Keep going to the
+   component log line that explains it.
+5. **Stop at the deepest evidence that is actually available.** A clear product-path defect
+   (wrong state transition, panic, rejected valid CR, retry loop) is a valid root cause — do
+   not invent a deeper layer that is not in the artifacts.
+
+Anti-patterns — these are not root causes:
+
+- Reporting "migration timed out" or "connection reset by peer" as the cause
+- Classifying from the test's `TimeoutExpiredError` without naming what the wait was on
+- Stopping at Kubernetes events or CR conditions without reading component logs
+- Blaming a too-low test timeout without evidence that the product progressed at all
+
+The same rule applies to "migration stuck": name the pipeline step that never completed,
+the pod or controller responsible for it, and the error that explains it.
 
 ### Exception and Pattern Signals
 
@@ -215,33 +248,175 @@ Pattern guidance:
   product finalizer or controller cleanup failure is `PRODUCT BUG`; namespace or cluster
   cleanup blocked by infrastructure is environmental
 
+### Jira Search Keyword Guidance
+
+When classifying as `PRODUCT BUG`, fill `product_bug_report.jira_search_keywords` with 3-5
+short keywords that combine a component with a concrete symptom:
+
+- Good: `forklift-controller plan not ready`, `virt-v2v conversion guest boot`,
+  `xcopy populator clone failed`, `CDI importer PVC pending`
+- Bad: `timeout`, `error`, `migration failed` (too generic to find anything)
+
+Never include test names, class names, fixture names, or `pytest` terms — those never
+appear in product bug titles. Keep unselected domain candidates in the evidence, not in
+the final keywords.
+
+### Severity Definitions for Product Bugs
+
+When classifying as `PRODUCT BUG`, set severity in `product_bug_report.severity` based on
+impact:
+
+- `critical` - data loss, VM corruption, cluster-wide disruption, security vulnerability
+- `high` - VM cannot migrate, start, or be validated at all; PVC or data inaccessible;
+  upgrade path blocked
+- `medium` - feature degraded but a workaround exists; failure limited to a specific
+  provider, storage backend, or plan configuration; intermittent under defined conditions
+- `low` - cosmetic or diagnostic-only: misleading status message, wrong condition reason,
+  log noise, documentation gap in CR status
+
+### Code Fix Suggestions for Code Issues
+
+When classifying as `CODE ISSUE`, name the fix concretely:
+
+- The exact file and line where the change belongs
+- The change itself (for example: "wait for `Plan` Ready before executing the migration",
+  "store the value in a variable instead of recomputing it")
+- An existing pattern in this repo that already does it correctly, when one exists
+
+"Improve the wait" is not a fix suggestion. A reviewer must be able to apply it.
+
 ## 3. Analysis Thoroughness and Required Evidence Structure
 
 **CRITICAL: Never dismiss or skip warnings, conditions, or errors found in the data.**
 Every warning, condition entry, and error message in Plan, Migration, Provider, and
 related resource status MUST be evaluated as a potential contributing factor.
 
-Each analysis MUST explicitly include these fields:
+### Environment Block (MANDATORY — first thing in `details`)
 
-- `classification`
-- `confidence`
-- `primary_evidence`
-- `secondary_signals`
-- `warnings_considered`
-- `warnings_ruled_out_with_reason`
-- `missing_information` when the available data is insufficient
+Every analysis opens `details` with the versions under test. A product bug claim without a
+version is not actionable — reviewers cannot reproduce it and triage cannot route it.
 
-Rules for using that structure:
+Collect from `pytest-tests.log` (session header), the job console, and the cluster:
+MTV/Forklift operator version (`oc get csv -n openshift-mtv`), OpenShift version,
+source provider type and version, target storage backend and `StorageClass`, network type
+(pod or multus with the NAD involved).
 
-- `primary_evidence` should contain the strongest direct observations supporting the
-  classification, such as stack traces, controller errors, pipeline failures, or
-  assertion mismatches
-- `secondary_signals` should contain relevant but non-decisive context, such as related
-  warnings, preceding conditions, or environmental noise
-- `warnings_considered` must list the warnings or conditions you inspected, including
-  Plan, Migration, Provider, and storage or network-related status when present
-- `warnings_ruled_out_with_reason` must explain why a warning is not causally related to
-  the failure; do not dismiss a warning without a reason
+`details` MUST start with exactly this shape:
+
+```text
+Environment:
+- MTV/Forklift: <csv version or unknown — not in artifacts> [HIGH|LOW]
+- OpenShift: <version> [HIGH|LOW]
+- Source provider: <vsphere 8.0 / rhv 4.5 / openstack / ova / remote openshift> [HIGH|LOW]
+- Storage: <backend / StorageClass> [HIGH|LOW]
+- Network: <pod | multus(NAD)> [HIGH|LOW]
+
+Root Cause: <one line>
+```
+
+`[HIGH]` means the component is implicated in this failure, `[LOW]` that it is included for
+context. When a version is genuinely unavailable, write `unknown — not in artifacts`; never
+omit the line silently.
+
+### Artifact Triage and Log Priority (MANDATORY)
+
+Attached artifacts are advertised in a `BUILD ARTIFACTS (MANDATORY)` prompt section and
+reachable as `build-artifacts/`; `AVAILABLE RESOURCES` lists repositories only. If no such
+section exists for this run, no artifacts were attached — record that as a missing-information
+case rather than assuming a bundle exists.
+
+This suite collects artifacts on failure: `pytest-tests.log` (the run log, including
+fixture teardown), enriched JUnit XML, and a must-gather bundle collected per Plan
+(`utilities/must_gather.py`). Test configuration lives in `.providers.json` — never quote
+credentials or secrets from it into the analysis.
+
+Evidence priority, highest first:
+
+1. **Component ERROR logs** — the actual error (controller, inventory, conversion,
+   CDI/importer, populator, virt-launcher)
+2. **Kubernetes events** — the reported error, usually downstream
+3. **CR status and conditions** — Plan, Migration, Provider, `status.vms[].pipeline[]`
+4. **Pod phases and container restarts** — when it failed
+5. **Test console / assertion output** — how the test observed it
+
+If the analysis cites only layers 2-5, the root cause has NOT been found — go back to
+layer 1. Three cases are not failures of the analysis, and each must be stated explicitly
+in the missing-information section rather than papered over:
+
+- **No must-gather for this run** — say `must-gather: not collected` and proceed with what exists.
+- **Plan-scoped bundle with no component logs** — per-Plan collection runs the targeted
+gather (`/usr/bin/targeted`, `utilities/must_gather.py:run_plan_must_gather`), which keeps
+that plan's VMs, networks and events rather than a full-cluster snapshot. A targeted bundle
+that simply does not contain controller logs is expected; say
+`targeted bundle — component logs not in scope` and proceed.
+- **Full gather present** — then layer 1 exists and citing only layers 2-5 is a failed analysis.
+
+Do not demand logs that were never collected, and do not treat a targeted bundle's silence
+as evidence that the component was healthy.
+
+### Regression Detection (MANDATORY when the failure looks new)
+
+When the failure shows recent-onset or behavioural-change signals, use the STEP 0 project
+agents and rootcoz's own failure history together:
+
+- `regression-detector` — version correlation and a version boundary.
+- `code-path-scanner` — the code paths implicated, plus the dependency versions actually
+  pinned in the workspace. It has no shell and no git: additional repos are depth-1 clones,
+  so it cannot produce commit history. Do not ask it for "what changed".
+- **Failure history** — the authoritative signal for whether this test passed before. If the
+  same test passed in earlier runs, treat it as a regression candidate regardless of what
+  the agents reported.
+
+Put the regression evidence inside `details`. Keep `pattern` as `NEW` at this stage; the
+pattern classification step consumes your evidence. If the investigation found nothing,
+state `Regression investigation: no evidence of a recent behavioural change in <component>`.
+If the data needed for the assessment is missing, state
+`Regression investigation: insufficient data to assess a recent behavioural change`.
+
+### Self-Verification (MANDATORY — before submitting any analysis or revision)
+
+1. Does `details` start with `Environment:` and list every version line?
+2. Did you read and apply the STEP 0 project agents whose question applies to this failure
+   (must-gather, regression, recent changes, cross-domain)?
+3. Is `classification` exactly one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`?
+4. If `PRODUCT BUG`: did you reach layer-1 component evidence, or state that it was not
+   collected? Did you fill `product_bug_report.jira_search_keywords` with 3-5 keywords?
+5. If `CODE ISSUE`: does `code_fix` name a file, a line, and the change?
+6. Did you evaluate every warning, condition, and error you saw, and give a reason for each
+   one you ruled out?
+7. On a revision after peer feedback: is the Environment block still the first block?
+
+rootcoz stores the analysis in its `AnalysisDetail` schema, which has exactly these
+fields:
+
+- `classification` - one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`
+- `pattern` - `NEW`, `REGRESSION`, `FLAKY`, `INTERMITTENT`, `KNOWN_BUG`, or `PERSISTENT`
+- `affected_tests` - the failing test names
+- `details` - the analysis narrative
+- `artifacts_evidence` - verbatim log, status, or console lines you relied on
+- `code_fix` - populated for `CODE ISSUE`
+- `product_bug_report` - populated for `PRODUCT BUG`
+
+Two of those fields are structured, and the detail goes one level down:
+
+- `product_bug_report`: `title`, `severity` (`critical`/`high`/`medium`/`low`), `component`,
+  `description`, `evidence` (verbatim log snippets), `jira_search_keywords` (list of
+  3-5 strings). This is where severity and search keywords belong — not at the top level.
+- `code_fix`: `file`, `line`, `change`, and optionally `original_code`. This is where the
+  concrete fix belongs.
+
+Any other top-level key is discarded. Everything below therefore belongs INSIDE the
+`details` narrative:
+
+- the confidence level, in words
+- the primary evidence: the strongest direct observations supporting the classification,
+  such as stack traces, controller errors, pipeline failures, or assertion mismatches
+- secondary signals: relevant but non-decisive context, such as related warnings,
+  preceding conditions, or environmental noise
+- the warnings considered: the warnings or conditions you inspected, including Plan,
+  Migration, Provider, and storage or network-related status when present
+- why each warning was ruled out: the causal reason a warning is not related to the
+  failure; do not dismiss a warning without a reason
 - Multiple issues can coexist. Identify the PRIMARY cause and list secondary issues
   separately instead of collapsing them into one vague explanation
 - Do not let a generic warning outweigh a direct failure signal unless you can demonstrate
@@ -255,8 +430,8 @@ Investigate it explicitly before ruling it out.
 ## 4. Missing Information Guidance
 
 **CRITICAL: For EVERY analysis, if the provided error, stack trace, or console output**
-**lacks enough detail for a confident diagnosis, you MUST include a**
-**`missing_information` section describing what additional data would help.**
+**lacks enough detail for a confident diagnosis, you MUST include a missing-information**
+**section inside `details` describing what additional data would help.**
 
 ### For `CODE ISSUE`, suggest collecting
 
@@ -324,7 +499,25 @@ Key product and runtime components to inspect:
 | `KubeVirt` | Resulting VM runtime | `VirtualMachine`, `VMI`, launcher pod status |
 | Provider / Map / Plan / Migration / Hook CRs | Declarative control-plane state | `status`, conditions, per-VM pipeline |
 
-## 6. Reference Links
+## 6. Project Agents and When to Use Them
+
+rootcoz advertises these as STEP 0 project agents under `.rootcoz/agents/` and copies them
+to `.pi/agents/` in the analysis workspace. They are not separate processes: they are
+instructions you must read and apply. Read the ones whose question matches the failure, and
+use their output as evidence — do not redo their investigation.
+
+| Agent | Answers | Use when |
+| --- | --- | --- |
+| `must-gather-analyzer` | What do the collected logs actually say, and how deep did the evidence reach? | A `BUILD ARTIFACTS` section advertises an artifacts directory |
+| `regression-detector` | Is this a regression, with which version boundary? | Failure looks recent-onset or behavioural |
+| `code-path-scanner` | Which code paths produced this failure, and which dependency versions are pinned? | A shared helper, fixture, or wrapper is implicated |
+| `cross-domain-resolver` | Which product domains are involved, and what Jira keywords find them? | Classifying as `PRODUCT BUG` |
+
+The separate history prompt `.rootcoz/ROOTCOZ_HISTORY_PROMPT.md` answers a different
+question — whether an earlier test's failed teardown caused this failure — and takes
+precedence over all of the above when it applies.
+
+## 7. Reference Links
 
 - Product docs: [MTV Documentation][mtv-doc],
   [OpenShift Virtualization Documentation][ocp-virt-doc]
@@ -346,6 +539,18 @@ Key product and runtime components to inspect:
 [forklift-docs]: https://github.com/kubev2v/forklift-documentation
 [xcopy-populator]: https://github.com/kubev2v/forklift/tree/main/cmd/vsphere-xcopy-volume-populator
 [opw-repo]: https://github.com/RedHatQE/openshift-python-wrapper
-[opw-docs]: https://openshift-python-wrapper.readthedocs.io/en/latest/
+[opw-docs]: https://redhatqe.github.io/openshift-python-wrapper/
 [forklift-crds]: https://github.com/kubev2v/forklift/tree/main/operator/config/crd/bases
 [hooks-docs]: https://github.com/kubev2v/forklift/blob/main/docs/hooks.md
+
+## FINAL REMINDER — READ THIS LAST
+
+**`details` starts with the `Environment:` block. Every time. On revisions too.**
+
+And the two failure modes this prompt exists to prevent:
+
+- Reporting the test's timeout, event, or exception text as the root cause — the root cause
+  is the component error one layer below it, or an explicit statement that it was not
+  collected.
+- Reporting a cascade of downstream steps as separate defects — if an earlier teardown broke
+the state, that is ONE root cause, and every later failure inherits its classification.
