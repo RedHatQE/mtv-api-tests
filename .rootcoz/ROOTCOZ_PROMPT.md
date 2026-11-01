@@ -288,7 +288,8 @@ rules in two steps — impact first, then scope — so the same bug cannot land 
 - `low` is cosmetic or diagnostic-only by definition and is not affected by scope.
 
 There is no level below `low`: never lower a severity below the value its impact earned, and
-never lower `high` by more than the one step above. Scope can only turn `high` into `medium`.
+never lower `high` by more than one step — to `medium`. Scope can only turn `high` into
+`medium`.
 
 Worked examples:
 
