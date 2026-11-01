@@ -76,8 +76,8 @@ class TestColdMigrationSkipGuestConversion:
         network, plus permission to create migration resources and target-namespace
         NADs. Use an isolated, disposable, powered-on VM with a boot disk, NIC, guest
         agent, and SSH access (RHEL 8 param), or a powered-on Windows Server 2019
-        VM with a boot disk, NIC, guest agent, and Windows guest credentials in the
-        provider config (guest_vm_win_user/guest_vm_win_password; Windows param). For extra source networks, provide
+        VM with a boot disk, NIC, and Windows guest credentials in the provider
+        config (guest_vm_win_user/guest_vm_win_password; Windows param). For extra source networks, provide
         matching NADs in the target namespace. An equivalent guest is acceptable;
         do not use a shared or production VM.
 
