@@ -210,6 +210,7 @@ patterns the suite actually uses.
 | 7-step copy-offload dedicated host | storagemap -> networkmap -> plan -> migrate -> verify_dedicated_migration_host -> check_xcopy_used -> check_vms | dedicated-migration-host classes |
 | 6-step LUKS | storagemap -> networkmap -> plan -> migrate -> verify_luks_encryption -> check_vms | `tests/luks/test_luks_cold_migration.py` |
 | 6-step XFS | storagemap -> networkmap -> plan -> migrate -> verify_xfs_version -> check_vms | `tests/cold/test_cold_migration_xfs.py`, `tests/warm/test_warm_migration_xfs.py` |
+| 6-step root-disk selection | storagemap -> networkmap -> plan -> migrate -> verify_selected_root_os -> check_vms | `tests/cold/test_cold_migration_root_disk.py` |
 
 A few details that matter when you reuse these:
 

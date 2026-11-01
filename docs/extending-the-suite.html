@@ -589,6 +589,11 @@ patterns the suite actually uses.</p>
 <td>storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; verify_xfs_version -&gt; check_vms</td>
 <td><code>tests/cold/test_cold_migration_xfs.py</code>, <code>tests/warm/test_warm_migration_xfs.py</code></td>
 </tr>
+<tr>
+<td>6-step root-disk selection</td>
+<td>storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; verify_selected_root_os -&gt; check_vms</td>
+<td><code>tests/cold/test_cold_migration_root_disk.py</code></td>
+</tr>
 </tbody>
 </table></div>
 <p>A few details that matter when you reuse these:</p>

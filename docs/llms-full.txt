@@ -4976,8 +4976,10 @@ Each item in `virtual_machines` describes one source VM or template.
 | `snapshots` | No | Number of source snapshots to create before migration. |
 | `target_datastore_id` | No | VMware target datastore for the cloned VM. |
 | `target_esxi_host` | No | Pin the clone to a specific ESXi host. Set automatically by `clone_to_same_host` and `pin_to_non_dedicated_host` unless you set it yourself. |
+| `rootDisk` | No | Root disk path for this VM, passed through as the Plan API field `spec.vms[].rootDisk` (for example, `/dev/sdb2`). Use the API spelling and casing. Tests may set it on `prepared_plan` at runtime after source inspection when the path is discovered dynamically. |
 | `luks` | No | `True` when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference. |
 | `luks_passphrase` | No | Per-VM LUKS passphrase. Overrides the provider-level `luks_passphrase`. |
+| `exclude_disks` | No | vSphere bus addresses of disks to exclude from migration (e.g. `["scsi0:1"]`). The exclusion test renames this key to the Plan `spec.vms[].excludeDisks` field before plan creation (the shared plan builder passes VM keys through unchanged); the excluded disks are neither copied nor attached to the migrated VM. |
 | `migrate_shared_disks` | No | `True` for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM. |
 | `add_nic` | No | `True` to add an extra NIC. vSphere only. |
 | `add_nic_start_connected` | Yes* | Required when `add_nic` is `True`. Must be a `bool`. |
@@ -5345,17 +5347,23 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1272:1291:conftest.py
-            skip_clone = plan.get("skip_clone", False)
-
+```1720:1745:conftest.py
             if skip_clone:
                 if not source_provider.supports_skip_clone():
                     raise ValueError(
                         f"skip_clone=True is not supported for provider type '{source_provider.type}'; "
                         "VMs must be cloned from templates."
                     )
-                skip_clone_incompatible = ["disable_drs_for_vms", "clone_to_same_host"]
-                if source_provider.type != Provider.ProviderType.HYPERV:
+                skip_clone_incompatible = [
+                    "disable_drs_for_vms",
+                    "clone_to_same_host",
+                    "pin_to_non_dedicated_host",
+                    "pin_first_vm_to_dedicated_host",
+                ]
+                # Only ESXi provider supports IPv6 currently, but it doesn't support VM cloning
+                # Allow skip_clone: true to work with ESXi provider
+                is_esxi_vsphere = is_direct_esxi_connection(source_provider_data)
+                if not (is_esxi_vsphere or source_provider.type == Provider.ProviderType.HYPERV):
                     skip_clone_incompatible.append("preserve_static_ips")
                 conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]
                 if has_shared_disk_config:
@@ -6012,10 +6020,14 @@ the ones the fixture guarantees on every run, which is why they can be indexed d
 The same five-step shape is reused by the remote-cluster cold class `TestColdRemoteOcp` in the same file. The only meaningful difference there is the destination provider
 fixture: it takes `destination_ocp_provider` instead of `destination_provider`, and it is gated on `remote_ocp_cluster`.
 
-Other cold classes extend the pattern with extra verification steps. `AGENTS.md` documents each of them, and the ones that matter for cold coverage are:
+Other cold classes extend the pattern with extra verification steps. The patterns used for cold coverage include:
 
 - **6-step XFS pattern** in `tests/cold/test_cold_migration_xfs.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_xfs_version` -> check_vms
+- **6-step root-disk selection pattern** in `tests/cold/test_cold_migration_root_disk.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_selected_root_os` -> check_vms
 - **6-step LUKS pattern** in `tests/luks/test_luks_cold_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_luks_encryption` -> check_vms
+- **6-step exclude-disks pattern** in `tests/cold/test_cold_migration_exclude_disks.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_excluded_disks`
+  -> check_vms. The Plan excludes individual source disks by bus address (`spec.vms[].excludeDisks`); the verify step confirms the migrated VM has exactly the
+  non-excluded disks attached and no PVC exists for the excluded ones in the dedicated VM namespace.
 - **6-step shared-disk pattern (Linux)** in `tests/shared_disk/test_shared_disk_rhel_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_shared_disk_data`
   -> check_vms
 - **7-step shared-disk pattern (Windows)** in `tests/shared_disk/test_shared_disk_windows_migration.py`: `test_label_shared_disk` -> storagemap -> networkmap -> plan -> migrate
@@ -11203,7 +11215,7 @@ Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven 
 
 ### `utilities/post_migration.py`
 
-Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used by `test_check_vms`; everything else is a focused check it composes.
+Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used by `test_check_vms`; everything else is a focused check it composes. `verify_excluded_disks()` orchestrates the disk-exclusion verification (per-VM kept-disk loop plus the namespace PVC-count assertion) and delegates per-VM disk-identity verification to the vSphere provider module `libs.providers.vmware.verify_kept_disks_attached`, since exclude_disks uses vSphere bus addresses.
 
 | Area | Functions |
 | --- | --- |
@@ -11234,7 +11246,9 @@ SSH into migrated VMs through `virtctl` port-forward plus `python-rrmngmnt`, so 
 ### `utilities/vmware_guest_operations.py`
 
 Commands executed inside vSphere guests via the Guest Operations API: `run_command_in_vmware_guest()`, `detect_vmware_ip_origins_via_guest_ops()`, `detect_guest_nic_names()`,
-`create_data_integrity_marker()`.
+`create_data_integrity_marker()`, and `find_alternate_linux_os_root()`. The latter requires a Linux guest and root Guest Operations credentials, reads the active OS identity and `lsblk` device inventory in separate Guest Operations calls, and inspects supported ext/XFS single-letter `/dev/sd` partitions read-only. Partition inspection and `umount` use guest-side timeouts; an EXIT trap also attempts to remove the temporary mount directory. It uses `lsblk --pairs`, available in util-linux 2.23.2; JSON output was added in util-linux 2.27. The helper returns a `LinuxOSRoot` with the unique alternate device path, OS ID, and version. The current Forklift vSphere mapper does not translate NVMe or LVM paths to the corresponding disk index.
+
+`run_command_in_vmware_guest()` terminates a Guest Operations process that exceeds its timeout. Callers may provide a timeout cleanup command for guest resources that need explicit cleanup after process termination.
 
 ### `utilities/worker_node_selection.py`
 
@@ -11302,7 +11316,7 @@ is `connect()`, `disconnect()`, `test`, `vm_dict`, `clone_vm()`, `delete_vm()`, 
 | `ova.py` | `OVAProvider` | OVA import over NFS |
 | `hyperv.py` | `HyperVProvider` | PowerShell Remoting (PSRP) |
 
-`vmware.py` also exposes `format_insufficient_capacity_message()` and `format_capacity_validation_log()`; module constant `VSPHERE_NIC_DEVICE_KEY_OFFSET` documents the vSphere
+`vmware.py` also exposes `format_insufficient_capacity_message()`, `format_capacity_validation_log()`, and `verify_kept_disks_attached()` (vSphere-source per-VM kept-disk verification for disk exclusion: bus-address partitioning, source disk UUID serial prefixes, volume-mode-aware capacity checks); module constant `VSPHERE_NIC_DEVICE_KEY_OFFSET` documents the vSphere
 device-key space used when adding NICs.
 
 ### `libs/forklift_inventory.py`
@@ -12393,6 +12407,7 @@ patterns the suite actually uses.
 | 7-step copy-offload dedicated host | storagemap -> networkmap -> plan -> migrate -> verify_dedicated_migration_host -> check_xcopy_used -> check_vms | dedicated-migration-host classes |
 | 6-step LUKS | storagemap -> networkmap -> plan -> migrate -> verify_luks_encryption -> check_vms | `tests/luks/test_luks_cold_migration.py` |
 | 6-step XFS | storagemap -> networkmap -> plan -> migrate -> verify_xfs_version -> check_vms | `tests/cold/test_cold_migration_xfs.py`, `tests/warm/test_warm_migration_xfs.py` |
+| 6-step root-disk selection | storagemap -> networkmap -> plan -> migrate -> verify_selected_root_os -> check_vms | `tests/cold/test_cold_migration_root_disk.py` |
 
 A few details that matter when you reuse these:
 

@@ -462,6 +462,11 @@ definitions.</p>
 <td>Pin the clone to a specific ESXi host. Set automatically by <code>clone_to_same_host</code> and <code>pin_to_non_dedicated_host</code> unless you set it yourself.</td>
 </tr>
 <tr>
+<td><code>rootDisk</code></td>
+<td>No</td>
+<td>Root disk path for this VM, passed through as the Plan API field <code>spec.vms[].rootDisk</code> (for example, <code>/dev/sdb2</code>). Use the API spelling and casing. Tests may set it on <code>prepared_plan</code> at runtime after source inspection when the path is discovered dynamically.</td>
+</tr>
+<tr>
 <td><code>luks</code></td>
 <td>No</td>
 <td><code>True</code> when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference.</td>
@@ -470,6 +475,11 @@ definitions.</p>
 <td><code>luks_passphrase</code></td>
 <td>No</td>
 <td>Per-VM LUKS passphrase. Overrides the provider-level <code>luks_passphrase</code>.</td>
+</tr>
+<tr>
+<td><code>exclude_disks</code></td>
+<td>No</td>
+<td>vSphere bus addresses of disks to exclude from migration (e.g. <code>["scsi0:1"]</code>). The exclusion test renames this key to the Plan <code>spec.vms[].excludeDisks</code> field before plan creation (the shared plan builder passes VM keys through unchanged); the excluded disks are neither copied nor attached to the migrated VM.</td>
 </tr>
 <tr>
 <td><code>migrate_shared_disks</code></td>
@@ -1012,16 +1022,22 @@ exists, that <code>storage_hostname</code>, <code>storage_username</code>, and <
 
 <h3 id="2-the-clone-phase-runs">2. The Clone Phase Runs</h3>
 <p>Unless <code>skip_clone</code> is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:</p>
-<div class="highlight"><pre><span></span><code>        <span class="n">skip_clone</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"skip_clone"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">skip_clone</span><span class="p">:</span>
+<div class="highlight"><pre><span></span><code>        <span class="k">if</span> <span class="n">skip_clone</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">supports_skip_clone</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">"skip_clone=True is not supported for provider type '</span><span class="si">{</span><span class="n">source_provider</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">'; "</span>
                     <span class="s2">"VMs must be cloned from templates."</span>
                 <span class="p">)</span>
-            <span class="n">skip_clone_incompatible</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"disable_drs_for_vms"</span><span class="p">,</span> <span class="s2">"clone_to_same_host"</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">:</span>
+            <span class="n">skip_clone_incompatible</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="s2">"disable_drs_for_vms"</span><span class="p">,</span>
+                <span class="s2">"clone_to_same_host"</span><span class="p">,</span>
+                <span class="s2">"pin_to_non_dedicated_host"</span><span class="p">,</span>
+                <span class="s2">"pin_first_vm_to_dedicated_host"</span><span class="p">,</span>
+            <span class="p">]</span>
+            <span class="c1"># Only ESXi provider supports IPv6 currently, but it doesn't support VM cloning</span>
+            <span class="c1"># Allow skip_clone: true to work with ESXi provider</span>
+            <span class="n">is_esxi_vsphere</span> <span class="o">=</span> <span class="n">is_direct_esxi_connection</span><span class="p">(</span><span class="n">source_provider_data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_esxi_vsphere</span> <span class="ow">or</span> <span class="n">source_provider</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Provider</span><span class="o">.</span><span class="n">ProviderType</span><span class="o">.</span><span class="n">HYPERV</span><span class="p">):</span>
                 <span class="n">skip_clone_incompatible</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"preserve_static_ips"</span><span class="p">)</span>
             <span class="n">conflicting</span> <span class="o">=</span> <span class="p">[</span><span class="n">flag</span> <span class="k">for</span> <span class="n">flag</span> <span class="ow">in</span> <span class="n">skip_clone_incompatible</span> <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">flag</span><span class="p">)]</span>
             <span class="k">if</span> <span class="n">has_shared_disk_config</span><span class="p">:</span>

@@ -120,8 +120,10 @@ Each item in `virtual_machines` describes one source VM or template.
 | `snapshots` | No | Number of source snapshots to create before migration. |
 | `target_datastore_id` | No | VMware target datastore for the cloned VM. |
 | `target_esxi_host` | No | Pin the clone to a specific ESXi host. Set automatically by `clone_to_same_host` and `pin_to_non_dedicated_host` unless you set it yourself. |
+| `rootDisk` | No | Root disk path for this VM, passed through as the Plan API field `spec.vms[].rootDisk` (for example, `/dev/sdb2`). Use the API spelling and casing. Tests may set it on `prepared_plan` at runtime after source inspection when the path is discovered dynamically. |
 | `luks` | No | `True` when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference. |
 | `luks_passphrase` | No | Per-VM LUKS passphrase. Overrides the provider-level `luks_passphrase`. |
+| `exclude_disks` | No | vSphere bus addresses of disks to exclude from migration (e.g. `["scsi0:1"]`). The exclusion test renames this key to the Plan `spec.vms[].excludeDisks` field before plan creation (the shared plan builder passes VM keys through unchanged); the excluded disks are neither copied nor attached to the migrated VM. |
 | `migrate_shared_disks` | No | `True` for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM. |
 | `add_nic` | No | `True` to add an extra NIC. vSphere only. |
 | `add_nic_start_connected` | Yes* | Required when `add_nic` is `True`. Must be a `bool`. |
@@ -489,20 +491,22 @@ The fixture copies the selected config, resolves a mapping-form `pvc_name_templa
 
 Unless `skip_clone` is set, each VM is cloned, the plan-level placement flags are applied, and shared disks are relinked between clones:
 
-```1272:1291:conftest.py
-        skip_clone = plan.get("skip_clone", False)
-
+```1720:1745:conftest.py
         if skip_clone:
             if not source_provider.supports_skip_clone():
                 raise ValueError(
                     f"skip_clone=True is not supported for provider type '{source_provider.type}'; "
                     "VMs must be cloned from templates."
                 )
-            skip_clone_incompatible = ["disable_drs_for_vms", "clone_to_same_host"]
-            is_esxi_vsphere = (
-                source_provider.type == Provider.ProviderType.VSPHERE
-                and source_provider_data.get("endpoint_type") == VSPHERE_ESXI_ENDPOINT_TYPE
-            )
+            skip_clone_incompatible = [
+                "disable_drs_for_vms",
+                "clone_to_same_host",
+                "pin_to_non_dedicated_host",
+                "pin_first_vm_to_dedicated_host",
+            ]
+            # Only ESXi provider supports IPv6 currently, but it doesn't support VM cloning
+            # Allow skip_clone: true to work with ESXi provider
+            is_esxi_vsphere = is_direct_esxi_connection(source_provider_data)
             if not (is_esxi_vsphere or source_provider.type == Provider.ProviderType.HYPERV):
                 skip_clone_incompatible.append("preserve_static_ips")
             conflicting = [flag for flag in skip_clone_incompatible if plan.get(flag)]

@@ -448,10 +448,16 @@ the ones the fixture guarantees on every run, which is why they can be indexed d
 
 <p>The same five-step shape is reused by the remote-cluster cold class <code>TestColdRemoteOcp</code> in the same file. The only meaningful difference there is the destination provider
 fixture: it takes <code>destination_ocp_provider</code> instead of <code>destination_provider</code>, and it is gated on <code>remote_ocp_cluster</code>.</p>
-<p>Other cold classes extend the pattern with extra verification steps. <code>AGENTS.md</code> documents each of them, and the ones that matter for cold coverage are:</p>
+<p>Other cold classes extend the pattern with extra verification steps. The patterns used for cold coverage include:</p>
 <ul>
 <li><strong>6-step XFS pattern</strong> in <code>tests/cold/test_cold_migration_xfs.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_xfs_version</code> -&gt; check_vms</li>
+<li><strong>6-step root-disk selection pattern</strong> in <code>tests/cold/test_cold_migration_root_disk.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_selected_root_os</code> -&gt; check_vms</li>
 <li><strong>6-step LUKS pattern</strong> in <code>tests/luks/test_luks_cold_migration.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_luks_encryption</code> -&gt; check_vms</li>
+<li>
+<p><strong>6-step exclude-disks pattern</strong> in <code>tests/cold/test_cold_migration_exclude_disks.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_excluded_disks</code>
+  -&gt; check_vms. The Plan excludes individual source disks by bus address (<code>spec.vms[].excludeDisks</code>); the verify step confirms the migrated VM has exactly the
+  non-excluded disks attached and no PVC exists for the excluded ones in the dedicated VM namespace.</p>
+</li>
 <li>
 <p><strong>6-step shared-disk pattern (Linux)</strong> in <code>tests/shared_disk/test_shared_disk_rhel_migration.py</code>: storagemap -&gt; networkmap -&gt; plan -&gt; migrate -&gt; <code>test_verify_shared_disk_data</code>
   -&gt; check_vms</p>
