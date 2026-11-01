@@ -134,7 +134,7 @@ tests_params: dict = {
     "test_cold_migration_skip_guest_conversion_win": {
         "virtual_machines": [
             {
-                "name": "mtv-win2019-79",
+                "name": "mtv-feature-win2019-multi-nics",
                 "source_vm_power": "on",
             },
         ],
