@@ -364,7 +364,8 @@ class TestColdMigrationSkipGuestConversion(ColdMigrationSkipGuestConversionBase)
     """Cold-migrate a vSphere RHEL 8 VM with guest conversion skipped.
 
     Purpose/Regression:
-        Verify no Plan-labeled virt-v2v pod is found at sampled migration status
+        Verify a RHEL 8 guest cold-migrates via raw copy mode (skipGuestConversion)
+        with no Plan-labeled virt-v2v pod found at sampled migration status
         polls while migration still produces a usable VM. The Plan API default
         useCompatibilityMode=true must be preserved.
 
