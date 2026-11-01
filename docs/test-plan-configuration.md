@@ -123,6 +123,7 @@ Each item in `virtual_machines` describes one source VM or template.
 | `rootDisk` | No | Root disk path for this VM, passed through as the Plan API field `spec.vms[].rootDisk` (for example, `/dev/sdb2`). Use the API spelling and casing. Tests may set it on `prepared_plan` at runtime after source inspection when the path is discovered dynamically. |
 | `luks` | No | `True` when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference. |
 | `luks_passphrase` | No | Per-VM LUKS passphrase. Overrides the provider-level `luks_passphrase`. |
+| `exclude_disks` | No | vSphere bus addresses of disks to exclude from migration (e.g. `["scsi0:1"]`). The exclusion test renames this key to the Plan `spec.vms[].excludeDisks` field before plan creation (the shared plan builder passes VM keys through unchanged); the excluded disks are neither copied nor attached to the migrated VM. |
 | `migrate_shared_disks` | No | `True` for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM. |
 | `add_nic` | No | `True` to add an extra NIC. vSphere only. |
 | `add_nic_start_connected` | Yes* | Required when `add_nic` is `True`. Must be a `bool`. |

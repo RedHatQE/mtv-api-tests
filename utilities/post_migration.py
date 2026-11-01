@@ -15,6 +15,7 @@ from kubernetes.dynamic.exceptions import NotFoundError
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.network_map import NetworkMap
+from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
@@ -29,6 +30,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
+from libs.providers.vmware import verify_kept_disks_attached
 from utilities.deep_inspection import verify_captured_di_results
 from utilities.naming import resolve_destination_vm_name
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection, run_cmd_in_vm
@@ -37,6 +39,7 @@ from utilities.vmware_guest_operations import DATA_INTEGRITY_FILE
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+
     from libs.providers.openshift import OCPProvider
 
 LOGGER = get_logger(name=__name__)
@@ -1196,11 +1199,84 @@ def check_nic_name_preservation(
                 break
 
 
-def check_storage(source_vm: dict[str, Any], destination_vm: dict[str, Any], storage_map_resource: StorageMap) -> None:
+def verify_excluded_disks(
+    plan: dict[str, Any],  # untyped pytest-testconfig JSON; accessed fields documented below
+    ocp_admin_client: DynamicClient,
+    destination_provider: BaseProvider,
+    source_provider_inventory: ForkliftInventory,
+) -> None:
+    """Verify that disks excluded from migration are absent from the migration outcome.
+
+    For every VM in the plan, verifies the migrated VM has exactly its non-excluded
+    disks attached; the per-VM disk-identity verification is delegated to the vSphere
+    provider module `libs.providers.vmware.verify_kept_disks_attached`, since
+    exclude_disks uses vSphere bus addresses. Then verifies the VM namespace holds
+    exactly one PVC per non-excluded disk across all plan VMs, so no volume was created
+    for an excluded disk.
+
+    The namespace check requires the plan's VMs to run in a dedicated namespace (plan
+    config vm_target_namespace); a shared namespace would contain PVCs of other VMs.
+
+    Args:
+        plan (dict[str, Any]): Prepared plan whose virtual_machines each contain the
+            "exclude_disks" bus address list, with _vm_target_namespace set.
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        destination_provider (BaseProvider): Destination provider of the migrated VMs.
+        source_provider_inventory (ForkliftInventory): Source provider inventory.
+
+    Raises:
+        AssertionError: If a migrated VM's disks or the namespace PVC set do not match
+            the non-excluded source disks.
+        ValueError: If an excludeDisks bus address matches no source disk, the inventory
+            disk list for a VM is missing or malformed, or a source disk has no serial
+            in the inventory.
+    """
+    vm_target_namespace = plan["_vm_target_namespace"]
+    expected_namespace_pvc_count = 0
+
+    for vm in plan["virtual_machines"]:
+        expected_namespace_pvc_count += verify_kept_disks_attached(
+            vm=vm,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            vm_target_namespace=vm_target_namespace,
+        )
+
+    namespace_pvcs = list(PersistentVolumeClaim.get(client=ocp_admin_client, namespace=vm_target_namespace))
+    assert len(namespace_pvcs) == expected_namespace_pvc_count, (
+        f"Namespace '{vm_target_namespace}' holds {len(namespace_pvcs)} PVC(s), expected "
+        f"{expected_namespace_pvc_count} (one per non-excluded disk of the plan's VMs)"
+    )
+
+
+def check_storage(
+    source_vm: dict[str, Any],
+    destination_vm: dict[str, Any],
+    storage_map_resource: StorageMap,
+    # Override the destination disk-count expectation when the migrated disk set intentionally differs
+    # from the source (e.g. disk exclusion: excluded disks are neither copied nor attached)
+    expected_disk_count: int | None = None,
+) -> None:
+    """Verify destination VM disks match the source and the storage map.
+
+    Args:
+        source_vm (dict[str, Any]): Source VM info dictionary.
+        destination_vm (dict[str, Any]): Destination VM info dictionary.
+        storage_map_resource (StorageMap): StorageMap resource used for the migration.
+        expected_disk_count (int | None): Expected number of disks on the destination
+            VM. Defaults to the source VM disk count; override when the migrated disk
+            set intentionally differs from the source (e.g. disk exclusion: excluded
+            disks are neither copied nor attached).
+
+    Raises:
+        AssertionError: If the disk count or a storage class does not match.
+    """
     destination_disks = destination_vm["disks"]
     source_vm_disks_storage = [disk["storage"]["name"] for disk in source_vm["disks"]]
 
-    assert len(destination_disks) == len(source_vm["disks"]), "disks count"
+    if expected_disk_count is None:
+        expected_disk_count = len(source_vm["disks"])
+    assert len(destination_disks) == expected_disk_count, "disks count"
 
     for destination_disk in destination_disks:
         assert destination_disk["storage"]["name"] == py_config["storage_class"], "storage class"
@@ -2319,8 +2395,14 @@ def check_vms(
                     res[vm_name].append(f"check_network - {str(exp)}")
 
             try:
+                # Excluded disks are neither copied nor attached, so the destination
+                # count is the source count minus distinct exclusions; an omitted
+                # exclude_disks means an empty list (the VM keeps its full disk set)
                 check_storage(
-                    source_vm=source_vm, destination_vm=destination_vm, storage_map_resource=storage_map_resource
+                    source_vm=source_vm,
+                    destination_vm=destination_vm,
+                    storage_map_resource=storage_map_resource,
+                    expected_disk_count=len(source_vm["disks"]) - len(set(vm.get("exclude_disks", []))),
                 )
             except Exception as exp:
                 res[vm_name].append(f"check_storage - {str(exp)}")

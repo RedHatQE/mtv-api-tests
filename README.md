@@ -860,6 +860,42 @@ See `.providers.json.example` for the complete provider template including the `
 
 ---
 
+## Disk Exclusion Migration (tier1)
+
+The disk-exclusion test verifies MTV's ability to exclude individual source disks from a
+migration: the excluded disks are neither copied nor attached to the migrated VM, and no PVC
+is created for them in the dedicated VM namespace.
+
+### Configuring `exclude_disks`
+
+Set `exclude_disks` on a VM entry in the test configuration with the vSphere bus addresses
+of the disks to exclude:
+
+```python
+"virtual_machines": [
+    {
+        "name": "your-source-vm",
+        "exclude_disks": ["scsi0:1"],  # vSphere bus addresses of disks to exclude
+    },
+]
+```
+
+The suite renames this key to the Plan `spec.vms[].excludeDisks` field before plan creation.
+
+### Running Disk Exclusion Tests
+
+```bash
+# Run the disk-exclusion migration test
+podman run ... uv run pytest -k exclude_disks -v --tc=source_provider:vsphere-8.0.1 ...
+```
+
+See [test-plan configuration](https://redhatqe.github.io/mtv-api-tests/test-plan-configuration.html)
+for the full `exclude_disks` reference and
+[cold migrations](https://redhatqe.github.io/mtv-api-tests/cold-migrations.html) for the
+exclude-disks test pattern.
+
+---
+
 ## Target Scheduling Features (MTV 2.10.0+)
 
 Control where and how migrated VMs are scheduled in the target OpenShift cluster.
