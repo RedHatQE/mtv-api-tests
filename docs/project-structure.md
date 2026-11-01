@@ -604,7 +604,7 @@ A few other support files are worth knowing about:
   - `ROOTCOZ_HISTORY_PROMPT.md` — the pre-classification check for failures caused by an earlier
     test's failed teardown rather than an independent defect.
   - `agents/*.md` — project agents rootcoz advertises at STEP 0 and copies to `.pi/agents/` in the
-    analysis workspace: `must-gather-analyzer`, `regression-detector`, `recent-changes-scanner`,
+    analysis workspace: `must-gather-analyzer`, `regression-detector`, `code-path-scanner`,
     `cross-domain-resolver`.
   - `settings.json` — models, peer reviewers, and the additional repositories rootcoz clones for
     context: the `forklift` product repo, the `mtv-autodeploy` deployment repo, the MTV Jenkins job

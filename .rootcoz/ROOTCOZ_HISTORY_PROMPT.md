@@ -32,8 +32,10 @@ class-scoped and incremental: one broken class cascades into everything after it
    - **Guest-level changes**: hooks that run inside the guest, extra disks added by
      `add_disks`, and cloned VMs that still exist on the source
    - **Lifecycle tests**: `tests/plan_lifecycle/` archives and deletes Plans on purpose,
-     and resume-conversion tests deliberately leave PVCs in place — their leftovers are
-     expected and must not be blamed on the next test
+     and a resume-conversion test keeps the destination PVCs only between the failed
+     conversion and the resume Migration — it deletes them at teardown. A PVC still present
+     after teardown is therefore NOT expected, unless the test failed before reaching its
+     cleanup step.
 3. **Check whether the current symptom matches that un-reverted state.** Examples:
    migration stuck in `CopyingPods` because a leftover populator pod holds the volume;
    `Plan` stuck `NotReady` because the source VM is already locked by a stale migration;

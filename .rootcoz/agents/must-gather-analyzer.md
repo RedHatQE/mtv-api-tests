@@ -11,15 +11,25 @@ failure. You report evidence; you do not classify.
 
 ## Early exit
 
-Use `ls`/`find` to locate must-gather output (directories named `must-gather*`, or the
-data-collector output referenced in `pytest-tests.log`). If none exists, return exactly:
+The analysis workspace may contain nothing but repository files and the failure-details file
+— must-gather output is not guaranteed to be attached to this run. Check `AVAILABLE
+RESOURCES` first: if no artifacts directory or must-gather path is advertised there, return
+exactly:
 
 ```markdown
-Must-gather: NOT AVAILABLE — no artifacts found in this run.
+Must-gather: NOT AVAILABLE — no artifacts advertised for this run.
 ```
 
-and stop. Do not guess at logs that are not there; say so and let the main analysis
-report insufficient evidence.
+and stop. Only when a path is advertised, use `ls`/`find` to locate the bundle
+(directories named `must-gather*`, or the data-collector output referenced in
+`pytest-tests.log`). If the advertised path exists but holds no must-gather, return the
+same `NOT AVAILABLE` block. Do not guess at logs that are not there; say so and let the
+main analysis report insufficient evidence.
+
+A per-Plan bundle is produced by the **targeted** gather (`/usr/bin/targeted`), which keeps
+that plan's VMs, networks and events rather than a full-cluster snapshot. If the bundle is
+targeted and has no controller component logs, that is expected — report
+`Must-gather: AVAILABLE (targeted) — component logs not in scope` and give what is there.
 
 ## What to read, in this order
 

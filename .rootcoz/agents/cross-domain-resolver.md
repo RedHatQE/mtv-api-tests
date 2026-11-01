@@ -47,7 +47,7 @@ Cross-domain: <primary domain> (primary), <secondary domains>
 Evidence per domain:
 - <domain>: <verbatim line or status that puts it in scope>
 
-Jira search keywords (3-5, use these verbatim in `jira_search_keywords`):
+Jira search keywords (3-5, use these verbatim in `product_bug_report.jira_search_keywords`):
 - <component> <symptom>
 - <component> <symptom>
 ```

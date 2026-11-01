@@ -250,9 +250,8 @@ Pattern guidance:
 
 ### Jira Search Keyword Guidance
 
-The `cross-domain-resolver` agent identifies the domains involved and drafts candidate
-keywords. When classifying a failure as `PRODUCT BUG`, produce 3-5 short keywords that
-combine a component with a concrete symptom:
+When classifying as `PRODUCT BUG`, fill `product_bug_report.jira_search_keywords` with 3-5
+short keywords that combine a component with a concrete symptom:
 
 - Good: `forklift-controller plan not ready`, `virt-v2v conversion guest boot`,
   `xcopy populator clone failed`, `CDI importer PVC pending`
@@ -263,6 +262,9 @@ appear in product bug titles. Keep unselected domain candidates in the evidence,
 the final keywords.
 
 ### Severity Definitions for Product Bugs
+
+When classifying as `PRODUCT BUG`, set severity in `product_bug_report.severity` based on
+impact:
 
 - `critical` - data loss, VM corruption, cluster-wide disruption, security vulnerability
 - `high` - VM cannot migrate, start, or be validated at all; PVC or data inaccessible;
@@ -333,17 +335,32 @@ Evidence priority, highest first:
 5. **Test console / assertion output** — how the test observed it
 
 If the analysis cites only layers 2-5, the root cause has NOT been found — go back to
-layer 1. The one exception: when no must-gather exists for this run, say so explicitly in
-the missing-information section and proceed with what exists. Do not demand logs that were
-never collected.
+layer 1. Three cases are not failures of the analysis, and each must be stated explicitly
+in the missing-information section rather than papered over:
+
+- **No must-gather for this run** — say `must-gather: not collected` and proceed with what exists.
+- **Plan-scoped bundle with no component logs** — per-Plan collection runs the targeted
+gather (`/usr/bin/targeted`, `utilities/must_gather.py:run_plan_must_gather`), which keeps
+that plan's VMs, networks and events rather than a full-cluster snapshot. A targeted bundle
+that simply does not contain controller logs is expected; say
+`targeted bundle — component logs not in scope` and proceed.
+- **Full gather present** — then layer 1 exists and citing only layers 2-5 is a failed analysis.
+
+Do not demand logs that were never collected, and do not treat a targeted bundle's silence
+as evidence that the component was healthy.
 
 ### Regression Detection (MANDATORY when the failure looks new)
 
-When the failure shows recent-onset or behavioural-change signals, run the STEP 0 project
-agents `regression-detector` and `recent-changes-scanner` and use their output: version
-correlation, candidate commits in this repo, and candidate commits in the pinned Forklift
-ref. Cross-reference with failure history — if the same test passed in earlier runs, treat
-it as a regression candidate regardless of what the agents reported.
+When the failure shows recent-onset or behavioural-change signals, use the STEP 0 project
+agents and rootcoz's own failure history together:
+
+- `regression-detector` — version correlation and a version boundary.
+- `code-path-scanner` — the code paths implicated, plus the dependency versions actually
+  pinned in the workspace. It has no shell and no git: additional repos are depth-1 clones,
+  so it cannot produce commit history. Do not ask it for "what changed".
+- **Failure history** — the authoritative signal for whether this test passed before. If the
+  same test passed in earlier runs, treat it as a regression candidate regardless of what
+  the agents reported.
 
 Put the regression evidence inside `details`. Keep `pattern` as `NEW` at this stage; the
 pattern classification step consumes your evidence. If the investigation found nothing,
@@ -358,7 +375,7 @@ If the data needed for the assessment is missing, state
    (must-gather, regression, recent changes, cross-domain)?
 3. Is `classification` exactly one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`?
 4. If `PRODUCT BUG`: did you reach layer-1 component evidence, or state that it was not
-   collected? Did you produce 3-5 `jira_search_keywords`?
+   collected? Did you fill `product_bug_report.jira_search_keywords` with 3-5 keywords?
 5. If `CODE ISSUE`: does `code_fix` name a file, a line, and the change?
 6. Did you evaluate every warning, condition, and error you saw, and give a reason for each
    one you ruled out?
@@ -375,8 +392,16 @@ fields:
 - `code_fix` - populated for `CODE ISSUE`
 - `product_bug_report` - populated for `PRODUCT BUG`
 
-Any other key is discarded. The items below therefore belong INSIDE the `details`
-narrative, never as separate keys:
+Two of those fields are structured, and the detail goes one level down:
+
+- `product_bug_report`: `title`, `severity` (`critical`/`high`/`medium`/`low`), `component`,
+  `description`, `evidence` (verbatim log snippets), `jira_search_keywords` (list of
+  3-5 strings). This is where severity and search keywords belong — not at the top level.
+- `code_fix`: `file`, `line`, `change`, and optionally `original_code`. This is where the
+  concrete fix belongs.
+
+Any other top-level key is discarded. Everything below therefore belongs INSIDE the
+`details` narrative:
 
 - the confidence level, in words
 - the primary evidence: the strongest direct observations supporting the classification,
@@ -478,9 +503,9 @@ use their output as evidence — do not redo their investigation.
 
 | Agent | Answers | Use when |
 | --- | --- | --- |
-| `must-gather-analyzer` | What do the collected logs actually say, and how deep did the evidence reach? | Must-gather artifacts exist for the run |
+| `must-gather-analyzer` | What do the collected logs actually say, and how deep did the evidence reach? | Must-gather artifacts are advertised in AVAILABLE RESOURCES |
 | `regression-detector` | Is this a regression, with which version boundary? | Failure looks recent-onset or behavioural |
-| `recent-changes-scanner` | Did a commit in this repo or the pinned Forklift ref cause it? | Failure is new, or a shared helper is implicated |
+| `code-path-scanner` | Which code paths produced this failure, and which dependency versions are pinned? | A shared helper, fixture, or wrapper is implicated |
 | `cross-domain-resolver` | Which product domains are involved, and what Jira keywords find them? | Classifying as `PRODUCT BUG` |
 
 The separate history prompt `.rootcoz/ROOTCOZ_HISTORY_PROMPT.md` answers a different
