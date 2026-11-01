@@ -349,7 +349,11 @@ adapters, validation helpers, and repository automation/configuration files.</p>
 ├── .pr_agent.toml
 ├── .flake8
 ├── .markdownlint.yaml
-├── .rootcoz/settings.json
+├── .rootcoz/
+│   ├── settings.json
+│   ├── ROOTCOZ_PROMPT.md
+│   ├── ROOTCOZ_HISTORY_PROMPT.md
+│   └── agents/*.md
 ├── AGENTS.md
 ├── test_plan_schema.md
 ├── README.md
@@ -942,21 +946,24 @@ scenarios. It lives in <code>guides/</code>, not in <code>docs/</code>.</p>
 <li>
 <p><code>test_plan_schema.md</code> defines the required class docstring (a manual product test plan) that every new test class must carry.</p>
 </li>
+<li><code>.rootcoz/</code> holds everything the rootcoz failure-analysis tooling reads from this repo
+  (rootcoz only discovers files under <code>.rootcoz/</code> inside the cloned repo, never at the repo root):</li>
+<li><code>ROOTCOZ_PROMPT.md</code> — the analysis doctrine: classification rules, upstream causality chain,
+    artifact triage, severity and Jira keyword guidance.</li>
+<li><code>ROOTCOZ_HISTORY_PROMPT.md</code> — the pre-classification check for failures caused by an earlier
+    test's failed teardown rather than an independent defect.</li>
+<li><code>agents/*.md</code> — project agents rootcoz advertises at STEP 0 and copies to <code>.pi/agents/</code> in the
+    analysis workspace: <code>must-gather-analyzer</code>, <code>regression-detector</code>, <code>recent-changes-scanner</code>,
+    <code>cross-domain-resolver</code>.</li>
 <li>
-<p><code>.rootcoz/ROOTCOZ_PROMPT.md</code> contains instructions for automated job/failure analysis tooling
-  (rootcoz discovers this path inside the cloned repo).</p>
+<p><code>settings.json</code> — models, peer reviewers, and the additional repositories rootcoz clones for
+    context: the <code>forklift</code> product repo, the <code>mtv-autodeploy</code> deployment repo, the MTV Jenkins job
+    repo, and the <code>openshift-python-wrapper</code> repo behind <code>ocp_resources</code>.</p>
 </li>
 <li>
 <p><code>OWNERS</code> lists repository approvers and reviewers.</p>
 </li>
-<li>
-<p><code>.rootcoz/settings.json</code> configures the rootcoz analysis server, including the additional repositories it reads for this
-  project: the <code>forklift</code> product repo, the <code>mtv-autodeploy</code> deployment repo, the MTV Jenkins job repo,
-  and the <code>openshift-python-wrapper</code> repo behind <code>ocp_resources</code>.</p>
-</li>
-<li>
-<p><code>junit_report_example.xml</code> shows the JUnit-style output shape emitted by <code>pytest</code>.</p>
-</li>
+<li><code>junit_report_example.xml</code> shows the JUnit-style output shape emitted by <code>pytest</code>.</li>
 </ul>
 <blockquote>
 <p><strong>Tip:</strong> <code>tools/clean_cluster.py</code> pairs naturally with the resource tracking written by <code>utilities/pytest_utils.py</code>, which
