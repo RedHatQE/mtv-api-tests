@@ -590,12 +590,17 @@ helpers <code>ensure_secure_shared_lock_dir()</code>, <code>get_forkliftcontroll
 </tbody>
 </table></div>
 <p>Static-IP preservation applies to vSphere and Hyper-V sources and supports both Windows (<code>ipconfig /all</code>) and Linux (<code>nmcli device show</code>) guests.</p>
+<p>Both <code>check_ssh_connectivity()</code> and <code>check_vbs_status()</code> wait for the guest to serve SSH sessions through the shared
+<code>_wait_for_ssh_connection()</code> retry (300s), because a freshly migrated guest accepts the port-forward tunnel before its
+OpenSSH server is ready.</p>
 <h3 id="utilitiesshared_diskpy"><code>utilities/shared_disk.py</code></h3>
 <p><code>verify_shared_disk_data()</code> mounts, writes, and reads a shared disk from both migrated VMs (Linux, 6-step pattern). <code>label_shared_disk_on_source_windows()</code> labels the shared NTFS
 volume on the source through the VMware Guest Operations API before migration, and <code>verify_shared_disk_data_windows()</code> verifies it afterwards (Windows, 7-step pattern).</p>
 <h3 id="utilitiesssh_utilspy"><code>utilities/ssh_utils.py</code></h3>
 <p>SSH into migrated VMs through <code>virtctl</code> port-forward plus <code>python-rrmngmnt</code>, so it works when cluster nodes have no external IPs. <code>VMSSHConnection</code> wraps a connection,
-<code>SSHConnectionManager</code> manages one connection per VM for fixtures, <code>create_vm_ssh_connection()</code> builds a single connection, and <code>run_cmd_in_vm()</code> runs a command in the guest.</p>
+<code>SSHConnectionManager</code> manages one connection per VM for fixtures, <code>create_vm_ssh_connection()</code> builds a single connection, and <code>run_cmd_in_vm()</code> runs a command in the guest.
+<code>VMSSHConnection.connect()</code> raises <code>ConnectionError</code> for any transport failure, including paramiko's <code>SSHException</code> (a guest that
+is not yet serving sessions).</p>
 <h3 id="utilitiesvirtctlpy"><code>utilities/virtctl.py</code></h3>
 <p><code>download_virtctl_from_cluster()</code> fetches the matching <code>virtctl</code> binary — a <code>virtctl</code> already on <code>PATH</code> is never reused, only a previously downloaded binary in the cluster-versioned cache — and <code>add_to_path()</code> puts the downloaded directory on <code>PATH</code> for the session.</p>
 <h3 id="utilitiesvmware_guest_operationspy"><code>utilities/vmware_guest_operations.py</code></h3>

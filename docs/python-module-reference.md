@@ -166,6 +166,10 @@ Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used b
 
 Static-IP preservation applies to vSphere and Hyper-V sources and supports both Windows (`ipconfig /all`) and Linux (`nmcli device show`) guests.
 
+Both `check_ssh_connectivity()` and `check_vbs_status()` wait for the guest to serve SSH sessions through the shared
+`_wait_for_ssh_connection()` retry (300s), because a freshly migrated guest accepts the port-forward tunnel before its
+OpenSSH server is ready.
+
 ### `utilities/shared_disk.py`
 
 `verify_shared_disk_data()` mounts, writes, and reads a shared disk from both migrated VMs (Linux, 6-step pattern). `label_shared_disk_on_source_windows()` labels the shared NTFS
@@ -175,6 +179,8 @@ volume on the source through the VMware Guest Operations API before migration, a
 
 SSH into migrated VMs through `virtctl` port-forward plus `python-rrmngmnt`, so it works when cluster nodes have no external IPs. `VMSSHConnection` wraps a connection,
 `SSHConnectionManager` manages one connection per VM for fixtures, `create_vm_ssh_connection()` builds a single connection, and `run_cmd_in_vm()` runs a command in the guest.
+`VMSSHConnection.connect()` raises `ConnectionError` for any transport failure, including paramiko's `SSHException` (a guest that
+is not yet serving sessions).
 
 ### `utilities/virtctl.py`
 

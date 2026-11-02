@@ -113,6 +113,58 @@ def get_ssh_credentials_from_provider_config(
     return username, password
 
 
+def _wait_for_ssh_connection(
+    ssh_conn: VMSSHConnection,
+    vm_name: str,
+    timeout: int = 300,
+    retry_delay: int = 15,
+) -> None:
+    """Retry opening an SSH connection until the guest serves sessions.
+
+    A freshly migrated guest (notably Windows) accepts the port-forward tunnel before its
+    OpenSSH server serves sessions, so a single connect attempt is not enough.
+
+    Args:
+        ssh_conn (VMSSHConnection): Connection created by the SSH connection manager; reused on every attempt.
+        vm_name (str): Name of the VM, used in log and error messages.
+        timeout (int): Maximum time in seconds to keep retrying.
+        retry_delay (int): Delay in seconds between attempts.
+
+    Raises:
+        TimeoutExpiredError: If SSH connectivity cannot be established within the timeout period.
+    """
+
+    def _test_connectivity() -> bool:
+        """Test SSH connectivity with retry support.
+
+        Returns:
+            bool: True when connectivity is verified; False to retry.
+        """
+        try:
+            with ssh_conn:
+                if ssh_conn.is_connective(tcp_timeout=10):
+                    LOGGER.info(f"SSH connectivity to VM {vm_name} verified successfully")
+                    return True
+                LOGGER.warning(f"SSH connectivity test failed for VM {vm_name} - retrying...")
+                return False
+        except (
+            SSHException,
+            AuthenticationException,
+            NoValidConnectionsError,
+            ChannelException,
+            ConnectionError,
+        ) as e:
+            LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
+            return False
+
+    try:
+        for sample in TimeoutSampler(wait_timeout=timeout, sleep=retry_delay, func=_test_connectivity):
+            if sample:
+                return
+    except TimeoutExpiredError as e:
+        raise TimeoutExpiredError(f"SSH connectivity to VM {vm_name} could not be established after {timeout}s") from e
+
+
 def check_ssh_connectivity(
     vm_name: str,
     vm_ssh_connections: SSHConnectionManager,
@@ -145,30 +197,7 @@ def check_ssh_connectivity(
 
     # Create SSH connection
     ssh_conn = vm_ssh_connections.create(vm_name=vm_name, username=ssh_username, password=ssh_password)
-
-    def _test_connectivity() -> bool:
-        """Test SSH connectivity with retry support.
-
-        Returns:
-            bool: True when connectivity is verified; False to retry.
-        """
-        try:
-            with ssh_conn:
-                if ssh_conn.is_connective(tcp_timeout=10):
-                    LOGGER.info(f"SSH connectivity to VM {vm_name} verified successfully")
-                    return True
-                LOGGER.warning(f"SSH connectivity test failed for VM {vm_name} - retrying...")
-                return False
-        except (SSHException, AuthenticationException, NoValidConnectionsError, ChannelException) as e:
-            LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
-            return False
-
-    try:
-        for sample in TimeoutSampler(wait_timeout=timeout, sleep=retry_delay, func=_test_connectivity):
-            if sample:
-                return
-    except TimeoutExpiredError as e:
-        raise TimeoutExpiredError(f"SSH connectivity to VM {vm_name} could not be established after {timeout}s") from e
+    _wait_for_ssh_connection(ssh_conn=ssh_conn, vm_name=vm_name, timeout=timeout, retry_delay=retry_delay)
 
 
 def verify_data_integrity(
@@ -1005,11 +1034,13 @@ def check_vbs_status(
 
     Raises:
         ConnectionError: If SSH connection cannot be established to the VM
+        TimeoutExpiredError: If SSH connectivity is not established within 300s
         ValueError: If credentials are not found or VBS status command fails
         AssertionError: If VBS is still running (status 2)
     """
     ssh_username, ssh_password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_info)
     ssh_conn = vm_ssh_connections.create(vm_name=vm_name, username=ssh_username, password=ssh_password)
+    _wait_for_ssh_connection(ssh_conn=ssh_conn, vm_name=vm_name)
 
     vbs_cmd = [
         "powershell",

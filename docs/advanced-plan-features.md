@@ -412,8 +412,10 @@ Both comprehensive configs use:
 "multus_namespace": "default",
 ```
 
-> **Note:** A single-NIC VM does not need Multus. The fixture calculates the number of NADs as `max(0, len(networks) - 1)`,
-> plus one per VM that sets `add_nic`, so only additional NICs get Multus attachments.
+> **Note:** A single-NIC VM does not need Multus. The fixture reads the VMs from `prepared_plan`, so the network lookup uses
+> the post-clone names the Plan migrates, and it calculates the number of NADs as `max(0, len(networks) - 1)` from the same
+> inventory data `gen_network_map_list()` uses. NICs added by `add_nic` are already part of that data, so only additional
+> NICs get Multus attachments.
 
 ## Per-NIC network mapping
 
@@ -682,8 +684,10 @@ Real configs, from the throttling and dedicated-host suites:
 ## Skipping the clone phase
 
 `skip_clone: True` makes `prepared_plan` use the existing source VMs instead of cloning them, which is how plan-readiness
-tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
-state during teardown, because these are real, shared VMs rather than disposable clones.
+tests avoid mutating shared infrastructure. It also captures each VM's original power state and restores it in teardown,
+because these are real, shared VMs rather than disposable clones. The restore is registered as a fixture finalizer too, so
+it still runs when the class setup fails between starting those VMs and the test run (guest-info collection, inventory
+sync, hook setup); each VM is restored independently, so one failure does not leave the others behind.
 
 The CA-certificate field tests (`tests/cold/test_ca_crt_migration.py`) do **not** use it: their plan config carries no
 `skip_clone`, so they follow the normal cloning path like every other cold test.

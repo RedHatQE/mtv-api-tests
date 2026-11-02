@@ -948,8 +948,10 @@ additional network to a Multus NAD:</p>
 </code></pre></div>
 
 <blockquote>
-<p><strong>Note:</strong> A single-NIC VM does not need Multus. The fixture calculates the number of NADs as <code>max(0, len(networks) - 1)</code>,
-plus one per VM that sets <code>add_nic</code>, so only additional NICs get Multus attachments.</p>
+<p><strong>Note:</strong> A single-NIC VM does not need Multus. The fixture reads the VMs from <code>prepared_plan</code>, so the network lookup uses
+the post-clone names the Plan migrates, and it calculates the number of NADs as <code>max(0, len(networks) - 1)</code> from the same
+inventory data <code>gen_network_map_list()</code> uses. NICs added by <code>add_nic</code> are already part of that data, so only additional
+NICs get Multus attachments.</p>
 </blockquote>
 <h2 id="per-nic-network-mapping">Per-NIC network mapping</h2>
 <p>By default the NetworkMap holds one entry per <strong>distinct source network</strong>, which collapses two NICs attached to the same
@@ -1243,8 +1245,10 @@ before migration. It raises <code>ValueError</code> for OVA providers and for an
 
 <h2 id="skipping-the-clone-phase">Skipping the clone phase</h2>
 <p><code>skip_clone: True</code> makes <code>prepared_plan</code> use the existing source VMs instead of cloning them, which is how plan-readiness
-tests avoid mutating shared infrastructure. It also captures and restores each VM's original power
-state during teardown, because these are real, shared VMs rather than disposable clones.</p>
+tests avoid mutating shared infrastructure. It also captures each VM's original power state and restores it in teardown,
+because these are real, shared VMs rather than disposable clones. The restore is registered as a fixture finalizer too, so
+it still runs when the class setup fails between starting those VMs and the test run (guest-info collection, inventory
+sync, hook setup); each VM is restored independently, so one failure does not leave the others behind.</p>
 <p>The CA-certificate field tests (<code>tests/cold/test_ca_crt_migration.py</code>) do <strong>not</strong> use it: their plan config carries no
 <code>skip_clone</code>, so they follow the normal cloning path like every other cold test.</p>
 <blockquote>
