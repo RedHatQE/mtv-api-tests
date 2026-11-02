@@ -40,61 +40,13 @@ if TYPE_CHECKING:
     from utilities.ssh_utils import SSHConnectionManager
 
 
-@pytest.mark.vsphere
-@pytest.mark.tier1
-@pytest.mark.incremental
-@pytest.mark.parametrize(
-    "class_plan_config",
-    [
-        pytest.param(
-            py_config["tests_params"]["test_cold_migration_skip_guest_conversion"],
-            id="skip-guest-conversion-cold",
-        )
-    ],
-    indirect=True,
-)
-@pytest.mark.usefixtures("cleanup_migrated_vms")
-class TestColdMigrationSkipGuestConversion:
-    """Cold-migrate a vSphere RHEL VM with guest conversion skipped.
+class ColdMigrationSkipGuestConversionBase:
+    """Shared guest-agnostic steps for skip-guest-conversion cold migration.
 
-    Purpose/Regression:
-        Verify no Plan-labeled virt-v2v pod is found at sampled migration status
-        polls while migration still produces a usable VM. The Plan API default
-        useCompatibilityMode=true must be preserved.
-
-    Prerequisites:
-        Register vSphere source and OpenShift Virtualization destination providers
-        on a healthy MTV cluster. Provide accessible destination storage and
-        network, plus permission to create migration resources and target-namespace
-        NADs. Use an isolated, disposable, powered-on RHEL 8 VM with a boot disk,
-        NIC, guest agent, and SSH access. For extra source networks, provide
-        matching NADs in the target namespace. An equivalent guest is acceptable;
-        do not use a shared or production VM.
-
-    Test plan:
-        1. Confirm providers are Ready and storage and network are accessible.
-           Prepare the powered-on VM and wait for Forklift inventory; create an
-           isolated target namespace and confirm it is Active.
-        2. Create StorageMap and NetworkMap for the VM. Confirm both are created
-           and extra-network destinations use the target namespace.
-        3. Create a cold Plan with skipGuestConversion=true and target power on.
-           Leave useCompatibilityMode unset and confirm Ready=True within 360 seconds.
-        4. Start the migration; confirm Succeeded within 3600 seconds and no
-           Plan-labeled virt-v2v pod is present at any status poll.
-        5. Confirm the VM is powered on, the guest agent responds, and SSH works.
-           Verify the compatibility-mode device models on the destination VM
-           (sata disks, e1000e interfaces, usb tablet input) and the
-           guestConverted="false" label. Delete the Migration, Plan, maps,
-           destination VM, temporary NADs, and target namespace.
-
-    Expected result:
-        The Plan has skipGuestConversion=true and useCompatibilityMode=true;
-        migration succeeds with no Plan-labeled virt-v2v pod found at sampled status
-        polls, and the destination VM passes power, guest-agent, and SSH checks. The
-        destination VM uses compatibility-mode devices (disk.bus "sata", interface
-        model "e1000e", tablet input bus "usb") and carries label
-        guestConverted="false". On failure, inspect Plan and Migration conditions,
-        the failed VM migration step, events, and Plan-labeled pods before cleanup.
+    Subclasses parametrize the scenario (RHEL / Windows guest) and carry the
+    per-scenario test plan. Each subclass is a separate pytest class collector,
+    so an incremental failure in one scenario cannot xfail the other's steps
+    (the incremental hook tracks failures per class collector, conftest.py).
     """
 
     storage_map: StorageMap
@@ -393,3 +345,123 @@ class TestColdMigrationSkipGuestConversion:
             f"Destination VM '{vm_name}' expected label guestConverted='false', got "
             f"{labels.get('guestConverted')!r} (labels: {labels})"
         )
+
+
+@pytest.mark.vsphere
+@pytest.mark.tier1
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_cold_migration_skip_guest_conversion"], id="skip-guest-conversion-cold"
+        )
+    ],
+    indirect=True,
+)
+@pytest.mark.usefixtures("cleanup_migrated_vms")
+class TestColdMigrationSkipGuestConversion(ColdMigrationSkipGuestConversionBase):
+    """Cold-migrate a vSphere RHEL 8 VM with guest conversion skipped.
+
+    Purpose/Regression:
+        Verify a RHEL 8 guest cold-migrates via raw copy mode (skipGuestConversion)
+        with no Plan-labeled virt-v2v pod found at sampled migration status
+        polls while migration still produces a usable VM. The Plan API default
+        useCompatibilityMode=true must be preserved.
+
+    Prerequisites:
+        Register vSphere source and OpenShift Virtualization destination providers
+        on a healthy MTV cluster. Provide accessible destination storage and
+        network, plus permission to create migration resources and target-namespace
+        NADs. Use an isolated, disposable, powered-on RHEL 8 VM with a boot disk,
+        NIC, guest agent, and SSH access. For extra source networks, provide
+        matching NADs in the target namespace. An equivalent guest is acceptable;
+        do not use a shared or production VM.
+
+    Test plan:
+        1. Confirm providers are Ready and storage and network are accessible.
+           Prepare the powered-on VM and wait for Forklift inventory; create an
+           isolated target namespace and confirm it is Active.
+        2. Create StorageMap and NetworkMap for the VM. Confirm both are created
+           and extra-network destinations use the target namespace.
+        3. Create a cold Plan with skipGuestConversion=true and target power on.
+           Leave useCompatibilityMode unset and confirm Ready=True within 360 seconds.
+        4. Start the migration; confirm Succeeded within 3600 seconds and no
+           Plan-labeled virt-v2v pod is present at any status poll.
+        5. Confirm the VM is powered on, the guest agent responds, and SSH works.
+           Verify the compatibility-mode device models on the destination VM
+           (sata disks, e1000e interfaces, usb tablet input) and the
+           guestConverted="false" label. Delete the Migration, Plan, maps,
+           destination VM, temporary NADs, and target namespace.
+
+    Expected result:
+        The Plan has skipGuestConversion=true and useCompatibilityMode=true;
+        migration succeeds with no Plan-labeled virt-v2v pod found at sampled status
+        polls, and the destination VM passes power, guest-agent, and SSH checks. The
+        destination VM uses compatibility-mode devices (disk.bus "sata", interface
+        model "e1000e", tablet input bus "usb") and carries label
+        guestConverted="false". On failure, inspect Plan and Migration conditions,
+        the failed VM migration step, events, and Plan-labeled pods before cleanup.
+    """
+
+
+@pytest.mark.vsphere
+@pytest.mark.tier1
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_cold_migration_skip_guest_conversion_win"],
+            id="skip-guest-conversion-cold-win",
+        )
+    ],
+    indirect=True,
+)
+@pytest.mark.usefixtures("cleanup_migrated_vms")
+class TestColdMigrationSkipGuestConversionWin(ColdMigrationSkipGuestConversionBase):
+    """Cold-migrate a vSphere Windows Server 2019 VM with guest conversion skipped.
+
+    Purpose/Regression:
+        Verify the skipGuestConversion contract on a Windows guest — the primary
+        customer scenario for raw copy (VMware guests that fail virt-v2v
+        conversion). This is the only scenario exercising the
+        WindowsWaitForGuestReboot pipeline stage being skipped (forklift gates it
+        on "!SkipGuestConversion", pkg/controller/plan/migrator/base/migrator.go).
+
+    Prerequisites:
+        Register vSphere source and OpenShift Virtualization destination providers
+        on a healthy MTV cluster. Provide accessible destination storage and
+        network, plus permission to create migration resources and target-namespace
+        NADs. Use an isolated, disposable, powered-on Windows Server 2019 VM with a
+        boot disk, NIC, and Windows guest credentials in the provider config
+        (guest_vm_win_user/guest_vm_win_password). For extra source networks,
+        provide matching NADs in the target namespace. An equivalent guest is
+        acceptable; do not use a shared or production VM.
+
+    Test plan:
+        1. Confirm providers are Ready and storage and network are accessible.
+           Prepare the powered-on VM and wait for Forklift inventory; create an
+           isolated target namespace and confirm it is Active.
+        2. Create StorageMap and NetworkMap for the VM. Confirm both are created
+           and extra-network destinations use the target namespace.
+        3. Create a cold Plan with skipGuestConversion=true and target power on.
+           Leave useCompatibilityMode unset and confirm Ready=True within 360 seconds.
+        4. Start the migration; confirm Succeeded within 3600 seconds and no
+           Plan-labeled virt-v2v pod is present at any status poll.
+        5. Confirm the VM is powered on and reachable with the Windows guest
+           credentials. Verify the compatibility-mode device models on the
+           destination VM (sata disks, e1000e interfaces, usb tablet input) and
+           the guestConverted="false" label. Delete the Migration, Plan, maps,
+           destination VM, temporary NADs, and target namespace.
+
+    Expected result:
+        The Plan has skipGuestConversion=true and useCompatibilityMode=true;
+        migration succeeds with no Plan-labeled virt-v2v pod found at sampled status
+        polls, and the destination VM passes power and connectivity checks with
+        Windows credentials. The destination VM uses compatibility-mode devices
+        (disk.bus "sata", interface model "e1000e", tablet input bus "usb") and
+        carries label guestConverted="false". On failure, inspect Plan and
+        Migration conditions, the failed VM migration step, events, and
+        Plan-labeled pods before cleanup.
+    """

@@ -131,6 +131,17 @@ tests_params: dict = {
         "target_power_state": "on",
         "skip_guest_conversion": True,
     },
+    "test_cold_migration_skip_guest_conversion_win": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-win2019-multi-nics",
+                "source_vm_power": "on",
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
+        "skip_guest_conversion": True,
+    },
     "test_cold_remote_ocp": {
         "virtual_machines": [
             {"name": "mtv-tests-rhel8"},
