@@ -1072,14 +1072,17 @@ def check_vbs_status(
         "-ClassName Win32_DeviceGuard).VirtualizationBasedSecurityStatus",
     ]
 
-    def _query_vbs_status() -> str | None:
-        """Query VBS status over a fresh session.
+    def _query_vbs_status() -> tuple[int, str, str] | None:
+        """Run the VBS command over a fresh session.
 
         The session is what has to be retried, not the guest's reachability: a guest that
         answered one probe can still refuse the next session, so the command runs on every attempt.
+        Only transport outcomes are reported here, so a failed command is not mistaken for a
+        connectivity timeout.
 
         Returns:
-            str | None: The reported status, or None when the session could not be opened (retry).
+            tuple[int, str, str] | None: The command result, or None when the session could not be
+                opened (retry).
         """
         try:
             with ssh_conn:
@@ -1096,15 +1099,14 @@ def check_vbs_status(
             ChannelException,
             ConnectionError,
             RuntimeError,
+            OSError,
         ) as e:
             LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
             return None
 
-        if rc != 0:
-            raise ValueError(f"VBS status command failed on VM '{vm_name}'. rc={rc}, stderr={err}")
-        return stdout.strip()
+        return rc, stdout, err
 
-    vbs_status: str | None = None
+    vbs_result: tuple[int, str, str] | None = None
     try:
         for sample in TimeoutSampler(
             wait_timeout=_SSH_RETRY_TIMEOUT_SECONDS,
@@ -1112,13 +1114,19 @@ def check_vbs_status(
             func=_query_vbs_status,
         ):
             if sample is not None:
-                vbs_status = sample
+                vbs_result = sample
                 break
     except TimeoutExpiredError as e:
         raise TimeoutExpiredError(
             f"SSH connectivity to VM {vm_name} could not be established after {_SSH_RETRY_TIMEOUT_SECONDS}s"
         ) from e
 
+    assert vbs_result is not None, "TimeoutSampler yielded without a command result"
+    rc, stdout, err = vbs_result
+    if rc != 0:
+        raise ValueError(f"VBS status command failed on VM '{vm_name}'. rc={rc}, stderr={err}")
+
+    vbs_status = stdout.strip()
     assert vbs_status != _VBS_STATUS_RUNNING, (
         f"VBS is still running on VM '{vm_name}'. "
         f"VirtualizationBasedSecurityStatus: {vbs_status}, expected: not 2 (not running)"
