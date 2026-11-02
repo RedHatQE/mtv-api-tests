@@ -120,6 +120,7 @@ from utilities.worker_node_selection import (
     get_ready_schedulable_worker_nodes,
     get_session_unique_label_key,
     select_node_by_available_memory,
+    select_node_by_requestable_memory,
 )
 
 RESULTS_PATH = Path("./.xdist_results/")
@@ -318,9 +319,6 @@ def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
 
     Args:
         item (pytest.Item): Item whose setup/call/teardown protocol is starting.
-
-    Returns:
-        None: Hook wrapper — the yield passes control to the inner runtest protocol hooks.
     """
     if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
         initialize_class_plan_context(item)
@@ -644,9 +642,6 @@ def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseExc
 
     Raises:
         Exception: Whatever the attempted collection raises, for the caller to defer or re-raise.
-
-    Returns:
-        None: The helper only records or collects diagnostics.
     """
     node_cls: type | None = getattr(node, "cls", None)
     if node_cls is None:
@@ -698,9 +693,6 @@ def pytest_exception_interact(node, call, report):
         node (pytest.Item): The test item reporting the exception.
         call (pytest.CallInfo[BaseException]): The call info of the failing phase.
         report (pytest.TestReport): The report of the failing phase.
-
-    Returns:
-        None: The hook only records or collects diagnostics.
     """
     if is_dry_run(node.session.config):
         return
@@ -2059,9 +2051,6 @@ def mtv_version_checker(request: pytest.FixtureRequest, ocp_admin_client: Dynami
 
     Raises:
         pytest.skip: If MTV version doesn't meet minimum
-
-    Returns:
-        None: This fixture performs validation only.
     """
     marker = request.node.get_closest_marker("min_mtv_version")
     if marker:
@@ -2070,6 +2059,37 @@ def mtv_version_checker(request: pytest.FixtureRequest, ocp_admin_client: Dynami
 
         if not has_mtv_minimum_version(min_version, client=ocp_admin_client):
             pytest.skip(f"Test requires MTV {min_version}+")
+
+
+# Class scope: the selected node must be identical for plan creation and the migration
+# assertion across the class's incremental test methods (a different node per method would
+# break the expected_node_name assertion, and re-querying per test wastes cluster calls).
+@pytest.fixture(scope="class")
+def selected_worker_node(ocp_admin_client: DynamicClient) -> dict[str, str]:
+    """Select the Ready, schedulable worker node with the most requestable memory.
+
+    Requestable memory is allocatable memory minus pod memory requests on the node;
+    no node labeling is performed and the returned node is pinned via its built-in
+    kubernetes.io/hostname label.
+
+    Args:
+        ocp_admin_client: OpenShift DynamicClient for node and pod queries.
+
+    Returns:
+        dict with keys: node_name (the node's metadata.name, as the scheduler reports
+            it) and hostname_label (the node's actual kubernetes.io/hostname label value,
+            for pinning convertor pods via a node selector).
+
+    Raises:
+        ValueError: If no Ready, schedulable worker nodes found in cluster
+    """
+    worker_nodes = [node.name for node in get_ready_schedulable_worker_nodes(ocp_client=ocp_admin_client)]
+    if not worker_nodes:
+        raise ValueError("No Ready, schedulable worker nodes found in cluster")
+
+    selected_node = select_node_by_requestable_memory(ocp_client=ocp_admin_client, node_names=worker_nodes)
+    LOGGER.info(f"Selected worker node '{selected_node['node_name']}' with the most requestable memory")
+    return selected_node
 
 
 @pytest.fixture(scope="class")

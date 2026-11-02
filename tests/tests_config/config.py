@@ -839,7 +839,7 @@ tests_params: dict = {
         "enable_nested_virtualization": False,
         "pvc_name_template": '{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,
-        "network_name_template": "net-{{.NetworkType}}-{{.NetworkIndex}}",
+        "network_name_template": "net-{{.NetworkType | lower}}-{{.NetworkIndex}}",
         "target_node_selector": {
             "mtv-comprehensive-node": None,  # None = auto-generate with session_uuid
         },
@@ -863,6 +863,18 @@ tests_params: dict = {
         "vm_target_namespace": f"mtv-vms-cold-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": default_multus_namespace,  # Cross-namespace NAD access
         "guest_agent_timeout": 600,
+    },
+    "test_convertor_settings_and_instance_type": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+                "instance_type": "u1.medium",  # CNV standard general-purpose instancetype (1 vCPU, 4Gi)
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
     },
     "test_post_hook_retain_failed_vm": {
         "virtual_machines": [

@@ -75,7 +75,7 @@ class TestColdMigrationComprehensive:
         3. Create a cold Plan for the VM with: target power state on;
            preserve static IPs; a PVC name template (using the VM and disk
            names) with explicit name (not generateName); a network name
-           template prefixing the mapped network name; the labeled node as
+           template rendering the source network type and NIC index; the labeled node as
            target node selector; target VM labels; a pod-affinity rule on a
            chosen label; a dedicated VM target namespace; and nested
            virtualization disabled. Check the Plan's Ready condition is True.

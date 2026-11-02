@@ -441,8 +441,14 @@ class OCPProvider(BaseProvider):
 
         result_vm_info["cpu"]["num_cores"] = cnv_vm.vmi.instance.spec.domain.cpu.cores
         result_vm_info["cpu"]["num_sockets"] = cnv_vm.vmi.instance.spec.domain.cpu.sockets
-        # KubeVirt leaves threads unset when 1; default it so consumers can rely on the field.
-        result_vm_info["cpu"]["num_threads"] = cnv_vm.vmi.instance.spec.domain.cpu.get("threads") or 1
+        # KubeVirt leaves threads unset when 1; default only a truly absent field so a
+        # malformed VMI value fails here instead of breaking the instance-type check math.
+        vmi_cpu_threads = cnv_vm.vmi.instance.spec.domain.cpu.get("threads")
+        if vmi_cpu_threads is None:
+            vmi_cpu_threads = 1
+        elif not isinstance(vmi_cpu_threads, int) or vmi_cpu_threads < 1:
+            raise ValueError(f"Malformed cpu.threads on VMI of VM '{result_vm_info['name']}': {vmi_cpu_threads!r}")
+        result_vm_info["cpu"]["num_threads"] = vmi_cpu_threads
         # CPU features are read from the VM template spec (not VMI) because features are configured at template level.
         template_cpu: dict[str, Any] = cnv_vm.instance.spec.template.spec.domain.get("cpu", {})
         result_vm_info["cpu"]["features"] = list(template_cpu.get("features", []))

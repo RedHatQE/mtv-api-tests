@@ -73,3 +73,4 @@ utilities/virtctl.py:d3563afcea498318  # L156: except Exception as e:
 utilities/vmware_guest_operations.py:01b6c917f46f5f05  # L126: except Exception:
 utilities/worker_node_selection.py:6b53dc896e2fef91  # L183: except Exception as e:
 utilities/worker_node_selection.py:af9b9450c4260281  # L52: except Exception as e:
+utilities/post_migration.py:f2294bed56935e65  # L1326: except Exception as exp: (go_template.render wraps native lib, no documented exception type)
