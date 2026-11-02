@@ -373,7 +373,7 @@ and repo-specific AST checks, so a single <code>pre-commit</code> run catches a 
 <span class="w">        </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^docs/</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/astral-sh/ruff-pre-commit</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.16.9</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.17.2</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff-format</span>
@@ -385,7 +385,7 @@ and repo-specific AST checks, so a single <code>pre-commit</code> run catches a 
 <span class="w">        </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^docs/</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/pre-commit/mirrors-mypy</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.3.1</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.4.0</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mypy</span>
 <span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span>
@@ -399,7 +399,7 @@ and repo-specific AST checks, so a single <code>pre-commit</code> run catches a 
 <span class="w">          </span><span class="p p-Indicator">]</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/DavidAnson/markdownlint-cli2</span>
-<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.23.3</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.24.0</span>
 <span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">markdownlint-cli2</span>
 <span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"--fix"</span><span class="p p-Indicator">]</span>
@@ -449,10 +449,21 @@ and repo-specific AST checks, so a single <code>pre-commit</code> run catches a 
 <span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_no_runtimeerror.py</span>
 <span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
 <span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-test-plan-docstring-schema</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test classes must have a schema-conforming test plan docstring</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_test_plan_docstring_schema.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^tests/</span>
+<span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-agents-md-budget</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AGENTS.md line budget (shrink-only)</span>
+<span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/hooks/check_agents_md_budget.py</span>
+<span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+<span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^AGENTS\.md$</span>
 </code></pre></div>
 
 <h2 id="agentsmd-enforcement-hooks">AGENTS.md Enforcement Hooks</h2>
-<p>The <code>repo: local</code> block is the most distinctive part of this file. Each of those eight hooks is a small AST-based script under
+<p>The <code>repo: local</code> block is the most distinctive part of this file. Each of those ten hooks is a small AST-based script under
 <code>scripts/hooks/</code> that turns one "MUST" rule from <code>AGENTS.md</code> into a blocking check.</p>
 <div class="table-wrap"><table>
 <thead>
@@ -494,9 +505,18 @@ and repo-specific AST checks, so a single <code>pre-commit</code> run catches a 
 <td><code>check-no-runtimeerror</code></td>
 <td>No <code>raise RuntimeError</code>, except in <code>pytest_*</code> functions in <code>conftest.py</code></td>
 </tr>
+<tr>
+<td><code>check-test-plan-docstring-schema</code></td>
+<td>Test classes must have a schema-conforming test plan docstring</td>
+</tr>
+<tr>
+<td><code>check-agents-md-budget</code></td>
+<td><code>AGENTS.md</code> line budget is shrink-only</td>
+</tr>
 </tbody>
 </table></div>
-<p>Two of them are scoped further with <code>files: ^tests/</code>, so they only run on files under <code>tests/</code>.</p>
+<p>Three of them are scoped further with <code>files: ^tests/</code>, so they only run on files under <code>tests/</code>. <code>check-agents-md-budget</code> runs only on
+<code>AGENTS.md</code>.</p>
 <p>Run the whole suite, one hook, or one script directly:</p>
 <div class="highlight"><pre><span></span><code>pre-commit<span class="w"> </span>run<span class="w"> </span>--all-files
 pre-commit<span class="w"> </span>run<span class="w"> </span>check-no-except-exception<span class="w"> </span>--all-files
@@ -531,7 +551,7 @@ to go green.</p>
 <li>Python quality: <code>flake8</code>, <code>ruff</code>, <code>ruff-format</code>, and <code>mypy</code></li>
 <li>secret prevention: <code>detect-private-key</code>, <code>detect-secrets</code>, and <code>gitleaks</code></li>
 <li>docs hygiene: <code>markdownlint-cli2 --fix</code></li>
-<li>project rules: the eight <code>AGENTS.md</code> AST hooks listed above</li>
+<li>project rules: the ten <code>AGENTS.md</code> AST hooks listed above</li>
 </ul>
 <p>The <code>ci:</code> block at the top pins the behavior of pre-commit.ci itself: <code>autoupdate_schedule: weekly</code> and <code>autofix_prs: false</code>. That means hook
 revisions are bumped on a schedule, and no autofix PR is opened for you.</p>

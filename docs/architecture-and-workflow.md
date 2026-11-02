@@ -141,7 +141,7 @@ This class-based layout is intentional. Earlier methods create resources that la
 
 ### Extended Step Patterns
 
-Feature suites extend or replace the base steps. `AGENTS.md` under "Key Patterns" is the authoritative list and names every test
+Feature suites extend or replace the base steps. `AGENTS.md` under "Step patterns" is the authoritative list and names every test
 method; the variants actually present in `tests/` are:
 
 - **4-step plan-readiness**: a leading `test_verify_<feature>` step replaces migrate/check, because the feature under test is

@@ -27,7 +27,7 @@ aligned with (currently `2.12`). No code in the repository reads it, so changing
 The first automation layer is `.pre-commit-config.yaml`. It combines generic repository safety checks with Python tooling, security scanning,
 and repo-specific AST checks, so a single `pre-commit` run catches a lot of problems early.
 
-```1:119:.pre-commit-config.yaml
+```1:130:.pre-commit-config.yaml
 ---
 ci:
     autofix_prs: false
@@ -71,7 +71,7 @@ repos:
         exclude: ^docs/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.9
+    rev: v0.17.2
     hooks:
       - id: ruff
       - id: ruff-format
@@ -83,7 +83,7 @@ repos:
         exclude: ^docs/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.1
+    rev: v2.4.0
     hooks:
       - id: mypy
         additional_dependencies:
@@ -97,7 +97,7 @@ repos:
           ]
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.23.3
+    rev: v0.24.0
     hooks:
       - id: markdownlint-cli2
         args: ["--fix"]
@@ -147,11 +147,22 @@ repos:
         entry: scripts/hooks/check_no_runtimeerror.py
         language: python
         types: [python]
+      - id: check-test-plan-docstring-schema
+        name: test classes must have a schema-conforming test plan docstring
+        entry: scripts/hooks/check_test_plan_docstring_schema.py
+        language: python
+        files: ^tests/
+        types: [python]
+      - id: check-agents-md-budget
+        name: AGENTS.md line budget (shrink-only)
+        entry: scripts/hooks/check_agents_md_budget.py
+        language: python
+        files: ^AGENTS\.md$
 ```
 
 ## AGENTS.md Enforcement Hooks
 
-The `repo: local` block is the most distinctive part of this file. Each of those eight hooks is a small AST-based script under
+The `repo: local` block is the most distinctive part of this file. Each of those ten hooks is a small AST-based script under
 `scripts/hooks/` that turns one "MUST" rule from `AGENTS.md` into a blocking check.
 
 | Hook id | Enforces |
@@ -164,8 +175,11 @@ The `repo: local` block is the most distinctive part of this file. Each of those
 | `check-test-file-location` | No `test_*.py` directly under `tests/` |
 | `check-autouse-fixtures` | Only the `autouse_fixtures` fixture in `conftest.py` may declare `autouse=True` |
 | `check-no-runtimeerror` | No `raise RuntimeError`, except in `pytest_*` functions in `conftest.py` |
+| `check-test-plan-docstring-schema` | Test classes must have a schema-conforming test plan docstring |
+| `check-agents-md-budget` | `AGENTS.md` line budget is shrink-only |
 
-Two of them are scoped further with `files: ^tests/`, so they only run on files under `tests/`.
+Three of them are scoped further with `files: ^tests/`, so they only run on files under `tests/`. `check-agents-md-budget` runs only on
+`AGENTS.md`.
 
 Run the whole suite, one hook, or one script directly:
 
@@ -206,7 +220,7 @@ That hook list tells you what the repo cares about:
 - Python quality: `flake8`, `ruff`, `ruff-format`, and `mypy`
 - secret prevention: `detect-private-key`, `detect-secrets`, and `gitleaks`
 - docs hygiene: `markdownlint-cli2 --fix`
-- project rules: the eight `AGENTS.md` AST hooks listed above
+- project rules: the ten `AGENTS.md` AST hooks listed above
 
 The `ci:` block at the top pins the behavior of pre-commit.ci itself: `autoupdate_schedule: weekly` and `autofix_prs: false`. That means hook
 revisions are bumped on a schedule, and no autofix PR is opened for you.
