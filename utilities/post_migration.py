@@ -6,7 +6,7 @@ import json
 import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import go_template
 import jc
@@ -1290,6 +1290,45 @@ def check_storage(
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
 
 
+def _render_forklift_template(
+    template: str,
+    template_values: dict[str, Any],
+    template_field_name: str,
+) -> str:
+    """Render a Forklift Go template (with Sprig functions) using py-go-template.
+
+    Args:
+        template (str): Forklift template string (e.g., "{{.VmName}}-{{.DiskIndex}}").
+        template_values (dict[str, Any]): Values exposed to the template wildcards.
+        template_field_name (str): Plan CR field name used in error messages (e.g., "pvcNameTemplate").
+
+    Returns:
+        str: The rendered template, stripped of surrounding whitespace.
+
+    Raises:
+        ValueError: If the template renders to an empty string.
+    """
+    # py-go-template requires a file path, so create a temporary file
+    tmp_file_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".tmpl", delete=False) as tmp_file:
+            tmp_file.write(template)
+            tmp_file_path = tmp_file.name
+
+        # Render Go template with proper Sprig function support
+        result = go_template.render(Path(tmp_file_path), template_values)
+        rendered = result.decode("utf-8") if isinstance(result, bytes) else result
+        rendered = rendered.strip()
+    finally:
+        # Clean up temporary file
+        if tmp_file_path:
+            Path(tmp_file_path).unlink(missing_ok=True)
+
+    if not rendered:
+        raise ValueError(f"{template_field_name} '{template}' rendered to empty string with values {template_values}")
+    return rendered
+
+
 def check_pvc_names(
     source_vm: dict[str, Any],
     destination_vm: dict[str, Any],
@@ -1434,31 +1473,11 @@ def check_pvc_names(
             "FileName": filename,
         }
 
-        # py-go-template requires a file path, so create a temporary file
-        tmp_file_path = None
-        try:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".tmpl", delete=False) as tmp_file:
-                tmp_file.write(pvc_name_template)
-                tmp_file_path = tmp_file.name
-
-            # Render Go template with proper Sprig function support
-            try:
-                result = go_template.render(Path(tmp_file_path), template_values)
-                expected_pvc_name = result.decode("utf-8") if isinstance(result, bytes) else result
-                expected_pvc_name = expected_pvc_name.strip()
-            except Exception as template_error:
-                raise ValueError(
-                    f"Failed to render pvcNameTemplate '{pvc_name_template}' with values {template_values}: {template_error}"
-                ) from template_error
-
-            if not expected_pvc_name:
-                raise ValueError(
-                    f"pvcNameTemplate '{pvc_name_template}' rendered to empty string with values {template_values}"
-                )
-        finally:
-            # Clean up temporary file
-            if tmp_file_path:
-                Path(tmp_file_path).unlink(missing_ok=True)
+        expected_pvc_name = _render_forklift_template(
+            template=pvc_name_template,
+            template_values=template_values,
+            template_field_name="pvcNameTemplate",
+        )
 
         if use_generate_name:
             max_prefix_length = KUBERNETES_MAX_GENERATE_NAME_PREFIX_LENGTH
@@ -1542,6 +1561,78 @@ def check_pvc_names(
     match_type = "prefix match (generateName=True)" if use_generate_name else "exact match (generateName=False)"
     LOGGER.info(
         f"PVC name verification completed: All {len(source_disks_ordered)} PVC names match template ({match_type})"
+    )
+
+
+def check_network_names(
+    destination_vm: dict[str, Any],
+    network_name_template: str,
+) -> None:
+    """Verify that migrated VM network and interface names match the networkNameTemplate.
+
+    Forklift renders spec.template.spec.networks[].name and the matching
+    domain.devices.interfaces[].name from the Plan's networkNameTemplate. The template
+    values are the mapped destination network name, its namespace, its type, and the
+    network index.
+
+    Template values mirror forklift's rendering (pkg/controller/plan/adapter/
+    vSphere/builder.go): NetworkType is the lowercase mapped network type
+    ("multus" or "pod"), and for pod-mapped networks NetworkName and
+    NetworkNamespace are empty strings — so a template like "net-{{.NetworkName}}"
+    legitimately renders to "net-".
+
+    Args:
+        destination_vm (dict[str, Any]): Destination VM info dictionary containing provider_vm_api.
+        network_name_template (str): Forklift network name template (e.g., "net-{{.NetworkName}}").
+
+    Raises:
+        AssertionError: If a network or interface name does not match the rendered template.
+        ValueError: If destination_vm has no provider_vm_api or the template renders to an empty string.
+    """
+    cnv_vm = destination_vm.get("provider_vm_api")
+    if cnv_vm is None:
+        raise ValueError(f"destination_vm '{destination_vm.get('name')}' has no provider_vm_api")
+
+    vm_spec = cnv_vm.instance.spec.template.spec
+    interfaces_by_name = {interface["name"]: interface for interface in vm_spec.domain.devices.interfaces}
+
+    for network_index, network in enumerate(vm_spec.networks or []):
+        if multus := network.get("multus"):
+            # networkName may be the bare NAD name (same namespace) or "<namespace>/<name>"
+            network_namespace, _, network_name = multus["networkName"].rpartition("/")
+            if not network_namespace:
+                # A bare NAD name is same-namespace: Forklift renders the mapped
+                # destination network's namespace, which is the VM's namespace.
+                network_namespace = cnv_vm.namespace
+            network_type = "multus"
+        else:  # pod-mapped network — forklift leaves name/namespace empty
+            network_namespace = ""
+            network_name = ""
+            network_type = "pod"
+
+        expected_network_name = _render_forklift_template(
+            template=network_name_template,
+            template_values={
+                "NetworkName": network_name,
+                "NetworkNamespace": network_namespace,
+                "NetworkType": network_type,
+                "NetworkIndex": network_index,
+            },
+            template_field_name="networkNameTemplate",
+        )
+
+        assert network["name"] == expected_network_name, (
+            f"VM '{destination_vm['name']}' network name '{network['name']}' does not match "
+            f"networkNameTemplate '{network_name_template}' rendered to '{expected_network_name}'"
+        )
+        assert network["name"] in interfaces_by_name, (
+            f"VM '{destination_vm['name']}' has no interface named '{network['name']}' matching "
+            f"network '{network['name']}'"
+        )
+
+    LOGGER.info(
+        f"Network name verification completed: All network and interface names on VM "
+        f"'{destination_vm['name']}' match template '{network_name_template}'"
     )
 
 
@@ -2173,6 +2264,36 @@ def check_vm_multus_network_name_form(
     )
 
 
+def _check_vms_source_cpu_memory(
+    vm: dict[str, Any],
+    source_vm: dict[str, Any],
+    destination_vm: dict[str, Any],
+    res: list[str],
+) -> None:
+    """Compare source and destination CPU and memory, unless an instanceType overrides them.
+
+    Args:
+        vm (dict[str, Any]): Plan configuration of the VM being validated.
+        source_vm (dict[str, Any]): Source VM info dictionary.
+        destination_vm (dict[str, Any]): Destination VM info dictionary.
+        res (list[str]): Per-VM validation failure messages to append to.
+    """
+    if vm.get("instance_type"):
+        # With a per-VM instanceType the destination CPU and memory come from the
+        # instancetype, not the source VM — _check_instance_type verifies them instead.
+        return
+
+    try:
+        check_cpu(source_vm=source_vm, destination_vm=destination_vm)
+    except AssertionError as exp:
+        res.append(f"check_cpu - {str(exp)}")
+
+    try:
+        check_memory(source_vm=source_vm, destination_vm=destination_vm)
+    except (AssertionError, ValueError) as exp:
+        res.append(f"check_memory - {str(exp)}")
+
+
 def check_vms(
     plan: dict[str, Any],
     source_provider: BaseProvider,
@@ -2188,6 +2309,7 @@ def check_vms(
     target_vm_labels: dict[str, Any] | None = None,
     plan_resource: Plan | None = None,
     di_results: list[dict[str, Any]] | None = None,
+    per_vm_extra_checks: list[Callable[[dict[str, Any], dict[str, Any]], None]] | None = None,
 ) -> None:
     res: dict[str, list[str]] = {}
 
@@ -2241,6 +2363,16 @@ def check_vms(
             )
         except Exception as exp:
             res[vm_name].append(f"check_vms_power_state - {str(exp)}")
+
+        # Feature-specific per-VM checks are supplied by feature callers as
+        # callbacks, keeping check_vms itself feature-neutral. They must run for
+        # OVA plans too, so they stay in the unconditional per-VM section.
+        for extra_check in per_vm_extra_checks or []:
+            display_name = getattr(extra_check, "__name__", type(extra_check).__name__)
+            try:
+                extra_check(vm, destination_vm)
+            except (AssertionError, ValueError) as exp:
+                res[vm_name].append(f"{display_name} - {str(exp)}")
 
         # OpenStack and OCP-source adapters always write the qualified "<namespace>/<name>" form
         if source_provider.type not in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT):
@@ -2373,15 +2505,12 @@ def check_vms(
 
         # Group 2: Source-comparison checks — require real source VM data (OVA has none)
         if source_provider.type != Provider.ProviderType.OVA:
-            try:
-                check_cpu(source_vm=source_vm, destination_vm=destination_vm)
-            except Exception as exp:
-                res[vm_name].append(f"check_cpu - {str(exp)}")
-
-            try:
-                check_memory(source_vm=source_vm, destination_vm=destination_vm)
-            except Exception as exp:
-                res[vm_name].append(f"check_memory - {str(exp)}")
+            _check_vms_source_cpu_memory(
+                vm=vm,
+                source_vm=source_vm,
+                destination_vm=destination_vm,
+                res=res[vm_name],
+            )
 
             # TODO: Remove when OCP to OCP migration is done with 2 clusters
             if source_provider.type != Provider.ProviderType.OPENSHIFT:

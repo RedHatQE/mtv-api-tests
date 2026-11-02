@@ -441,6 +441,8 @@ class OCPProvider(BaseProvider):
 
         result_vm_info["cpu"]["num_cores"] = cnv_vm.vmi.instance.spec.domain.cpu.cores
         result_vm_info["cpu"]["num_sockets"] = cnv_vm.vmi.instance.spec.domain.cpu.sockets
+        # KubeVirt leaves threads unset when 1; default it so consumers can rely on the field.
+        result_vm_info["cpu"]["num_threads"] = cnv_vm.vmi.instance.spec.domain.cpu.get("threads") or 1
         # CPU features are read from the VM template spec (not VMI) because features are configured at template level.
         template_cpu: dict[str, Any] = cnv_vm.instance.spec.template.spec.domain.get("cpu", {})
         result_vm_info["cpu"]["features"] = list(template_cpu.get("features", []))

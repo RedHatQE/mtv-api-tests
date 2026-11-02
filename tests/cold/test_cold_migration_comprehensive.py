@@ -6,6 +6,7 @@ from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
+from simple_logger.logger import get_logger
 
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -13,8 +14,10 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
-from utilities.post_migration import check_vms
+from utilities.post_migration import check_network_names, check_vms
 from utilities.utils import populate_vm_ids
+
+LOGGER = get_logger(__name__)
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -44,11 +47,11 @@ class TestColdMigrationComprehensive:
     Purpose/Regression:
         Broad regression coverage for cold-migration Plan options in a single
         scenario: static IP preservation, PVC naming via a name template,
-        target node scheduling via node selector, target VM labels, VM
-        affinity rules, a dedicated VM target namespace, target power state,
-        and nested virtualization left disabled. There is no induced failure;
-        the test passes only when every option is observable on the migrated
-        VM.
+        network naming via a name template, target node scheduling via node
+        selector, target VM labels, VM affinity rules, a dedicated VM target
+        namespace, target power state, and nested virtualization left
+        disabled. There is no induced failure; the test passes only when every
+        option is observable on the migrated VM.
 
     Prerequisites:
         Register and connect a source provider and an OpenShift destination
@@ -71,7 +74,8 @@ class TestColdMigrationComprehensive:
            networks. Confirm both are created.
         3. Create a cold Plan for the VM with: target power state on;
            preserve static IPs; a PVC name template (using the VM and disk
-           names) with explicit name (not generateName); the labeled node as
+           names) with explicit name (not generateName); a network name
+           template prefixing the mapped network name; the labeled node as
            target node selector; target VM labels; a pod-affinity rule on a
            chosen label; a dedicated VM target namespace; and nested
            virtualization disabled. Check the Plan's Ready condition is True.
@@ -82,7 +86,9 @@ class TestColdMigrationComprehensive:
            subnet mask and gateway match the source; interface names are
            preserved; guest connectivity over the mapped network works; CPU and memory match the
            source; NICs and disks match the maps; each PVC is named according
-           to the template; the VM runs on the labeled node; the target labels
+           to the template; each network and its matching interface in the VM
+           spec are named according to the network name template; the VM runs
+           on the labeled node; the target labels
            are present; the affinity rule matches; CPU features vmx/svm are
            disabled; and Virtualization Based Security is not running. After
            the checks, delete the migrated VM and the labeled node label;
@@ -91,13 +97,14 @@ class TestColdMigrationComprehensive:
     Expected result:
         The migration succeeds and every configured option is visible on the
         migrated VM: correct static network configuration and connectivity,
-        template-derived PVC names, scheduling on the labeled node, target
+        template-derived PVC names, template-derived network and interface
+        names, scheduling on the labeled node, target
         labels, affinity, placement in the dedicated namespace, and disabled
         nested-virtualization CPU features. On failure, inspect the migration
         CR status and its VM entries for the failed step, the Plan conditions,
-        the VM spec (labels, affinity, node selector, CPU features), the PVC
-        names in the VM target namespace, and guest network configuration
-        inside the VM.
+        the VM spec (labels, affinity, node selector, networks, interfaces,
+        CPU features), the PVC names and network names in the VM target
+        namespace, and guest network configuration inside the VM.
     """
 
     storage_map: StorageMap
@@ -226,6 +233,7 @@ class TestColdMigrationComprehensive:
             warm_migration=prepared_plan["warm_migration"],
             preserve_static_ips=prepared_plan["preserve_static_ips"],
             pvc_name_template=prepared_plan["pvc_name_template"],
+            network_name_template=prepared_plan["network_name_template"],
             pvc_name_template_use_generate_name=prepared_plan["pvc_name_template_use_generate_name"],
             target_node_selector={labeled_worker_node["label_key"]: labeled_worker_node["label_value"]},
             target_labels=target_vm_labels["vm_labels"],
@@ -287,6 +295,25 @@ class TestColdMigrationComprehensive:
         Raises:
             AssertionError: If any VM validation checks fail
         """
+
+        def _check_vm_network_names(vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
+            """Verify the VM's network and interface names match the plan's networkNameTemplate.
+
+            Skips with a warning for source providers whose Forklift adapter is not
+            confirmed to render networkNameTemplate with the modeled template values.
+            """
+            if not source_provider.renders_network_name_template:
+                LOGGER.warning(
+                    f"Skipping network name template check for provider type '{source_provider.type}': "
+                    "its Forklift adapter is not confirmed to render networkNameTemplate with the "
+                    "modeled template values"
+                )
+                return
+            check_network_names(
+                destination_vm=destination_vm,
+                network_name_template=prepared_plan["network_name_template"],
+            )
+
         check_vms(
             plan=prepared_plan,
             source_provider=source_provider,
@@ -299,4 +326,5 @@ class TestColdMigrationComprehensive:
             labeled_worker_node=labeled_worker_node,
             target_vm_labels=target_vm_labels,
             vm_ssh_connections=vm_ssh_connections,
+            per_vm_extra_checks=[_check_vm_network_names],
         )

@@ -220,6 +220,7 @@ def create_plan_resource(
     copyoffload: bool = False,
     preserve_static_ips: bool = False,
     pvc_name_template: str | None = None,
+    network_name_template: str | None = None,
     pvc_name_template_use_generate_name: bool | None = None,
     target_node_selector: dict[str, str] | None = None,
     target_labels: dict[str, str] | None = None,
@@ -260,6 +261,7 @@ def create_plan_resource(
         copyoffload (bool): Enable copy-offload specific settings. Defaults to False.
         preserve_static_ips (bool): Preserve static IP addresses. Defaults to False.
         pvc_name_template (str | None): PVC naming template. Defaults to None.
+        network_name_template (str | None): Template for migrated VM network names. Defaults to None.
         pvc_name_template_use_generate_name (bool | None): Use generateName for PVCs. Defaults to None.
         target_node_selector (dict[str, str] | None): Optional node selector labels for scheduling VMs to specific nodes. Defaults to None.
         target_labels (dict[str, str] | None): Optional custom labels to apply to migrated VM metadata. Defaults to None.
@@ -331,6 +333,7 @@ def create_plan_resource(
         "after_hook_namespace": after_hook_namespace,
         "preserve_static_ips": preserve_static_ips,
         "pvc_name_template": pvc_name_template,
+        "network_name_template": network_name_template,
         "pvc_name_template_use_generate_name": pvc_name_template_use_generate_name,
         "target_power_state": target_power_state,
     }

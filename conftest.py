@@ -117,8 +117,8 @@ from utilities.utils import (
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
 from utilities.vmware_guest_operations import collect_linux_guest_static_ip_metadata
 from utilities.worker_node_selection import (
+    get_ready_schedulable_worker_nodes,
     get_session_unique_label_key,
-    get_worker_nodes,
     select_node_by_available_memory,
 )
 
@@ -2093,7 +2093,7 @@ def labeled_worker_node(
 
     Raises:
         ValueError: If target_node_selector not in test config, does not contain exactly one label,
-            or no worker nodes found
+            or no Ready, schedulable worker nodes found
     """
     try:
         target_node_selector = prepared_plan["target_node_selector"]
@@ -2106,9 +2106,10 @@ def labeled_worker_node(
     if len(target_node_selector) != 1:
         raise ValueError(f"target_node_selector must contain exactly one label, got {len(target_node_selector)}")
 
-    worker_nodes = get_worker_nodes(ocp_admin_client)
+    # Only Ready, schedulable workers without blocking taints can run the labeled pod.
+    worker_nodes = [node.name for node in get_ready_schedulable_worker_nodes(ocp_client=ocp_admin_client)]
     if not worker_nodes:
-        raise ValueError("No worker nodes found in cluster")
+        raise ValueError("No Ready, schedulable worker nodes found in cluster")
 
     target_node = select_node_by_available_memory(ocp_admin_client, worker_nodes)
 

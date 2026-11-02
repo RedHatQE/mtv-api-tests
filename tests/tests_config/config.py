@@ -839,6 +839,7 @@ tests_params: dict = {
         "enable_nested_virtualization": False,
         "pvc_name_template": '{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,
+        "network_name_template": "net-{{.NetworkType}}-{{.NetworkIndex}}",
         "target_node_selector": {
             "mtv-comprehensive-node": None,  # None = auto-generate with session_uuid
         },

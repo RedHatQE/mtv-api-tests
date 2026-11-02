@@ -283,6 +283,7 @@ def check_vms_power_state(
 | `vm_target_namespace` | No | Custom namespace for migrated VMs. The preparation flow creates it if needed. |
 | `multus_namespace` | No | Namespace where NetworkAttachmentDefinitions are created for additional networks. |
 | `pvc_name_template` | No | Forklift PVC naming template. Either a string, or a mapping of provider type to template. |
+| `network_name_template` | No | Forklift network naming template (e.g. `net-{{.NetworkType}}-{{.NetworkIndex}}`). The check is only run for source providers whose Forklift adapter is confirmed to render the template (vSphere). Post-checks render it per mapped destination network and verify the migrated VM's `networks[].name` and matching `interfaces[].name`. |
 | `pvc_name_template_use_generate_name` | No | When `True`, post-checks treat the rendered PVC name as a prefix because Kubernetes adds a generated suffix. |
 | `target_node_selector` | No | Node label selector used for VM placement tests. |
 | `target_labels` | No | Labels to apply to migrated VM metadata. |
@@ -591,8 +592,8 @@ Right before creating the MTV `Plan`, the tests add VM IDs from the Forklift inv
 ```
 
 `create_plan_resource()` accepts only the flags that map onto the Plan CR: `warm_migration`, `copyoffload`, `preserve_static_ips`, `pvc_name_template`,
-`pvc_name_template_use_generate_name`, `target_node_selector`, `target_labels`, `target_affinity`, `vm_target_namespace`, `migrate_shared_disks`, `target_power_state`,
-`enable_nested_virtualization`, `xfs_compatibility`, `run_preflight_inspection`, and `rdm_as_lun`. Additional Plan constructor fields can be passed through
+`network_name_template`, `pvc_name_template_use_generate_name`, `target_node_selector`, `target_labels`, `target_affinity`, `vm_target_namespace`, `migrate_shared_disks`, `target_power_state`,
+`enable_nested_virtualization`, `xfs_compatibility`, `run_preflight_inspection`, `rdm_as_lun`. Additional Plan constructor fields can be passed through
 `additional_plan_options`; everything else is consumed by fixtures or by post-migration checks.
 
 ## Runtime Fields Added During Preparation
