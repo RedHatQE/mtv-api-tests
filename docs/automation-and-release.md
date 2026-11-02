@@ -176,7 +176,7 @@ The `repo: local` block is the most distinctive part of this file. Each of those
 | `check-autouse-fixtures` | Only the `autouse_fixtures` fixture in `conftest.py` may declare `autouse=True` |
 | `check-no-runtimeerror` | No `raise RuntimeError`, except in `pytest_*` functions in `conftest.py` |
 | `check-test-plan-docstring-schema` | Test classes must have a schema-conforming test plan docstring |
-| `check-agents-md-budget` | `AGENTS.md` line budget is shrink-only |
+| `check-agents-md-budget` | `AGENTS.md` must stay within the 420-line `MAX_LINES` cap; raising that cap takes a deliberate, reviewed edit of the hook's constant, which the hook itself does not block |
 
 Three of them are scoped further with `files: ^tests/`, so they only run on files under `tests/`. `check-agents-md-budget` runs only on
 `AGENTS.md`.

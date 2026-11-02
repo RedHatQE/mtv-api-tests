@@ -511,7 +511,7 @@ and repo-specific AST checks, so a single <code>pre-commit</code> run catches a 
 </tr>
 <tr>
 <td><code>check-agents-md-budget</code></td>
-<td><code>AGENTS.md</code> line budget is shrink-only</td>
+<td><code>AGENTS.md</code> must stay within the 420-line <code>MAX_LINES</code> cap; raising that cap takes a deliberate, reviewed edit of the hook's constant, which the hook itself does not block</td>
 </tr>
 </tbody>
 </table></div>

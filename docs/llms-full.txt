@@ -1528,7 +1528,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:218:utilities/mtv_migration.py
+```205:238:utilities/mtv_migration.py
     def create_plan_resource(
         ocp_admin_client: DynamicClient,
         fixture_store: dict[str, Any],
@@ -1603,7 +1603,7 @@ narrowly as its content allows.
 
 Optional features are only added when requested, so an unset flag never lands on the `Plan` CR:
 
-```307:358:utilities/mtv_migration.py
+```341:385:utilities/mtv_migration.py
         if target_node_selector:
             plan_kwargs["target_node_selector"] = target_node_selector
 
@@ -1636,7 +1636,7 @@ Optional features are only added when requested, so an unset flag never lands on
             plan_kwargs["run_preflight_inspection"] = run_preflight_inspection
 
         if additional_plan_options:
-            duplicate_options = plan_kwargs.keys() & additional_plan_options.keys()
+            duplicate_options = (plan_kwargs.keys() | _CREATE_AND_STORE_RESOURCE_KEYS) & additional_plan_options.keys()
             if duplicate_options:
                 raise ValueError(
                     f"Additional Plan options cannot override options already set by create_plan_resource: "
@@ -1751,7 +1751,8 @@ contains a wrong-passphrase class that expects the migration to fail.
 `xfs_compatibility: True` on the Plan and then run `xfs_info` inside the migrated guest to validate the filesystem version.
 
 **Skip guest conversion** is covered by `tests/cold/test_cold_migration_skip_guest_conversion.py`. The test sets
-`skip_guest_conversion: True` through `additional_plan_options`, verifies no Plan-labeled `virt-v2v` pod appears during migration, and checks that the
+`skip_guest_conversion: True` through `additional_plan_options`, verifies that no Plan-labeled `virt-v2v` pod is
+observed at the status polls taken during migration (a pod that exists only between two polls can be missed), and checks that the
 destination guest boots and accepts SSH connections.
 
 **Shared disks** are covered by `tests/shared_disk/`. The Linux test mounts, writes, and reads a marker from both migrated VMs. The
@@ -2320,7 +2321,8 @@ multi-datastore, mixed datastore, 10 mixed disks, warm copy-offload, and the 5-V
 - **XFS.** `tests/cold/test_cold_migration_xfs.py` and `tests/warm/test_warm_migration_xfs.py` set `xfs_compatibility: True`
   and verify the guest filesystem with an `xfs_check` command, expecting `crc=0` in `xfs_info` output.
 - **Skip guest conversion.** `tests/cold/test_cold_migration_skip_guest_conversion.py` sets `skip_guest_conversion: True`, verifies
-  that no Plan-labeled `virt-v2v` pod appears during migration, and checks the destination guest.
+  that no Plan-labeled `virt-v2v` pod is observed at the status polls taken during migration (a pod that exists only
+  between two polls can be missed), and checks the destination guest.
 - **Shared disk.** `tests/shared_disk/` migrates an owner VM with `migrateSharedDisks: True` and a consumer VM with it
   `False`, then verifies the shared disk data on both.
 - **Deep inspection.** `tests/deep_inspection/` drives Forklift `Conversion` resources: standalone conversion with cancel
@@ -5134,7 +5136,7 @@ plan for later validation:
 | `guest_agent_timeout` | No | Guest-info wait timeout in seconds. Defaults to `120` where used. |
 | `migrate_shared_disks` | No | `True` to enable shared disk migration at plan level. Individual VMs can override. |
 | `xfs_compatibility` | No | `True` to request XFS v4 filesystem compatibility on the Plan CR. |
-| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. |
+| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. The config value alone does not reach the Plan: `create_plan_resource` does not map it, so a test must pass it explicitly via `additional_plan_options={"skip_guest_conversion": ...}`, as `tests/cold/test_cold_migration_skip_guest_conversion.py` does. |
 | `rdm_as_lun` | No | `True` to map RDM disks as LUN devices with a SCSI bus instead of the default virtio. |
 | `enable_nested_virtualization` | No | `False` disables the `vmx` and `svm` CPU features. |
 | `run_preflight_inspection` | No | `False` disables the Plan CR preflight inspection step. |
@@ -13428,7 +13430,7 @@ The `repo: local` block is the most distinctive part of this file. Each of those
 | `check-autouse-fixtures` | Only the `autouse_fixtures` fixture in `conftest.py` may declare `autouse=True` |
 | `check-no-runtimeerror` | No `raise RuntimeError`, except in `pytest_*` functions in `conftest.py` |
 | `check-test-plan-docstring-schema` | Test classes must have a schema-conforming test plan docstring |
-| `check-agents-md-budget` | `AGENTS.md` line budget is shrink-only |
+| `check-agents-md-budget` | `AGENTS.md` must stay within the 420-line `MAX_LINES` cap; raising that cap takes a deliberate, reviewed edit of the hook's constant, which the hook itself does not block |
 
 Three of them are scoped further with `files: ^tests/`, so they only run on files under `tests/`. `check-agents-md-budget` runs only on
 `AGENTS.md`.

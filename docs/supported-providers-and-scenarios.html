@@ -829,7 +829,8 @@ multi-datastore, mixed datastore, 10 mixed disks, warm copy-offload, and the 5-V
 </li>
 <li>
 <p><strong>Skip guest conversion.</strong> <code>tests/cold/test_cold_migration_skip_guest_conversion.py</code> sets <code>skip_guest_conversion: True</code>, verifies
-  that no Plan-labeled <code>virt-v2v</code> pod appears during migration, and checks the destination guest.</p>
+  that no Plan-labeled <code>virt-v2v</code> pod is observed at the status polls taken during migration (a pod that exists only
+  between two polls can be missed), and checks the destination guest.</p>
 </li>
 <li>
 <p><strong>Shared disk.</strong> <code>tests/shared_disk/</code> migrates an owner VM with <code>migrateSharedDisks: True</code> and a consumer VM with it
