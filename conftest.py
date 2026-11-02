@@ -16,8 +16,9 @@ from shutil import rmtree
 from typing import TYPE_CHECKING, Any
 
 import filelock
+import ovirtsdk4
 import pytest
-from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
+from kubernetes.dynamic.exceptions import ApiException, DynamicApiError, ForbiddenError, NotFoundError
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -33,6 +34,7 @@ from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.subscription import Subscription
 from ocp_resources.virtual_machine import VirtualMachine
+from openstack import exceptions as os_exc
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 from pyVmomi import vim
@@ -1273,7 +1275,8 @@ def multus_network_name(
         source_provider_inventory (ForkliftInventory): Source provider inventory
         class_plan_config (dict[str, Any]): Plan configuration from class parametrization
         prepared_plan (dict[str, Any]): Processed plan; its VM names are the post-clone names that
-            the Forklift inventory and the Plan use
+            the Forklift inventory and the Plan use. Heterogeneous pytest fixture dict — schema
+            varies by test scenario, so the values stay ``Any``.
         request (pytest.FixtureRequest): Pytest fixture request
 
     Returns:
@@ -1528,7 +1531,7 @@ def validated_source_vms(
 
 
 def _restore_skip_clone_power_states(
-    source_provider: Any,  # Any: provider-specific VM power APIs are not declared on BaseProvider
+    source_provider: Any,
     original_power_states: list[tuple[str, str]],
 ) -> None:
     """Restore skip_clone VMs to the power state recorded before the plan setup changed it.
@@ -1539,7 +1542,8 @@ def _restore_skip_clone_power_states(
     idempotent. Every VM is attempted: one unreachable VM must not leave the others behind.
 
     Args:
-        source_provider (Any): Source provider owning the shared VMs.
+        source_provider (Any): Source provider owning the shared VMs. Typed ``Any`` because the
+            VM power APIs it is called with are provider-specific and not declared on ``BaseProvider``.
         original_power_states (list[tuple[str, str]]): (VM name, original power state) pairs;
             drained by this call.
 
@@ -1550,6 +1554,11 @@ def _restore_skip_clone_power_states(
         VmNotFoundError: The shared source VM no longer exists.
         VmCloneError: The provider reported a clone-level failure for the VM.
         PowerShellCommandError: A Windows guest rejected the power command.
+        vim.fault.VimFault: The vSphere provider rejected the power operation.
+        ovirtsdk4.Error: The oVirt provider rejected the power operation.
+        os_exc.SDKException: The OpenStack provider rejected the power operation.
+        DynamicApiError: The OpenShift API rejected the power operation.
+        ApiException: An OpenShift resource call failed.
 
     The first failure is re-raised only after every VM was attempted.
     """
@@ -1562,7 +1571,19 @@ def _restore_skip_clone_power_states(
                 source_provider.start_vm(provider_vm_api)
             else:
                 source_provider.stop_vm(provider_vm_api)
-        except (ValueError, OSError, TimeoutExpiredError, VmNotFoundError, VmCloneError, PowerShellCommandError) as err:
+        except (
+            ValueError,
+            OSError,
+            TimeoutExpiredError,
+            VmNotFoundError,
+            VmCloneError,
+            PowerShellCommandError,
+            vim.fault.VimFault,
+            ovirtsdk4.Error,
+            os_exc.SDKException,
+            DynamicApiError,
+            ApiException,
+        ) as err:
             LOGGER.error(f"Failed to restore power state '{original_power}' of skip_clone VM '{vm_name}': {err}")
             first_error = first_error or err
 
@@ -1600,7 +1621,9 @@ def prepared_plan(
         class_plan_config (dict[str, Any]): Plan configuration from parametrization
         validated_source_vms (None): Ensures source VMs/templates exist before setup
         fixture_store (dict[str, Any]): Fixture store for resource tracking
-        source_provider: Source provider instance (VMWareProvider, OvirtProvider, etc.)
+        source_provider (Any): Source provider instance (VMWareProvider, OvirtProvider, etc.);
+            typed ``Any`` because the provider-specific VM APIs used here are not declared on
+            ``BaseProvider``.
         source_vms_namespace (str): Source VMs namespace
         ocp_admin_client (DynamicClient): OpenShift client
         multus_cni_config (str): Multus CNI configuration

@@ -166,9 +166,10 @@ Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used b
 
 Static-IP preservation applies to vSphere and Hyper-V sources and supports both Windows (`ipconfig /all`) and Linux (`nmcli device show`) guests.
 
-Both `check_ssh_connectivity()` and `check_vbs_status()` wait for the guest to serve SSH sessions through the shared
-`_wait_for_ssh_connection()` retry (300s), because a freshly migrated guest accepts the port-forward tunnel before its
-OpenSSH server is ready.
+`check_ssh_connectivity()` waits for the guest to serve SSH sessions through the shared `_wait_for_ssh_connection()`
+retry (300s), because a freshly migrated guest accepts the port-forward tunnel before its OpenSSH server is ready.
+`check_vbs_status()` retries the DeviceGuard query itself in the same window, since a guest that answered a probe can
+still refuse the next session.
 
 ### `utilities/shared_disk.py`
 
