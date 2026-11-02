@@ -242,7 +242,7 @@ That five-step flow repeats throughout the repository:
 4. Execute migration (`test_migrate_vms`)
 5. Validate migrated VMs (`test_check_vms`)
 
-Feature suites insert or replace steps. The verified variants, all defined in `AGENTS.md` under "Key Patterns" and present in
+Feature suites insert or replace steps. The verified variants, all defined in `AGENTS.md` under "Step patterns" and present in
 `tests/`, are: the 4-step plan-readiness pattern, the 6-step plan-archive PVC cleanup pattern, the 6-step shared-disk (Linux)
 pattern, the 7-step shared-disk (Windows) pattern, the 6/7/8-step copy-offload patterns, the 6-step LUKS pattern, and the 6-step
 XFS pattern. `AGENTS.md` names the exact test method for each step, so the authoritative naming list lives there rather than
@@ -295,7 +295,7 @@ For example, the comprehensive cold scenario defines advanced feature coverage d
     },
 ```
 
-The complete plan-option vocabulary is documented in `AGENTS.md` under "Plan Configuration Options". It covers `warm_migration`,
+The complete plan-option vocabulary is documented in `AGENTS.md` under "Plan configuration options". It covers `warm_migration`,
 `preserve_static_ips`, `copyoffload`, `xfs_compatibility`, `migrate_shared_disks`, `inventory_timeout`, `clone_to_same_host`,
 `pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, `rdm_as_lun`, and
 `skip_guest_conversion`.
@@ -635,7 +635,7 @@ The most important ones are:
 - `tox.toml` defines lightweight local automation: `pytest --setup-plan`, `pytest --collect-only`, and unused-code scanning via
   `pyutils-unusedcode`.
 - `.pre-commit-config.yaml` configures local quality gates including `flake8`, `ruff`, `ruff-format`, `mypy`, `detect-secrets`,
-  `gitleaks`, `markdownlint-cli2`, and the eight `scripts/hooks/` AGENTS-rules hooks.
+  `gitleaks`, `markdownlint-cli2`, and the ten `scripts/hooks/` AGENTS-rules hooks.
 - `Dockerfile` is a two-stage UBI 10 build: a builder stage that copies `cli`, `docs`, `utilities`, `tests`, `libs`, and
   `exceptions` and runs `uv sync --locked`, and a minimal runtime stage that defaults to `uv run pytest --collect-only`. It can
   optionally install pinned `openshift-python-wrapper` / `openshift-python-utilities` commits via build args.

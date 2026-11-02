@@ -524,7 +524,7 @@ operator is upgraded, then the migration runs.</p>
 <li>Execute migration (<code>test_migrate_vms</code>)</li>
 <li>Validate migrated VMs (<code>test_check_vms</code>)</li>
 </ol>
-<p>Feature suites insert or replace steps. The verified variants, all defined in <code>AGENTS.md</code> under "Key Patterns" and present in
+<p>Feature suites insert or replace steps. The verified variants, all defined in <code>AGENTS.md</code> under "Step patterns" and present in
 <code>tests/</code>, are: the 4-step plan-readiness pattern, the 6-step plan-archive PVC cleanup pattern, the 6-step shared-disk (Linux)
 pattern, the 7-step shared-disk (Windows) pattern, the 6/7/8-step copy-offload patterns, the 6-step LUKS pattern, and the 6-step
 XFS pattern. <code>AGENTS.md</code> names the exact test method for each step, so the authoritative naming list lives there rather than
@@ -573,7 +573,7 @@ per-scenario settings.</p>
     <span class="p">},</span>
 </code></pre></div>
 
-<p>The complete plan-option vocabulary is documented in <code>AGENTS.md</code> under "Plan Configuration Options". It covers <code>warm_migration</code>,
+<p>The complete plan-option vocabulary is documented in <code>AGENTS.md</code> under "Plan configuration options". It covers <code>warm_migration</code>,
 <code>preserve_static_ips</code>, <code>copyoffload</code>, <code>xfs_compatibility</code>, <code>migrate_shared_disks</code>, <code>inventory_timeout</code>, <code>clone_to_same_host</code>,
 <code>pin_to_non_dedicated_host</code>, <code>disable_drs_for_vms</code>, <code>per_nic_network_map</code>, <code>skip_clone</code>, <code>rdm_as_lun</code>, and
 <code>skip_guest_conversion</code>.</p>
@@ -998,7 +998,7 @@ stores created resources in a JSON file when data collection is enabled.</p>
 </li>
 <li>
 <p><code>.pre-commit-config.yaml</code> configures local quality gates including <code>flake8</code>, <code>ruff</code>, <code>ruff-format</code>, <code>mypy</code>, <code>detect-secrets</code>,
-  <code>gitleaks</code>, <code>markdownlint-cli2</code>, and the eight <code>scripts/hooks/</code> AGENTS-rules hooks.</p>
+  <code>gitleaks</code>, <code>markdownlint-cli2</code>, and the ten <code>scripts/hooks/</code> AGENTS-rules hooks.</p>
 </li>
 <li>
 <p><code>Dockerfile</code> is a two-stage UBI 10 build: a builder stage that copies <code>cli</code>, <code>docs</code>, <code>utilities</code>, <code>tests</code>, <code>libs</code>, and

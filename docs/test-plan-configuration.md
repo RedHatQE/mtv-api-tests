@@ -245,7 +245,7 @@ plan for later validation:
 | `guest_agent_timeout` | No | Guest-info wait timeout in seconds. Defaults to `120` where used. |
 | `migrate_shared_disks` | No | `True` to enable shared disk migration at plan level. Individual VMs can override. |
 | `xfs_compatibility` | No | `True` to request XFS v4 filesystem compatibility on the Plan CR. |
-| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. |
+| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. The config value alone does not reach the Plan: `create_plan_resource` does not map it, so a test must pass it explicitly via `additional_plan_options={"skip_guest_conversion": ...}`, as `tests/cold/test_cold_migration_skip_guest_conversion.py` does. |
 | `rdm_as_lun` | No | `True` to map RDM disks as LUN devices with a SCSI bus instead of the default virtio. |
 | `enable_nested_virtualization` | No | `False` disables the `vmx` and `svm` CPU features. |
 | `run_preflight_inspection` | No | `False` disables the Plan CR preflight inspection step. |
@@ -448,7 +448,7 @@ There is one more important implementation detail: when the helper creates an MT
 
 > **Warning:** Do not expect a custom `pvc_name_template` in `tests_params` to survive copy-offload plan creation. The helper overwrites it with `"pvc"`.
 
-Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.md#vsphere-copy-offload).
+Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.html#vsphere-copy-offload).
 
 ## How Raw Config Becomes `prepared_plan`
 

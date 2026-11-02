@@ -307,7 +307,7 @@ network or class-scoped Multus networks.
 
 The key rule is simple: the first network goes to the pod network, and every additional network is mapped to a Multus `NetworkAttachmentDefinition`.
 
-```342:367:utilities/utils.py
+```576:601:utilities/utils.py
 for index, network in enumerate(networks):
     if pod_only or index == 0:
         # First network or pod_only mode → pod network
@@ -327,7 +327,7 @@ for index, network in enumerate(networks):
             "namespace": multus_namespace,
             "type": "multus",
         }
-        multus_counter += 1
+        multus_counter += 1  # Increment for next NAD
 
     network_map_list.append({
         "destination": _destination,
