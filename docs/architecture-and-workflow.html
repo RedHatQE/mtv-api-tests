@@ -436,7 +436,7 @@ already stored on the class.</p>
 <code>@pytest.mark.incremental</code> prevents the test from pretending the later stages are meaningful after an earlier failure:
 <code>pytest_runtest_makereport</code> records the failure and <code>pytest_runtest_setup</code> turns it into an <code>xfail</code> for the rest of the class.</p>
 <h3 id="extended-step-patterns">Extended Step Patterns</h3>
-<p>Feature suites extend or replace the base steps. <code>AGENTS.md</code> under "Key Patterns" is the authoritative list and names every test
+<p>Feature suites extend or replace the base steps. <code>AGENTS.md</code> under "Step patterns" is the authoritative list and names every test
 method; the variants actually present in <code>tests/</code> are:</p>
 <ul>
 <li>
@@ -835,7 +835,7 @@ narrowly as its content allows.</p>
         <span class="n">plan_kwargs</span><span class="p">[</span><span class="s2">"run_preflight_inspection"</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_preflight_inspection</span>
 
     <span class="k">if</span> <span class="n">additional_plan_options</span><span class="p">:</span>
-        <span class="n">duplicate_options</span> <span class="o">=</span> <span class="n">plan_kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">additional_plan_options</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="n">duplicate_options</span> <span class="o">=</span> <span class="p">(</span><span class="n">plan_kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">|</span> <span class="n">_CREATE_AND_STORE_RESOURCE_KEYS</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">additional_plan_options</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">duplicate_options</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"Additional Plan options cannot override options already set by create_plan_resource: "</span>
@@ -943,7 +943,8 @@ contains a wrong-passphrase class that expects the migration to fail.</p>
 <p><strong>XFS compatibility</strong> is covered by <code>tests/cold/test_cold_migration_xfs.py</code> and <code>tests/warm/test_warm_migration_xfs.py</code>. Both set
 <code>xfs_compatibility: True</code> on the Plan and then run <code>xfs_info</code> inside the migrated guest to validate the filesystem version.</p>
 <p><strong>Skip guest conversion</strong> is covered by <code>tests/cold/test_cold_migration_skip_guest_conversion.py</code>. The test sets
-<code>skip_guest_conversion: True</code> through <code>additional_plan_options</code>, verifies no Plan-labeled <code>virt-v2v</code> pod appears during migration, and checks that the
+<code>skip_guest_conversion: True</code> through <code>additional_plan_options</code>, verifies that no Plan-labeled <code>virt-v2v</code> pod is
+observed at the status polls taken during migration (a pod that exists only between two polls can be missed), and checks that the
 destination guest boots and accepts SSH connections.</p>
 <p><strong>Shared disks</strong> are covered by <code>tests/shared_disk/</code>. The Linux test mounts, writes, and reads a marker from both migrated VMs. The
 Windows test first labels the shared NTFS volume on the source VM through the VMware Guest Operations API, then verifies

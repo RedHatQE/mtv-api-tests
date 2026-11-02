@@ -676,7 +676,7 @@ become per-test clone names even when the raw plan entry does not set <code>clon
 <tr>
 <td><code>skip_guest_conversion</code></td>
 <td>No</td>
-<td><code>True</code> to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination.</td>
+<td><code>True</code> to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. The config value alone does not reach the Plan: <code>create_plan_resource</code> does not map it, so a test must pass it explicitly via <code>additional_plan_options={"skip_guest_conversion": ...}</code>, as <code>tests/cold/test_cold_migration_skip_guest_conversion.py</code> does.</td>
 </tr>
 <tr>
 <td><code>rdm_as_lun</code></td>
@@ -991,7 +991,7 @@ exists, that <code>storage_hostname</code>, <code>storage_username</code>, and <
 <blockquote>
 <p><strong>Warning:</strong> Do not expect a custom <code>pvc_name_template</code> in <code>tests_params</code> to survive copy-offload plan creation. The helper overwrites it with <code>"pvc"</code>.</p>
 </blockquote>
-<p>Provider-side copy-offload settings are documented in <a href="provider-config-file.md#vsphere-copy-offload">Provider Config File</a>.</p>
+<p>Provider-side copy-offload settings are documented in <a href="provider-config-file.html#vsphere-copy-offload">Provider Config File</a>.</p>
 <h2 id="how-raw-config-becomes-prepared_plan">How Raw Config Becomes <code>prepared_plan</code></h2>
 <p>The raw entry from <code>tests_params</code> is not used directly. The repository converts it into a runtime <code>prepared_plan</code> in several steps.</p>
 <h3 id="1-the-raw-plan-is-deep-copied">1. The Raw Plan Is Deep-Copied</h3>

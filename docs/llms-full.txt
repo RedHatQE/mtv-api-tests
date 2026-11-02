@@ -655,7 +655,7 @@ That five-step flow repeats throughout the repository:
 4. Execute migration (`test_migrate_vms`)
 5. Validate migrated VMs (`test_check_vms`)
 
-Feature suites insert or replace steps. The verified variants, all defined in `AGENTS.md` under "Key Patterns" and present in
+Feature suites insert or replace steps. The verified variants, all defined in `AGENTS.md` under "Step patterns" and present in
 `tests/`, are: the 4-step plan-readiness pattern, the 6-step plan-archive PVC cleanup pattern, the 6-step shared-disk (Linux)
 pattern, the 7-step shared-disk (Windows) pattern, the 6/7/8-step copy-offload patterns, the 6-step LUKS pattern, and the 6-step
 XFS pattern. `AGENTS.md` names the exact test method for each step, so the authoritative naming list lives there rather than
@@ -708,7 +708,7 @@ For example, the comprehensive cold scenario defines advanced feature coverage d
         },
 ```
 
-The complete plan-option vocabulary is documented in `AGENTS.md` under "Plan Configuration Options". It covers `warm_migration`,
+The complete plan-option vocabulary is documented in `AGENTS.md` under "Plan configuration options". It covers `warm_migration`,
 `preserve_static_ips`, `copyoffload`, `xfs_compatibility`, `migrate_shared_disks`, `inventory_timeout`, `clone_to_same_host`,
 `pin_to_non_dedicated_host`, `disable_drs_for_vms`, `per_nic_network_map`, `skip_clone`, `rdm_as_lun`, and
 `skip_guest_conversion`.
@@ -1048,7 +1048,7 @@ The most important ones are:
 - `tox.toml` defines lightweight local automation: `pytest --setup-plan`, `pytest --collect-only`, and unused-code scanning via
   `pyutils-unusedcode`.
 - `.pre-commit-config.yaml` configures local quality gates including `flake8`, `ruff`, `ruff-format`, `mypy`, `detect-secrets`,
-  `gitleaks`, `markdownlint-cli2`, and the eight `scripts/hooks/` AGENTS-rules hooks.
+  `gitleaks`, `markdownlint-cli2`, and the ten `scripts/hooks/` AGENTS-rules hooks.
 - `Dockerfile` is a two-stage UBI 10 build: a builder stage that copies `cli`, `docs`, `utilities`, `tests`, `libs`, and
   `exceptions` and runs `uv sync --locked`, and a minimal runtime stage that defaults to `uv run pytest --collect-only`. It can
   optionally install pinned `openshift-python-wrapper` / `openshift-python-utilities` commits via build args.
@@ -1272,7 +1272,7 @@ This class-based layout is intentional. Earlier methods create resources that la
 
 ### Extended Step Patterns
 
-Feature suites extend or replace the base steps. `AGENTS.md` under "Key Patterns" is the authoritative list and names every test
+Feature suites extend or replace the base steps. `AGENTS.md` under "Step patterns" is the authoritative list and names every test
 method; the variants actually present in `tests/` are:
 
 - **4-step plan-readiness**: a leading `test_verify_<feature>` step replaces migrate/check, because the feature under test is
@@ -1528,7 +1528,7 @@ inventory IDs into the VM list. The Plan is not built from names alone.
 `utilities/mtv_migration.py:create_plan_resource()` is the assembly point where providers, maps, VM IDs, and optional plan
 features become an MTV `Plan` custom resource.
 
-```187:218:utilities/mtv_migration.py
+```205:238:utilities/mtv_migration.py
     def create_plan_resource(
         ocp_admin_client: DynamicClient,
         fixture_store: dict[str, Any],
@@ -1603,7 +1603,7 @@ narrowly as its content allows.
 
 Optional features are only added when requested, so an unset flag never lands on the `Plan` CR:
 
-```307:358:utilities/mtv_migration.py
+```341:385:utilities/mtv_migration.py
         if target_node_selector:
             plan_kwargs["target_node_selector"] = target_node_selector
 
@@ -1636,7 +1636,7 @@ Optional features are only added when requested, so an unset flag never lands on
             plan_kwargs["run_preflight_inspection"] = run_preflight_inspection
 
         if additional_plan_options:
-            duplicate_options = plan_kwargs.keys() & additional_plan_options.keys()
+            duplicate_options = (plan_kwargs.keys() | _CREATE_AND_STORE_RESOURCE_KEYS) & additional_plan_options.keys()
             if duplicate_options:
                 raise ValueError(
                     f"Additional Plan options cannot override options already set by create_plan_resource: "
@@ -1751,7 +1751,8 @@ contains a wrong-passphrase class that expects the migration to fail.
 `xfs_compatibility: True` on the Plan and then run `xfs_info` inside the migrated guest to validate the filesystem version.
 
 **Skip guest conversion** is covered by `tests/cold/test_cold_migration_skip_guest_conversion.py`. The test sets
-`skip_guest_conversion: True` through `additional_plan_options`, verifies no Plan-labeled `virt-v2v` pod appears during migration, and checks that the
+`skip_guest_conversion: True` through `additional_plan_options`, verifies that no Plan-labeled `virt-v2v` pod is
+observed at the status polls taken during migration (a pod that exists only between two polls can be missed), and checks that the
 destination guest boots and accepts SSH connections.
 
 **Shared disks** are covered by `tests/shared_disk/`. The Linux test mounts, writes, and reads a marker from both migrated VMs. The
@@ -2320,7 +2321,8 @@ multi-datastore, mixed datastore, 10 mixed disks, warm copy-offload, and the 5-V
 - **XFS.** `tests/cold/test_cold_migration_xfs.py` and `tests/warm/test_warm_migration_xfs.py` set `xfs_compatibility: True`
   and verify the guest filesystem with an `xfs_check` command, expecting `crc=0` in `xfs_info` output.
 - **Skip guest conversion.** `tests/cold/test_cold_migration_skip_guest_conversion.py` sets `skip_guest_conversion: True`, verifies
-  that no Plan-labeled `virt-v2v` pod appears during migration, and checks the destination guest.
+  that no Plan-labeled `virt-v2v` pod is observed at the status polls taken during migration (a pod that exists only
+  between two polls can be missed), and checks the destination guest.
 - **Shared disk.** `tests/shared_disk/` migrates an owner VM with `migrateSharedDisks: True` and a consumer VM with it
   `False`, then verifies the shared disk data on both.
 - **Deep inspection.** `tests/deep_inspection/` drives Forklift `Conversion` resources: standalone conversion with cancel
@@ -5134,7 +5136,7 @@ plan for later validation:
 | `guest_agent_timeout` | No | Guest-info wait timeout in seconds. Defaults to `120` where used. |
 | `migrate_shared_disks` | No | `True` to enable shared disk migration at plan level. Individual VMs can override. |
 | `xfs_compatibility` | No | `True` to request XFS v4 filesystem compatibility on the Plan CR. |
-| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. |
+| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. The config value alone does not reach the Plan: `create_plan_resource` does not map it, so a test must pass it explicitly via `additional_plan_options={"skip_guest_conversion": ...}`, as `tests/cold/test_cold_migration_skip_guest_conversion.py` does. |
 | `rdm_as_lun` | No | `True` to map RDM disks as LUN devices with a SCSI bus instead of the default virtio. |
 | `enable_nested_virtualization` | No | `False` disables the `vmx` and `svm` CPU features. |
 | `run_preflight_inspection` | No | `False` disables the Plan CR preflight inspection step. |
@@ -5337,7 +5339,7 @@ There is one more important implementation detail: when the helper creates an MT
 
 > **Warning:** Do not expect a custom `pvc_name_template` in `tests_params` to survive copy-offload plan creation. The helper overwrites it with `"pvc"`.
 
-Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.md#vsphere-copy-offload).
+Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.html#vsphere-copy-offload).
 
 ## How Raw Config Becomes `prepared_plan`
 
@@ -6197,7 +6199,7 @@ network or class-scoped Multus networks.
 
 The key rule is simple: the first network goes to the pod network, and every additional network is mapped to a Multus `NetworkAttachmentDefinition`.
 
-```342:367:utilities/utils.py
+```576:601:utilities/utils.py
     for index, network in enumerate(networks):
         if pod_only or index == 0:
             # First network or pod_only mode → pod network
@@ -6217,7 +6219,7 @@ The key rule is simple: the first network goes to the pod network, and every add
                 "namespace": multus_namespace,
                 "type": "multus",
             }
-            multus_counter += 1
+            multus_counter += 1  # Increment for next NAD
 
         network_map_list.append({
             "destination": _destination,
@@ -8314,6 +8316,7 @@ Once it knows the actual failed step, the hook utility validates it against the 
         Validate the actual failed step matches expected (predefined mode only).
 
         For custom playbook mode (no expected_result set), this is a no-op.
+        ...
         """
         # Extract hook configs with type validation
         pre_hook_config = plan_config.get("pre_hook")
@@ -8340,7 +8343,7 @@ Once it knows the actual failed step, the hook utility validates it against the 
                 f"Migration failed at step '{actual_failed_step}' but expected to fail at '{expected_step}'"
             )
 
-        LOGGER.info("Migration correctly failed at expected step '%s'", expected_step)
+        LOGGER.info(f"Migration correctly failed at expected step '{expected_step}'")
 ```
 
 ```322:333:utilities/hooks.py
@@ -13289,7 +13292,7 @@ aligned with (currently `2.12`). No code in the repository reads it, so changing
 The first automation layer is `.pre-commit-config.yaml`. It combines generic repository safety checks with Python tooling, security scanning,
 and repo-specific AST checks, so a single `pre-commit` run catches a lot of problems early.
 
-```1:119:.pre-commit-config.yaml
+```1:130:.pre-commit-config.yaml
     ---
     ci:
         autofix_prs: false
@@ -13333,7 +13336,7 @@ and repo-specific AST checks, so a single `pre-commit` run catches a lot of prob
             exclude: ^docs/
 
       - repo: https://github.com/astral-sh/ruff-pre-commit
-        rev: v0.16.9
+        rev: v0.17.2
         hooks:
           - id: ruff
           - id: ruff-format
@@ -13345,7 +13348,7 @@ and repo-specific AST checks, so a single `pre-commit` run catches a lot of prob
             exclude: ^docs/
 
       - repo: https://github.com/pre-commit/mirrors-mypy
-        rev: v2.3.1
+        rev: v2.4.0
         hooks:
           - id: mypy
             additional_dependencies:
@@ -13359,7 +13362,7 @@ and repo-specific AST checks, so a single `pre-commit` run catches a lot of prob
               ]
 
       - repo: https://github.com/DavidAnson/markdownlint-cli2
-        rev: v0.23.3
+        rev: v0.24.0
         hooks:
           - id: markdownlint-cli2
             args: ["--fix"]
@@ -13409,11 +13412,22 @@ and repo-specific AST checks, so a single `pre-commit` run catches a lot of prob
             entry: scripts/hooks/check_no_runtimeerror.py
             language: python
             types: [python]
+          - id: check-test-plan-docstring-schema
+            name: test classes must have a schema-conforming test plan docstring
+            entry: scripts/hooks/check_test_plan_docstring_schema.py
+            language: python
+            files: ^tests/
+            types: [python]
+          - id: check-agents-md-budget
+            name: AGENTS.md line budget (shrink-only)
+            entry: scripts/hooks/check_agents_md_budget.py
+            language: python
+            files: ^AGENTS\.md$
 ```
 
 ## AGENTS.md Enforcement Hooks
 
-The `repo: local` block is the most distinctive part of this file. Each of those eight hooks is a small AST-based script under
+The `repo: local` block is the most distinctive part of this file. Each of those ten hooks is a small AST-based script under
 `scripts/hooks/` that turns one "MUST" rule from `AGENTS.md` into a blocking check.
 
 | Hook id | Enforces |
@@ -13426,8 +13440,11 @@ The `repo: local` block is the most distinctive part of this file. Each of those
 | `check-test-file-location` | No `test_*.py` directly under `tests/` |
 | `check-autouse-fixtures` | Only the `autouse_fixtures` fixture in `conftest.py` may declare `autouse=True` |
 | `check-no-runtimeerror` | No `raise RuntimeError`, except in `pytest_*` functions in `conftest.py` |
+| `check-test-plan-docstring-schema` | Test classes must have a schema-conforming test plan docstring |
+| `check-agents-md-budget` | `AGENTS.md` must stay within the 420-line `MAX_LINES` cap; raising that cap takes a deliberate, reviewed edit of the hook's constant, which the hook itself does not block |
 
-Two of them are scoped further with `files: ^tests/`, so they only run on files under `tests/`.
+Three of them are scoped further with `files: ^tests/`, so they only run on files under `tests/`. `check-agents-md-budget` runs only on
+`AGENTS.md`.
 
 Run the whole suite, one hook, or one script directly:
 
@@ -13468,7 +13485,7 @@ That hook list tells you what the repo cares about:
 - Python quality: `flake8`, `ruff`, `ruff-format`, and `mypy`
 - secret prevention: `detect-private-key`, `detect-secrets`, and `gitleaks`
 - docs hygiene: `markdownlint-cli2 --fix`
-- project rules: the eight `AGENTS.md` AST hooks listed above
+- project rules: the ten `AGENTS.md` AST hooks listed above
 
 The `ci:` block at the top pins the behavior of pre-commit.ci itself: `autoupdate_schedule: weekly` and `autofix_prs: false`. That means hook
 revisions are bumped on a schedule, and no autofix PR is opened for you.
