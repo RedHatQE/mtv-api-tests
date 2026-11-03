@@ -127,6 +127,11 @@ def format_capacity_validation_log(datastore_name: str, required_gb: float, avai
 class VMWareProvider(BaseProvider):
     """https://github.com/vmware/vsphere-automation-sdk-python"""
 
+    @property
+    def renders_network_name_template(self) -> bool:
+        """Whether this source provider's Forklift adapter renders the Plan networkNameTemplate."""
+        return True
+
     DISK_TYPE_MAP = {
         "thin": ("sparse", "Setting disk provisioning to 'thin' (sparse)."),
         "thick-lazy": ("flat", "Setting disk provisioning to 'thick-lazy' (flat)."),

@@ -12,7 +12,7 @@ from ocp_resources.resource import ResourceEditor
 from ocp_resources.utils.constants import TIMEOUT_10MINUTES, TIMEOUT_2MINUTES
 
 from exceptions.exceptions import MigrationNotFoundError
-from utilities.mtv_migration import get_migration_for_plan
+from utilities.mtv_migration import get_conversion_pods, get_migration_for_plan
 from utilities.worker_node_selection import (
     get_node_labels,
     get_ready_schedulable_worker_nodes,
@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 
 
 _IMPORTER_POD_LABEL_SELECTOR = "app=containerized-data-importer,cdi.kubevirt.io=importer"
-_CONVERSION_POD_LABEL_SELECTOR = "forklift.app=virt-v2v"
 
 
 def _get_pod_snapshots(plan: Plan, namespace: str, label_selector: str) -> list[ResourceInstance]:
@@ -118,10 +117,10 @@ class ConvertorPodPlacementObserver:
             namespace=namespace,
             label_selector=f"{_IMPORTER_POD_LABEL_SELECTOR},migration={self._migration_uid}",
         )
-        conversion_pods = _get_pod_snapshots(
-            plan=self._plan,
+        conversion_pods = get_conversion_pods(
+            client=self._plan.client,
             namespace=namespace,
-            label_selector=f"{_CONVERSION_POD_LABEL_SELECTOR},migration={self._migration_uid}",
+            migration_uid=self._migration_uid,
         )
         self._check_importer_readiness_deadline(importer_pods=importer_pods, status=status)
         if self._target.worker_node is None:

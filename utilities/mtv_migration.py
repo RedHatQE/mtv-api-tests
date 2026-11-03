@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
+from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine_instance import VirtualMachineInstance
@@ -30,7 +31,16 @@ from utilities.utils import gen_network_map_list
 from utilities.worker_node_selection import has_unschedulable_condition
 
 if TYPE_CHECKING:
-    from kubernetes.dynamic import DynamicClient
+    from kubernetes.dynamic import DynamicClient, ResourceInstance
+
+# Forklift virt-v2v conversion pod label; shared by all conversion-pod observers and helpers.
+CONVERSION_POD_LABEL_SELECTOR: str = "forklift.app=virt-v2v"
+
+# Test-config keys renamed to their Kubernetes API spec field names.
+_VM_CONFIG_TO_SPEC_KEY_RENAMES: dict[str, str] = {
+    "migrate_shared_disks": "migrateSharedDisks",
+    "instance_type": "instanceType",
+}
 
 LOGGER = get_logger(__name__)
 
@@ -43,11 +53,6 @@ _VM_DICT_TEST_ONLY_KEYS: frozenset[str] = frozenset({
     "preserve_name_format",
     "snapshots_before_migration",
 })
-
-# Test-config keys renamed to their Kubernetes API spec field names.
-_VM_CONFIG_TO_SPEC_KEY_RENAMES: dict[str, str] = {
-    "migrate_shared_disks": "migrateSharedDisks",
-}
 
 # Keys consumed directly by create_and_store_resource that create_plan_resource does not
 # set itself. Passing any of these via additional_plan_options could make create_and_store_resource
@@ -86,6 +91,31 @@ def get_migration_for_plan(plan: Plan) -> Migration:
                     return migration
 
     raise MigrationNotFoundError(f"Migration CR not found for Plan '{plan.name}' in namespace '{plan.namespace}'")
+
+
+def get_conversion_pods(
+    client: "DynamicClient",
+    namespace: str,
+    migration_uid: str,
+) -> list["ResourceInstance"]:
+    """List raw virt-v2v conversion pod snapshots for one migration.
+
+    Args:
+        client (DynamicClient): OpenShift client used to query Pods.
+        namespace (str): Namespace the conversion pods run in (the Plan target namespace).
+        migration_uid (str): UID of the Migration whose conversion pods are listed.
+
+    Returns:
+        list[ResourceInstance]: Raw Pod snapshots labeled for the given migration.
+    """
+    return list(
+        Pod.get(
+            client=client,
+            namespace=namespace,
+            label_selector=f"{CONVERSION_POD_LABEL_SELECTOR},migration={migration_uid}",
+            raw=True,
+        )
+    )
 
 
 def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
@@ -230,6 +260,7 @@ def create_plan_resource(
     copyoffload: bool = False,
     preserve_static_ips: bool = False,
     pvc_name_template: str | None = None,
+    network_name_template: str | None = None,
     pvc_name_template_use_generate_name: bool | None = None,
     target_node_selector: dict[str, str] | None = None,
     target_labels: dict[str, str] | None = None,
@@ -270,6 +301,7 @@ def create_plan_resource(
         copyoffload (bool): Enable copy-offload specific settings. Defaults to False.
         preserve_static_ips (bool): Preserve static IP addresses. Defaults to False.
         pvc_name_template (str | None): PVC naming template. Defaults to None.
+        network_name_template (str | None): Template for migrated VM network names. Defaults to None.
         pvc_name_template_use_generate_name (bool | None): Use generateName for PVCs. Defaults to None.
         target_node_selector (dict[str, str] | None): Optional node selector labels for scheduling VMs to specific nodes. Defaults to None.
         target_labels (dict[str, str] | None): Optional custom labels to apply to migrated VM metadata. Defaults to None.
@@ -341,6 +373,7 @@ def create_plan_resource(
         "after_hook_namespace": after_hook_namespace,
         "preserve_static_ips": preserve_static_ips,
         "pvc_name_template": pvc_name_template,
+        "network_name_template": network_name_template,
         "pvc_name_template_use_generate_name": pvc_name_template_use_generate_name,
         "target_power_state": target_power_state,
     }
@@ -961,9 +994,6 @@ def wait_for_concurrent_migration_execution(
         timeout: Timeout in seconds to wait for simultaneous execution.
         callbacks: Optional dict mapping plan names to status poll callbacks. Callbacks are
             invoked with the current status string for their respective plan on each poll.
-
-    Returns:
-        None
 
     Raises:
         AssertionError: If plans do not execute simultaneously or if any plan completes early.
