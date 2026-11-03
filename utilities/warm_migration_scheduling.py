@@ -354,8 +354,11 @@ def _is_unschedulable(pod: ResourceInstance) -> bool:
     Returns:
         bool: Whether the scheduler has reported this pending pod as unschedulable.
     """
-    status = pod.get("status", {})
-    return status.get("phase") == Pod.Status.PENDING and has_unschedulable_condition(status.get("conditions"))
+    # Plain dict snapshot: has_unschedulable_condition() validates plain condition mappings.
+    status = pod.to_dict().get("status", {})
+    return status.get("phase") == Pod.Status.PENDING and has_unschedulable_condition(
+        conditions=status.get("conditions")
+    )
 
 
 def _get_importer_pod_states(pods: list[ResourceInstance]) -> list[dict[str, str | None]]:

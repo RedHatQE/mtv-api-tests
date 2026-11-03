@@ -410,7 +410,10 @@
 supported source type, and <code>create_source_cnv_vms()</code> builds the target VMs from plan data.</p>
 <p>Other public helpers: <code>resolve_providers_json_path()</code>, <code>generate_class_hash_prefix()</code>, <code>gen_network_map_list()</code>, <code>get_per_nic_networks()</code>, <code>populate_vm_ids()</code>,
 <code>extract_vm_from_plan()</code>, <code>get_cluster_version()</code>, <code>get_cluster_version_str()</code>, <code>get_mtv_version()</code>, <code>has_mtv_minimum_version()</code>, <code>delete_all_vms()</code>, <code>generate_ca_cert_file()</code>,
-<code>background()</code>.</p>
+<code>background()</code>, <code>restore_skip_clone_power_states()</code>.</p>
+<p><code>restore_skip_clone_power_states()</code> puts shared <code>skip_clone</code> source VMs back to the power state recorded before plan setup changed it. It drains
+its list, so the setup-failure finalizer and the class teardown call never restore twice, and it attempts every VM before re-raising the first
+provider failure.</p>
 <p>Provider shortcuts used by fixtures: <code>vmware_provider()</code>, <code>rhv_provider()</code>, <code>openstack_provider()</code>, <code>ova_provider()</code>, <code>ocp_provider()</code>, <code>hyperv_provider()</code>.</p>
 <p>Constants: <code>DEFAULT_PROVIDERS_JSON_PATH</code>.</p>
 <p>The module also defines <code>VirtualMachineFromInstanceType</code>, a <code>VirtualMachine</code> subclass that builds a full VM spec from instancetype/preference plus a few parameters.</p>
@@ -488,7 +491,9 @@ tracking — required when a test archives and deletes a Plan mid-run.</p>
 <p><code>wait_for_migration_complate()</code> polls <code>Plan</code> status every second until <code>Succeeded</code> or <code>Failed</code>, and additionally re-reads the destination
 <code>VirtualMachineInstance</code> objects of the plan's VMs every 30 seconds. When the scheduler reports <code>PodScheduled=False</code> with reason
 <code>Unschedulable</code> on the same VM for 3 consecutive checks, the wait raises <code>MigrationVmUnschedulableError</code> naming the VM and the raw
-scheduler message. The suite never frees destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
+scheduler message. The probe matches the destination names the plan reports plus each spec VM's resolved destination name (<code>targetName</code>, or the
+sanitised source name), keeps a consecutive count per VM, and runs only on non-terminal polls — a plan that reports <code>Failed</code> still raises
+<code>MigrationPlanExecError</code> carrying its status. The suite never frees destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
 is preferable to running to <code>plan_wait_timeout</code> (1 hour) for a VM that can never start.</p>
 <h3 id="utilitiesmigration_utilspy"><code>utilities/migration_utils.py</code></h3>
 <p>Cancel, archive, and cleanup flows: <code>cancel_migration()</code>, <code>archive_plan()</code>, <code>get_orphan_resource_names()</code>, <code>check_dv_pvc_pv_deleted()</code>, <code>append_leftovers()</code>, <code>get_cutover_value()</code>.</p>
@@ -605,8 +610,9 @@ volume on the source through the VMware Guest Operations API before migration, a
 <h3 id="utilitiesssh_utilspy"><code>utilities/ssh_utils.py</code></h3>
 <p>SSH into migrated VMs through <code>virtctl</code> port-forward plus <code>python-rrmngmnt</code>, so it works when cluster nodes have no external IPs. <code>VMSSHConnection</code> wraps a connection,
 <code>SSHConnectionManager</code> manages one connection per VM for fixtures, <code>create_vm_ssh_connection()</code> builds a single connection, and <code>run_cmd_in_vm()</code> runs a command in the guest.
-<code>VMSSHConnection.connect()</code> raises <code>ConnectionError</code> for any transport failure, including paramiko's <code>SSHException</code> (a guest that
-is not yet serving sessions).</p>
+<code>VMSSHConnection.connect()</code> raises <code>ConnectionError</code> for a paramiko <code>SSHException</code> (a guest that
+is not yet serving sessions), <code>RuntimeError</code> when the port-forward cannot be established and when the <code>echo test</code> probe fails, and re-raises
+<code>OSError</code> unchanged.</p>
 <h3 id="utilitiesvirtctlpy"><code>utilities/virtctl.py</code></h3>
 <p><code>download_virtctl_from_cluster()</code> fetches the matching <code>virtctl</code> binary — a <code>virtctl</code> already on <code>PATH</code> is never reused, only a previously downloaded binary in the cluster-versioned cache — and <code>add_to_path()</code> puts the downloaded directory on <code>PATH</code> for the session.</p>
 <h3 id="utilitiesvmware_guest_operationspy"><code>utilities/vmware_guest_operations.py</code></h3>
@@ -614,7 +620,8 @@ is not yet serving sessions).</p>
 <code>create_data_integrity_marker()</code>, and <code>find_alternate_linux_os_root()</code>. The latter requires a Linux guest and root Guest Operations credentials, reads the active OS identity and <code>lsblk</code> device inventory in separate Guest Operations calls, and inspects supported ext/XFS single-letter <code>/dev/sd</code> partitions read-only. Partition inspection and <code>umount</code> use guest-side timeouts; an EXIT trap also attempts to remove the temporary mount directory. It uses <code>lsblk --pairs</code>, available in util-linux 2.23.2; JSON output was added in util-linux 2.27. The helper returns a <code>LinuxOSRoot</code> with the unique alternate device path, OS ID, and version. The current Forklift vSphere mapper does not translate NVMe or LVM paths to the corresponding disk index.</p>
 <p><code>run_command_in_vmware_guest()</code> terminates a Guest Operations process that exceeds its timeout. Callers may provide a timeout cleanup command for guest resources that need explicit cleanup after process termination.</p>
 <h3 id="utilitiesworker_node_selectionpy"><code>utilities/worker_node_selection.py</code></h3>
-<p>Target worker node selection for placement tests: <code>get_worker_nodes()</code>, <code>parse_prometheus_value()</code>, <code>parse_prometheus_memory_metrics()</code>, <code>select_node_by_available_memory()</code>.</p>
+<p>Target worker node selection for placement tests: <code>get_worker_nodes()</code>, <code>parse_prometheus_value()</code>, <code>parse_prometheus_memory_metrics()</code>, <code>select_node_by_available_memory()</code>.
+<code>has_unschedulable_condition()</code> is shared with the migration unschedulable probe and validates its input: a list of condition mappings or <code>None</code>, else <code>ValueError</code>.</p>
 <h3 id="utilitiesesxipy"><code>utilities/esxi.py</code></h3>
 <p>Direct-ESXi host access for the <code>endpoint_type: esxi</code> source path: <code>install_ssh_key_on_esxi()</code>, <code>remove_ssh_key_from_esxi()</code>, raising <code>ESXiError</code> on failure.</p>
 <h3 id="utilitiesprovider_inventorypy"><code>utilities/provider_inventory.py</code></h3>

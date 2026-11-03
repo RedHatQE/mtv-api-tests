@@ -16,9 +16,8 @@ from shutil import rmtree
 from typing import TYPE_CHECKING, Any
 
 import filelock
-import ovirtsdk4
 import pytest
-from kubernetes.dynamic.exceptions import ApiException, DynamicApiError, ForbiddenError, NotFoundError
+from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -34,7 +33,6 @@ from ocp_resources.storage_class import StorageClass
 from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.subscription import Subscription
 from ocp_resources.virtual_machine import VirtualMachine
-from openstack import exceptions as os_exc
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
 from pyVmomi import vim
@@ -44,10 +42,7 @@ from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
     MissingProvidersFileError,
     MtvOperatorNotInstalledError,
-    PowerShellCommandError,
     RemoteClusterAndLocalCluterNamesError,
-    VmCloneError,
-    VmNotFoundError,
 )
 from libs.base_provider import (
     _PROVIDER_TEST_MARKERS,
@@ -118,6 +113,7 @@ from utilities.utils import (
     get_value_from_py_config,
     load_source_providers,
     resolve_providers_json_path,
+    restore_skip_clone_power_states,
 )
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
 from utilities.vmware_guest_operations import collect_linux_guest_static_ip_metadata
@@ -1522,67 +1518,6 @@ def validated_source_vms(
     )
 
 
-def _restore_skip_clone_power_states(
-    source_provider: Any,
-    original_power_states: list[tuple[str, str]],
-) -> None:
-    """Restore skip_clone VMs to the power state recorded before the plan setup changed it.
-
-    skip_clone VMs are shared, real VMs (not disposable clones) that other tests may depend on,
-    so the restore also has to run when the class setup fails before the plan is yielded. The
-    list is drained while restoring, so the setup-failure finalizer and the teardown call are
-    idempotent. Every VM is attempted: one unreachable VM must not leave the others behind.
-
-    Args:
-        source_provider (Any): Source provider owning the shared VMs. Typed ``Any`` because the
-            VM power APIs it is called with are provider-specific and not declared on ``BaseProvider``.
-        original_power_states (list[tuple[str, str]]): (VM name, original power state) pairs;
-            drained by this call.
-
-    Raises:
-        ValueError: A VM could not be resolved, or the provider rejected the power operation.
-        OSError: The provider connection failed while restoring.
-        TimeoutExpiredError: The provider did not complete the power operation in time.
-        VmNotFoundError: The shared source VM no longer exists.
-        VmCloneError: The provider reported a clone-level failure for the VM.
-        PowerShellCommandError: A Windows guest rejected the power command.
-        vim.fault.VimFault: The vSphere provider rejected the power operation.
-        ovirtsdk4.Error: The oVirt provider rejected the power operation.
-        os_exc.SDKException: The OpenStack provider rejected the power operation.
-        DynamicApiError: The OpenShift API rejected the power operation.
-        ApiException: An OpenShift resource call failed.
-
-    The first failure is re-raised only after every VM was attempted.
-    """
-    first_error: Exception | None = None
-    while original_power_states:
-        vm_name, original_power = original_power_states.pop()
-        try:
-            provider_vm_api = source_provider.get_vm_by_name(vm_name)
-            if original_power == "on":
-                source_provider.start_vm(provider_vm_api)
-            else:
-                source_provider.stop_vm(provider_vm_api)
-        except (
-            ValueError,
-            OSError,
-            TimeoutExpiredError,
-            VmNotFoundError,
-            VmCloneError,
-            PowerShellCommandError,
-            vim.fault.VimFault,
-            ovirtsdk4.Error,
-            os_exc.SDKException,
-            DynamicApiError,
-            ApiException,
-        ) as err:
-            LOGGER.error(f"Failed to restore power state '{original_power}' of skip_clone VM '{vm_name}': {err}")
-            first_error = first_error or err
-
-    if first_error is not None:
-        raise first_error
-
-
 @pytest.fixture(scope="class")
 def prepared_plan(
     request: pytest.FixtureRequest,
@@ -1669,7 +1604,7 @@ def prepared_plan(
     # the list so this finalizer and the teardown call below never restore twice.
     request.addfinalizer(
         partial(
-            _restore_skip_clone_power_states,
+            restore_skip_clone_power_states,
             source_provider=source_provider,
             original_power_states=original_power_states,
         )
@@ -2038,7 +1973,7 @@ def prepared_plan(
 
     # Restore original power states of skip_clone VMs. Unlike cloned VMs (disposable), these
     # are real, shared VMs that other tests may depend on.
-    _restore_skip_clone_power_states(
+    restore_skip_clone_power_states(
         source_provider=source_provider,
         original_power_states=original_power_states,
     )

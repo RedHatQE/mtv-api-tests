@@ -12,8 +12,10 @@ from subprocess import STDOUT, check_output
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
+import ovirtsdk4
 import pytest
 from kubernetes.dynamic import DynamicClient
+from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
 from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -26,8 +28,11 @@ from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.virtual_machine_cluster_instancetype import VirtualMachineClusterInstancetype
 from ocp_resources.virtual_machine_cluster_preference import VirtualMachineClusterPreference
+from openstack import exceptions as os_exc
 from pytest_testconfig import config as py_config
+from pyVmomi import vim
 from simple_logger.logger import get_logger
+from timeout_sampler import TimeoutExpiredError
 
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
@@ -37,7 +42,14 @@ from libs.providers.ova import OVAProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from libs.providers.hyperv import HyperVProvider
-from exceptions.exceptions import ProviderEmptyContentError
+from exceptions.exceptions import (
+    PowerShellCommandError,
+    ProviderEmptyContentError,
+    VmBadDatastoreError,
+    VmCloneError,
+    VmMissingVmxError,
+    VmNotFoundError,
+)
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.resources import create_and_store_resource
 
@@ -864,6 +876,71 @@ def delete_all_vms(ocp_admin_client: DynamicClient, namespace: str) -> None:
     for vm in VirtualMachine.get(client=ocp_admin_client, namespace=namespace):
         with suppress(Exception):
             vm.clean_up(wait=True)
+
+
+def restore_skip_clone_power_states(
+    source_provider: Any,
+    original_power_states: list[tuple[str, str]],
+) -> None:
+    """Restore skip_clone VMs to the power state recorded before the plan setup changed it.
+
+    skip_clone VMs are shared, real VMs (not disposable clones) that other tests may depend on,
+    so the restore also has to run when the class setup fails before the plan is yielded. The
+    list is drained while restoring, so the setup-failure finalizer and the teardown call are
+    idempotent. Every VM is attempted: one unreachable VM must not leave the others behind.
+
+    Args:
+        source_provider (Any): Source provider owning the shared VMs. Typed ``Any`` because the
+            VM power APIs it is called with are provider-specific and not declared on ``BaseProvider``.
+        original_power_states (list[tuple[str, str]]): (VM name, original power state) pairs;
+            drained by this call.
+
+    Raises:
+        ValueError: A VM could not be resolved, or the provider rejected the power operation.
+        OSError: The provider connection failed while restoring.
+        TimeoutExpiredError: The provider did not complete the power operation in time.
+        VmNotFoundError: The shared source VM no longer exists.
+        VmMissingVmxError: The shared source VM is missing its VMX file.
+        VmBadDatastoreError: The shared source VM has a bad datastore status.
+        VmCloneError: The provider reported a clone-level failure for the VM.
+        PowerShellCommandError: A Windows guest rejected the power command.
+        vim.fault.VimFault: The vSphere provider rejected the power operation.
+        ovirtsdk4.Error: The oVirt provider rejected the power operation.
+        os_exc.SDKException: The OpenStack provider rejected the power operation.
+        DynamicApiError: The OpenShift API rejected the power operation.
+        ApiException: An OpenShift resource call failed.
+
+    The first failure is re-raised only after every VM was attempted.
+    """
+    first_error: Exception | None = None
+    while original_power_states:
+        vm_name, original_power = original_power_states.pop()
+        try:
+            provider_vm_api = source_provider.get_vm_by_name(vm_name)
+            if original_power == "on":
+                source_provider.start_vm(provider_vm_api)
+            else:
+                source_provider.stop_vm(provider_vm_api)
+        except (
+            ValueError,
+            OSError,
+            TimeoutExpiredError,
+            VmNotFoundError,
+            VmMissingVmxError,
+            VmBadDatastoreError,
+            VmCloneError,
+            PowerShellCommandError,
+            vim.fault.VimFault,
+            ovirtsdk4.Error,
+            os_exc.SDKException,
+            DynamicApiError,
+            ApiException,
+        ) as err:
+            LOGGER.error(f"Failed to restore power state '{original_power}' of skip_clone VM '{vm_name}': {err}")
+            first_error = first_error or err
+
+    if first_error is not None:
+        raise first_error
 
 
 class VirtualMachineFromInstanceType(VirtualMachine):

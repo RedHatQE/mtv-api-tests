@@ -5,6 +5,7 @@ from datetime import datetime
 from time import monotonic
 from typing import TYPE_CHECKING, Any
 
+from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
@@ -26,6 +27,7 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
+from utilities.naming import resolve_destination_vm_name
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 from utilities.worker_node_selection import has_unschedulable_condition
@@ -566,6 +568,83 @@ def get_plan_migration_status(plan: Plan) -> str:
         return ""
 
 
+def _plan_status(plan: Plan) -> dict[str, Any]:
+    """Return the Plan status as plain Python data.
+
+    Args:
+        plan (Plan): Plan whose status is read.
+
+    Returns:
+        dict[str, Any]: Plain-dict view of the Plan status, empty when the Plan reports none.
+    """
+    # Plan status blocks are free-form provider data, so their values are typed Any: the
+    # Kubernetes CRD schema does not express the per-field types the wrapper exposes.
+    status = plan.instance.status
+    return status.to_dict() if status is not None else {}
+
+
+def _get_migration_vm_statuses(plan: Plan) -> list[dict[str, Any]]:
+    """Return the Plan's per-VM migration status entries.
+
+    Args:
+        plan (Plan): Plan whose migration is being waited on.
+
+    Returns:
+        list[dict[str, Any]]: Entries of ``status.migration.vms``, empty when the migration
+            block is missing or reports no VMs yet.
+
+    Raises:
+        ValueError: If the migration block, its ``vms`` list, or a VM entry has an unexpected
+            shape.
+    """
+    migration = _plan_status(plan=plan).get("migration")
+    if migration is None:
+        return []
+    if not isinstance(migration, dict):
+        raise ValueError(
+            f"Plan '{plan.name}' reports status.migration as {type(migration).__name__}, expected a mapping"
+        )
+
+    vms = migration.get("vms")
+    if vms is None:
+        return []
+    if not isinstance(vms, list):
+        raise ValueError(f"Plan '{plan.name}' reports status.migration.vms as {type(vms).__name__}, expected a list")
+
+    for vm in vms:
+        if not isinstance(vm, dict) or not isinstance(vm.get("name"), str):
+            raise ValueError(
+                f"Plan '{plan.name}' reports a malformed status.migration.vms entry {vm!r}: "
+                "expected a mapping with a string 'name'"
+            )
+
+    return vms
+
+
+def _get_destination_vm_names(plan: Plan) -> set[str]:
+    """Collect the destination VM names the plan's migration can produce.
+
+    The migration status only lists VMs that already reported status, so the Plan spec is
+    resolved as well: OVA plans rename VMs through ``targetName`` and non-conforming source
+    names are sanitized, and either name can be the destination name.
+
+    Args:
+        plan (Plan): Plan whose migration is being waited on.
+
+    Returns:
+        set[str]: Destination VM names.
+
+    Raises:
+        ValueError: If the Plan reports a malformed migration status.
+        InvalidVMNameError: If a spec VM name cannot be sanitized to a DNS-1123 name.
+    """
+    destination_vm_names = {vm["name"] for vm in _get_migration_vm_statuses(plan=plan)}
+    destination_vm_names.update(
+        resolve_destination_vm_name({"name": vm.name, "targetName": vm.targetName}) for vm in plan.instance.spec.vms
+    )
+    return destination_vm_names
+
+
 def _get_unschedulable_destination_vm(plan: Plan) -> tuple[str, str] | None:
     """Find a migrated VM the destination scheduler has rejected.
 
@@ -574,60 +653,72 @@ def _get_unschedulable_destination_vm(plan: Plan) -> tuple[str, str] | None:
 
     Returns:
         tuple[str, str] | None: Destination VM name and the raw scheduler message, or None when
-            no migrated VM is currently unschedulable.
+            no migrated VM is currently unschedulable or the destination could not be read.
+
+    Raises:
+        ValueError: If the Plan reports a malformed migration status or VMI conditions.
     """
-    destination_vm_names = {vm["name"] for vm in (plan.instance.status or {}).get("vms") or []}
+    destination_vm_names = _get_destination_vm_names(plan=plan)
     if not destination_vm_names:
         return None
 
-    for vmi in VirtualMachineInstance.get(
-        client=plan.client,
-        namespace=plan.instance.spec.targetNamespace,
-    ):
-        if vmi.name not in destination_vm_names:
-            continue
+    # A diagnostic read must never abort the migration wait: a transient destination API failure
+    # only means there is no scheduler observation on this cycle.
+    try:
+        for vmi in VirtualMachineInstance.get(
+            client=plan.client,
+            namespace=plan.instance.spec.targetNamespace,
+        ):
+            if vmi.name not in destination_vm_names:
+                continue
 
-        conditions = (vmi.instance.status or {}).get("conditions")
-        if not has_unschedulable_condition(conditions):
-            continue
+            vmi_status = vmi.instance.status
+            conditions = vmi_status.to_dict().get("conditions") if vmi_status is not None else None
+            if not has_unschedulable_condition(conditions=conditions):
+                continue
 
-        for condition in conditions or []:
-            if condition.get("type") == "PodScheduled":
-                return vmi.name, condition.get("message") or condition.get("reason") or "unknown"
+            for condition in conditions or []:
+                if condition.get("type") == "PodScheduled":
+                    return vmi.name, condition.get("message") or condition.get("reason") or "unknown"
+    except (ApiException, DynamicApiError) as err:
+        LOGGER.info(f"Could not list destination VMIs for plan '{plan.name}', skipping this scheduler check: {err}")
+        return None
 
     return None
 
 
-def _confirm_unschedulable_destination_vm(plan: Plan, consecutive_hits: int) -> int:
-    """Count consecutive destination scheduler rejections and fail once they are confirmed.
+def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]) -> None:
+    """Count consecutive destination scheduler rejections per VM and fail once they are confirmed.
 
     Args:
         plan (Plan): Plan whose migration is being waited on.
-        consecutive_hits (int): Confirmations observed before this check.
-
-    Returns:
-        int: Updated count of consecutive unschedulable confirmations, 0 when scheduling recovered.
+        hits_by_vm (dict[str, int]): Consecutive rejection count per destination VM name,
+            updated in place so a VM that schedules again starts over.
 
     Raises:
-        MigrationVmUnschedulableError: If the rejection is confirmed by enough consecutive checks.
+        MigrationVmUnschedulableError: If one VM is rejected on enough consecutive checks.
+        ValueError: If the Plan reports a malformed migration status.
     """
     unschedulable_vm = _get_unschedulable_destination_vm(plan=plan)
+    observed_vm_name = unschedulable_vm[0] if unschedulable_vm is not None else None
+
+    # Counts are per VM: a rejection only confirms anything when the same VM was rejected on
+    # every check, so a VM that is no longer rejected (or is gone) starts over.
+    for vm_name in [name for name in hits_by_vm if name != observed_vm_name]:
+        del hits_by_vm[vm_name]
+
     if unschedulable_vm is None:
-        return 0
+        return
 
     vm_name, scheduler_message = unschedulable_vm
-    hits = consecutive_hits + 1
+    hits = hits_by_vm.get(vm_name, 0) + 1
+    hits_by_vm[vm_name] = hits
     LOGGER.warning(
-        "Migrated VM '%s' is unschedulable on the destination cluster (check %d/%d): %s",
-        vm_name,
-        hits,
-        _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED,
-        scheduler_message,
+        f"Migrated VM '{vm_name}' is unschedulable on the destination cluster "
+        f"(check {hits}/{_UNSCHEDULABLE_CONFIRMATIONS_REQUIRED}): {scheduler_message}"
     )
     if hits >= _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED:
         raise MigrationVmUnschedulableError(vm_name=vm_name, scheduler_message=scheduler_message)
-
-    return hits
 
 
 def wait_for_migration_complate(
@@ -645,9 +736,10 @@ def wait_for_migration_complate(
     Raises:
         MigrationPlanExecError: If migration fails or doesn't reach expected condition within timeout
         MigrationVmUnschedulableError: If a migrated VM is confirmed unschedulable by the destination scheduler.
+        ValueError: If the Plan reports a malformed migration status.
     """
     next_unschedulable_check = monotonic()
-    unschedulable_hits = 0
+    unschedulable_hits: dict[str, int] = {}
 
     try:
         last_status: str = ""
@@ -665,18 +757,17 @@ def wait_for_migration_complate(
             if on_status_poll is not None:
                 on_status_poll(sample)
 
-            if monotonic() >= next_unschedulable_check:
-                next_unschedulable_check = monotonic() + _UNSCHEDULABLE_CHECK_INTERVAL_SECONDS
-                unschedulable_hits = _confirm_unschedulable_destination_vm(
-                    plan=plan,
-                    consecutive_hits=unschedulable_hits,
-                )
-
             if sample == Plan.Status.SUCCEEDED:
                 return
 
             elif sample == Plan.Status.FAILED:
                 raise MigrationPlanExecError()
+
+            # Probed only on non-terminal polls, so a plan that reports its own failure on the
+            # poll where a VM is confirmed unschedulable still surfaces the plan status.
+            if monotonic() >= next_unschedulable_check:
+                next_unschedulable_check = monotonic() + _UNSCHEDULABLE_CHECK_INTERVAL_SECONDS
+                _confirm_unschedulable_destination_vm(plan=plan, hits_by_vm=unschedulable_hits)
 
     except (TimeoutExpiredError, MigrationPlanExecError):
         raise MigrationPlanExecError(

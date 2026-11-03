@@ -74,6 +74,18 @@ _WINDOWS_NETWORK_CMD = ["ipconfig", "/all"]
 _SSH_RETRY_TIMEOUT_SECONDS: int = 300
 _SSH_RETRY_DELAY_SECONDS: int = 15
 
+# Transport failures a retry can recover from: the guest may not serve sessions yet, and
+# connect() surfaces those as ConnectionError, RuntimeError or a re-raised OSError.
+_SSH_TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+    SSHException,
+    AuthenticationException,
+    NoValidConnectionsError,
+    ChannelException,
+    ConnectionError,
+    RuntimeError,
+    OSError,
+)
+
 
 def get_ssh_credentials_from_provider_config(
     source_provider_data: dict[str, Any], source_vm_info: dict[str, Any]
@@ -154,14 +166,7 @@ def _wait_for_ssh_connection(
                     return True
                 LOGGER.warning(f"SSH connectivity test failed for VM {vm_name} - retrying...")
                 return False
-        except (
-            SSHException,
-            AuthenticationException,
-            NoValidConnectionsError,
-            ChannelException,
-            ConnectionError,
-            RuntimeError,
-        ) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
             return False
 
@@ -261,13 +266,7 @@ def verify_data_integrity(
                     LOGGER.warning(f"Failed to read marker file on VM {vm_name}: {err} - retrying...")
                     return None
                 return stdout.strip()
-        except (
-            SSHException,
-            AuthenticationException,
-            NoValidConnectionsError,
-            ChannelException,
-            ConnectionError,
-        ) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
             return None
 
@@ -356,13 +355,7 @@ def verify_luks_encryption(
                     return None
 
                 return _find_luks_devices(lsblk_data["blockdevices"])
-        except (
-            SSHException,
-            AuthenticationException,
-            NoValidConnectionsError,
-            ChannelException,
-            ConnectionError,
-        ) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
             return None
 
@@ -886,13 +879,7 @@ def check_static_ip_preservation(
 
         except CommandExecFailed:
             raise
-        except (
-            SSHException,
-            ChannelException,
-            NoValidConnectionsError,
-            AuthenticationException,
-            ConnectionError,
-        ) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH connection failed: {e}")
             return None
         except Exception as e:
@@ -1094,15 +1081,7 @@ def check_vbs_status(
                 executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)
                 executor.port = ssh_conn.local_port
                 rc, stdout, err = executor.run_cmd(vbs_cmd)
-        except (
-            SSHException,
-            AuthenticationException,
-            NoValidConnectionsError,
-            ChannelException,
-            ConnectionError,
-            RuntimeError,
-            OSError,
-        ) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
             return None
 
