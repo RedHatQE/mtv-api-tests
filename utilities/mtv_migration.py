@@ -639,8 +639,12 @@ def _get_destination_vm_names(plan: Plan) -> set[str]:
         InvalidVMNameError: If a spec VM name cannot be sanitized to a DNS-1123 name.
     """
     destination_vm_names = {vm["name"] for vm in _get_migration_vm_statuses(plan=plan)}
+    # .get() is the only access form that tolerates the optional targetName for both entry shapes
+    # the wrapper exposes here (a plain dict or a ResourceField), keeping a VM without targetName
+    # from breaking the probe.
     destination_vm_names.update(
-        resolve_destination_vm_name({"name": vm.name, "targetName": vm.targetName}) for vm in plan.instance.spec.vms
+        resolve_destination_vm_name({"name": vm.get("name"), "targetName": vm.get("targetName")})
+        for vm in plan.instance.spec.vms
     )
     return destination_vm_names
 
