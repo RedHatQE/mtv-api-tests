@@ -158,12 +158,17 @@ class BaseProvider(abc.ABC):
             base_name: The base name for the cloned VM
 
         Returns:
-            A unique VM name, truncated to 63 chars if needed (keeping last 63 chars to preserve UUID)
+            A unique VM name, truncated to 63 chars if needed (keeping last 63 chars to
+            preserve UUID) and DNS-1123 compliant (no leading/trailing hyphen)
         """
         clone_vm_name = generate_name_with_uuid(f"{session_uuid}-{base_name}")
         if len(clone_vm_name) > 63:
             self.log.warning(f"VM name '{clone_vm_name}' is too long ({len(clone_vm_name)} > 63). Truncating.")
-            clone_vm_name = clone_vm_name[-63:]
+            # Keep the last 63 chars (preserves the UUID suffix), then strip invalid edge
+            # characters: a left-side cut can land right after a hyphen, leaving a leading '-'
+            # which Kubernetes names must not have (forklift would silently drop it on the
+            # destination VM, breaking name-based lookups).
+            clone_vm_name = clone_vm_name[-63:].strip("-")
         return clone_vm_name
 
     @abc.abstractmethod
