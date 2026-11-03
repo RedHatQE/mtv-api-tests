@@ -170,6 +170,9 @@ Other cold classes extend the pattern with extra verification steps. The pattern
 - **6-step XFS pattern** in `tests/cold/test_cold_migration_xfs.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_xfs_version` -> check_vms
 - **6-step root-disk selection pattern** in `tests/cold/test_cold_migration_root_disk.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_selected_root_os` -> check_vms
 - **6-step LUKS pattern** in `tests/luks/test_luks_cold_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_luks_encryption` -> check_vms
+- **6-step exclude-disks pattern** in `tests/cold/test_cold_migration_exclude_disks.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_excluded_disks`
+  -> check_vms. The Plan excludes individual source disks by bus address (`spec.vms[].excludeDisks`); the verify step confirms the migrated VM has exactly the
+  non-excluded disks attached and no PVC exists for the excluded ones in the dedicated VM namespace.
 - **6-step shared-disk pattern (Linux)** in `tests/shared_disk/test_shared_disk_rhel_migration.py`: storagemap -> networkmap -> plan -> migrate -> `test_verify_shared_disk_data`
   -> check_vms
 - **7-step shared-disk pattern (Windows)** in `tests/shared_disk/test_shared_disk_windows_migration.py`: `test_label_shared_disk` -> storagemap -> networkmap -> plan -> migrate
@@ -304,7 +307,7 @@ network or class-scoped Multus networks.
 
 The key rule is simple: the first network goes to the pod network, and every additional network is mapped to a Multus `NetworkAttachmentDefinition`.
 
-```342:367:utilities/utils.py
+```576:601:utilities/utils.py
 for index, network in enumerate(networks):
     if pod_only or index == 0:
         # First network or pod_only mode → pod network
@@ -324,7 +327,7 @@ for index, network in enumerate(networks):
             "namespace": multus_namespace,
             "type": "multus",
         }
-        multus_counter += 1
+        multus_counter += 1  # Increment for next NAD
 
     network_map_list.append({
         "destination": _destination,

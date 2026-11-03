@@ -123,7 +123,9 @@ Each item in `virtual_machines` describes one source VM or template.
 | `rootDisk` | No | Root disk path for this VM, passed through as the Plan API field `spec.vms[].rootDisk` (for example, `/dev/sdb2`). Use the API spelling and casing. Tests may set it on `prepared_plan` at runtime after source inspection when the path is discovered dynamically. |
 | `luks` | No | `True` when the VM has a LUKS-encrypted disk. Consumed by the LUKS fixture and replaced with a Secret reference. |
 | `luks_passphrase` | No | Per-VM LUKS passphrase. Overrides the provider-level `luks_passphrase`. |
+| `exclude_disks` | No | vSphere bus addresses of disks to exclude from migration (e.g. `["scsi0:1"]`). The exclusion test renames this key to the Plan `spec.vms[].excludeDisks` field before plan creation (the shared plan builder passes VM keys through unchanged); the excluded disks are neither copied nor attached to the migrated VM. |
 | `migrate_shared_disks` | No | `True` for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM. |
+| `instance_type` | No | Cluster instancetype name (e.g. `u1.medium`) passed to the Plan as `spec.vms[].instanceType`. The migrated VM takes CPU and memory from the instancetype; post-checks skip source CPU/memory comparison and verify `spec.instancetype` instead. |
 | `add_nic` | No | `True` to add an extra NIC. vSphere only. |
 | `add_nic_start_connected` | Yes* | Required when `add_nic` is `True`. Must be a `bool`. |
 | `win_os` | No | Hyper-V guest OS override. Must be a `bool` when present. |
@@ -244,6 +246,7 @@ plan for later validation:
 | `guest_agent_timeout` | No | Guest-info wait timeout in seconds. Defaults to `120` where used. |
 | `migrate_shared_disks` | No | `True` to enable shared disk migration at plan level. Individual VMs can override. |
 | `xfs_compatibility` | No | `True` to request XFS v4 filesystem compatibility on the Plan CR. |
+| `skip_guest_conversion` | No | `True` to skip the guest-conversion pipeline stages; the guest must be prepared to boot on the destination. The config value alone does not reach the Plan: `create_plan_resource` does not map it, so a test must pass it explicitly via `additional_plan_options={"skip_guest_conversion": ...}`, as `tests/cold/test_cold_migration_skip_guest_conversion.py` does. |
 | `rdm_as_lun` | No | `True` to map RDM disks as LUN devices with a SCSI bus instead of the default virtio. |
 | `enable_nested_virtualization` | No | `False` disables the `vmx` and `svm` CPU features. |
 | `run_preflight_inspection` | No | `False` disables the Plan CR preflight inspection step. |
@@ -281,6 +284,8 @@ def check_vms_power_state(
 | `vm_target_namespace` | No | Custom namespace for migrated VMs. The preparation flow creates it if needed. |
 | `multus_namespace` | No | Namespace where NetworkAttachmentDefinitions are created for additional networks. |
 | `pvc_name_template` | No | Forklift PVC naming template. Either a string, or a mapping of provider type to template. |
+| `network_name_template` | No | Forklift network naming template (e.g. `net-{{.NetworkType | lower}}-{{.NetworkIndex}}`). The check is only run for source providers whose Forklift adapter is confirmed to render the template (vSphere). Post-checks render it per mapped destination network and verify the migrated VM's `networks[].name` and matching `interfaces[].name`. Note: the Plan validator renders templates with test data where `NetworkType` is capitalized ("Multus"/"Pod"), so templates must lowercase it (e.g. `| lower`) to pass the DNS1123 label validation (lowercase only). |
+| `convertor_node_selector` | No | Node selector for virt-v2v convertor pods (`convertorNodeSelector`). Tests verify the pod inherits the selector and runs on the selected worker (pinned via `kubernetes.io/hostname`) during migration. |
 | `pvc_name_template_use_generate_name` | No | When `True`, post-checks treat the rendered PVC name as a prefix because Kubernetes adds a generated suffix. |
 | `target_node_selector` | No | Node label selector used for VM placement tests. |
 | `target_labels` | No | Labels to apply to migrated VM metadata. |
@@ -446,7 +451,7 @@ There is one more important implementation detail: when the helper creates an MT
 
 > **Warning:** Do not expect a custom `pvc_name_template` in `tests_params` to survive copy-offload plan creation. The helper overwrites it with `"pvc"`.
 
-Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.md#vsphere-copy-offload).
+Provider-side copy-offload settings are documented in [Provider Config File](provider-config-file.html#vsphere-copy-offload).
 
 ## How Raw Config Becomes `prepared_plan`
 
@@ -589,8 +594,9 @@ Right before creating the MTV `Plan`, the tests add VM IDs from the Forklift inv
 ```
 
 `create_plan_resource()` accepts only the flags that map onto the Plan CR: `warm_migration`, `copyoffload`, `preserve_static_ips`, `pvc_name_template`,
-`pvc_name_template_use_generate_name`, `target_node_selector`, `target_labels`, `target_affinity`, `vm_target_namespace`, `migrate_shared_disks`, `target_power_state`,
-`enable_nested_virtualization`, `xfs_compatibility`, `run_preflight_inspection`, and `rdm_as_lun`. Everything else is consumed by fixtures or by post-migration checks.
+`network_name_template`, `pvc_name_template_use_generate_name`, `target_node_selector`, `target_labels`, `target_affinity`, `vm_target_namespace`, `migrate_shared_disks`, `target_power_state`,
+`enable_nested_virtualization`, `xfs_compatibility`, `run_preflight_inspection`, `rdm_as_lun`, and `convertor_node_selector`. Additional Plan constructor fields can be passed through
+`additional_plan_options`; everything else is consumed by fixtures or by post-migration checks.
 
 ## Runtime Fields Added During Preparation
 

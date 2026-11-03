@@ -469,7 +469,8 @@ existing tests.</p>
 </li>
 <li>
 <p>Plan-level keys such as <code>target_power_state</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>, <code>vm_target_namespace</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>,
-<code>pre_hook</code>, <code>post_hook</code>, and <code>copyoffload</code> are already supported by the shared helpers.</p>
+<code>pre_hook</code>, <code>post_hook</code>, and <code>copyoffload</code> are supported by the shared helpers. Pass additional Plan constructor fields such as <code>skip_guest_conversion</code> through
+<code>additional_plan_options</code> when creating the Plan.</p>
 </li>
 </ul>
 <blockquote>

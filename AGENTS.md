@@ -4,14 +4,11 @@
 
 This file is a **budgeted index**. Its line count is capped by the `check-agents-md-budget`
 pre-commit hook (shrink-only — growing past the cap fails the commit; raising the cap requires a
-deliberate edit of the hook's constant).
-
-- Rules live here in minimal form. Examples and encyclopedic detail live in the linked files
-  (`test_plan_schema.md`, `docs/`, hook sources) — link to them, never paste their content here.
-- No duplications: define information once, reference it elsewhere.
-- Clear, unambiguous instructions — no vague terms without definitions.
-- Update this file when an agent makes a mistake; prune stale rules — outdated rules are actively
-  harmful because agents trust them over the actual code. Changes need user approval before commit.
+deliberate edit of the hook's constant). Rules live here in minimal form; examples and detail
+live in the linked files (`test_plan_schema.md`, `docs/`, hook sources) — link, never paste.
+No duplications: define once, reference elsewhere. Clear, unambiguous instructions. Update this
+file when an agent makes a mistake; prune stale rules — outdated rules are actively harmful
+because agents trust them over the actual code; changes need user approval.
 
 ## Commands
 
@@ -181,6 +178,7 @@ Base: `test_create_storagemap` → `test_create_networkmap` → `test_create_pla
 | Copy-offload VM+populator throttling | + `test_verify_vm_inflight_throttling`, then throttling steps |
 | Copy-offload dedicated host | + `test_verify_dedicated_migration_host`, then `check_xcopy_used` |
 | LUKS | + `test_verify_luks_encryption` |
+| Exclude-disks (`exclude_disks`, vSphere) | + `test_verify_excluded_disks` (disk exclusion by bus address) |
 | XFS (`xfs_compatibility: True`) | + `test_verify_xfs_version` |
 | Plan-archive PVC cleanup (`tests/plan_lifecycle/`) | migrate (expected `MigrationPlanExecError`) → `test_archive_and_delete_plan` → `test_verify_pvc_cleanup`; no `check_vms` |
 | Resume-conversion (`vsphere`) | migrate (expected fail) → `test_verify_pvcs_preserved` → `test_resume_migration` → `check_vms` |
@@ -260,7 +258,10 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `clone` | No | True to clone before migration |
 | `disk_type` | No | "thin" / "thick-lazy" / "thick-eager" |
 | `luks` / `luks_passphrase` | No | LUKS-encrypted disk; per-VM passphrase override |
+| `add_disks` | No | Extra disks to attach to the VM clone |
+| `exclude_disks` | No | vSphere bus addresses to exclude |
 | `migrate_shared_disks` | No | True for owner VM in shared-disk tests |
+| `instance_type` | No | Cluster instancetype name (e.g. `u1.medium`, 1 vCPU/4Gi); VM takes CPU/memory from it |
 | `add_nic` | No | True to add a NIC (vSphere only) |
 | `add_nic_start_connected` | Yes* | Required when `add_nic=True`; bool |
 | `win_os` | No | Hyper-V guest OS override (bool) |
@@ -273,6 +274,7 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `preserve_static_ips` | Preserve static IPs after migration |
 | `copyoffload` | Copy-offload (XCOPY) migration |
 | `xfs_compatibility` | XFS v4 filesystem compatibility (requires `xfs_check` config: `command`, `mount_point`, `expected_output`) |
+| `skip_guest_conversion` | Skip guest-conversion pipeline stages on the Plan |
 | `migrate_shared_disks` | Shared disk migration at plan level |
 | `inventory_timeout` | Per-VM Forklift inventory wait timeout (seconds) |
 | `clone_to_same_host` | VM2+ default to VM1's ESXi host; explicit `target_esxi_host` overrides |
@@ -283,6 +285,8 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `rdm_as_lun` | Map RDM disks as LUN devices with SCSI bus |
 | `pre_copy_source_disks` | Hyper-V two-phase VHDX→raw transfer (Hyper-V source only) |
 | `network_map_overrides` | Per-network destination overrides chosen by `source_ip_config`; `pod`/`multus`/`ignored` + optional `network_ip_mode` |
+| `network_name_template` | Forklift network-name template (e.g. `net-{{.NetworkType \| lower}}-{{.NetworkIndex}}`); asserted post-migration |
+| `convertor_node_selector` | Node selector for virt-v2v convertor pods; pod checked during migration |
 
 The boolean flags in this table use `plan.get("flag", False)` in code. Exceptions:
 `inventory_timeout` is numeric and defaults via `plan.get("inventory_timeout", 300)`;

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
+from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import py_config
@@ -26,7 +27,16 @@ from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
 
 if TYPE_CHECKING:
-    from kubernetes.dynamic import DynamicClient
+    from kubernetes.dynamic import DynamicClient, ResourceInstance
+
+# Forklift virt-v2v conversion pod label; shared by all conversion-pod observers and helpers.
+CONVERSION_POD_LABEL_SELECTOR: str = "forklift.app=virt-v2v"
+
+# Test-config keys renamed to their Kubernetes API spec field names.
+_VM_CONFIG_TO_SPEC_KEY_RENAMES: dict[str, str] = {
+    "migrate_shared_disks": "migrateSharedDisks",
+    "instance_type": "instanceType",
+}
 
 LOGGER = get_logger(__name__)
 
@@ -38,6 +48,17 @@ _VM_DICT_TEST_ONLY_KEYS: frozenset[str] = frozenset({
     "disconnected_nic_mac",
     "preserve_name_format",
     "snapshots_before_migration",
+})
+
+# Keys consumed directly by create_and_store_resource that create_plan_resource does not
+# set itself. Passing any of these via additional_plan_options could make create_and_store_resource
+# reuse an existing resource (e.g. an already-existing Plan name) instead of creating a new one,
+# so they are reserved and rejected by the duplicate-options check below.
+_CREATE_AND_STORE_RESOURCE_KEYS: frozenset[str] = frozenset({
+    "name",
+    "kind_dict",
+    "yaml_file",
+    "test_name",
 })
 
 
@@ -60,6 +81,31 @@ def get_migration_for_plan(plan: Plan) -> Migration:
                     return migration
 
     raise MigrationNotFoundError(f"Migration CR not found for Plan '{plan.name}' in namespace '{plan.namespace}'")
+
+
+def get_conversion_pods(
+    client: "DynamicClient",
+    namespace: str,
+    migration_uid: str,
+) -> list["ResourceInstance"]:
+    """List raw virt-v2v conversion pod snapshots for one migration.
+
+    Args:
+        client (DynamicClient): OpenShift client used to query Pods.
+        namespace (str): Namespace the conversion pods run in (the Plan target namespace).
+        migration_uid (str): UID of the Migration whose conversion pods are listed.
+
+    Returns:
+        list[ResourceInstance]: Raw Pod snapshots labeled for the given migration.
+    """
+    return list(
+        Pod.get(
+            client=client,
+            namespace=namespace,
+            label_selector=f"{CONVERSION_POD_LABEL_SELECTOR},migration={migration_uid}",
+            raw=True,
+        )
+    )
 
 
 def _get_failed_migration_step(plan: Plan, vm_name: str) -> str:
@@ -204,6 +250,7 @@ def create_plan_resource(
     copyoffload: bool = False,
     preserve_static_ips: bool = False,
     pvc_name_template: str | None = None,
+    network_name_template: str | None = None,
     pvc_name_template_use_generate_name: bool | None = None,
     target_node_selector: dict[str, str] | None = None,
     target_labels: dict[str, str] | None = None,
@@ -217,6 +264,8 @@ def create_plan_resource(
     rdm_as_lun: bool | None = None,
     pre_copy_source_disks: bool = False,
     convertor_node_selector: dict[str, str] | None = None,
+    # Any: Plan option values are heterogeneous/provider-defined and intentionally untyped to pass arbitrary kubevirt Plan spec fields through.
+    additional_plan_options: dict[str, Any] | None = None,
 ) -> Plan:
     """Create MTV Plan CR resource.
 
@@ -242,6 +291,7 @@ def create_plan_resource(
         copyoffload (bool): Enable copy-offload specific settings. Defaults to False.
         preserve_static_ips (bool): Preserve static IP addresses. Defaults to False.
         pvc_name_template (str | None): PVC naming template. Defaults to None.
+        network_name_template (str | None): Template for migrated VM network names. Defaults to None.
         pvc_name_template_use_generate_name (bool | None): Use generateName for PVCs. Defaults to None.
         target_node_selector (dict[str, str] | None): Optional node selector labels for scheduling VMs to specific nodes. Defaults to None.
         target_labels (dict[str, str] | None): Optional custom labels to apply to migrated VM metadata. Defaults to None.
@@ -261,12 +311,16 @@ def create_plan_resource(
             qemu-img, then in-place virt-v2v). Only applies to Hyper-V migrations. Defaults to False.
         convertor_node_selector (dict[str, str] | None): Optional selector for virt-v2v conversion and vSphere
             warm-migration CDI importer pods. Defaults to None.
+        additional_plan_options (dict[str, Any] | None): Additional Plan constructor options not already handled by
+            this helper. Defaults to None. Keys consumed by create_and_store_resource ("name", "kind_dict", "yaml_file",
+            "test_name") are not allowed.
 
     Returns:
         Plan: The created Plan CR resource.
 
     Raises:
-        ValueError: If source_provider or destination_provider ocp_resource is not set.
+        ValueError: If either provider resource is not set or additional_plan_options conflicts with options already
+            set by this helper or with keys consumed by create_and_store_resource (e.g. "name").
         TimeoutExpiredError: If Plan fails to reach Ready status within timeout.
     """
     if not source_provider.ocp_resource:
@@ -275,14 +329,15 @@ def create_plan_resource(
     if not destination_provider.ocp_resource:
         raise ValueError("destination_provider.ocp_resource is not set")
 
-    # Convert per-VM migrate_shared_disks (snake_case config) to migrateSharedDisks (camelCase API)
+    # Convert per-VM snake_case config keys to camelCase API fields.
     # The Plan class passes virtual_machines_list directly to spec.vms, so any key in the
-    # VM dict ends up in the CR. We rename here to match the Kubernetes API field name.
+    # VM dict ends up in the CR. We rename here to match the Kubernetes API field names.
     # Work on copies to avoid mutating the caller's prepared_plan data.
     vms_for_plan = [dict(vm) for vm in virtual_machines_list]
     for vm in vms_for_plan:
-        if "migrate_shared_disks" in vm:
-            vm["migrateSharedDisks"] = vm.pop("migrate_shared_disks")
+        for config_key, spec_key in _VM_CONFIG_TO_SPEC_KEY_RENAMES.items():
+            if config_key in vm:
+                vm[spec_key] = vm.pop(config_key)
         for key in _VM_DICT_TEST_ONLY_KEYS:
             vm.pop(key, None)
 
@@ -308,6 +363,7 @@ def create_plan_resource(
         "after_hook_namespace": after_hook_namespace,
         "preserve_static_ips": preserve_static_ips,
         "pvc_name_template": pvc_name_template,
+        "network_name_template": network_name_template,
         "pvc_name_template_use_generate_name": pvc_name_template_use_generate_name,
         "target_power_state": target_power_state,
     }
@@ -351,6 +407,15 @@ def create_plan_resource(
 
     if run_preflight_inspection is not None:
         plan_kwargs["run_preflight_inspection"] = run_preflight_inspection
+
+    if additional_plan_options:
+        duplicate_options = (plan_kwargs.keys() | _CREATE_AND_STORE_RESOURCE_KEYS) & additional_plan_options.keys()
+        if duplicate_options:
+            raise ValueError(
+                f"Additional Plan options cannot override options already set by create_plan_resource: "
+                f"{sorted(duplicate_options)}"
+            )
+        plan_kwargs.update(additional_plan_options)
 
     plan = create_and_store_resource(**plan_kwargs)
 
@@ -844,9 +909,6 @@ def wait_for_concurrent_migration_execution(
         timeout: Timeout in seconds to wait for simultaneous execution.
         callbacks: Optional dict mapping plan names to status poll callbacks. Callbacks are
             invoked with the current status string for their respective plan on each poll.
-
-    Returns:
-        None
 
     Raises:
         AssertionError: If plans do not execute simultaneously or if any plan completes early.

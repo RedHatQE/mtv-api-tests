@@ -124,6 +124,11 @@ class BaseProvider(abc.ABC):
     def __exit__(self, exc_type, exc_val, exc_tb):
         return
 
+    @property
+    def renders_network_name_template(self) -> bool:
+        """Whether this source provider's Forklift adapter renders the Plan networkNameTemplate."""
+        return False
+
     @abc.abstractmethod
     def connect(self) -> Any:
         pass

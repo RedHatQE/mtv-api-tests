@@ -25,6 +25,7 @@ from utilities.copyoffload_datastore import (
     format_custom_datastore_not_found_message,
     resolve_datastore_moid_from_disk_config,
 )
+from utilities.naming import resolve_destination_vm_name
 
 if TYPE_CHECKING:
     from libs.forklift_inventory import ForkliftInventory
@@ -125,6 +126,11 @@ def format_capacity_validation_log(datastore_name: str, required_gb: float, avai
 
 class VMWareProvider(BaseProvider):
     """https://github.com/vmware/vsphere-automation-sdk-python"""
+
+    @property
+    def renders_network_name_template(self) -> bool:
+        """Whether this source provider's Forklift adapter renders the Plan networkNameTemplate."""
+        return True
 
     DISK_TYPE_MAP = {
         "thin": ("sparse", "Setting disk provisioning to 'thin' (sparse)."),
@@ -2215,3 +2221,147 @@ class VMWareProvider(BaseProvider):
             f"(power={power_state}, tools={tools_status}, networks={net_count})",
         )
         return False
+
+
+# Forklift aligns DataVolume capacity up to this block size (1 MiB) when sizing destination PVCs.
+_DATAVOLUME_ALIGN_BLOCK_BYTES = 1024 * 1024
+
+_DISK_SERIAL_MAX = 20  # libvirt disk serial limit; forklift writes the source disk UUID prefix
+
+_CDI_FILESYSTEM_OVERHEAD = 0.055  # CDI default filesystem overhead fraction for Filesystem-mode volumes
+_PVC_REQUEST_ROUNDING_SLACK_KB = 1024 * 1024  # 1 GiB slack for provisioner rounding of PVC requests to whole GiB
+
+
+def verify_kept_disks_attached(
+    vm: dict[str, Any],  # untyped pytest-testconfig JSON; accessed fields documented below
+    destination_provider: BaseProvider,
+    source_provider_inventory: ForkliftInventory,
+    vm_target_namespace: str,
+) -> int:
+    """Verify a migrated VM has exactly its non-excluded disks attached (vSphere source implementation).
+
+    Splits the source VM disks, read from the Forklift inventory, into excluded and kept
+    sets using the Plan excludeDisks vSphere bus addresses, then compares the destination
+    VM disks against the kept set by serial provenance and capacity: each kept source
+    disk's serial (the vSphere disk UUID prefix forklift preserves as the destination
+    disk serial) must appear on a destination disk, no destination disk may carry an
+    excluded disk's serial, and capacities are verified per disk, paired by serial —
+    Block volumes require an exact match (aligned to 1 MiB), Filesystem volumes are
+    checked within CDI-overhead bounds because CDI inflates their PVC requests.
+    Serial provenance distinguishes same-sized kept and excluded disks that capacities
+    alone cannot tell apart.
+
+    Args:
+        vm (dict[str, Any]): VM configuration dict from prepared_plan["virtual_machines"]
+            containing the "exclude_disks" bus address list.
+        destination_provider (BaseProvider): Destination provider of the migrated VM.
+        source_provider_inventory (ForkliftInventory): Source provider inventory.
+        vm_target_namespace (str): Namespace of the migrated VM.
+
+    Returns:
+        int: Number of non-excluded (kept) source disks.
+
+    Raises:
+        AssertionError: If the destination VM disks do not match the non-excluded source
+            disks by serial, or a kept disk's destination capacity does not satisfy its
+            volume mode's expectation.
+        ValueError: If the excludeDisks bus address list contains duplicates, an
+            excludeDisks bus address matches no source disk, the inventory disk list
+            for the VM is missing or malformed, a source disk reports a busAddress
+            or serial that is not a non-empty string, serial-prefix ambiguity exists
+            among the VM's disks (kept or excluded disks sharing a 20-character
+            serial prefix), or the destination disks share duplicate serials.
+    """
+    excluded_addresses = vm.get("exclude_disks", [])
+    vm_name = vm["name"]
+
+    # Inventory validation
+    if len(excluded_addresses) != len(set(excluded_addresses)):
+        raise ValueError(f"Duplicate bus addresses in exclude_disks for VM '{vm_name}': {excluded_addresses}")
+
+    inventory_vm = source_provider_inventory.get_vm(name=vm_name)
+    inventory_disks = inventory_vm.get("disks")
+    if not isinstance(inventory_disks, list) or not inventory_disks:
+        raise ValueError(f"Forklift inventory reported no valid disk list for VM '{vm_name}'")
+
+    source_disks: list[dict[str, Any]] = inventory_disks
+    for disk in source_disks:
+        if not isinstance(disk, dict):
+            raise ValueError(f"Malformed disk entry in Forklift inventory for VM '{vm_name}': {disk}")
+        for field in ("busAddress", "serial"):
+            # String type is required: non-string values would reach set comparisons and serial slicing
+            field_value = disk.get(field)
+            if not isinstance(field_value, str) or not field_value:
+                raise ValueError(
+                    f"Malformed disk entry in Forklift inventory for VM '{vm_name}': "
+                    f"'{field}' must be a non-empty string, got {field_value!r}"
+                )
+
+    # Kept/excluded partitioning
+    excluded_disks = [disk for disk in source_disks if disk.get("busAddress") in excluded_addresses]
+    unmatched_addresses = set(excluded_addresses) - {disk.get("busAddress") for disk in excluded_disks}
+    if unmatched_addresses:
+        raise ValueError(
+            f"excludeDisks bus addresses {sorted(unmatched_addresses)} match no disk on source VM '{vm_name}'"
+        )
+
+    kept_disks = [disk for disk in source_disks if disk.get("busAddress") not in excluded_addresses]
+
+    # Serial verification
+    destination_vm = destination_provider.vm_dict(
+        name=resolve_destination_vm_name(vm),
+        namespace=vm_target_namespace,
+    )
+
+    # Ambiguity guard: set comparisons cannot tell disks apart when serial prefixes collide
+    kept_serial_prefixes = [disk["serial"][:_DISK_SERIAL_MAX] for disk in kept_disks]
+    excluded_serial_prefixes = [disk["serial"][:_DISK_SERIAL_MAX] for disk in excluded_disks]
+    if len(set(kept_serial_prefixes)) != len(kept_serial_prefixes) or set(kept_serial_prefixes) & set(
+        excluded_serial_prefixes
+    ):
+        raise ValueError(
+            f"VM '{vm_name}': kept and/or excluded disks share a 20-character serial prefix — "
+            f"disk identity cannot be established (kept: {kept_serial_prefixes}, excluded: {excluded_serial_prefixes})"
+        )
+    destination_disk_serials = [disk["serial"] for disk in destination_vm["disks"]]
+    if len(set(destination_disk_serials)) != len(destination_disk_serials):
+        raise ValueError(
+            f"VM '{vm_name}': destination disks share serials — disk identity cannot be established: {destination_disk_serials}"
+        )
+
+    kept_serials = {disk["serial"][:_DISK_SERIAL_MAX] for disk in kept_disks}
+    destination_serials = {disk["serial"] for disk in destination_vm["disks"]}
+    assert kept_serials == destination_serials, (
+        f"VM '{vm_name}': destination disk serials {destination_serials} must exactly match the kept source "
+        f"disks' serial prefixes {kept_serials} (excluded bus addresses: {excluded_addresses}) — this catches "
+        "a same-sized excluded disk being migrated instead of a kept one"
+    )
+
+    # Capacity verification
+    LOGGER.info(
+        f"VM '{vm_name}': excluded bus addresses {excluded_addresses}, "
+        f"kept source disk serial prefixes {kept_serials}; verifying per-disk serial-paired capacities"
+    )
+    destination_disks_by_serial = {disk["serial"]: disk for disk in destination_vm["disks"]}
+    for disk in kept_disks:
+        destination_disk = destination_disks_by_serial[disk["serial"][:_DISK_SERIAL_MAX]]
+        # Forklift aligns DataVolume capacity up to 1 MiB blocks when sizing destination PVCs.
+        capacity = int(disk["capacity"])
+        align = _DATAVOLUME_ALIGN_BLOCK_BYTES
+        expected_capacity_kb = (capacity + align - 1) // align * align // 1024
+        actual_capacity_kb = destination_disk["size_in_kb"]
+        if destination_disk["volume_mode"] == "Block":
+            assert actual_capacity_kb == expected_capacity_kb, (
+                f"VM '{vm_name}': destination disk with serial '{destination_disk['serial']}' (volumeMode "
+                f"Block) has capacity {actual_capacity_kb} KB, expected exactly {expected_capacity_kb} KB "
+                f"(source capacity aligned to 1 MiB)"
+            )
+        else:
+            # CDI inflates Filesystem-mode PVC requests by filesystem overhead; only bounds are enforceable
+            max_capacity_kb = expected_capacity_kb / (1 - _CDI_FILESYSTEM_OVERHEAD) + _PVC_REQUEST_ROUNDING_SLACK_KB
+            assert expected_capacity_kb <= actual_capacity_kb <= max_capacity_kb, (
+                f"VM '{vm_name}': destination disk with serial '{destination_disk['serial']}' (volumeMode "
+                f"Filesystem) has capacity {actual_capacity_kb} KB, expected between {expected_capacity_kb} "
+                f"KB and {int(max_capacity_kb)} KB (CDI filesystem overhead bounds)"
+            )
+    return len(kept_disks)

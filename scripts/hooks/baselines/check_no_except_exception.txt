@@ -29,8 +29,6 @@ utilities/post_migration.py:5429edfd9d943a0b  # L1788: except Exception as exp:
 utilities/post_migration.py:59723e2bc12dc016  # L1831: except Exception as exp:
 utilities/post_migration.py:5c6d2a971d3657bc  # L696: except Exception as e:
 utilities/post_migration.py:5d7b20f3be7f798d  # L1669: except Exception as exp:
-utilities/post_migration.py:6261c651a3ce5d1a  # L1795: except Exception as exp:
-utilities/post_migration.py:62e96549033cf5d7  # L1121: except Exception as template_error:
 utilities/post_migration.py:6774ae82b2ac5a8e  # L1844: except Exception as exp:
 utilities/post_migration.py:69cb48022133e752  # L1811: except Exception as exp:
 utilities/post_migration.py:7729c9167148bb3d  # L1742: except Exception as exp:
@@ -39,7 +37,6 @@ utilities/post_migration.py:b82bda27b02cce56  # L1856: except Exception as exp:
 utilities/post_migration.py:cb91a607e5087dbb  # L1713: except Exception as exp:
 utilities/post_migration.py:cde9f1e9cd34d542  # L1751: except Exception as exp:
 utilities/post_migration.py:eab73efda5ea12b0  # L1687: except Exception as exp:
-utilities/post_migration.py:ecd2e39349c50adb  # L1800: except Exception as exp:
 utilities/pytest_utils.py:1283b435773a7327  # L298: except Exception as exc:
 utilities/pytest_utils.py:17fcd4cd1ea20442  # L408: except Exception as exc:
 utilities/pytest_utils.py:237d21643c5ef35c  # L199: except Exception as exc:
@@ -76,3 +73,4 @@ utilities/virtctl.py:d3563afcea498318  # L156: except Exception as e:
 utilities/vmware_guest_operations.py:01b6c917f46f5f05  # L126: except Exception:
 utilities/worker_node_selection.py:6b53dc896e2fef91  # L183: except Exception as e:
 utilities/worker_node_selection.py:af9b9450c4260281  # L52: except Exception as e:
+utilities/post_migration.py:f2294bed56935e65  # L1326: except Exception as exp: (go_template.render wraps native lib, no documented exception type)

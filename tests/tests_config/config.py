@@ -119,6 +119,29 @@ tests_params: dict = {
         "warm_migration": False,
         "per_nic_network_map": True,
     },
+    "test_cold_migration_skip_guest_conversion": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
+        "skip_guest_conversion": True,
+    },
+    "test_cold_migration_skip_guest_conversion_win": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-win2019-multi-nics",
+                "source_vm_power": "on",
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
+        "skip_guest_conversion": True,
+    },
     "test_cold_remote_ocp": {
         "virtual_machines": [
             {"name": "mtv-tests-rhel8"},
@@ -816,6 +839,7 @@ tests_params: dict = {
         "enable_nested_virtualization": False,
         "pvc_name_template": '{{ .VmName | trunc 32 | trimSuffix "-" }}-{{ .VmName | trunc -4 }}-disk-{{.DiskIndex}}',
         "pvc_name_template_use_generate_name": False,
+        "network_name_template": "net-{{.NetworkType | lower}}-{{.NetworkIndex}}",
         "target_node_selector": {
             "mtv-comprehensive-node": None,  # None = auto-generate with session_uuid
         },
@@ -839,6 +863,18 @@ tests_params: dict = {
         "vm_target_namespace": f"mtv-vms-cold-comprehensive-{uuid.uuid4().hex[:4]}",
         "multus_namespace": default_multus_namespace,  # Cross-namespace NAD access
         "guest_agent_timeout": 600,
+    },
+    "test_convertor_settings_and_instance_type": {
+        "virtual_machines": [
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+                "instance_type": "u1.medium",  # CNV standard general-purpose instancetype (1 vCPU, 4Gi)
+            },
+        ],
+        "warm_migration": False,
+        "target_power_state": "on",
     },
     "test_post_hook_retain_failed_vm": {
         "virtual_machines": [
@@ -906,6 +942,29 @@ tests_params: dict = {
             },
         ],
         "warm_migration": False,
+    },
+    "test_exclude_disks_cold_migration": {
+        "virtual_machines": [
+            {
+                "name": "mtv-func-rhel8-2disks",
+                "source_vm_power": "on",
+                "guest_agent": True,
+                "add_disks": [{"size_gb": 4, "provision_type": "thin", "disk_mode": "persistent"}],
+                # Disk layout: the VM's boot disk is the first disk on the SCSI controller
+                # (scsi0:0, 16 GB, kept); its native 4 GB data disk sits at scsi0:1 (EXCLUDED);
+                # the clone-time added 4 GB disk takes the next free unit (scsi0:2, kept). The
+                # kept and excluded 4 GB disks have EQUAL capacity deliberately — capacities
+                # alone cannot tell them apart, so verification relies on disk serial
+                # provenance (the source disk UUID preserved as the destination disk serial).
+                # Keeping the boot disk first in bus order matters: when the conversion
+                # reports no boot disk, forklift assigns boot order to the first volume,
+                # which must be the OS disk.
+                "exclude_disks": ["scsi0:1"],
+            },
+        ],
+        "warm_migration": False,
+        "vm_target_namespace": f"mtv-vms-exclude-disks-{uuid.uuid4().hex[:4]}",
+        "multus_namespace": default_multus_namespace,  # Cross-namespace NAD access
     },
     "test_shared_disk_windows_migration": {
         "virtual_machines": [

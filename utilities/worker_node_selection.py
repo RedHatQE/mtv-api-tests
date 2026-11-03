@@ -10,8 +10,27 @@ if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
     from ocp_utilities.monitoring import Prometheus
 
-LOGGER = get_logger(__name__)
 _WORKER_ROLE_LABEL = "node-role.kubernetes.io/worker"
+_HOSTNAME_LABEL = "kubernetes.io/hostname"
+_KIB = 1024  # Kubernetes memory quantities are normalized to bytes; 1 Ki = 1024 bytes
+# Full Kubernetes memory quantity suffix set, case-sensitive per the Kubernetes spec
+# (decimal SI: lowercase k, uppercase M/G/T/P/E; binary: Ki/Mi/Gi/Ti/Pi/Ei).
+_MEMORY_SUFFIX_FACTORS = {
+    "Ki": _KIB,
+    "Mi": _KIB**2,
+    "Gi": _KIB**3,
+    "Ti": _KIB**4,
+    "Pi": _KIB**5,
+    "Ei": _KIB**6,
+    "k": 1000,
+    "M": 1000**2,
+    "G": 1000**3,
+    "T": 1000**4,
+    "P": 1000**5,
+    "E": 1000**6,
+}
+
+LOGGER = get_logger(__name__)
 
 
 def get_worker_nodes(ocp_client: DynamicClient) -> list[str]:
@@ -284,3 +303,155 @@ def select_node_by_available_memory(
     LOGGER.info("Selected node %s with highest available memory for scheduling", selected_node)
 
     return selected_node
+
+
+def _parse_kubernetes_memory_quantity(quantity: str) -> int:
+    """Parse a Kubernetes memory quantity string to bytes.
+
+    Args:
+        quantity (str): Kubernetes quantity string (e.g. "15306Mi", "16Gi", "500k", "1Ei",
+            "123456789"). A bare number is bytes. "m" (milli) is sub-byte for memory and
+            rounds to 0 bytes.
+
+    Returns:
+        int: Quantity in bytes.
+
+    Raises:
+        ValueError: If the quantity string does not match a known Kubernetes format.
+    """
+    for suffix, factor in _MEMORY_SUFFIX_FACTORS.items():
+        if quantity.endswith(suffix):
+            return int(float(quantity[: -len(suffix)]) * factor)
+    if quantity.endswith("m"):  # milli: sub-byte for memory, rounds to 0 bytes
+        return 0
+    try:
+        return int(float(quantity))
+    except ValueError:
+        raise ValueError(f"Unparsable Kubernetes memory quantity '{quantity}'") from None
+
+
+def _get_container_memory_request(container: dict[str, Any], pod_name: str) -> int:
+    """Get a single container's memory request in bytes, with shape validation.
+
+    Args:
+        container (dict[str, Any]): Raw container entry from a Pod spec.
+        pod_name (str): Pod name for error context.
+
+    Returns:
+        int: Requested memory in bytes; 0 when no request is set (absence is valid).
+
+    Raises:
+        ValueError: If the container entry or its memory request is malformed/unparsable.
+    """
+    if not isinstance(container, dict):
+        raise ValueError(f"Pod '{pod_name}' has a malformed container entry: {container!r}")
+    resources = container.get("resources")
+    requests = resources.get("requests") if isinstance(resources, dict) else None
+    memory = requests.get("memory") if isinstance(requests, dict) else None
+    if memory is None:
+        return 0
+    if not isinstance(memory, str):
+        raise ValueError(f"Pod '{pod_name}' has a non-string memory request: {memory!r}")
+    try:
+        return _parse_kubernetes_memory_quantity(memory)
+    except ValueError:
+        raise ValueError(f"Pod '{pod_name}' has an unparsable memory request '{memory}'") from None
+
+
+def _get_pod_memory_request(pod: dict[str, Any]) -> int:
+    """Get the effective memory request of a pod.
+
+    Kubernetes schedules a pod based on the larger of the sum of regular container
+    requests and the largest init-container request
+    (max(sum(containers), max(initContainers)));
+
+    Args:
+        pod (dict[str, Any]): Raw Pod resource as returned by the dynamic API.
+
+    Returns:
+        int: Effective requested memory in bytes for the pod.
+
+    Raises:
+        ValueError: If a container entry, memory quantity, or pod overhead is malformed.
+    """
+    pod_name = (pod.get("metadata") or {}).get("name") or "<unnamed>"
+    spec = pod.get("spec") or {}
+    containers = spec.get("containers") or []
+    init_containers = spec.get("initContainers") or []
+    regular_sum = sum(_get_container_memory_request(container, pod_name) for container in containers)
+    init_max = max((_get_container_memory_request(container, pod_name) for container in init_containers), default=0)
+    # Kubernetes pod scheduling rule: max(sum(regular container requests), max(init container requests))
+    # plus the pod's spec.overhead (runtime overhead charged on top of container requests)
+    overhead = spec.get("overhead")
+    overhead_memory = overhead.get("memory") if isinstance(overhead, dict) else None
+    if overhead_memory is None:
+        overhead_bytes = 0
+    else:
+        if not isinstance(overhead_memory, str):
+            raise ValueError(f"Pod '{pod_name}' has a non-string overhead memory: {overhead_memory!r}")
+        try:
+            overhead_bytes = _parse_kubernetes_memory_quantity(overhead_memory)
+        except ValueError:
+            raise ValueError(f"Pod '{pod_name}' has an unparsable overhead memory '{overhead_memory}'") from None
+    return max(regular_sum, init_max) + overhead_bytes
+
+
+def select_node_by_requestable_memory(
+    ocp_client: DynamicClient,
+    node_names: list[str],
+) -> dict[str, str]:
+    """Select the worker node with the most requestable memory.
+
+    Requestable memory is the node's allocatable memory minus the sum of memory
+    requests of pods scheduled on it (non-terminal phases only).
+
+    Args:
+        ocp_client (DynamicClient): OpenShift DynamicClient instance.
+        node_names (list[str]): Worker node names to select from.
+
+    Returns:
+        dict with keys: node_name (the node's metadata.name, as the scheduler reports
+            it) and hostname_label (the node's actual kubernetes.io/hostname label value,
+            which may differ from the node name and is what node selectors match).
+
+    Raises:
+        ValueError: If node_names is empty, no allocatable memory is found for the given
+            nodes, or the selected node lacks the kubernetes.io/hostname label.
+    """
+    if not node_names:
+        raise ValueError("Cannot select node: node_names is empty")
+
+    node_names_set = set(node_names)
+    requestable_memory: dict[str, int] = {}
+    nodes_by_name: dict[str, Any] = {}
+
+    nodes = ocp_client.resources.get(api_version="v1", kind="Node").get().items
+    for node in nodes:
+        node_name = node.metadata.name
+        if node_name in node_names_set:
+            nodes_by_name[node_name] = node
+            allocatable = node.status.allocatable.get("memory")
+            if allocatable:
+                requestable_memory[node_name] = _parse_kubernetes_memory_quantity(allocatable)
+
+    if not requestable_memory:
+        raise ValueError("No allocatable memory found for the given worker nodes")
+
+    pods = ocp_client.resources.get(api_version="v1", kind="Pod").get().items
+    for pod in pods:
+        pod_dict = pod.to_dict()
+        pod_node_name = pod_dict.get("spec", {}).get("nodeName")
+        pod_phase = pod_dict.get("status", {}).get("phase")
+        if pod_node_name in requestable_memory and pod_phase not in {"Succeeded", "Failed"}:
+            requestable_memory[pod_node_name] -= _get_pod_memory_request(pod=pod_dict)
+
+    selected_node_name = max(requestable_memory, key=lambda node_name: requestable_memory[node_name])
+    selected_node = nodes_by_name[selected_node_name]
+    hostname_label = (selected_node.metadata.labels or {}).get(_HOSTNAME_LABEL)
+    if not isinstance(hostname_label, str) or not hostname_label:
+        raise ValueError(
+            f"Selected node '{selected_node_name}' has an invalid {_HOSTNAME_LABEL} label value: "
+            f"{hostname_label!r} (expected a non-empty string)"
+        )
+
+    return {"node_name": selected_node_name, "hostname_label": hostname_label}
