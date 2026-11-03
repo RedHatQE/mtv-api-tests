@@ -1201,7 +1201,7 @@ requires-dist = [
     { name = "humanfriendly", specifier = ">=10.0" },
     { name = "jc", specifier = ">=1.25.0" },
     { name = "openshift-python-utilities", specifier = ">=6.0.7" },
-    { name = "openshift-python-wrapper", specifier = ">=11.0.143" },
+    { name = "openshift-python-wrapper", specifier = ">=11.0.148" },
     { name = "openstacksdk", specifier = ">=4.0.0" },
     { name = "ovirt-python-sdk", specifier = ">=1.2.0" },
     { name = "packaging", specifier = ">=24.0" },
@@ -1328,7 +1328,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/11/8c/5a03b7c28670dd355
 
 [[package]]
 name = "openshift-python-wrapper"
-version = "11.0.147"
+version = "11.0.148"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1348,7 +1348,7 @@ dependencies = [
     { name = "timeout-sampler" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/92/d2/569033b2713d2c0c8fed8fd82e16581fd6ca453af17363b3a2e1d2d88e99/openshift_python_wrapper-11.0.147.tar.gz", hash = "sha256:876a103dbece9c7a3f661a8569d80e0fa91b7aa18af7df6b1ce86792469b5d0b", size = 8717548, upload-time = "2026-10-29T13:50:47.472Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b7/65/2c50905ba4721914fd66ce597d572c576c67e718e9a47d2ac18180e3dd5c/openshift_python_wrapper-11.0.148.tar.gz", hash = "sha256:265db7cc9e88e2b35da992319ab0c65b3eee5e180bb5d779b74849ed76027316", size = 8635937, upload-time = "2026-11-03T09:55:23.899Z" }
 
 [[package]]
 name = "openshift-python-wrapper-data-collector"

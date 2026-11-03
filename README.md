@@ -401,7 +401,7 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 `tests/warm/test_resume_conversion_warm_migration.py` covers vSphere warm
 migration recovery after conversion failure and rejection of a resume request
 without a prior migration failure. These tests require an MTV version supporting
-`resumeConversion` and `openshift-python-wrapper` version 11.0.142 or later.
+`resumeConversion` and `openshift-python-wrapper` version 11.0.148 or later.
 
 ### Copy-Offload Sanity Tests
 

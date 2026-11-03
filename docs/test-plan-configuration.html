@@ -487,6 +487,11 @@ definitions.</p>
 <td><code>True</code> for the owner VM in a shared-disk pair. Overrides the plan-level value for that VM.</td>
 </tr>
 <tr>
+<td><code>instance_type</code></td>
+<td>No</td>
+<td>Cluster instancetype name (e.g. <code>u1.medium</code>) passed to the Plan as <code>spec.vms[].instanceType</code>. The migrated VM takes CPU and memory from the instancetype; post-checks skip source CPU/memory comparison and verify <code>spec.instancetype</code> instead.</td>
+</tr>
+<tr>
 <td><code>add_nic</code></td>
 <td>No</td>
 <td><code>True</code> to add an extra NIC. vSphere only.</td>
@@ -742,6 +747,16 @@ become per-test clone names even when the raw plan entry does not set <code>clon
 <td><code>pvc_name_template</code></td>
 <td>No</td>
 <td>Forklift PVC naming template. Either a string, or a mapping of provider type to template.</td>
+</tr>
+<tr>
+<td><code>network_name_template</code></td>
+<td>No</td>
+<td>Forklift network naming template (e.g. <code>net-{{.NetworkType | lower}}-{{.NetworkIndex}}</code>). The check is only run for source providers whose Forklift adapter is confirmed to render the template (vSphere). Post-checks render it per mapped destination network and verify the migrated VM's <code>networks[].name</code> and matching <code>interfaces[].name</code>. Note: the Plan validator renders templates with test data where <code>NetworkType</code> is capitalized ("Multus"/"Pod"), so templates must lowercase it (e.g. <code>| lower</code>) to pass the DNS1123 label validation (lowercase only).</td>
+</tr>
+<tr>
+<td><code>convertor_node_selector</code></td>
+<td>No</td>
+<td>Node selector for virt-v2v convertor pods (<code>convertorNodeSelector</code>). Tests verify the pod inherits the selector and runs on the selected worker (pinned via <code>kubernetes.io/hostname</code>) during migration.</td>
 </tr>
 <tr>
 <td><code>pvc_name_template_use_generate_name</code></td>
@@ -1116,8 +1131,8 @@ runtime name:</p>
 </code></pre></div>
 
 <p><code>create_plan_resource()</code> accepts only the flags that map onto the Plan CR: <code>warm_migration</code>, <code>copyoffload</code>, <code>preserve_static_ips</code>, <code>pvc_name_template</code>,
-<code>pvc_name_template_use_generate_name</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>, <code>vm_target_namespace</code>, <code>migrate_shared_disks</code>, <code>target_power_state</code>,
-<code>enable_nested_virtualization</code>, <code>xfs_compatibility</code>, <code>run_preflight_inspection</code>, and <code>rdm_as_lun</code>. Additional Plan constructor fields can be passed through
+<code>network_name_template</code>, <code>pvc_name_template_use_generate_name</code>, <code>target_node_selector</code>, <code>target_labels</code>, <code>target_affinity</code>, <code>vm_target_namespace</code>, <code>migrate_shared_disks</code>, <code>target_power_state</code>,
+<code>enable_nested_virtualization</code>, <code>xfs_compatibility</code>, <code>run_preflight_inspection</code>, <code>rdm_as_lun</code>, and <code>convertor_node_selector</code>. Additional Plan constructor fields can be passed through
 <code>additional_plan_options</code>; everything else is consumed by fixtures or by post-migration checks.</p>
 <h2 id="runtime-fields-added-during-preparation">Runtime Fields Added During Preparation</h2>
 <p>These fields are derived at runtime. You do <strong>not</strong> write them yourself in <code>tests_params</code>.</p>

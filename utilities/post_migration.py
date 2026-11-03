@@ -6,9 +6,10 @@ import json
 import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import go_template
+import humanfriendly
 import jc
 import pytest
 from kubernetes.dynamic.exceptions import NotFoundError
@@ -21,6 +22,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
+from ocp_resources.virtual_machine_cluster_instancetype import VirtualMachineClusterInstancetype
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
 from pyhelper_utils.exceptions import CommandExecFailed
 from pytest_testconfig import py_config
@@ -1290,6 +1292,53 @@ def check_storage(
                         assert destination_disk["storage"]["access_mode"][0] == DataVolume.AccessMode.RWX
 
 
+def _render_forklift_template(
+    template: str,
+    template_values: dict[str, Any],
+    template_field_name: str,
+) -> str:
+    """Render a Forklift Go template (with Sprig functions) using py-go-template.
+
+    Args:
+        template (str): Forklift template string (e.g., "{{.VmName}}-{{.DiskIndex}}").
+        template_values (dict[str, Any]): Values exposed to the template wildcards.
+        template_field_name (str): Plan CR field name used in error messages (e.g., "pvcNameTemplate").
+
+    Returns:
+        str: The rendered template, stripped of surrounding whitespace.
+
+    Raises:
+        ValueError: If the template fails to render or renders to an empty string.
+    """
+    # py-go-template requires a file path, so create a temporary file
+    tmp_file_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".tmpl", delete=False) as tmp_file:
+            tmp_file.write(template)
+            tmp_file_path = tmp_file.name
+
+        # Render Go template with proper Sprig function support. py-go-template wraps
+        # a native library, so it has no documented exception type — any render
+        # failure is converted to a ValueError carrying the template and its values
+        # (baselined except Exception, see scripts/hooks/baselines).
+        try:
+            result = go_template.render(Path(tmp_file_path), template_values)
+        except Exception as exp:  # noqa: BLE001
+            raise ValueError(
+                f"Failed to render {template_field_name} '{template}' with values {template_values}: {exp}"
+            ) from exp
+        rendered = result.decode("utf-8") if isinstance(result, bytes) else result
+        rendered = rendered.strip()
+    finally:
+        # Clean up temporary file
+        if tmp_file_path:
+            Path(tmp_file_path).unlink(missing_ok=True)
+
+    if not rendered:
+        raise ValueError(f"{template_field_name} '{template}' rendered to empty string with values {template_values}")
+    return rendered
+
+
 def check_pvc_names(
     source_vm: dict[str, Any],
     destination_vm: dict[str, Any],
@@ -1434,31 +1483,11 @@ def check_pvc_names(
             "FileName": filename,
         }
 
-        # py-go-template requires a file path, so create a temporary file
-        tmp_file_path = None
-        try:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".tmpl", delete=False) as tmp_file:
-                tmp_file.write(pvc_name_template)
-                tmp_file_path = tmp_file.name
-
-            # Render Go template with proper Sprig function support
-            try:
-                result = go_template.render(Path(tmp_file_path), template_values)
-                expected_pvc_name = result.decode("utf-8") if isinstance(result, bytes) else result
-                expected_pvc_name = expected_pvc_name.strip()
-            except Exception as template_error:
-                raise ValueError(
-                    f"Failed to render pvcNameTemplate '{pvc_name_template}' with values {template_values}: {template_error}"
-                ) from template_error
-
-            if not expected_pvc_name:
-                raise ValueError(
-                    f"pvcNameTemplate '{pvc_name_template}' rendered to empty string with values {template_values}"
-                )
-        finally:
-            # Clean up temporary file
-            if tmp_file_path:
-                Path(tmp_file_path).unlink(missing_ok=True)
+        expected_pvc_name = _render_forklift_template(
+            template=pvc_name_template,
+            template_values=template_values,
+            template_field_name="pvcNameTemplate",
+        )
 
         if use_generate_name:
             max_prefix_length = KUBERNETES_MAX_GENERATE_NAME_PREFIX_LENGTH
@@ -1542,6 +1571,213 @@ def check_pvc_names(
     match_type = "prefix match (generateName=True)" if use_generate_name else "exact match (generateName=False)"
     LOGGER.info(
         f"PVC name verification completed: All {len(source_disks_ordered)} PVC names match template ({match_type})"
+    )
+
+
+def check_network_names(
+    destination_vm: dict[str, Any],
+    network_name_template: str,
+) -> None:
+    """Verify that migrated VM network and interface names match the networkNameTemplate.
+
+    Forklift renders spec.template.spec.networks[].name and the matching
+    domain.devices.interfaces[].name from the Plan's networkNameTemplate. The template
+    values are the mapped destination network name, its namespace, its type, and the
+    network index.
+
+    Template values mirror forklift's rendering (pkg/controller/plan/adapter/
+    vSphere/builder.go): NetworkType is the lowercase mapped network type
+    ("multus" or "pod"), and for pod-mapped networks NetworkName and
+    NetworkNamespace are empty strings — so a template like "net-{{.NetworkName}}"
+    legitimately renders to "net-". Templates may also use sprig functions such
+    as `| lower` (the Plan validator renders with capitalized NetworkType test
+    data); since the values here are already lowercase, `| lower` is a no-op.
+
+    Args:
+        destination_vm (dict[str, Any]): Destination VM info dictionary containing provider_vm_api.
+        network_name_template (str): Forklift network name template (e.g., "net-{{.NetworkName}}").
+
+    Raises:
+        AssertionError: If a network or interface name does not match the rendered template.
+        ValueError: If destination_vm has no provider_vm_api or the template renders to an empty string.
+    """
+    cnv_vm = destination_vm.get("provider_vm_api")
+    if cnv_vm is None:
+        raise ValueError(f"destination_vm '{destination_vm.get('name')}' has no provider_vm_api")
+
+    vm_spec = cnv_vm.instance.spec.template.spec
+    interfaces_by_name = {interface["name"]: interface for interface in vm_spec.domain.devices.interfaces}
+
+    for network_index, network in enumerate(vm_spec.networks or []):
+        if multus := network.get("multus"):
+            # networkName may be the bare NAD name (same namespace) or "<namespace>/<name>".
+            # The destination VM data comes from the Kubernetes dynamic client, where nested
+            # values are ResourceField objects (mapping-like, but not isinstance dict), so
+            # read via .get() and validate the resulting value instead of the container type.
+            network_name_full = multus.get("networkName")
+            if not isinstance(network_name_full, str) or not network_name_full:
+                raise ValueError(
+                    f"VM '{destination_vm['name']}' network {network_index} has malformed multus data "
+                    f"(expected a 'networkName' string): {multus}"
+                )
+            network_namespace, _, network_name = network_name_full.rpartition("/")
+            if not network_namespace:
+                # A bare NAD name is same-namespace: Forklift renders the mapped
+                # destination network's namespace, which is the VM's namespace.
+                network_namespace = cnv_vm.namespace
+            network_type = "multus"
+        else:  # pod-mapped network — forklift leaves name/namespace empty
+            network_namespace = ""
+            network_name = ""
+            network_type = "pod"
+
+        expected_network_name = _render_forklift_template(
+            template=network_name_template,
+            template_values={
+                "NetworkName": network_name,
+                "NetworkNamespace": network_namespace,
+                "NetworkType": network_type,
+                "NetworkIndex": network_index,
+            },
+            template_field_name="networkNameTemplate",
+        )
+
+        assert network["name"] == expected_network_name, (
+            f"VM '{destination_vm['name']}' network name '{network['name']}' does not match "
+            f"networkNameTemplate '{network_name_template}' rendered to '{expected_network_name}'"
+        )
+        assert network["name"] in interfaces_by_name, (
+            f"VM '{destination_vm['name']}' has no interface named '{network['name']}' matching "
+            f"network '{network['name']}'"
+        )
+
+    LOGGER.info(
+        f"Network name verification completed: All network and interface names on VM "
+        f"'{destination_vm['name']}' match template '{network_name_template}'"
+    )
+
+
+def _get_cluster_instancetype(
+    cnv_vm: VirtualMachine,
+    expected_instance_type: str,
+) -> Any:  # Any: the destination cluster API response (dynamic client ResourceField) has no narrower static type in the wrapper
+    """Look up the cluster instancetype referenced by the Plan on the destination cluster.
+
+    Args:
+        cnv_vm (VirtualMachine): Destination VM API object.
+        expected_instance_type (str): Configured instancetype name (e.g., "u1.medium").
+
+    Returns:
+        Any: Cluster instancetype instance data for the configured instancetype.
+
+    Raises:
+        ValueError: If the cluster instancetype does not exist on the destination cluster.
+    """
+    try:
+        cluster_instancetype_instance = VirtualMachineClusterInstancetype(
+            client=cnv_vm.client, name=expected_instance_type
+        ).instance
+    except NotFoundError as exp:
+        raise ValueError(f"cluster instancetype '{expected_instance_type}' not found") from exp
+    if cluster_instancetype_instance is None:
+        raise ValueError(f"cluster instancetype '{expected_instance_type}' not found")
+    return cluster_instancetype_instance
+
+
+def _check_instancetype_match(
+    cnv_vm: VirtualMachine,
+    vm_name: str,
+    expected_instance_type: str,
+) -> None:
+    """Verify the destination VM references the configured cluster instancetype by name.
+
+    The instancetype matcher comes from the destination API (as a ResourceField —
+    mapping-like, but not isinstance dict), so its field values are read via
+    .get() and validated directly.
+
+    Args:
+        cnv_vm (VirtualMachine): Destination VM API object.
+        vm_name (str): Destination VM name used in error messages.
+        expected_instance_type (str): Configured instancetype name (e.g., "u1.medium").
+
+    Raises:
+        AssertionError: If the VM has no instancetype, its name differs from the
+            configured one, or it references a namespaced (non-cluster) instancetype.
+        ValueError: If the instancetype matcher is malformed (no usable name).
+    """
+    instancetype_matcher = cnv_vm.instance.spec.get("instancetype")
+    assert instancetype_matcher is not None, f"VM '{vm_name}' has no instancetype; expected '{expected_instance_type}'"
+    instancetype_name = instancetype_matcher.get("name")
+    if not isinstance(instancetype_name, str) or not instancetype_name:
+        raise ValueError(
+            f"VM '{vm_name}' has a malformed instancetype matcher (expected a 'name' string): {instancetype_matcher}"
+        )
+    assert instancetype_name == expected_instance_type, (
+        f"VM '{vm_name}' instancetype name is '{instancetype_name}', expected '{expected_instance_type}'"
+    )
+    # The test config expects a CLUSTER instancetype. KubeVirt defaults an absent
+    # matcher kind to the cluster-scoped VirtualMachineClusterInstancetype, so only
+    # an explicitly namespaced kind is a mismatch (compared case-insensitively).
+    matcher_kind = instancetype_matcher.get("kind")
+    expected_cluster_kind = "VirtualMachineClusterInstancetype"
+    if matcher_kind is not None and (not isinstance(matcher_kind, str) or not matcher_kind):
+        raise ValueError(
+            f"VM '{vm_name}' has a malformed instancetype matcher 'kind' (expected a string): {instancetype_matcher}"
+        )
+    if matcher_kind and matcher_kind.lower() != expected_cluster_kind.lower():
+        raise AssertionError(
+            f"VM '{vm_name}' instancetype '{instancetype_name}' has kind '{matcher_kind}', "
+            f"expected the cluster-scoped kind '{expected_cluster_kind}'"
+        )
+
+
+def _check_instancetype_cpu_memory(
+    cnv_vm: VirtualMachine,
+    destination_vm: dict[str, Any],
+    vm_name: str,
+    expected_instance_type: str,
+    cluster_instancetype_instance: Any,  # Any: the destination cluster API response (dynamic client ResourceField) has no narrower static type in the wrapper
+) -> None:
+    """Verify the VM takes CPU and memory from the instancetype, with no template overrides.
+
+    Args:
+        cnv_vm (VirtualMachine): Destination VM API object.
+        destination_vm (dict[str, Any]): Destination VM info dictionary with effective
+            cpu/memory reported by the VMI.
+        vm_name (str): Destination VM name used in error messages.
+        expected_instance_type (str): Configured instancetype name (e.g., "u1.medium").
+        cluster_instancetype_instance (Any): Cluster instancetype instance data.
+
+    Raises:
+        AssertionError: If CPU/memory overrides remain in the VM template, or the effective
+            values differ from the instancetype.
+    """
+    domain = cnv_vm.instance.spec.template.spec.domain
+    assert domain.get("cpu") is None, (
+        f"VM '{vm_name}' has a CPU override in its template; with instanceType "
+        f"'{expected_instance_type}' the CPU must come from the instancetype, not the source VM"
+    )
+    assert domain.get("memory") is None, (
+        f"VM '{vm_name}' has a memory override in its template; with instanceType "
+        f"'{expected_instance_type}' the memory must come from the instancetype, not the source VM"
+    )
+
+    instancetype_spec = cluster_instancetype_instance.spec
+    expected_cpus = instancetype_spec.cpu.guest
+    expected_memory_in_mb = int(humanfriendly.parse_size(instancetype_spec.memory.guest, binary=True) / 1024 / 1024)
+
+    vm_cpu = destination_vm["cpu"]
+    # The VMI reports the full CPU topology: total guest vCPUs are cores * sockets * threads.
+    vm_threads = vm_cpu.get("num_threads") or 1
+    effective_vcpus = vm_cpu["num_cores"] * vm_cpu["num_sockets"] * vm_threads
+    assert effective_vcpus == expected_cpus, (
+        f"VM '{vm_name}' reports {effective_vcpus} vCPU(s) "
+        f"(cores={vm_cpu['num_cores']}, sockets={vm_cpu['num_sockets']}, threads={vm_threads}); "
+        f"instancetype '{expected_instance_type}' defines {expected_cpus}"
+    )
+    assert destination_vm["memory_in_mb"] == expected_memory_in_mb, (
+        f"VM '{vm_name}' reports {destination_vm['memory_in_mb']} MiB; "
+        f"instancetype '{expected_instance_type}' defines {expected_memory_in_mb} MiB"
     )
 
 
@@ -2173,6 +2409,59 @@ def check_vm_multus_network_name_form(
     )
 
 
+def check_vm_instance_type(vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
+    """Verify the migrated VM takes CPU and memory from the instanceType configured for the VM.
+
+    When a Plan sets spec.vms[].instanceType, Forklift skips mapping the source VM's
+    CPU and memory and sets spec.instancetype instead. The VM template must therefore
+    carry no CPU or memory overrides, and the effective values reported by the VMI must
+    match the referenced cluster instancetype.
+
+    Suitable as a check_vms per_vm_extra_checks callback: it raises instead of
+    collecting errors so check_vms reports them uniformly with the other checks.
+
+    Args:
+        vm: Plan configuration of the VM being validated; must set ``instance_type``.
+        destination_vm: Destination VM info dictionary containing provider_vm_api.
+
+    Raises:
+        AssertionError: If the destination VM does not use the configured instanceType.
+        ValueError: If the plan VM has no instance_type configured, destination_vm has no
+            provider_vm_api, the referenced cluster instancetype does not exist on the
+            destination cluster, or the instancetype matcher from the destination API is
+            malformed.
+    """
+    cnv_vm = destination_vm.get("provider_vm_api")
+    if cnv_vm is None:
+        raise ValueError(f"destination_vm '{destination_vm.get('name')}' has no provider_vm_api")
+
+    vm_name = destination_vm["name"]
+    if "instance_type" not in vm:
+        raise ValueError(f"Plan VM '{vm_name}' has no instance_type configured")
+    expected_instance_type = vm["instance_type"]
+
+    _check_instancetype_match(cnv_vm=cnv_vm, vm_name=vm_name, expected_instance_type=expected_instance_type)
+
+    cluster_instancetype_instance = _get_cluster_instancetype(
+        cnv_vm=cnv_vm, expected_instance_type=expected_instance_type
+    )
+
+    _check_instancetype_cpu_memory(
+        cnv_vm=cnv_vm,
+        destination_vm=destination_vm,
+        vm_name=vm_name,
+        expected_instance_type=expected_instance_type,
+        cluster_instancetype_instance=cluster_instancetype_instance,
+    )
+
+    instancetype_spec = cluster_instancetype_instance.spec
+    LOGGER.info(
+        f"Instance type verified on VM '{vm_name}': {expected_instance_type} "
+        f"({instancetype_spec.cpu.guest} vCPU, "
+        f"{int(humanfriendly.parse_size(instancetype_spec.memory.guest, binary=True) / 1024 / 1024)} MiB)"
+    )
+
+
 def check_vms(
     plan: dict[str, Any],
     source_provider: BaseProvider,
@@ -2188,6 +2477,7 @@ def check_vms(
     target_vm_labels: dict[str, Any] | None = None,
     plan_resource: Plan | None = None,
     di_results: list[dict[str, Any]] | None = None,
+    per_vm_extra_checks: list[Callable[[dict[str, Any], dict[str, Any]], None]] | None = None,
 ) -> None:
     res: dict[str, list[str]] = {}
 
@@ -2241,6 +2531,16 @@ def check_vms(
             )
         except Exception as exp:
             res[vm_name].append(f"check_vms_power_state - {str(exp)}")
+
+        # Feature-specific per-VM checks are supplied by feature callers as
+        # callbacks, keeping check_vms itself feature-neutral. They must run for
+        # OVA plans too, so they stay in the unconditional per-VM section.
+        for extra_check in per_vm_extra_checks or []:
+            display_name = getattr(extra_check, "__name__", type(extra_check).__name__)
+            try:
+                extra_check(vm, destination_vm)
+            except (AssertionError, ValueError) as exp:
+                res[vm_name].append(f"{display_name} - {str(exp)}")
 
         # OpenStack and OCP-source adapters always write the qualified "<namespace>/<name>" form
         if source_provider.type not in (Provider.ProviderType.OPENSTACK, Provider.ProviderType.OPENSHIFT):
@@ -2373,15 +2673,25 @@ def check_vms(
 
         # Group 2: Source-comparison checks — require real source VM data (OVA has none)
         if source_provider.type != Provider.ProviderType.OVA:
-            try:
-                check_cpu(source_vm=source_vm, destination_vm=destination_vm)
-            except Exception as exp:
-                res[vm_name].append(f"check_cpu - {str(exp)}")
+            if vm.get("instance_type") and check_vm_instance_type not in (per_vm_extra_checks or []):
+                # With a per-VM instanceType, CPU/memory checks are skipped below — the
+                # instancetype verification must be registered or they silently go unverified
+                res[vm_name].append(
+                    f"check_vm_instance_type - VM sets 'instance_type' but check_vm_instance_type is "
+                    "not registered in per_vm_extra_checks; CPU/memory verification would be skipped"
+                )
+            if not vm.get("instance_type"):
+                # With a per-VM instanceType the destination CPU and memory come from
+                # the instancetype, not the source VM — check_vm_instance_type verifies them.
+                try:
+                    check_cpu(source_vm=source_vm, destination_vm=destination_vm)
+                except AssertionError as exp:
+                    res[vm_name].append(f"check_cpu - {str(exp)}")
 
-            try:
-                check_memory(source_vm=source_vm, destination_vm=destination_vm)
-            except Exception as exp:
-                res[vm_name].append(f"check_memory - {str(exp)}")
+                try:
+                    check_memory(source_vm=source_vm, destination_vm=destination_vm)
+                except (AssertionError, ValueError) as exp:
+                    res[vm_name].append(f"check_memory - {str(exp)}")
 
             # TODO: Remove when OCP to OCP migration is done with 2 clusters
             if source_provider.type != Provider.ProviderType.OPENSHIFT:
