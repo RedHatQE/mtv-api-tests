@@ -461,7 +461,7 @@ tracking — required when a test archives and deletes a Plan mid-run.</p>
 </tr>
 <tr>
 <td><code>wait_for_migration_complate()</code></td>
-<td>poll a migration, with an optional per-poll status callback</td>
+<td>poll a migration, with an optional per-poll status callback and an unschedulable-VM fail-fast</td>
 </tr>
 <tr>
 <td><code>wait_for_dual_migration_completion()</code></td>
@@ -485,6 +485,11 @@ tracking — required when a test archives and deletes a Plan mid-run.</p>
 </tr>
 </tbody>
 </table></div>
+<p><code>wait_for_migration_complate()</code> polls <code>Plan</code> status every second until <code>Succeeded</code> or <code>Failed</code>, and additionally re-reads the destination
+<code>VirtualMachineInstance</code> objects of the plan's VMs every 30 seconds. When the scheduler reports <code>PodScheduled=False</code> with reason
+<code>Unschedulable</code> on the same VM for 3 consecutive checks, the wait raises <code>MigrationVmUnschedulableError</code> naming the VM and the raw
+scheduler message. The suite never frees destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
+is preferable to running to <code>plan_wait_timeout</code> (1 hour) for a VM that can never start.</p>
 <h3 id="utilitiesmigration_utilspy"><code>utilities/migration_utils.py</code></h3>
 <p>Cancel, archive, and cleanup flows: <code>cancel_migration()</code>, <code>archive_plan()</code>, <code>get_orphan_resource_names()</code>, <code>check_dv_pvc_pv_deleted()</code>, <code>append_leftovers()</code>, <code>get_cutover_value()</code>.</p>
 <h3 id="utilitiescopyoffload_migrationpy"><code>utilities/copyoffload_migration.py</code></h3>
@@ -716,7 +721,7 @@ provider-specific sync checks (OpenStack volumes and networks).</p>
 </tr>
 <tr>
 <td>Migration</td>
-<td><code>MigrationNotFoundError</code>, <code>MigrationStatusError</code>, <code>MigrationPlanExecError</code></td>
+<td><code>MigrationNotFoundError</code>, <code>MigrationStatusError</code>, <code>MigrationPlanExecError</code>, <code>MigrationVmUnschedulableError</code></td>
 </tr>
 <tr>
 <td>Guest access</td>

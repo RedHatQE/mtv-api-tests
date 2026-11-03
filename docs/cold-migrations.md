@@ -404,7 +404,10 @@ For standard cold migrations, the important switch is `warm_migration=False`. Th
 - Execution goes directly from a ready `Plan` to a real `Migration` CR.
 
 The config sets `plan_wait_timeout` to `3600` seconds by default in `tests/tests_config/config.py`, and `wait_for_migration_complate()` polls the Plan status until it reaches
-`Succeeded` or `Failed`, raising `MigrationPlanExecError` on failure or timeout.
+`Succeeded` or `Failed`, raising `MigrationPlanExecError` on failure or timeout. It also re-reads the destination
+`VirtualMachineInstance` objects every 30 seconds and raises `MigrationVmUnschedulableError` once the scheduler reports the same VM
+`PodScheduled=False`/`Unschedulable` on 3 consecutive checks, so a VM pinned to a node that cannot fit it fails in about a minute
+instead of at `plan_wait_timeout`.
 
 ## 5. Validate The Migrated VM
 

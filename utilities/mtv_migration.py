@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 
 from ocp_resources.migration import Migration
@@ -9,6 +10,7 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
+from ocp_resources.virtual_machine_instance import VirtualMachineInstance
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
@@ -16,6 +18,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from exceptions.exceptions import (
     MigrationNotFoundError,
     MigrationPlanExecError,
+    MigrationVmUnschedulableError,
     VmNotFoundError,
     VmPipelineError,
 )
@@ -24,6 +27,7 @@ from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
+from utilities.worker_node_selection import has_unschedulable_condition
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -55,6 +59,12 @@ _CREATE_AND_STORE_RESOURCE_KEYS: frozenset[str] = frozenset({
     "yaml_file",
     "test_name",
 })
+
+# A migrated VM the scheduler has definitively rejected never starts on its own, and the suite
+# never frees destination node capacity, so a confirmed Unschedulable condition fails the run
+# instead of burning the whole plan timeout.
+_UNSCHEDULABLE_CHECK_INTERVAL_SECONDS = 30
+_UNSCHEDULABLE_CONFIRMATIONS_REQUIRED = 3
 
 
 def get_migration_for_plan(plan: Plan) -> Migration:
@@ -523,6 +533,70 @@ def get_plan_migration_status(plan: Plan) -> str:
         return ""
 
 
+def _get_unschedulable_destination_vm(plan: Plan) -> tuple[str, str] | None:
+    """Find a migrated VM the destination scheduler has rejected.
+
+    Args:
+        plan (Plan): Plan whose migration is being waited on.
+
+    Returns:
+        tuple[str, str] | None: Destination VM name and the raw scheduler message, or None when
+            no migrated VM is currently unschedulable.
+    """
+    destination_vm_names = {vm["name"] for vm in (plan.instance.status or {}).get("vms") or []}
+    if not destination_vm_names:
+        return None
+
+    for vmi in VirtualMachineInstance.get(
+        client=plan.client,
+        namespace=plan.instance.spec.targetNamespace,
+    ):
+        if vmi.name not in destination_vm_names:
+            continue
+
+        conditions = (vmi.instance.status or {}).get("conditions")
+        if not has_unschedulable_condition(conditions):
+            continue
+
+        for condition in conditions or []:
+            if condition.get("type") == "PodScheduled":
+                return vmi.name, condition.get("message") or condition.get("reason") or "unknown"
+
+    return None
+
+
+def _confirm_unschedulable_destination_vm(plan: Plan, consecutive_hits: int) -> int:
+    """Count consecutive destination scheduler rejections and fail once they are confirmed.
+
+    Args:
+        plan (Plan): Plan whose migration is being waited on.
+        consecutive_hits (int): Confirmations observed before this check.
+
+    Returns:
+        int: Updated count of consecutive unschedulable confirmations, 0 when scheduling recovered.
+
+    Raises:
+        MigrationVmUnschedulableError: If the rejection is confirmed by enough consecutive checks.
+    """
+    unschedulable_vm = _get_unschedulable_destination_vm(plan=plan)
+    if unschedulable_vm is None:
+        return 0
+
+    vm_name, scheduler_message = unschedulable_vm
+    hits = consecutive_hits + 1
+    LOGGER.warning(
+        "Migrated VM '%s' is unschedulable on the destination cluster (check %d/%d): %s",
+        vm_name,
+        hits,
+        _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED,
+        scheduler_message,
+    )
+    if hits >= _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED:
+        raise MigrationVmUnschedulableError(vm_name=vm_name, scheduler_message=scheduler_message)
+
+    return hits
+
+
 def wait_for_migration_complate(
     plan: Plan,
     *,
@@ -537,7 +611,11 @@ def wait_for_migration_complate(
 
     Raises:
         MigrationPlanExecError: If migration fails or doesn't reach expected condition within timeout
+        MigrationVmUnschedulableError: If a migrated VM is confirmed unschedulable by the destination scheduler.
     """
+    next_unschedulable_check = monotonic()
+    unschedulable_hits = 0
+
     try:
         last_status: str = ""
 
@@ -553,6 +631,13 @@ def wait_for_migration_complate(
 
             if on_status_poll is not None:
                 on_status_poll(sample)
+
+            if monotonic() >= next_unschedulable_check:
+                next_unschedulable_check = monotonic() + _UNSCHEDULABLE_CHECK_INTERVAL_SECONDS
+                unschedulable_hits = _confirm_unschedulable_destination_vm(
+                    plan=plan,
+                    consecutive_hits=unschedulable_hits,
+                )
 
             if sample == Plan.Status.SUCCEEDED:
                 return

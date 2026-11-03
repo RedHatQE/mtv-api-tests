@@ -678,7 +678,10 @@ builds a <code>Plan</code> CR that ties together the source provider, destinatio
 <li>Execution goes directly from a ready <code>Plan</code> to a real <code>Migration</code> CR.</li>
 </ul>
 <p>The config sets <code>plan_wait_timeout</code> to <code>3600</code> seconds by default in <code>tests/tests_config/config.py</code>, and <code>wait_for_migration_complate()</code> polls the Plan status until it reaches
-<code>Succeeded</code> or <code>Failed</code>, raising <code>MigrationPlanExecError</code> on failure or timeout.</p>
+<code>Succeeded</code> or <code>Failed</code>, raising <code>MigrationPlanExecError</code> on failure or timeout. It also re-reads the destination
+<code>VirtualMachineInstance</code> objects every 30 seconds and raises <code>MigrationVmUnschedulableError</code> once the scheduler reports the same VM
+<code>PodScheduled=False</code>/<code>Unschedulable</code> on 3 consecutive checks, so a VM pinned to a node that cannot fit it fails in about a minute
+instead of at <code>plan_wait_timeout</code>.</p>
 <h2 id="5-validate-the-migrated-vm">5. Validate The Migrated VM</h2>
 <p>The post-migration phase is much more than "the VM exists." The <code>check_vms()</code> helper fetches both the source VM and the destination VM, runs a series of validations, accumulates
 any mismatches per VM, and fails at the end if anything is wrong.</p>

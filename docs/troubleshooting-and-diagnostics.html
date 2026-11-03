@@ -619,7 +619,15 @@ cluster at all.</p>
 <li>The <code>Plan</code> becomes ready, but the migration never reaches <code>Succeeded</code>.</li>
 <li>The migration reaches <code>Failed</code>.</li>
 <li>The run times out waiting for migration completion.</li>
-<li>Hook execution fails at <code>PreHook</code> or <code>PostHook</code>.</li>
+<li>
+<p>A migrated VM stays unschedulable on the destination cluster (for example a <code>target_node_selector</code> pinning it to one worker
+  that lacks memory). <code>wait_for_migration_complate()</code> fails fast here with <code>MigrationVmUnschedulableError</code> after the destination
+  <code>VirtualMachineInstance</code> reports <code>PodScheduled=False</code>/<code>Unschedulable</code> for 3 consecutive 30-second checks, instead of waiting for
+  <code>plan_wait_timeout</code>. The suite never frees node capacity, so this state does not recover within a run.</p>
+</li>
+<li>
+<p>Hook execution fails at <code>PreHook</code> or <code>PostHook</code>.</p>
+</li>
 <li>Warm migration timing is wrong for the environment.</li>
 </ul>
 <p>The repo’s default timeout config is important here:</p>

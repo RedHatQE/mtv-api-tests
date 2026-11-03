@@ -16,6 +16,7 @@ from utilities.mtv_migration import get_migration_for_plan
 from utilities.worker_node_selection import (
     get_node_labels,
     get_ready_schedulable_worker_nodes,
+    has_unschedulable_condition,
     select_node_by_available_memory,
 )
 
@@ -355,12 +356,7 @@ def _is_unschedulable(pod: ResourceInstance) -> bool:
         bool: Whether the scheduler has reported this pending pod as unschedulable.
     """
     status = pod.get("status", {})
-    return status.get("phase") == Pod.Status.PENDING and any(
-        condition.get("type") == "PodScheduled"
-        and condition.get("status") == "False"
-        and condition.get("reason") == "Unschedulable"
-        for condition in status.get("conditions") or []
-    )
+    return status.get("phase") == Pod.Status.PENDING and has_unschedulable_condition(status.get("conditions"))
 
 
 def _get_importer_pod_states(pods: list[ResourceInstance]) -> list[dict[str, str | None]]:

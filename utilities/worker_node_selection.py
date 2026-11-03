@@ -83,6 +83,23 @@ def get_ready_schedulable_worker_nodes(
     ]
 
 
+def has_unschedulable_condition(conditions: list[dict[str, Any]] | None) -> bool:
+    """Check whether a scheduler condition reports the object as unschedulable.
+
+    Args:
+        conditions (list[dict[str, Any]] | None): Pod or VirtualMachineInstance status conditions.
+
+    Returns:
+        bool: True when the scheduler rejected scheduling for this object.
+    """
+    return any(
+        condition.get("type") == "PodScheduled"
+        and condition.get("status") == "False"
+        and condition.get("reason") == "Unschedulable"
+        for condition in conditions or []
+    )
+
+
 def get_session_unique_label_key(label_key: str, session_uuid: str) -> str:
     """Append a session identifier to a Kubernetes label key without exceeding 63 characters.
 

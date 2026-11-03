@@ -6296,7 +6296,10 @@ For standard cold migrations, the important switch is `warm_migration=False`. Th
 - Execution goes directly from a ready `Plan` to a real `Migration` CR.
 
 The config sets `plan_wait_timeout` to `3600` seconds by default in `tests/tests_config/config.py`, and `wait_for_migration_complate()` polls the Plan status until it reaches
-`Succeeded` or `Failed`, raising `MigrationPlanExecError` on failure or timeout.
+`Succeeded` or `Failed`, raising `MigrationPlanExecError` on failure or timeout. It also re-reads the destination
+`VirtualMachineInstance` objects every 30 seconds and raises `MigrationVmUnschedulableError` once the scheduler reports the same VM
+`PodScheduled=False`/`Unschedulable` on 3 consecutive checks, so a VM pinned to a node that cannot fit it fails in about a minute
+instead of at `plan_wait_timeout`.
 
 ## 5. Validate The Migrated VM
 
@@ -11204,12 +11207,18 @@ The module most test authors reuse first. It owns `StorageMap`, `NetworkMap`, `P
 | `create_plan_resource()` | build and deploy the `Plan`, including plan flags |
 | `execute_migration()` | create the `Migration` and poll it to completion |
 | `get_migration_for_plan()` | locate the `Migration` CR belonging to a `Plan` |
-| `wait_for_migration_complate()` | poll a migration, with an optional per-poll status callback |
+| `wait_for_migration_complate()` | poll a migration, with an optional per-poll status callback and an unschedulable-VM fail-fast |
 | `wait_for_dual_migration_completion()` | wait for two plans migrating concurrently |
 | `wait_for_concurrent_migration_execution()` | start several migrations and wait for all of them |
 | `get_plan_migration_status()` / `get_vm_suffix()` | status parsing helpers |
 | `resolve_pvc_name_template()` | resolve the per-provider PVC name template |
 | `verify_vm_disk_count()` | assert the migrated disk count matches the source |
+
+`wait_for_migration_complate()` polls `Plan` status every second until `Succeeded` or `Failed`, and additionally re-reads the destination
+`VirtualMachineInstance` objects of the plan's VMs every 30 seconds. When the scheduler reports `PodScheduled=False` with reason
+`Unschedulable` on the same VM for 3 consecutive checks, the wait raises `MigrationVmUnschedulableError` naming the VM and the raw
+scheduler message. The suite never frees destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
+is preferable to running to `plan_wait_timeout` (1 hour) for a VM that can never start.
 
 ### `utilities/migration_utils.py`
 
@@ -11400,7 +11409,7 @@ Every custom exception lives in this one module, enforced by the `check-exceptio
 | --- | --- |
 | Provider and cluster | `MissingProvidersFileError`, `ProviderEmptyContentError`, `MtvOperatorNotInstalledError`, `ForkliftPodsNotRunningError`, `RemoteClusterAndLocalCluterNamesError` |
 | VM lifecycle | `VmNotFoundError`, `VmCloneError`, `VmMissingVmxError`, `VmBadDatastoreError`, `VmPipelineError`, `VmMigrationStepMismatchError`, `InvalidVMNameError` |
-| Migration | `MigrationNotFoundError`, `MigrationStatusError`, `MigrationPlanExecError` |
+| Migration | `MigrationNotFoundError`, `MigrationStatusError`, `MigrationPlanExecError`, `MigrationVmUnschedulableError` |
 | Guest access | `GuestCommandError`, `SSHConnectionSetupError`, `PowerShellCommandError`, `ConversionError` |
 | Suite lifecycle | `SessionTeardownError`, `ResourceNameNotStartedWithSessionUUIDError`, `OvirtMTVDatacenterNotFoundError`, `OvirtMTVDatacenterStatusError`, `MtvUpgradeError` |
 
@@ -11759,6 +11768,10 @@ These issues usually show up as setup failures, plan readiness timeouts, or earl
 - The `Plan` becomes ready, but the migration never reaches `Succeeded`.
 - The migration reaches `Failed`.
 - The run times out waiting for migration completion.
+- A migrated VM stays unschedulable on the destination cluster (for example a `target_node_selector` pinning it to one worker
+  that lacks memory). `wait_for_migration_complate()` fails fast here with `MigrationVmUnschedulableError` after the destination
+  `VirtualMachineInstance` reports `PodScheduled=False`/`Unschedulable` for 3 consecutive 30-second checks, instead of waiting for
+  `plan_wait_timeout`. The suite never frees node capacity, so this state does not recover within a run.
 - Hook execution fails at `PreHook` or `PostHook`.
 - Warm migration timing is wrong for the environment.
 

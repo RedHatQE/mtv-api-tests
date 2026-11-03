@@ -83,12 +83,18 @@ The module most test authors reuse first. It owns `StorageMap`, `NetworkMap`, `P
 | `create_plan_resource()` | build and deploy the `Plan`, including plan flags |
 | `execute_migration()` | create the `Migration` and poll it to completion |
 | `get_migration_for_plan()` | locate the `Migration` CR belonging to a `Plan` |
-| `wait_for_migration_complate()` | poll a migration, with an optional per-poll status callback |
+| `wait_for_migration_complate()` | poll a migration, with an optional per-poll status callback and an unschedulable-VM fail-fast |
 | `wait_for_dual_migration_completion()` | wait for two plans migrating concurrently |
 | `wait_for_concurrent_migration_execution()` | start several migrations and wait for all of them |
 | `get_plan_migration_status()` / `get_vm_suffix()` | status parsing helpers |
 | `resolve_pvc_name_template()` | resolve the per-provider PVC name template |
 | `verify_vm_disk_count()` | assert the migrated disk count matches the source |
+
+`wait_for_migration_complate()` polls `Plan` status every second until `Succeeded` or `Failed`, and additionally re-reads the destination
+`VirtualMachineInstance` objects of the plan's VMs every 30 seconds. When the scheduler reports `PodScheduled=False` with reason
+`Unschedulable` on the same VM for 3 consecutive checks, the wait raises `MigrationVmUnschedulableError` naming the VM and the raw
+scheduler message. The suite never frees destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
+is preferable to running to `plan_wait_timeout` (1 hour) for a VM that can never start.
 
 ### `utilities/migration_utils.py`
 
@@ -279,7 +285,7 @@ Every custom exception lives in this one module, enforced by the `check-exceptio
 | --- | --- |
 | Provider and cluster | `MissingProvidersFileError`, `ProviderEmptyContentError`, `MtvOperatorNotInstalledError`, `ForkliftPodsNotRunningError`, `RemoteClusterAndLocalCluterNamesError` |
 | VM lifecycle | `VmNotFoundError`, `VmCloneError`, `VmMissingVmxError`, `VmBadDatastoreError`, `VmPipelineError`, `VmMigrationStepMismatchError`, `InvalidVMNameError` |
-| Migration | `MigrationNotFoundError`, `MigrationStatusError`, `MigrationPlanExecError` |
+| Migration | `MigrationNotFoundError`, `MigrationStatusError`, `MigrationPlanExecError`, `MigrationVmUnschedulableError` |
 | Guest access | `GuestCommandError`, `SSHConnectionSetupError`, `PowerShellCommandError`, `ConversionError` |
 | Suite lifecycle | `SessionTeardownError`, `ResourceNameNotStartedWithSessionUUIDError`, `OvirtMTVDatacenterNotFoundError`, `OvirtMTVDatacenterStatusError`, `MtvUpgradeError` |
 
