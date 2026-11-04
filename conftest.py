@@ -299,13 +299,21 @@ def pytest_sessionstart(session):
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
 
+    # pytest_sessionstart runs on the xdist controller and in every worker, but the controller runs
+    # it before spawning the workers. Only the controller may wipe the root and write the baseline:
+    # a worker wipe would remove the session-start baseline and every earlier worker's artifacts.
+    is_xdist_worker = getattr(session.config, "workerinput", None) is not None
+
     _data_collector_path: Path | None = None
     if not session.config.getoption("skip_data_collector"):
         _data_collector_path = Path(session.config.getoption("data_collector_path"))
-        prepare_base_path(base_path=_data_collector_path)
+        if is_xdist_worker:
+            _data_collector_path.mkdir(parents=True, exist_ok=True)
+        else:
+            prepare_base_path(base_path=_data_collector_path)
     configure_data_collector_path(_data_collector_path)
 
-    if not is_dry_run(session.config):
+    if not is_dry_run(session.config) and not is_xdist_worker:
         write_session_baseline(
             pytest_args=session.config.invocation_params.args,
             skip_teardown=session.config.getoption("skip_teardown"),

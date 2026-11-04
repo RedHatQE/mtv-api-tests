@@ -11,10 +11,10 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
-from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from utilities.data_collector import data_collector_path, redact_secret, utc_timestamp
+from utilities.utils import resolve_cluster_credential
 
 LOGGER = get_logger(name=__name__)
 
@@ -28,6 +28,7 @@ _CNV_NAMESPACE = "openshift-cnv"
 _CSI_PROVISIONER_DEPLOYMENT = "csi-rbdplugin-provisioner"
 _CSI_LOG_TAIL_LINES = 3000
 _MCO_LOG_TAIL_LINES = 500
+_ALL_PODS_FLAG = "--all-pods"
 _REASON_SLUG_MAX_LENGTH = 60
 _REASON_SLUG_SEPARATOR = "-"
 _UNSPECIFIED_REASON = "unspecified"
@@ -235,16 +236,22 @@ def _dump_storage_scope(namespace: str) -> list[str]:
         "logs",
         f"deploy/{_CSI_PROVISIONER_DEPLOYMENT}",
         "--all-containers",
-        # A Deployment can run several replicas; without --all-pods oc picks one pod and the
-        # replica that logged the refused volume is silently omitted.
-        "--all-pods",
         "--prefix",
         f"--tail={_CSI_LOG_TAIL_LINES}",
     ]
+    # A Deployment can run several replicas; without --all-pods oc picks one pod and the replica that
+    # logged the refused volume is silently omitted. The flag is recent, so an older client rejects
+    # the whole command; the same command without it is retried and both records are kept.
+    log_args = [*provisioner_logs, _ALL_PODS_FLAG]
+    current_logs = _run_bounded(log_args)
+    sections.append(current_logs)
+    if not _succeeded(current_logs):
+        log_args = provisioner_logs
+        sections.append(f"# retried without {_ALL_PODS_FLAG}: the oc client did not accept the flag")
+        sections.append(_run_bounded(log_args))
     # The current log always: it holds the errors produced at dump time even when the container
     # restarted. The previous container's log is added only when one exists.
-    sections.append(_run_bounded(provisioner_logs))
-    previous_logs = _run_bounded([*provisioner_logs, "--previous"])
+    previous_logs = _run_bounded([*log_args, "--previous"])
     if _succeeded(previous_logs):
         sections.append(previous_logs)
     return sections
@@ -383,9 +390,10 @@ def _session_start_identity_sections(
         list[str]: One rendered record per identity probe.
     """
     command_line = " ".join(pytest_args)
-    # The invocation can carry --tc=cluster_password:<password>, so redact before writing. The key
-    # is required: a missing one aborts instead of writing the password unredacted.
-    command_line = redact_secret(text=command_line, secret=py_config["cluster_password"])
+    # The invocation can carry --tc=cluster_password:<password>, so redact before writing. The
+    # credential may come from CLUSTER_PASSWORD alone, so a missing one leaves the text as is instead
+    # of aborting the whole baseline.
+    command_line = redact_secret(text=command_line, secret=resolve_cluster_credential("cluster_password") or "")
     return [
         f"$ git rev-parse HEAD\n{_git_head()}",
         f"$ pytest\n{command_line}",
@@ -454,9 +462,8 @@ def write_session_baseline(*, pytest_args: Sequence[str], skip_teardown: bool, s
         identity_created = _write_once_atomic(
             path=identity_path, text=f"{_SECTION_SEPARATOR.join(identity_sections)}\n"
         )
-    except (OSError, subprocess.SubprocessError, ValueError, TypeError, KeyError) as exc:
-        # Best-effort evidence: a missing required config key skips the baseline instead of
-        # aborting session start or writing the run identity unredacted.
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError) as exc:
+        # Best-effort evidence: a failing probe skips the baseline instead of aborting session start.
         LOGGER.warning(f"Session-start baseline could not be written to {directory}: {exc}")
         return
 

@@ -513,9 +513,9 @@ falling back to the matching <code>CLUSTER_*</code> environment variable:</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_client</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DynamicClient</span><span class="p">:</span>
     <span class="o">...</span>
     <span class="n">_validate_cluster_credentials</span><span class="p">()</span>
-    <span class="n">host</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
-    <span class="n">username</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
-    <span class="n">password</span> <span class="o">=</span> <span class="n">_resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_host"</span><span class="p">)</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_username"</span><span class="p">)</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">resolve_cluster_credential</span><span class="p">(</span><span class="s2">"cluster_password"</span><span class="p">)</span>
     <span class="n">verify_ssl_env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CLUSTER_VERIFY_SSL"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">verify_ssl_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">insecure_verify_skip</span> <span class="o">=</span> <span class="n">verify_ssl_env</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"true"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">,</span> <span class="s2">"yes"</span><span class="p">)</span>
@@ -529,7 +529,7 @@ falling back to the matching <code>CLUSTER_*</code> environment variable:</p>
     <span class="k">return</span> <span class="n">client</span>
 </code></pre></div>
 
-<p>Each credential resolves through <code>_resolve_cluster_credential()</code>, which reads the <code>--tc</code> value first and falls back to the matching <code>CLUSTER_*</code> environment variable.
+<p>Each credential resolves through <code>resolve_cluster_credential()</code>, which reads the <code>--tc</code> value first and falls back to the matching <code>CLUSTER_*</code> environment variable.
 <code>_validate_cluster_credentials()</code> requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment.
 Otherwise, it raises <code>ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")</code> naming each absent, empty, or whitespace-only value.
 Omitting all three is legitimate: the CLI takes that path when it authenticates with an existing <code>oc</code> token, and the client library then authenticates from the ambient kubeconfig.

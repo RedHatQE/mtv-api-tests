@@ -27,6 +27,7 @@ from urllib3.exceptions import TimeoutError as HTTPTimeoutError
 
 from exceptions.exceptions import MustGatherImageError
 from utilities.constants import MTV_OPERATOR_NAME
+from utilities.data_collector import data_collector_path as shared_data_collector_path
 from utilities.data_collector import utc_timestamp
 from utilities.utils import get_cluster_client
 
@@ -286,7 +287,8 @@ def _run_inspect_dump(data_collector_path: Path) -> bool:
     wins; later calls return without re-running, even when that attempt failed.
 
     Args:
-        data_collector_path (Path): Directory where the inspect output is written.
+        data_collector_path (Path): Per-identity directory, used as the destination only when no
+            shared collector root is configured.
 
     Returns:
         bool: True when this call ran the inspect command, False when it was skipped (already
@@ -298,14 +300,19 @@ def _run_inspect_dump(data_collector_path: Path) -> bool:
         return False
     _inspect_dump_attempted = True
 
+    # The caller passes a per-identity subdir, so the guard and the destination must use the shared
+    # collector root or one worker cannot see a dump written by another.
+    # shortcut: check-then-act, two workers starting together can both pass the guard; at most one
+    # extra dump per worker, add locking if the dump count must be exact.
+    collector_root = shared_data_collector_path() or data_collector_path
     # Another xdist worker may already have collected it: the module flag is per process, so the
     # artifact directory is the cross-worker guard that keeps the dump to one per run.
-    existing_dumps = sorted(data_collector_path.glob(f"{_INSPECT_DEST_DIR_PREFIX}-*"))
+    existing_dumps = sorted(collector_root.glob(f"{_INSPECT_DEST_DIR_PREFIX}-*"))
     if existing_dumps:
         LOGGER.info(f"Inspect dump already collected at {existing_dumps[0]}, skipping")
         return False
 
-    dest_dir = data_collector_path / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}"
+    dest_dir = collector_root / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}"
     command = [
         "oc",
         "adm",

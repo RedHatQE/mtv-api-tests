@@ -577,8 +577,8 @@ error says the output was not captured.</p>
 <h3 id="utilitiescluster_statepy"><code>utilities/cluster_state.py</code></h3>
 <p><code>dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=...)</code> writes one timestamped, bounded snapshot per failure and never raises, so the failing exception
 stays the error the caller sees. <code>write_session_baseline()</code> writes <code>&lt;data-collector&gt;/session-start/cluster.txt</code> and <code>run-identity.txt</code> once per session from
-<code>pytest_sessionstart</code>, tolerating a missing <code>.git</code> and skipping cleanly under <code>--skip-data-collector</code>; the files are created exclusively, so the first worker's snapshot is kept
-and later workers log that the existing baseline is reused.</p>
+<code>pytest_sessionstart</code>, tolerating a missing <code>.git</code> and skipping cleanly under <code>--skip-data-collector</code>; only the xdist controller (or the sole process without xdist) wipes the
+data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces an existing snapshot.</p>
 <h3 id="utilitiesdata_collectorpy"><code>utilities/data_collector.py</code></h3>
 <p>Holds the resolved artifact directory as module state, because most writers have no pytest <code>config</code> to read it from: <code>configure_data_collector_path()</code> is called once in
 <code>pytest_sessionstart</code> (<code>None</code> under <code>--skip-data-collector</code>), <code>data_collector_path()</code> returns it, <code>utc_timestamp()</code> names timestamped artifacts, and <code>redact_secret()</code> keeps the

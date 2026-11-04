@@ -172,8 +172,8 @@ error says the output was not captured.
 
 `dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=...)` writes one timestamped, bounded snapshot per failure and never raises, so the failing exception
 stays the error the caller sees. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt` and `run-identity.txt` once per session from
-`pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`; the files are created exclusively, so the first worker's snapshot is kept
-and later workers log that the existing baseline is reused.
+`pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`; only the xdist controller (or the sole process without xdist) wipes the
+data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces an existing snapshot.
 
 ### `utilities/data_collector.py`
 

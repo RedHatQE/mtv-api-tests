@@ -214,8 +214,8 @@ The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
 - `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, `ClusterOperator`, the `MachineConfigPool` manifests plus per-pool counters
-  and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run:
-  the first worker to write it wins and every later `pytest_sessionstart` keeps the existing snapshot.
+  and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
+  the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it.
 - `.data-collector/session-start/run-identity.txt`: the checkout revision, the pytest invocation (with `--tc` values, cluster password redacted), `oc whoami`, and whether
   `--skip-teardown` / `--skip-data-collector` were set. Written once per run, like `cluster.txt`.
 - `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see

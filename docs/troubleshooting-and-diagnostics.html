@@ -528,8 +528,8 @@ and turns the feature off instead of failing the run.
 <li><code>.data-collector/resources.json</code>: a dump of tracked resources created during the run.</li>
 <li>
 <p><code>.data-collector/session-start/cluster.txt</code>: the cluster baseline captured at session start — <code>ClusterVersion</code>, <code>ClusterOperator</code>, the <code>MachineConfigPool</code> manifests plus per-pool counters
-  and conditions, nodes, and the <code>openshift-mtv</code> / <code>openshift-cnv</code> CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run:
-  the first worker to write it wins and every later <code>pytest_sessionstart</code> keeps the existing snapshot.</p>
+  and conditions, nodes, and the <code>openshift-mtv</code> / <code>openshift-cnv</code> CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
+  the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it.</p>
 </li>
 <li>
 <p><code>.data-collector/session-start/run-identity.txt</code>: the checkout revision, the pytest invocation (with <code>--tc</code> values, cluster password redacted), <code>oc whoami</code>, and whether

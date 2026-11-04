@@ -58,14 +58,14 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 ```python
 def get_cluster_client() -> DynamicClient:
     _validate_cluster_credentials()
-    host = _resolve_cluster_credential("cluster_host")
-    username = _resolve_cluster_credential("cluster_username")
-    password = _resolve_cluster_credential("cluster_password")
+    host = resolve_cluster_credential("cluster_host")
+    username = resolve_cluster_credential("cluster_username")
+    password = resolve_cluster_credential("cluster_password")
     ...
     client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
 
-Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. `_validate_cluster_credentials()`
+Each credential is resolved by `resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. `_validate_cluster_credentials()`
 requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment. Otherwise, it fails fast with a `ValueError`
 naming each absent, empty, or whitespace-only value, for example `Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME`.
 Omitting all three is legitimate: the client library then authenticates from the ambient kubeconfig, which must be available to the test process; containers do not
