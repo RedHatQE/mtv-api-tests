@@ -235,6 +235,10 @@ def _dump_storage_scope(namespace: str) -> list[str]:
         "logs",
         f"deploy/{_CSI_PROVISIONER_DEPLOYMENT}",
         "--all-containers",
+        # A Deployment can run several replicas; without --all-pods oc picks one pod and the
+        # replica that logged the refused volume is silently omitted.
+        "--all-pods",
+        "--prefix",
         f"--tail={_CSI_LOG_TAIL_LINES}",
     ]
     # The current log always: it holds the errors produced at dump time even when the container
