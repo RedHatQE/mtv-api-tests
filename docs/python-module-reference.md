@@ -165,24 +165,25 @@ from `resolve_upgrade_timeout()`: the `--mtv-upgrade-timeout` option, then `MTV_
 internal waits and the script reports its own timeout instead of being killed by the harness. The script writes into a temporary directory that is deleted before the function
 returns; only the redacted text is persisted under `<data-collector>/upgrade-script-<timestamp>/`, so `CLUSTER_PASSWORD` never reaches the artifact tree, and `MtvUpgradeError`
 carries the tail of both redacted logs plus those paths. A missing or empty `cluster_password` raises before the script starts. A `scope="upgrade"` cluster-state snapshot is
-written before both the outer-timeout raise and the non-zero-exit raise, using the `client` the caller passes so the probes also work in a container run with no ambient kubeconfig.
+written before both the outer-timeout raise and the non-zero-exit raise, reading the cluster through the `client` the caller passes; without a client the snapshot is skipped rather than collected some other way.
 Under `--skip-data-collector` nothing is persisted: the child still writes its stdout and stderr into a
 temporary directory that is deleted before the function returns, and the error carries the redacted tails of both streams.
 
 ### `utilities/cluster_state.py`
 
 `dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=..., client=..., data_collector_path=...)` writes one timestamped, bounded snapshot per failure and never
-raises, so the failing exception stays the error the caller sees. `data_collector_path` overrides the configured root when given. The collector root is resolved first, so
-`--skip-data-collector` returns before any temporary kubeconfig is written or logged, and every probe output is written with the resolved `CLUSTER_PASSWORD` redacted. Each snapshot
-also has a total budget (`_SNAPSHOT_DEADLINE_SECONDS`, 120 seconds): probes stop once it expires and the file closes with a "snapshot deadline reached … N probes skipped"
-record, so a hanging cluster cannot delay the original error by minutes. Each stream is capped at `_MAX_PROBE_OUTPUT_BYTES` (512 KiB) with an explicit
-`[truncated: <N> bytes omitted]` marker, and a probe that times out keeps the partial stdout/stderr it produced, marked `[timed out after <N>s]`. Passing `client` makes the probes
-use an ephemeral kubeconfig built from the run client inside a temporary directory, because a container run has no ambient kubeconfig for `oc` to use; without a client (or without
-a server in its configuration) the ambient `oc` context is used and the snapshot header records which one was in effect, and a setup failure such as a full temporary filesystem
-degrades to the ambient context with a warning instead of escaping. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt` and `run-identity.txt` once per session from
-`pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`; it builds a client for the cluster probes when none is passed and keeps the
-ambient context if that fails, so the hook never raises. Only the xdist controller (or the sole process without xdist) wipes the
-data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces an existing snapshot.
+raises, so the failing exception stays the error the caller sees. `client` is required: every probe reads the cluster through an `ocp_resources` wrapper (a small summary-list
+helper reads a kind's listing in one request), so collection uses no `oc` binary, no `subprocess` and no kubeconfig — a token never reaches the disk. There is no `ocp_resources`
+wrapper for the cluster-wide image config in this release, so that one probe reads `config.openshift.io/v1` `Image` through the client's generic kind API. Each probe runs under
+its own `try`/`except` over the exceptions the client can raise, including the wrapper's missing-API `NotImplementedError`, and renders as `[probe failed: …]` instead of escaping.
+`data_collector_path` overrides the configured root when given; the collector root is resolved first, so `--skip-data-collector` returns before the first probe, and every artifact
+is written with the resolved `CLUSTER_PASSWORD` redacted. Each snapshot also has a total budget (`_SNAPSHOT_DEADLINE_SECONDS`, 120 seconds, `monotonic()`): probes stop once it
+expires and the file closes with a "snapshot deadline reached … N probes skipped" record, so a hanging API server cannot delay the original error by minutes. Each probe's output is
+capped at `_MAX_PROBE_OUTPUT_BYTES` (512 KiB) with an explicit `[truncated: <N> bytes omitted]` marker. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt`
+and `run-identity.txt` once per session from `pytest_sessionstart`, tolerating a missing `.git` (the revision is read from git's files, no subprocess) and skipping cleanly under
+`--skip-data-collector`; it builds a client for the cluster probes when none is passed and skips the cluster section if that fails, so the hook never raises. Only the xdist
+controller (or the sole process without xdist) wipes the data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces
+an existing snapshot.
 
 ### `utilities/data_collector.py`
 

@@ -308,6 +308,20 @@ def _supervise_upgrade_process(
     return returncode, timeout_exc, cleanup_exc, stdout, stderr, persisted_logs
 
 
+def _dump_upgrade_cluster_state(*, client: DynamicClient | None, reason: str) -> None:
+    """Write the upgrade-scope snapshot when the caller has a client to read the cluster with.
+
+    Args:
+        client (DynamicClient | None): Run client, or None when the caller has none and the
+            snapshot is skipped instead of being collected some other way.
+        reason (str): Short cause, used in the snapshot file name and header.
+    """
+    if client is None:
+        LOGGER.warning(f"No cluster client for the upgrade snapshot '{reason}', skipping cluster state collection")
+        return
+    dump_cluster_state(reason=reason, scope="upgrade", client=client)
+
+
 def run_mtv_upgrade(
     script_path: str,
     mtv_version: str,
@@ -326,8 +340,8 @@ def run_mtv_upgrade(
         image_index (str): Optional image index override for the upgrade.
         timeout (int): Outer wait budget in seconds. The script owns its own internal waits; this
             only guards against a wedged process.
-        client (DynamicClient | None): Run client, so the failure snapshot also probes a container
-            run that has no ambient kubeconfig.
+        client (DynamicClient | None): Run client, so the failure snapshot also reads the cluster
+            through the wrapper; without one the snapshot is skipped.
 
     Raises:
         ValueError: If ``CLUSTER_PASSWORD``, ``CLUSTER_USERNAME`` or ``CLUSTER_HOST`` is missing or
@@ -352,7 +366,7 @@ def run_mtv_upgrade(
     )
     cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
     if timeout_exc is not None:
-        dump_cluster_state(reason=f"upgrade-script-timeout-{timeout}", scope="upgrade", client=client)
+        _dump_upgrade_cluster_state(client=client, reason=f"upgrade-script-timeout-{timeout}")
         raise MtvUpgradeError(
             f"MTV upgrade script timed out after {timeout_exc.timeout} seconds "
             f"(plus up to {_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS} seconds process-group cleanup)\n"
@@ -361,7 +375,7 @@ def run_mtv_upgrade(
     if returncode is None or returncode != 0:
         # The script reports its own 60-minute wait first and exits non-zero, so this branch
         # (not only the outer timeout) needs the snapshot for MCP/CO evidence.
-        dump_cluster_state(reason=f"upgrade-script-exit-{returncode}", scope="upgrade", client=client)
+        _dump_upgrade_cluster_state(client=client, reason=f"upgrade-script-exit-{returncode}")
         raise MtvUpgradeError(
             f"MTV upgrade script failed with exit code {returncode}\n{failure_details}{cleanup_note}"
         ) from cleanup_exc

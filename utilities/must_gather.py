@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import shlex
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
@@ -28,8 +27,6 @@ from urllib3.exceptions import TimeoutError as HTTPTimeoutError
 
 from exceptions.exceptions import MustGatherImageError
 from utilities.constants import MTV_OPERATOR_NAME
-from utilities.data_collector import data_collector_path as shared_data_collector_path
-from utilities.data_collector import utc_timestamp
 from utilities.utils import get_cluster_client
 
 if TYPE_CHECKING:
@@ -37,23 +34,6 @@ if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(__name__)
-
-# Inspect dump written before the image gather: Machine Config Operator state only, so it stays
-# inside the job's disk budget (the gather has already been killed at 83% against a 70% cap).
-_INSPECT_DEST_DIR_PREFIX = "inspect"
-# Atomic claim: the winner of a simultaneous start creates this directory, so two xdist workers can
-# never write inspect output into the same tree.
-_INSPECT_CLAIM_DIR_NAME = ".inspect-claim"
-_INSPECT_COMMAND_TIMEOUT_SECONDS = 600
-_MCO_NAMESPACE = "openshift-machine-config-operator"
-# Explicitly named resources only: inspecting a ClusterOperator follows its .status.relatedObjects
-# and queues whole namespaces (every ``all``-category resource plus all pod logs).
-_MCO_INSPECT_TARGETS = (
-    "machineconfigpool",
-    "deploy/machine-config-operator",
-    "ds/machine-config-daemon",
-)
-_inspect_dump_attempted = False
 
 
 def _get_idms_name(channel: str) -> str:
@@ -282,92 +262,6 @@ def _resolve_must_gather_image(
     return resolved_image
 
 
-def _inspect_worker_suffix() -> str:
-    """Return a file-name suffix naming the xdist worker, empty for a single-process run.
-
-    Returns:
-        str: ``-<worker id>`` when running under xdist, otherwise an empty string.
-    """
-    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
-    return f"-{worker}" if worker else ""
-
-
-def _run_inspect_dump(data_collector_path: Path) -> bool:
-    """Write a bounded ``oc adm inspect`` of the explicitly named MCO resources, once per session.
-
-    Runs before the image gather so the MCP and MCO pod state survives a gather that fails or is
-    killed by the disk-usage checker. Only explicitly named resources are inspected, so no
-    namespace and no ``.status.relatedObjects`` tree is expanded. The first attempt of a session
-    wins; later calls return without re-running, even when that attempt failed.
-
-    Args:
-        data_collector_path (Path): Per-identity directory, used as the destination only when no
-            shared collector root is configured.
-
-    Returns:
-        bool: True when this call ran the inspect command, False when it was skipped (already
-            attempted in this session) or the command failed.
-    """
-    global _inspect_dump_attempted
-    if _inspect_dump_attempted:
-        LOGGER.info("Inspect dump already attempted in this session, skipping")
-        return False
-    _inspect_dump_attempted = True
-
-    # Another xdist worker may already have collected it: the module flag is per process, so the
-    # collector root is the cross-worker view of what the run already has.
-    collector_root = shared_data_collector_path() or data_collector_path
-    existing_dumps = sorted(collector_root.glob(f"{_INSPECT_DEST_DIR_PREFIX}-*"))
-    if existing_dumps:
-        LOGGER.info(f"Inspect dump already collected at {existing_dumps[0]}, skipping")
-        return False
-
-    # Claim the dump atomically: creating the directory fails for the loser of a simultaneous start,
-    # so two workers can never write into the same tree and interleave their diagnostics.
-    claim = collector_root / _INSPECT_CLAIM_DIR_NAME
-    try:
-        collector_root.mkdir(parents=True, exist_ok=True)
-        claim.mkdir()
-    except FileExistsError:
-        LOGGER.info(f"Inspect dump already claimed at {claim}, skipping")
-        return False
-    except OSError as ex:
-        # A read-only or full collector must not abort the gather this dump only documents.
-        LOGGER.warning(f"Could not claim the inspect dump directory '{claim}': {ex}")
-        return False
-
-    dest_dir = collector_root / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}{_inspect_worker_suffix()}"
-    command = [
-        "oc",
-        "adm",
-        "inspect",
-        f"--dest-dir={dest_dir}",
-        "-n",
-        _MCO_NAMESPACE,
-        *_MCO_INSPECT_TARGETS,
-    ]
-    resolved_command = " ".join(command)
-    LOGGER.warning(f"Running inspect dump before the image gather: {resolved_command}")
-
-    try:
-        success, _, stderr = run_command(
-            command,
-            verify_stderr=False,
-            check=False,
-            timeout=_INSPECT_COMMAND_TIMEOUT_SECONDS,
-        )
-    except (CalledProcessError, TimeoutExpired, OSError) as ex:
-        LOGGER.warning(f"Inspect dump failed for dest-dir '{dest_dir}' via '{resolved_command}': {ex}")
-        return False
-
-    if not success:
-        LOGGER.warning(f"Inspect dump exited non-zero for dest-dir '{dest_dir}' via '{resolved_command}': {stderr}")
-        return False
-
-    LOGGER.warning(f"Inspect dump written to '{dest_dir}' by: {resolved_command}")
-    return True
-
-
 def run_must_gather(data_collector_path: Path) -> bool:
     """Run ``oc adm must-gather`` to collect the full MTV diagnostic bundle.
 
@@ -420,11 +314,6 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
     Returns:
         bool: True when the gather command ran. False when it did not.
     """
-    # The inspect dump runs before any gather attempt on this path, so MCO state is captured even
-    # when image resolution, the gather itself, or the disk-usage checker kills the bundle. It is
-    # written once per session, not once per failing test.
-    _run_inspect_dump(data_collector_path=data_collector_path)
-
     try:
         # Resource discovery: cluster client, MTV Subscription, and its installed CSV.
         # https://github.com/kubev2v/forklift-must-gather

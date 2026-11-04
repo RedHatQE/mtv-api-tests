@@ -4,9 +4,26 @@ import shutil
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from typing import Optional
 
-from simple_logger.logger import DuplicateFilter, WrapperLogFormatter
+from simple_logger.logger import DuplicateFilter, RedactingFilter, WrapperLogFormatter
 
 LOGGER = logging.getLogger(__name__)
+
+# Credential keys whose value must never reach the console or the log file. simple_logger ships the
+# redaction filter, so masking belongs on the handlers every record passes through - not in the
+# individual writers that happen to remember it.
+_SENSITIVE_LOG_PATTERNS: list[str] = [
+    # Filter order matters: RedactingFilter masks the single word following a pattern, so "bearer"
+    # must run before "authorization" - otherwise "Authorization: Bearer <jwt>" keeps the JWT
+    # visible while only the word Bearer is masked.
+    "bearer",
+    "password",
+    "passphrase",
+    "token",
+    "secret",
+    "api_key",
+    "apikey",
+    "authorization",
+]
 
 
 def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> QueueListener:
@@ -41,6 +58,10 @@ def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> Qu
 
     console_handler = logging.StreamHandler()
     log_file_handler = RotatingFileHandler(filename=log_file, maxBytes=100 * 1024 * 1024, backupCount=20)
+
+    redacting_filter = RedactingFilter(patterns=_SENSITIVE_LOG_PATTERNS)
+    console_handler.addFilter(filter=redacting_filter)
+    log_file_handler.addFilter(filter=redacting_filter)
 
     log_queue = multiprocessing.Queue(maxsize=-1)  # type: ignore[var-annotated]
     log_listener = QueueListener(
