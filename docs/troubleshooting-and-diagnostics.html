@@ -540,9 +540,10 @@ and turns the feature off instead of failing the run.
   <a href="#failure-evidence-dumps">Failure Evidence Dumps</a>).</p>
 </li>
 <li>
-<p><code>.data-collector/upgrade-script-&lt;timestamp&gt;/upgrade-script-stdout.log</code> and <code>-stderr.log</code>: the upgrade script's own output with <code>CLUSTER_PASSWORD</code> redacted. The child writes
-  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree. Without <code>--data-collector-path</code> the redacted logs live
-  under the default <code>.data-collector/</code>; with <code>--skip-data-collector</code> nothing is written at all and the script output stays in the pytest captured output.</p>
+<p><code>.data-collector/upgrade-script-&lt;timestamp&gt;/upgrade-script-stdout.log</code> and <code>-stderr.log</code>: the upgrade script's own output with <code>CLUSTER_PASSWORD</code> redacted. The child always writes
+  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree — and never the inherited streams either, because the
+  script receives the cluster password and pytest runs with <code>-s</code>. Without <code>--data-collector-path</code> the redacted logs live under the default <code>.data-collector/</code>;
+  with <code>--skip-data-collector</code> nothing is persisted at all, while the failure message still carries the redacted tails.</p>
 </li>
 <li>
 <p><code>.data-collector/&lt;encoded-class-plan-identity&gt;/...</code>: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.</p>

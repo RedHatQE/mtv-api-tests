@@ -220,9 +220,10 @@ The most important files are:
   `--skip-teardown` / `--skip-data-collector` were set. Written once per run, like `cluster.txt`.
 - `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see
   [Failure Evidence Dumps](#failure-evidence-dumps)).
-- `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output with `CLUSTER_PASSWORD` redacted. The child writes
-  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree. Without `--data-collector-path` the redacted logs live
-  under the default `.data-collector/`; with `--skip-data-collector` nothing is written at all and the script output stays in the pytest captured output.
+- `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output with `CLUSTER_PASSWORD` redacted. The child always writes
+  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree — and never the inherited streams either, because the
+  script receives the cluster password and pytest runs with `-s`. Without `--data-collector-path` the redacted logs live under the default `.data-collector/`;
+  with `--skip-data-collector` nothing is persisted at all, while the failure message still carries the redacted tails.
 - `.data-collector/<encoded-class-plan-identity>/...`: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.
 - `.data-collector/<encoded-test-node-identity>/...`: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.
 - `.data-collector/.../inspect-<timestamp>/`: the `oc adm inspect` dump of the explicitly named Machine Config Operator resources, written before the image gather of the first

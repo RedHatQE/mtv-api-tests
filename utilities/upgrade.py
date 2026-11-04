@@ -132,18 +132,21 @@ def _upgrade_failure_details(*, stdout: str, stderr: str, artifact_dir: Path | N
     Args:
         stdout (str): Redacted upgrade script stdout.
         stderr (str): Redacted upgrade script stderr.
-        artifact_dir (Path | None): Directory holding the redacted logs, or None when collection
-            was disabled and the output was never captured.
+        artifact_dir (Path | None): Directory holding the redacted logs, or None when collection was
+            disabled - the tails are still rendered, they are simply not persisted.
 
     Returns:
         str: Message fragment carrying the last lines of both streams.
     """
-    if artifact_dir is None:
-        return "script output was not captured because --skip-data-collector is set; see the pytest captured output"
+    persisted_note = (
+        f"\npersisted logs: {artifact_dir / _UPGRADE_STDOUT_LOG_NAME} {artifact_dir / _UPGRADE_STDERR_LOG_NAME}"
+        if artifact_dir is not None
+        else "\n(not persisted: --skip-data-collector)"
+    )
     return (
         f"stdout tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stdout)}\n"
-        f"stderr tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stderr)}\n"
-        f"persisted logs: {artifact_dir / _UPGRADE_STDOUT_LOG_NAME} {artifact_dir / _UPGRADE_STDERR_LOG_NAME}"
+        f"stderr tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stderr)}"
+        f"{persisted_note}"
     )
 
 
@@ -224,10 +227,11 @@ def _supervise_upgrade_process(
 ) -> tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str]:
     """Run the upgrade script and supervise its process group.
 
-    The child writes into an ephemeral directory so the raw bytes never reach the artifact tree;
-    only the redacted text is persisted. File redirect (not PIPEs): leftover mtv-upgrade.sh
-    children would keep communicate() blocked. With --skip-data-collector the child inherits the
-    pytest capture streams and no file is written at all.
+    The child always writes into an ephemeral directory, never the inherited streams: the script
+    receives CLUSTER_PASSWORD, and pytest runs with ``-s``, so anything printed would otherwise land
+    unredacted in the CI log. Only the redacted text is ever persisted, and only when data collection
+    is enabled - with ``--skip-data-collector`` nothing is written to the artifact tree at all. File
+    redirect (not PIPEs): leftover mtv-upgrade.sh children would keep communicate() blocked.
 
     Args:
         script_path (str): Full path to the upgrade script.
@@ -239,7 +243,8 @@ def _supervise_upgrade_process(
     Returns:
         tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str]: Exit
             code (None on timeout), the timeout exception, a process-group cleanup failure, and the
-            redacted stdout and stderr. Both streams are empty when data collection is disabled.
+            redacted stdout and stderr. The redacted tails are always returned; they are persisted to
+            the artifact tree only when collection is enabled.
 
     Raises:
         MtvUpgradeError: If the process group is still running after SIGKILL.
@@ -247,17 +252,9 @@ def _supervise_upgrade_process(
     """
     password = env[_CLUSTER_PASSWORD_ENV_VAR]
     with contextlib.ExitStack() as stack:
-        log_dir: Path | None = (
-            Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="mtv-upgrade-logs-")))
-            if artifact_dir is not None
-            else None
-        )
-        stdout_file = (
-            stack.enter_context((log_dir / _UPGRADE_STDOUT_LOG_NAME).open("wb")) if log_dir is not None else None
-        )
-        stderr_file = (
-            stack.enter_context((log_dir / _UPGRADE_STDERR_LOG_NAME).open("wb")) if log_dir is not None else None
-        )
+        log_dir = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="mtv-upgrade-logs-")))
+        stdout_file = stack.enter_context((log_dir / _UPGRADE_STDOUT_LOG_NAME).open("wb"))
+        stderr_file = stack.enter_context((log_dir / _UPGRADE_STDERR_LOG_NAME).open("wb"))
         proc = subprocess.Popen(
             [script_path],
             env=env,
@@ -282,9 +279,9 @@ def _supervise_upgrade_process(
                 cleanup_exc = exc
             # Persist the redacted copy here (not after the try) so an unexpected wait failure still
             # leaves a redacted artifact, and the raw bytes stay in the ephemeral directory only.
-            if log_dir is not None and artifact_dir is not None:
-                stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
-                stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
+            stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
+            stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
+            if artifact_dir is not None:
                 _write_redacted_logs(artifact_dir=artifact_dir, stdout=stdout, stderr=stderr)
 
     return returncode, timeout_exc, cleanup_exc, stdout, stderr
