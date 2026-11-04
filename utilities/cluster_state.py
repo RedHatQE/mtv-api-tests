@@ -143,6 +143,10 @@ _PROBE_EXCEPTIONS: tuple[type[Exception], ...] = (
     OSError,
     NotImplementedError,
 )
+# RuntimeError is not raised by this module: it is caught so a probe that fails that way records a
+# failure instead of dying silently on its worker thread and leaving the snapshot looking healthy.
+# mypy rejects a starred tuple inside an except clause, hence the explicit constant.
+_PROBE_FAILURES: tuple[type[Exception], ...] = (*_PROBE_EXCEPTIONS, RuntimeError)
 
 
 def _render_json(value: Any) -> str:
@@ -195,22 +199,33 @@ def _call_within_budget(*, probe: Callable[[], Any], budget: float) -> tuple[Any
     snapshot stops waiting when the budget expires, while the request finishes (or not) on its own.
 
     Args:
-        probe (Callable[[], Any]): Read performed against the run client.
+        probe (Callable[[], Any]): Read performed against the run client; its value is provider-shaped
+            cluster data the wrapper exposes dynamically, so the type stays Any.
         budget (float): Seconds the snapshot may still spend on this probe.
 
     Returns:
         tuple[Any, Exception | None]: The probe value, or the exception it raised (including
-            ClusterStateProbeTimeout), with None in the other slot.
+            ClusterStateProbeTimeout), with None in the other slot. The value is Any because it is
+            whatever the probe read from the cluster, rendered by the caller.
+
+    Raises:
+        RuntimeError: Never raised here; a probe that fails records its exception instead of
+            propagating it, so the snapshot always renders a failure record.
     """
+    # Any: the probe returns dynamic cluster data (a resource list or its instance dict) that has no
+    # narrower static type, and the dict only carries the two outcomes of the thread below.
     outcome: dict[str, Any] = {}
 
-    def _run() -> None:
+    def _execute_probe() -> None:
+        """Run the probe and record either its value or the exception it raised."""
         try:
             outcome["value"] = probe()
-        except _PROBE_EXCEPTIONS as exc:
+        except _PROBE_FAILURES as exc:
+            # RuntimeError is not raised here: it is caught so a probe that fails that way records a
+            # failure record instead of dying silently and leaving the snapshot looking healthy.
             outcome["failure"] = exc
 
-    worker = threading.Thread(target=_run, name="cluster-state-probe", daemon=True)
+    worker = threading.Thread(target=_execute_probe, name="cluster-state-probe", daemon=True)
     worker.start()
     worker.join(timeout=budget)
     if worker.is_alive():
