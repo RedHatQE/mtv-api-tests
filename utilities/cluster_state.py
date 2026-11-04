@@ -78,6 +78,8 @@ _STORAGE_CLASS_CONFIG_KEY = "storage_class"
 # One claim's consumers are the importer/populator and launcher pods; they log at most a few
 # thousand lines each.
 _STORAGE_CLAIM_LOG_TAIL_LINES = 1000
+# A driver's pods exist once per node and repeat the same lines, so a failure tail is enough.
+_DRIVER_LOG_TAIL_LINES = 300
 # The MCO pods carry a stable k8s-app label; their names encode the node and change between
 # releases, so the label - not the name - is what a snapshot may rely on.
 _MCO_POD_LABEL_SELECTOR = "k8s-app in (machine-config-operator,machine-config-controller,machine-config-daemon)"
@@ -101,6 +103,8 @@ _NODE_ROLE_LABEL_PREFIX = "node-role.kubernetes.io/"
 _KIND_HANDLE_NAME = "cluster-state-probe"
 
 
+# Handle for a listing across every namespace; the wrapper's own name for it.
+_ALL_NAMESPACES = "*"
 _PROBE_LABEL_PREFIX = "### "
 _SECTION_SEPARATOR = "\n\n"
 _SNAPSHOT_DIRECTORY = "cluster-state"
@@ -459,16 +463,19 @@ def _list_items(
     Args:
         resource_cls (type[Resource]): Wrapper class of the kind; it resolves the API version.
         client (DynamicClient): Run client.
-        namespace (str | None): Namespace of a namespaced kind; None lists every namespace.
+        namespace (str | None): Namespace of a namespaced kind; None or _ALL_NAMESPACES lists
+            every namespace.
         label_selector (str | None): Server-side label filter, so a caller never has to match on
             object names, which differ between product versions.
 
     Returns:
         list[dict[str, Any]]: The listed objects as plain dicts, empty when the kind has none.
     """
-    api = _wrapper(resource_cls, client=client, name=_KIND_HANDLE_NAME, namespace=namespace).api
+    # A namespaced wrapper such as Pod requires a namespace to build its API handle, so the
+    # cluster-wide listing goes through the "*" handle and omits the namespace from the query.
+    api = _wrapper(resource_cls, client=client, name=_KIND_HANDLE_NAME, namespace=namespace or _ALL_NAMESPACES).api
     query: dict[str, Any] = {"label_selector": label_selector} if label_selector else {}
-    if namespace:
+    if namespace and namespace != _ALL_NAMESPACES:
         query["namespace"] = namespace
     return [item.to_dict() for item in api.get(**query).items]
 
@@ -890,7 +897,7 @@ def _pod_log_sections(
     Args:
         probes (_Probes): Probe runner of the current snapshot.
         label (str): Readable label of the pod listing.
-        namespace (str): Namespace holding the pods.
+        namespace (str): Namespace holding the pods, or ``*`` for every namespace.
         tail_lines (int): Lines kept per container log.
         label_selector (str | None): Server-side label filter selecting the pods to read.
         pod_filter (Callable[[dict[str, Any]], bool] | None): Keeps only the pods worth reading,
@@ -915,7 +922,11 @@ def _pod_log_sections(
     for pod in pods:
         pod_name = _resource_name(pod)
         containers = [container.get("name", "") for container in (pod.get("spec") or {}).get("containers") or []]
-        pod_wrapper = Pod(client=probes.client, name=pod_name, namespace=namespace)
+        pod_wrapper = Pod(
+            client=probes.client,
+            name=pod_name,
+            namespace=(pod.get("metadata") or {}).get("namespace") or namespace,
+        )
         restarted_containers = _restarted_containers(pod=pod)
         for container in containers:
             sections.append(
@@ -1132,13 +1143,13 @@ def _storage_class_sections(*, probes: _Probes, claims: list[dict[str, Any]], na
                 render=_render_lines,
             )
         )
-        sections.append(
-            probes.run(
-                f"Volume attachments of {class_name}",
-                partial(_volume_attachments, client=probes.client, volume_names=volume_names),
-                render=_render_lines,
-            )
+        attachment_record, attachments = probes.fetch(
+            label=f"Volume attachments of {class_name}",
+            probe=partial(_volume_attachments, client=probes.client, volume_names=volume_names),
+            render=_render_attachments,
         )
+        sections.append(attachment_record)
+        sections.extend(_driver_pod_sections(probes=probes, attachments=attachments or []))
     if not claim_names:
         return sections
     sections.extend(
@@ -1180,7 +1191,71 @@ def _uses_claims(pod: dict[str, Any], *, claim_names: set[str]) -> bool:
     return any((volume.get("persistentVolumeClaim") or {}).get("claimName") in claim_names for volume in volumes)
 
 
-def _volume_attachments(*, client: DynamicClient, volume_names: set[str]) -> list[str]:
+def _render_attachments(attachments: list[dict[str, Any]]) -> str:
+    """Render one line per volume attachment, including the driver and both error fields.
+
+    Args:
+        attachments (list[dict[str, Any]]): Attachment summaries.
+
+    Returns:
+        str: The rendered lines.
+    """
+    return _render_lines([
+        f"{attachment['volume']}: driver={attachment['driver']} node={attachment['node']} "
+        f"attached={attachment['attached']} attachError={attachment['attachError']} "
+        f"detachError={attachment['detachError']}"
+        for attachment in attachments
+    ])
+
+
+def _driver_pod_sections(*, probes: _Probes, attachments: list[dict[str, Any]]) -> list[str]:
+    """Collect the logs of the pods belonging to the drivers that serve the claims under test.
+
+    The driver name is the one the cluster reports in ``VolumeAttachment.spec.attacher``, never a
+    literal, and a pod belongs to it only by mentioning that name. A driver that does not name
+    itself in its own pods (cinder, nfs and smb installs do not) yields no section rather than the
+    pods of a driver that has nothing to do with the stalled volume.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        attachments (list[dict[str, Any]]): Attachment summaries of the claims under test.
+
+    Returns:
+        list[str]: The pod listing, its summary and one record per container log.
+    """
+    drivers = {attachment["driver"] for attachment in attachments if attachment.get("driver")}
+    if not drivers:
+        return [
+            f"{_PROBE_LABEL_PREFIX}Storage driver pods\n"
+            "[no driver identified: no volume of the storage class under test is attached]"
+        ]
+    return _pod_log_sections(
+        probes=probes,
+        label=f"Storage driver pods ({', '.join(sorted(drivers))})",
+        namespace=_ALL_NAMESPACES,
+        tail_lines=_DRIVER_LOG_TAIL_LINES,
+        pod_filter=partial(_mentions_any, needles=drivers),
+    )
+
+
+def _mentions_any(pod: dict[str, Any], *, needles: set[str]) -> bool:
+    """Return whether a pod names any of the given strings in its labels or containers.
+
+    Args:
+        pod (dict[str, Any]): Pod body.
+        needles (set[str]): Strings to look for, usually storage driver names.
+
+    Returns:
+        bool: True when one of them appears in a label, container name, image, args or command.
+    """
+    body = json.dumps({
+        "labels": (pod.get("metadata") or {}).get("labels") or {},
+        "containers": (pod.get("spec") or {}).get("containers") or [],
+    })
+    return any(needle in body for needle in needles)
+
+
+def _volume_attachments(*, client: DynamicClient, volume_names: set[str]) -> list[dict[str, Any]]:
     """Render the volume attachments of the given persistent volumes.
 
     A driver's refusal to attach is reported in the attachment's own status, whatever the driver is
@@ -1191,22 +1266,25 @@ def _volume_attachments(*, client: DynamicClient, volume_names: set[str]) -> lis
         volume_names (set[str]): Persistent volumes behind the claims under test.
 
     Returns:
-        list[str]: One line per attachment, empty when nothing is attached yet.
+        list[dict[str, Any]]: One summary per attachment, empty when nothing is attached yet.
     """
     if not volume_names:
         return []
-    lines: list[str] = []
+    summaries: list[dict[str, Any]] = []
     for attachment in _list_items(VolumeAttachment, client=client):
         spec = attachment.get("spec") or {}
         if (spec.get("source") or {}).get("persistentVolumeName") not in volume_names:
             continue
         status = attachment.get("status") or {}
-        lines.append(
-            f"{_resource_name(attachment)}: driver={spec.get('attacher')} node={spec.get('nodeName')} "
-            f"attached={status.get('attached')} attachError={status.get('attachError')} "
-            f"detachError={status.get('detachError')}"
-        )
-    return lines
+        summaries.append({
+            "volume": _resource_name(attachment),
+            "driver": spec.get("attacher"),
+            "node": spec.get("nodeName"),
+            "attached": status.get("attached"),
+            "attachError": status.get("attachError"),
+            "detachError": status.get("detachError"),
+        })
+    return summaries
 
 
 def _class_persistent_volumes(*, client: DynamicClient, names: set[str]) -> list[str]:
