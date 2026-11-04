@@ -281,14 +281,17 @@ def run_mtv_upgrade(
                 _stop_upgrade_process(proc)
             except MtvUpgradeError as exc:
                 cleanup_exc = exc
+            # Persist the redacted copy here (not after the try) so an unexpected wait failure still
+            # leaves a redacted artifact, and the raw bytes stay in the ephemeral directory only.
+            persisted_stdout = ""
+            persisted_stderr = ""
+            if log_dir is not None and artifact_dir is not None:
+                persisted_stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
+                persisted_stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
+                _write_redacted_logs(artifact_dir=artifact_dir, stdout=persisted_stdout, stderr=persisted_stderr)
 
-        stdout = ""
-        stderr = ""
-        # Both are set together: collection enabled keeps the raw output in the ephemeral dir.
-        if log_dir is not None and artifact_dir is not None:
-            stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
-            stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
-            _write_redacted_logs(artifact_dir=artifact_dir, stdout=stdout, stderr=stderr)
+        stdout = persisted_stdout
+        stderr = persisted_stderr
 
         failure_details = _upgrade_failure_details(stdout=stdout, stderr=stderr, artifact_dir=artifact_dir)
         cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""

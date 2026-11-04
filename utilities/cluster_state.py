@@ -19,6 +19,8 @@ from utilities.data_collector import data_collector_path, redact_secret, utc_tim
 LOGGER = get_logger(name=__name__)
 
 _COMMAND_TIMEOUT_SECONDS = 20
+# Per-PVC YAML can be tens of KB each on a full disk; the listing above already carries every phase.
+_MAX_PENDING_PVC_DUMPS = 20
 _MCO_NAMESPACE = "openshift-machine-config-operator"
 _STORAGE_NAMESPACE = "openshift-storage"
 _MTV_NAMESPACE = "openshift-mtv"
@@ -53,7 +55,9 @@ def _run_bounded(cmd: list[str], timeout: int = _COMMAND_TIMEOUT_SECONDS) -> str
     """
     header = f"$ {' '.join(cmd)}"
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, check=False
+        )
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
         return f"{header}\n[command failed after up to {timeout}s: {exc}]"
     return (
@@ -201,7 +205,10 @@ def _pending_pvc_yaml(namespace: str) -> list[str]:
 
     return [
         listing,
-        *(_run_bounded(["oc", "-n", namespace, "get", "pvc", name, "-o", "yaml"]) for name in pending_names),
+        *(
+            _run_bounded(["oc", "-n", namespace, "get", "pvc", name, "-o", "yaml"])
+            for name in pending_names[:_MAX_PENDING_PVC_DUMPS]
+        ),
     ]
 
 

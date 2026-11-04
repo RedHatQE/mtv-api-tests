@@ -298,6 +298,13 @@ def _run_inspect_dump(data_collector_path: Path) -> bool:
         return False
     _inspect_dump_attempted = True
 
+    # Another xdist worker may already have collected it: the module flag is per process, so the
+    # artifact directory is the cross-worker guard that keeps the dump to one per run.
+    existing_dumps = sorted(data_collector_path.glob(f"{_INSPECT_DEST_DIR_PREFIX}-*"))
+    if existing_dumps:
+        LOGGER.info(f"Inspect dump already collected at {existing_dumps[0]}, skipping")
+        return False
+
     dest_dir = data_collector_path / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}"
     command = [
         "oc",

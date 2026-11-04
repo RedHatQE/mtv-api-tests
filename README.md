@@ -984,6 +984,23 @@ Upgrade tests require additional `--tc` parameters beyond the standard cluster a
 | `mtv_upgrade_to_source` | Yes | MTV source identifier (e.g., `brew`, `released`) |
 | `mtv_upgrade_image_index` | No | Image index override (pass empty string `""` to skip) |
 
+### Upgrade Timeout Budget
+
+The suite waits for the external upgrade script with an outer budget that exists only to catch a wedged
+process — the script owns its own internal waits (the MCP rollout, its `oc wait` timeouts). Configure it
+with either source, highest priority first:
+
+| Source | Example |
+| ------ | ------- |
+| pytest option | `--mtv-upgrade-timeout 7200` |
+| environment variable | `MTV_UPGRADE_TIMEOUT_SECONDS=7200` |
+| default | `5400` seconds |
+
+Keep the outer budget above whatever the script waits for internally: when it expires first the script is
+SIGTERMed and never gets to report its own timeout. The resolved budget is logged at the start of the run,
+and the script's stdout/stderr are persisted under the data-collector directory (redacted, with the last
+200 lines of each also carried in the failure message). With `--skip-data-collector` no file is written.
+
 ### Example
 
 ```bash
