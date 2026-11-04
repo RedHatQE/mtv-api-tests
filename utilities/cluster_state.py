@@ -29,6 +29,7 @@ from ocp_resources.datavolume import DataVolume
 from ocp_resources.event import Event
 from ocp_resources.exceptions import ClientWithBasicAuthError
 from ocp_resources.image_content_source_policy import ImageContentSourcePolicy
+from ocp_resources.image_config_openshift_io import Image
 from ocp_resources.image_digest_mirror_set import ImageDigestMirrorSet
 from ocp_resources.machine_config_pool import MachineConfigPool
 from ocp_resources.node import Node
@@ -38,6 +39,7 @@ from ocp_resources.pod import Pod
 from ocp_resources.resource import NamespacedResource, Resource
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.user import User
+from ocp_resources.volume_attachment import VolumeAttachment
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
@@ -67,10 +69,6 @@ _MTV_NAMESPACE_CONFIG_KEY = "mtv_namespace"
 _CNV_NAMESPACE = "openshift-cnv"
 _MACHINE_CONFIG_OPERATOR = "machine-config"
 _CLUSTER_VERSION_NAME = "version"
-# There is no wrapper class for the cluster-wide image config in this wrapper release, so it is
-# read through the client's generic kind API instead of a subprocess.
-_CLUSTER_IMAGE_API_VERSION = "config.openshift.io/v1"
-_CLUSTER_IMAGE_KIND = "Image"
 _CLUSTER_IMAGE_NAME = "cluster"
 # ``~`` is the API's self-subject name for the authenticated user, the documented ``oc whoami``.
 _CURRENT_USER_NAME = "~"
@@ -786,8 +784,7 @@ def _cluster_image(*, client: DynamicClient) -> dict[str, Any]:
     Returns:
         dict[str, Any]: The ``image.config.openshift.io`` cluster object as a plain dict.
     """
-    image_api = client.resources.get(api_version=_CLUSTER_IMAGE_API_VERSION, kind=_CLUSTER_IMAGE_KIND)
-    return image_api.get(name=_CLUSTER_IMAGE_NAME).to_dict()
+    return _named_instance(Image, client=client, name=_CLUSTER_IMAGE_NAME)
 
 
 def _listing_sections(
@@ -1129,6 +1126,11 @@ def _storage_class_sections(*, probes: _Probes, claims: list[dict[str, Any]], na
             partial(_class_persistent_volumes, client=probes.client, names=volume_names),
             render=_render_lines,
         ),
+        probes.run(
+            f"Volume attachments of {class_name}",
+            partial(_volume_attachments, client=probes.client, volume_names=volume_names),
+            render=_render_lines,
+        ),
     ]
     if not claim_names:
         return sections
@@ -1169,6 +1171,35 @@ def _uses_claims(pod: dict[str, Any], *, claim_names: set[str]) -> bool:
     """
     volumes = (pod.get("spec") or {}).get("volumes") or []
     return any((volume.get("persistentVolumeClaim") or {}).get("claimName") in claim_names for volume in volumes)
+
+
+def _volume_attachments(*, client: DynamicClient, volume_names: set[str]) -> list[str]:
+    """Render the volume attachments of the given persistent volumes.
+
+    A driver's refusal to attach is reported in the attachment's own status, whatever the driver is
+    called, so this is the backend-agnostic replacement for reading a driver's pods.
+
+    Args:
+        client (DynamicClient): Run client.
+        volume_names (set[str]): Persistent volumes behind the claims under test.
+
+    Returns:
+        list[str]: One line per attachment, empty when nothing is attached yet.
+    """
+    if not volume_names:
+        return []
+    lines: list[str] = []
+    for attachment in _list_items(VolumeAttachment, client=client):
+        spec = attachment.get("spec") or {}
+        if (spec.get("source") or {}).get("persistentVolumeName") not in volume_names:
+            continue
+        status = attachment.get("status") or {}
+        lines.append(
+            f"{_resource_name(attachment)}: driver={spec.get('attacher')} node={spec.get('nodeName')} "
+            f"attached={status.get('attached')} attachError={status.get('attachError')} "
+            f"detachError={status.get('detachError')}"
+        )
+    return lines
 
 
 def _named_instances(resource_cls: type[Resource], *, client: DynamicClient, names: set[str]) -> list[dict[str, Any]]:
