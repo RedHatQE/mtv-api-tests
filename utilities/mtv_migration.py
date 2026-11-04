@@ -722,7 +722,13 @@ def _dump_plan_storage_state(plan: Plan, *, reason: str) -> None:
     namespace = _plan_target_namespace(plan=plan)
     if namespace is None:
         return
-    dump_cluster_state(reason=reason, scope="storage", namespace=namespace, client=plan.client)
+    dump_cluster_state(
+        reason=reason,
+        scope="storage",
+        namespace=namespace,
+        client=plan.client,
+        subject=plan.name,
+    )
 
 
 def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]) -> None:

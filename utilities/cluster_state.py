@@ -84,6 +84,7 @@ _MAX_PENDING_PVC_DUMPS = 20
 # Events of a stalled migration can be hours old, so the lookback covers the whole wait budget.
 _EVENT_LOOKBACK_SECONDS = 24 * 60 * 60
 _GIT_PACKED_REFS_NAME = "packed-refs"
+_HTTP_BAD_REQUEST = 400
 # The wrapper exposes no per-request timeout, so a stalled API or OAuth endpoint would block past the
 # snapshot deadline and delay the error being reported. The socket default bounds every request made
 # inside the context; it is restored on exit.
@@ -239,6 +240,8 @@ class _Probes:
 
     Args:
         client (DynamicClient): Run client every probe reads the cluster with.
+        data_collector_path (Path | None): Artifact root; the configured root when None.
+        subject (str | None): Plan name the snapshot belongs to, for the file name and header.
         started (float): ``monotonic()`` value the snapshot deadline is measured from.
         skipped (int): Probes not run because the snapshot deadline had already passed.
     """
@@ -705,6 +708,51 @@ def _listing_sections(
     return sections
 
 
+def _previous_container_log(*, pod: Pod, container: str, tail_lines: int) -> str:
+    """Read a container's previous log, or explain that the instance is gone.
+
+    A restarted container's previous instance can already be garbage-collected, and the API answers
+    400 "previous terminated container ... not found". That is expected, not a failed probe.
+
+    Args:
+        pod (Pod): Pod wrapper to read from.
+        container (str): Container name.
+        tail_lines (int): Lines kept.
+
+    Returns:
+        str: The previous log, or a note when no previous instance is retained.
+
+    Raises:
+        ApiException: For any other rejection of the log request.
+    """
+    try:
+        return pod.log(container=container, tail_lines=tail_lines, previous=True)
+    except ApiException as exc:
+        if exc.status == _HTTP_BAD_REQUEST and "previous terminated container" in str(exc):
+            return f"[no previous instance retained for container '{container}']"
+        raise
+
+
+def _restarted_containers(*, pod: dict[str, Any]) -> set[str]:
+    """Return the containers that have a previous instance to read.
+
+    Asking for a previous log of a container that never restarted makes the API answer 400, which
+    would be recorded as a probe failure and make a healthy snapshot look broken.
+
+    Args:
+        pod (dict[str, Any]): Pod body, whose status carries one containerStatus per container.
+
+    Returns:
+        set[str]: Names of the containers whose restart count is above zero.
+    """
+    statuses = (pod.get("status") or {}).get("containerStatuses") or []
+    return {
+        status["name"]
+        for status in statuses
+        if isinstance(status, dict) and status.get("name") and (status.get("restartCount") or 0) > 0
+    }
+
+
 def _pod_log_sections(
     *, probes: _Probes, label: str, namespace: str, pod_prefixes: tuple[str, ...], tail_lines: int
 ) -> list[str]:
@@ -728,18 +776,29 @@ def _pod_log_sections(
     if pods is None:
         return [record]
 
-    sections = [record, probes.record(label=f"{label} summary", value=_pod_summary(pods=pods), render=_render_lines)]
+    # The summary already carries phase, readiness, restarts and node: the full pod bodies are the
+    # bulk of the artifact and add nothing the logs below do not show.
+    del record
+    sections = [probes.record(label=f"{label} summary", value=_pod_summary(pods=pods), render=_render_lines)]
     for pod in pods:
         pod_name = _resource_name(pod)
         if not pod_name.startswith(pod_prefixes):
             continue
         pod_wrapper = Pod(client=probes.client, name=pod_name, namespace=namespace)
+        restarted_containers = _restarted_containers(pod=pod)
         for container in (container.get("name") for container in (pod.get("spec") or {}).get("containers") or []):
-            for previous in (False, True):
+            sections.append(
+                probes.run(
+                    f"log {pod_name}/{container}",
+                    partial(pod_wrapper.log, container=container, tail_lines=tail_lines),
+                    render=str,
+                )
+            )
+            if container in restarted_containers:
                 sections.append(
                     probes.run(
-                        f"log {pod_name}/{container}{' (previous)' if previous else ''}",
-                        partial(pod_wrapper.log, container=container, tail_lines=tail_lines, previous=previous),
+                        f"log {pod_name}/{container} (previous)",
+                        partial(_previous_container_log, pod=pod_wrapper, container=container, tail_lines=tail_lines),
                         render=str,
                     )
                 )
@@ -818,6 +877,7 @@ def _dump_upgrade_scope(probes: _Probes) -> list[str]:
             label="MachineConfigPools",
             resource_cls=MachineConfigPool,
             summarise=_machine_config_pool_summary,
+            include_listing=False,
         ),
         *_listing_sections(
             probes=probes, label="Nodes", resource_cls=Node, summarise=_node_summary, include_listing=False
@@ -946,7 +1006,39 @@ def _worker_suffix() -> str:
     return f"-{worker}" if worker else ""
 
 
-def _write_snapshot(*, collector_path: Path, scope: str, reason: str, sections: list[str]) -> Path:
+def _snapshot_name(*, scope: str, reason: str, namespace: str | None, subject: str | None) -> str:
+    """Build a self-describing snapshot file name.
+
+    Analysis starts from the artifact tree, so the name carries what a reviewer needs to know which
+    test produced it without opening the file: time, scope, reason, and the plan and namespace the
+    failure belongs to.
+
+    Args:
+        scope (str): Snapshot scope (``upgrade`` or ``storage``).
+        reason (str): Failure reason.
+        namespace (str | None): Migration target namespace, when the scope has one.
+        subject (str | None): Plan name the snapshot belongs to, when the scope has one.
+
+    Returns:
+        str: File name of the snapshot.
+    """
+    parts = [utc_timestamp(), scope, _reason_slug(reason)]
+    if subject:
+        parts.append(_reason_slug(subject))
+    if namespace:
+        parts.append(_reason_slug(namespace))
+    return "-".join(parts) + _worker_suffix() + ".txt"
+
+
+def _write_snapshot(
+    *,
+    collector_path: Path,
+    scope: str,
+    reason: str,
+    sections: list[str],
+    namespace: str | None = None,
+    subject: str | None = None,
+) -> Path:
     """Write one snapshot file.
 
     Args:
@@ -954,16 +1046,19 @@ def _write_snapshot(*, collector_path: Path, scope: str, reason: str, sections: 
         scope (str): Snapshot scope, used in the file name and header.
         reason (str): Failure reason, used in the file name and header.
         sections (list[str]): Rendered probe records, written in order.
+        namespace (str | None): Migration target namespace, recorded when known.
+        subject (str | None): Plan name the snapshot belongs to, recorded when known.
 
     Returns:
         Path: Path of the written snapshot.
     """
     directory = collector_path / _SNAPSHOT_DIRECTORY
     directory.mkdir(parents=True, exist_ok=True)
-    snapshot_path = directory / f"{utc_timestamp()}-{scope}-{_reason_slug(reason)}{_worker_suffix()}.txt"
+    snapshot_path = directory / _snapshot_name(scope=scope, reason=reason, namespace=namespace, subject=subject)
     collected = utc_timestamp()
     header = (
         f"# reason: {reason}\n# scope: {scope}\n"
+        f"# plan: {subject or 'n/a'}\n# namespace: {namespace or 'n/a'}\n"
         f"# client: run DynamicClient through ocp_resources wrappers\n# collected: {collected}"
     )
     text = f"{header}\n\n{_SECTION_SEPARATOR.join(sections)}\n"
@@ -976,7 +1071,14 @@ def _write_snapshot(*, collector_path: Path, scope: str, reason: str, sections: 
 
 
 def _collect_and_write(
-    *, collector_path: Path, reason: str, scope: str, collect: Callable[[_Probes], list[str]], client: DynamicClient
+    *,
+    collector_path: Path,
+    reason: str,
+    scope: str,
+    collect: Callable[[_Probes], list[str]],
+    client: DynamicClient,
+    namespace: str | None = None,
+    subject: str | None = None,
 ) -> None:
     """Write one snapshot for a scope and never raise.
 
@@ -986,6 +1088,8 @@ def _collect_and_write(
         scope (str): Snapshot scope, used in the file name and header.
         collect (Callable[[_Probes], list[str]]): Probe collector of the scope.
         client (DynamicClient): Run client every probe reads the cluster with.
+        namespace (str | None): Migration target namespace, recorded when known.
+        subject (str | None): Plan name the snapshot belongs to, recorded when known.
     """
     probes = _Probes(client=client)
     try:
@@ -996,6 +1100,8 @@ def _collect_and_write(
             scope=scope,
             reason=reason,
             sections=_with_deadline_record(sections=collect(probes), probes=probes),
+            namespace=namespace,
+            subject=subject,
         )
     except (AttributeError, KeyError, OSError, TypeError, ValueError) as exc:
         LOGGER.warning(f"Cluster state snapshot for scope '{scope}' (reason '{reason}') failed: {exc}")
@@ -1011,6 +1117,7 @@ def dump_cluster_state(
     namespace: str | None = None,
     client: DynamicClient,
     data_collector_path: Path | None = None,
+    subject: str | None = None,
 ) -> None:
     """Write a bounded cluster-state snapshot for a real failure.
 
@@ -1040,7 +1147,15 @@ def dump_cluster_state(
     if collector_path is None:
         return
 
-    _collect_and_write(collector_path=collector_path, reason=reason, scope=scope, collect=collect, client=client)
+    _collect_and_write(
+        collector_path=collector_path,
+        reason=reason,
+        scope=scope,
+        collect=collect,
+        client=client,
+        namespace=namespace,
+        subject=subject,
+    )
 
 
 def _session_start_cluster_sections(probes: _Probes) -> list[str]:
@@ -1069,16 +1184,31 @@ def _session_start_cluster_sections(probes: _Probes) -> list[str]:
             label="MachineConfigPools",
             resource_cls=MachineConfigPool,
             summarise=_machine_config_pool_summary,
+            include_listing=False,
         ),
         *_listing_sections(
             probes=probes, label="Nodes", resource_cls=Node, summarise=_node_summary, include_listing=False
         ),
     ]
     sections.extend(
-        _listing_sections(probes=probes, label="MTV CSVs", resource_cls=ClusterServiceVersion, namespace=_MTV_NAMESPACE)
+        _listing_sections(
+            probes=probes,
+            label="MTV CSVs",
+            resource_cls=ClusterServiceVersion,
+            namespace=_MTV_NAMESPACE,
+            summarise=_cluster_service_version_summary,
+            include_listing=False,
+        )
     )
     sections.extend(
-        _listing_sections(probes=probes, label="CNV CSVs", resource_cls=ClusterServiceVersion, namespace=_CNV_NAMESPACE)
+        _listing_sections(
+            probes=probes,
+            label="CNV CSVs",
+            resource_cls=ClusterServiceVersion,
+            namespace=_CNV_NAMESPACE,
+            summarise=_cluster_service_version_summary,
+            include_listing=False,
+        )
     )
     return sections
 
