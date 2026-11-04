@@ -38,6 +38,7 @@ from ocp_resources.pod import Pod
 from ocp_resources.resource import NamespacedResource, Resource
 from ocp_resources.storage_class import StorageClass
 from ocp_resources.user import User
+from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import ClusterStateProbeTimeout
@@ -62,7 +63,8 @@ _CLIENT_BUILD_BUDGET_SECONDS = 60
 _TRUNCATION_MARKER = "[truncated: {omitted} bytes omitted]"
 _MCO_NAMESPACE = "openshift-machine-config-operator"
 _STORAGE_NAMESPACE = "openshift-storage"
-_MTV_NAMESPACE = "openshift-mtv"
+# The MTV namespace is configurable (--tc=mtv_namespace:), so it is read from the run config.
+_MTV_NAMESPACE_CONFIG_KEY = "mtv_namespace"
 _CNV_NAMESPACE = "openshift-cnv"
 _MACHINE_CONFIG_OPERATOR = "machine-config"
 _CLUSTER_VERSION_NAME = "version"
@@ -79,18 +81,21 @@ _CSI_LOG_TAIL_LINES = 3000
 _MCO_LOG_TAIL_LINES = 500
 # A snapshot of one pod's current and previous log covers an operator restart; daemonsets that are
 # not part of the MCO or the ceph-csi path would only add noise.
-_MCO_POD_PREFIXES = ("machine-config-operator-", "machine-config-daemon-", "machine-config-controller-")
+# The MCO pods carry a stable k8s-app label; their names encode the node and change between
+# releases, so the label - not the name - is what a snapshot may rely on.
+_MCO_POD_LABEL_SELECTOR = "k8s-app in (machine-config-operator,machine-config-controller,machine-config-daemon)"
 # CSI pod names differ across ODF versions (csi-rbdplugin-provisioner-* upstream, and
 # openshift-storage.rbd.csi.ceph.com-ctrlplugin-* / -nodeplugin-* in ODF), so the pods are selected
 # by what they run - a CSI sidecar or the rbd driver container - rather than by a name prefix that
 # silently matches nothing on a different deployment.
-_CSI_POD_NAME_FRAGMENTS = ("rbd.csi.ceph.com", "csi-rbdplugin")
 # Only the two containers that explain a refused volume: the provisioner answers the PVC and the
 # driver performs the RPC. The attacher/resizer/snapshotter sidecars add megabytes of unrelated log.
 _CSI_CONTAINER_NAMES = ("csi-provisioner", "csi-rbdplugin")
 # The node plugin runs once per node, so its tail is kept short: the volume-refusal evidence lives in
 # the controller plugin, and 3+ nodes of 3000-line tails alone exceeded the snapshot budget.
-_CSI_NODE_POD_FRAGMENTS = ("nodeplugin",)
+# The controller plugin runs the provisioner sidecar; the per-node plugin does not, which is how the
+# two are told apart without relying on either deployment's pod naming.
+_CSI_CONTROLLER_CONTAINER = "csi-provisioner"
 _CSI_NODE_LOG_TAIL_LINES = 500
 # Non-Bound PVC bodies carry their own event history and can be tens of KiB each on a full disk;
 # the listing above already names every PVC with its phase.
@@ -443,7 +448,11 @@ def _named_instance(
 
 
 def _list_items(
-    resource_cls: type[Resource], *, client: DynamicClient, namespace: str | None = None
+    resource_cls: type[Resource],
+    *,
+    client: DynamicClient,
+    namespace: str | None = None,
+    label_selector: str | None = None,
 ) -> list[dict[str, Any]]:
     """Read one kind's listing in a single request.
 
@@ -454,13 +463,17 @@ def _list_items(
         resource_cls (type[Resource]): Wrapper class of the kind; it resolves the API version.
         client (DynamicClient): Run client.
         namespace (str | None): Namespace of a namespaced kind; None lists every namespace.
+        label_selector (str | None): Server-side label filter, so a caller never has to match on
+            object names, which differ between product versions.
 
     Returns:
         list[dict[str, Any]]: The listed objects as plain dicts, empty when the kind has none.
     """
     api = _wrapper(resource_cls, client=client, name=_KIND_HANDLE_NAME, namespace=namespace).api
-    listing = api.get(namespace=namespace) if namespace else api.get()
-    return [item.to_dict() for item in listing.items]
+    query: dict[str, Any] = {"label_selector": label_selector} if label_selector else {}
+    if namespace:
+        query["namespace"] = namespace
+    return [item.to_dict() for item in api.get(**query).items]
 
 
 def _resource_name(instance: dict[str, Any]) -> str:
@@ -869,8 +882,7 @@ def _pod_log_sections(
     label: str,
     namespace: str,
     tail_lines: int,
-    pod_prefixes: tuple[str, ...] = (),
-    pod_name_fragments: tuple[str, ...] = (),
+    label_selector: str | None = None,
     container_names: tuple[str, ...] = (),
 ) -> list[str]:
     """Collect the pods of a namespace and every container log of the matching ones.
@@ -884,16 +896,17 @@ def _pod_log_sections(
         label (str): Readable label of the pod listing.
         namespace (str): Namespace holding the pods.
         tail_lines (int): Lines kept per container log.
-        pod_prefixes (tuple[str, ...]): Pod name prefixes worth collecting.
-        pod_name_fragments (tuple[str, ...]): Name fragments worth collecting, for deployments whose
-            pod names differ across versions.
+        label_selector (str | None): Server-side label filter selecting the pods to read.
         container_names (tuple[str, ...]): Container names worth collecting, matched per pod so a
             renamed pod is still selected by the sidecar it runs.
 
     Returns:
         list[str]: The pod listing, its summary, and one record per container log.
     """
-    record, pods = probes.fetch(label=label, probe=partial(_list_items, Pod, client=probes.client, namespace=namespace))
+    record, pods = probes.fetch(
+        label=label,
+        probe=partial(_list_items, Pod, client=probes.client, namespace=namespace, label_selector=label_selector),
+    )
     if pods is None:
         return [record]
 
@@ -904,23 +917,13 @@ def _pod_log_sections(
     for pod in pods:
         pod_name = _resource_name(pod)
         containers = [container.get("name", "") for container in (pod.get("spec") or {}).get("containers") or []]
-        wanted = (
-            pod_name.startswith(pod_prefixes)
-            or any(fragment in pod_name for fragment in pod_name_fragments)
-            or any(name in container_names for name in containers)
-        )
+        wanted = not container_names or any(name in container_names for name in containers)
         if not wanted:
             continue
         pod_wrapper = Pod(client=probes.client, name=pod_name, namespace=namespace)
-        pod_tail_lines = (
-            _CSI_NODE_LOG_TAIL_LINES
-            if any(fragment in pod_name for fragment in _CSI_NODE_POD_FRAGMENTS)
-            else tail_lines
-        )
+        pod_tail_lines = tail_lines if _CSI_CONTROLLER_CONTAINER in containers else _CSI_NODE_LOG_TAIL_LINES
         restarted_containers = _restarted_containers(pod=pod)
-        selected_containers = [
-            name for name in containers if not container_names or name in container_names or pod_prefixes
-        ]
+        selected_containers = [name for name in containers if not container_names or name in container_names]
         for container in selected_containers:
             sections.append(
                 probes.run(
@@ -1025,24 +1028,46 @@ def _dump_upgrade_scope(probes: _Probes) -> list[str]:
             probes=probes,
             label=f"Pods in {_MCO_NAMESPACE}",
             namespace=_MCO_NAMESPACE,
-            pod_prefixes=_MCO_POD_PREFIXES,
+            label_selector=_MCO_POD_LABEL_SELECTOR,
             tail_lines=_MCO_LOG_TAIL_LINES,
         ),
     ]
     sections.extend(_listing_sections(probes=probes, label="IDMS", resource_cls=ImageDigestMirrorSet))
     sections.extend(_listing_sections(probes=probes, label="ICSP", resource_cls=ImageContentSourcePolicy))
     sections.append(probes.run("Image cluster", partial(_cluster_image, client=probes.client)))
-    sections.extend(
-        _listing_sections(
-            probes=probes,
-            label="MTV CSVs",
-            resource_cls=ClusterServiceVersion,
-            namespace=_MTV_NAMESPACE,
-            summarise=_cluster_service_version_summary,
-            include_listing=False,
-        )
-    )
+    sections.extend(_mtv_csv_sections(probes=probes))
     return sections
+
+
+def _mtv_csv_sections(*, probes: _Probes) -> list[str]:
+    """Render the MTV ClusterServiceVersions installed in the configured MTV namespace.
+
+    The namespace comes from the run configuration, so it is resolved inside the probe: a missing
+    key outside pytest must cost one failed record, not the whole snapshot.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+
+    Returns:
+        list[str]: The CSV summary record, or a failure record when the namespace is unknown.
+    """
+
+    def _mtv_csvs() -> list[dict[str, Any]]:
+        """Read the MTV ClusterServiceVersions.
+
+        Returns:
+            list[dict[str, Any]]: CSV bodies installed in the configured MTV namespace.
+        """
+        return _list_items(
+            ClusterServiceVersion,
+            client=probes.client,
+            namespace=py_config[_MTV_NAMESPACE_CONFIG_KEY],
+        )
+
+    record, csvs = probes.fetch(label="MTV CSVs", probe=_mtv_csvs)
+    if csvs is None:
+        return [record]
+    return [probes.record(label="MTV CSVs summary", value=_cluster_service_version_summary(csvs), render=_render_lines)]
 
 
 def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
@@ -1096,7 +1121,6 @@ def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
             probes=probes,
             label=f"Pods in {_STORAGE_NAMESPACE}",
             namespace=_STORAGE_NAMESPACE,
-            pod_name_fragments=_CSI_POD_NAME_FRAGMENTS,
             container_names=_CSI_CONTAINER_NAMES,
             tail_lines=_CSI_LOG_TAIL_LINES,
         )
@@ -1330,16 +1354,7 @@ def _session_start_cluster_sections(probes: _Probes) -> list[str]:
             probes=probes, label="Nodes", resource_cls=Node, summarise=_node_summary, include_listing=False
         ),
     ]
-    sections.extend(
-        _listing_sections(
-            probes=probes,
-            label="MTV CSVs",
-            resource_cls=ClusterServiceVersion,
-            namespace=_MTV_NAMESPACE,
-            summarise=_cluster_service_version_summary,
-            include_listing=False,
-        )
-    )
+    sections.extend(_mtv_csv_sections(probes=probes))
     sections.extend(
         _listing_sections(
             probes=probes,
