@@ -319,6 +319,25 @@ These issues usually show up as setup failures, plan readiness timeouts, or earl
 - Hook execution fails at `PreHook` or `PostHook`.
 - Warm migration timing is wrong for the environment.
 
+### Starting a Migrated VM
+
+`OCPProvider.vm_dict()` starts the destination VM and waits for it to run before any post-migration check reads its
+power state. Both waits are bounded and sample the VM's `printableStatus`, because the intermediate statuses are normal
+and not failures:
+
+- The power-state read waits up to 120 seconds for `Running` or `Stopped` before recording `power_state`.
+- The start verdict waits up to 300 seconds for `Running`. `Starting` with the condition
+  `Ready: GuestNotRunning` only means the guest has not booted yet — the wrapper's `status.ready` turns true before
+  `printableStatus` reaches `Running`, so a single sample is not a valid verdict. A VM still in `Starting` when the
+  300-second wait expires does raise `ValueError`; the state is tolerated, not ignored.
+- Only a confirmed `Stopped` reading is recorded as `power_state="off"` — that value drives the restore-to-off path, so
+  an unresolved pre-start status is left unset and becomes `on` once the start wait confirms `Running`.
+- The "did not reach status" `ValueError` reports the last observed status together with the VM conditions, so a
+  genuine start failure names the state the VM ended in instead of the first sample.
+
+The 300-second bound matches the explicit `timeout=300` the copy-offload tests already use for slow-booting multi-disk
+VMs. If a VM legitimately needs longer, raise the timeout rather than reintroducing a single-sample check.
+
 The repo’s default timeout config is important here:
 
 - `plan_wait_timeout` defaults to `3600` seconds.
