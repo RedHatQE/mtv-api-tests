@@ -13,7 +13,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from exceptions.exceptions import MtvUpgradeError
@@ -226,14 +225,29 @@ def run_mtv_upgrade(
             with a non-zero status or times out.
     """
     password = _require_cluster_password()
+    # Every cluster credential is resolved the same way (pytest config, then the CLUSTER_* env var);
+    # the CLI passes the username and password only through the environment, so reading pytest config
+    # directly here would KeyError before the script starts.
+    username = resolve_cluster_credential("cluster_username")
+    cluster_host = resolve_cluster_credential("cluster_host")
+    if not username or not username.strip():
+        raise MtvUpgradeError(
+            "CLUSTER_USERNAME is missing or empty: neither 'cluster_username' in pytest config nor the "
+            "CLUSTER_USERNAME environment variable is set, so the upgrade script cannot log in"
+        )
+    if not cluster_host or not cluster_host.strip():
+        raise MtvUpgradeError(
+            "CLUSTER_HOST is missing or empty: neither 'cluster_host' in pytest config nor the CLUSTER_HOST "
+            "environment variable is set, so the upgrade script has no API server to upgrade"
+        )
     env = os.environ.copy()
     env.update({
         "MTV_VERSION": mtv_version,
         "MTV_SOURCE": mtv_source.upper(),
         "IMAGE_INDEX": image_index,
-        "CLUSTER_USERNAME": py_config["cluster_username"],
+        "CLUSTER_USERNAME": username,
         "CLUSTER_PASSWORD": password,
-        "CLUSTER_API_URL": py_config["cluster_host"],
+        "CLUSTER_API_URL": cluster_host,
         "DEBUG": "true",
     })
 
