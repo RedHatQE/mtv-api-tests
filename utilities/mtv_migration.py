@@ -28,6 +28,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.cluster_state import dump_cluster_state
+from utilities.data_collector import data_collector_path
 from utilities.naming import resolve_destination_vm_name
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
@@ -692,6 +693,38 @@ def _get_unschedulable_destination_vm(plan: Plan) -> tuple[str, str] | None:
     return None
 
 
+def _plan_target_namespace(plan: Plan) -> str | None:
+    """Read the migration target namespace without masking the failure being reported.
+
+    Args:
+        plan (Plan): Plan whose migration is being waited on.
+
+    Returns:
+        str | None: The target namespace, or None when the read failed or the spec carries none.
+    """
+    try:
+        return plan.instance.spec.targetNamespace
+    except (ApiException, DynamicApiError, TypeError, ValueError) as err:
+        LOGGER.info(f"Could not read the target namespace of plan '{plan.name}', skipping the snapshot: {err}")
+        return None
+
+
+def _dump_plan_storage_state(plan: Plan, *, reason: str) -> None:
+    """Collect a storage snapshot for a plan failure, at no cost when evidence is disabled.
+
+    Args:
+        plan (Plan): Plan the failure belongs to.
+        reason (str): Short cause, used in the snapshot file name and header.
+    """
+    # Resolved before the namespace so --skip-data-collector costs no API request either.
+    if data_collector_path() is None:
+        return
+    namespace = _plan_target_namespace(plan=plan)
+    if namespace is None:
+        return
+    dump_cluster_state(reason=reason, scope="storage", namespace=namespace, client=plan.client)
+
+
 def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]) -> None:
     """Count consecutive destination scheduler rejections per VM and fail once they are confirmed.
 
@@ -723,11 +756,7 @@ def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]
         f"(check {hits}/{_UNSCHEDULABLE_CONFIRMATIONS_REQUIRED}): {scheduler_message}"
     )
     if hits >= _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED:
-        dump_cluster_state(
-            reason=f"vm-unschedulable-{vm_name}",
-            scope="storage",
-            namespace=plan.instance.spec.targetNamespace,
-        )
+        _dump_plan_storage_state(plan=plan, reason=f"vm-unschedulable-{vm_name}")
         raise MigrationVmUnschedulableError(vm_name=vm_name, scheduler_message=scheduler_message)
 
 
@@ -783,11 +812,7 @@ def wait_for_migration_complate(
         # Storage evidence is collected for a wait timeout only: expected-failure tests raise the
         # MigrationPlanExecError below on purpose and must not pay for a dump.
         if isinstance(err, TimeoutExpiredError):
-            dump_cluster_state(
-                reason="plan-wait-timeout",
-                scope="storage",
-                namespace=plan.instance.spec.targetNamespace,
-            )
+            _dump_plan_storage_state(plan=plan, reason="plan-wait-timeout")
         raise MigrationPlanExecError(
             f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
         )

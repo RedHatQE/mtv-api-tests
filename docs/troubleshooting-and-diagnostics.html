@@ -532,8 +532,10 @@ and turns the feature off instead of failing the run.
   the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it.</p>
 </li>
 <li>
-<p><code>.data-collector/session-start/run-identity.txt</code>: the checkout revision, the pytest invocation (with <code>--tc</code> values, cluster password redacted), <code>oc whoami</code>, and whether
-  <code>--skip-teardown</code> / <code>--skip-data-collector</code> were set. Written once per run, like <code>cluster.txt</code>.</p>
+<p><code>.data-collector/session-start/run-identity.txt</code>: the checkout revision, the pytest invocation, <code>oc whoami</code>, and whether
+  <code>--skip-teardown</code> / <code>--skip-data-collector</code> were set. Written once per run, like <code>cluster.txt</code>. Credentials never reach this file: the value of every credential-ish <code>--tc</code>
+  (<code>password</code>, <code>token</code>, <code>secret</code>, <code>api_key</code>, <code>apikey</code>, <code>credential</code>), any URL userinfo (<code>scheme://user:pass@host</code> → <code>scheme://***@host</code>) and the resolved cluster password are
+  replaced with <code>***</code>.</p>
 </li>
 <li>
 <p><code>.data-collector/cluster-state/&lt;timestamp&gt;-&lt;scope&gt;-&lt;reason&gt;[-&lt;worker&gt;].txt</code>: bounded cluster snapshots written just before a real failure is raised (see
@@ -573,6 +575,21 @@ failed” to “which exact <code>Plan</code>, <code>Provider</code>, <code>Stor
 failing job to learn the cluster state. It is observation only and never raises: every <code>oc</code> command runs through one <code>subprocess</code> helper with a 20-second timeout, failures are
 logged into the snapshot itself, and the original exception is always the error you see. Each invocation writes one file,
 <code>cluster-state/&lt;UTC timestamp&gt;-&lt;scope&gt;-&lt;reason slug&gt;[-&lt;xdist worker&gt;].txt</code>, so parallel workers cannot collide.</p>
+<p>Two limits keep a snapshot from delaying the error it documents:</p>
+<ul>
+<li>
+<p><strong>Total deadline.</strong> One snapshot has 120 seconds of budget in total. Every command gets <code>min(20 seconds, budget left)</code>, and once the budget expires the remaining probes are not
+  run: the file ends with <code># snapshot deadline reached after &lt;N&gt;s of 120s, &lt;M&gt; probes skipped</code>. A short snapshot is therefore visibly truncated, never silently mistaken for a
+  healthy cluster.</p>
+</li>
+<li>
+<p><strong>Ephemeral kubeconfig.</strong> <code>oc</code> would otherwise use the ambient kubeconfig, which a container or credential-only run does not have — every probe would fail with "no context" and
+  the snapshot would be empty. When the caller passes the run client (<code>client=plan.client</code>), the probes use a kubeconfig built from that client's configuration (server, token or
+  client certificate, CA or <code>insecure-skip-tls-verify</code>) in a temporary directory, mode <code>0600</code>, passed as <code>--kubeconfig=&lt;path&gt;</code> to every <code>oc</code> call and deleted when the snapshot
+  ends. It is never written into the artifact tree, and the token is never logged; the snapshot header records <code># oc context: temporary kubeconfig &lt;path&gt; (deleted after this
+  snapshot)</code> or that the ambient context was used.</p>
+</li>
+</ul>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -594,6 +611,8 @@ logged into the snapshot itself, and the original exception is always the error 
 </tr>
 </tbody>
 </table></div>
+<p>The target namespace is read defensively and the dump is skipped when the read fails or <code>--skip-data-collector</code> is set, so collecting evidence can never replace the
+<code>MigrationPlanExecError</code> / <code>MigrationVmUnschedulableError</code> the caller is supposed to see.</p>
 <p>Deliberately <strong>not</strong> dumped: the generic <code>MigrationPlanExecError</code>. Expected-failure tests (<code>tests/plan_lifecycle/</code>, <code>TestPostHookRetainFailedVm</code>, resume-conversion) raise it on
 purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under <code>--skip-data-collector</code>.</p>
 <h2 id="must-gather-support">Must-Gather Support</h2>

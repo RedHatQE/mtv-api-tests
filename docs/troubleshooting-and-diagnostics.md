@@ -216,8 +216,10 @@ The most important files are:
 - `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, `ClusterOperator`, the `MachineConfigPool` manifests plus per-pool counters
   and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
   the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it.
-- `.data-collector/session-start/run-identity.txt`: the checkout revision, the pytest invocation (with `--tc` values, cluster password redacted), `oc whoami`, and whether
-  `--skip-teardown` / `--skip-data-collector` were set. Written once per run, like `cluster.txt`.
+- `.data-collector/session-start/run-identity.txt`: the checkout revision, the pytest invocation, `oc whoami`, and whether
+  `--skip-teardown` / `--skip-data-collector` were set. Written once per run, like `cluster.txt`. Credentials never reach this file: the value of every credential-ish `--tc`
+  (`password`, `token`, `secret`, `api_key`, `apikey`, `credential`), any URL userinfo (`scheme://user:pass@host` → `scheme://***@host`) and the resolved cluster password are
+  replaced with `***`.
 - `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see
   [Failure Evidence Dumps](#failure-evidence-dumps)).
 - `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output with `CLUSTER_PASSWORD` redacted. The child always writes
@@ -251,10 +253,24 @@ failing job to learn the cluster state. It is observation only and never raises:
 logged into the snapshot itself, and the original exception is always the error you see. Each invocation writes one file,
 `cluster-state/<UTC timestamp>-<scope>-<reason slug>[-<xdist worker>].txt`, so parallel workers cannot collide.
 
+Two limits keep a snapshot from delaying the error it documents:
+
+- **Total deadline.** One snapshot has 120 seconds of budget in total. Every command gets `min(20 seconds, budget left)`, and once the budget expires the remaining probes are not
+  run: the file ends with `# snapshot deadline reached after <N>s of 120s, <M> probes skipped`. A short snapshot is therefore visibly truncated, never silently mistaken for a
+  healthy cluster.
+- **Ephemeral kubeconfig.** `oc` would otherwise use the ambient kubeconfig, which a container or credential-only run does not have — every probe would fail with "no context" and
+  the snapshot would be empty. When the caller passes the run client (`client=plan.client`), the probes use a kubeconfig built from that client's configuration (server, token or
+  client certificate, CA or `insecure-skip-tls-verify`) in a temporary directory, mode `0600`, passed as `--kubeconfig=<path>` to every `oc` call and deleted when the snapshot
+  ends. It is never written into the artifact tree, and the token is never logged; the snapshot header records `# oc context: temporary kubeconfig <path> (deleted after this
+  snapshot)` or that the ambient context was used.
+
 | Scope | Where it fires | What it collects |
 | --- | --- | --- |
 | `upgrade` | The upgrade script hits the outer wait budget, or exits non-zero after its own wait times out | `clusterversion`, `co`, `co machine-config -o yaml`, `mcp -o yaml` plus per-pool `ready`/`updated`/`degraded`/`unavailable` counters and conditions, nodes, Machine Config Operator pods and their logs, `idms`, `icsp`, `image.config cluster`, and the `openshift-mtv` CSV |
 | `storage` | A migration wait times out, or a migrated VM is confirmed unschedulable | `pvc,dv,pv -o wide` for the target namespace plus `-o yaml` for the non-Bound PVCs only, namespace events, storage classes, `openshift-storage` pods, and the ceph-csi provisioner log for all containers (`--all-containers --tail=3000`), followed by the `--previous` container log when one exists |
+
+The target namespace is read defensively and the dump is skipped when the read fails or `--skip-data-collector` is set, so collecting evidence can never replace the
+`MigrationPlanExecError` / `MigrationVmUnschedulableError` the caller is supposed to see.
 
 Deliberately **not** dumped: the generic `MigrationPlanExecError`. Expected-failure tests (`tests/plan_lifecycle/`, `TestPostHookRetainFailedVm`, resume-conversion) raise it on
 purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under `--skip-data-collector`.

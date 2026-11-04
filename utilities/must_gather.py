@@ -326,9 +326,14 @@ def _run_inspect_dump(data_collector_path: Path) -> bool:
     # so two workers can never write into the same tree and interleave their diagnostics.
     claim = collector_root / _INSPECT_CLAIM_DIR_NAME
     try:
+        collector_root.mkdir(parents=True, exist_ok=True)
         claim.mkdir()
     except FileExistsError:
         LOGGER.info(f"Inspect dump already claimed at {claim}, skipping")
+        return False
+    except OSError as ex:
+        # A read-only or full collector must not abort the gather this dump only documents.
+        LOGGER.warning(f"Could not claim the inspect dump directory '{claim}': {ex}")
         return False
 
     dest_dir = collector_root / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}{_inspect_worker_suffix()}"

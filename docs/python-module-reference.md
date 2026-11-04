@@ -165,13 +165,16 @@ from `resolve_upgrade_timeout()`: the `--mtv-upgrade-timeout` option, then `MTV_
 internal waits and the script reports its own timeout instead of being killed by the harness. The script writes into a temporary directory that is deleted before the function
 returns; only the redacted text is persisted under `<data-collector>/upgrade-script-<timestamp>/`, so `CLUSTER_PASSWORD` never reaches the artifact tree, and `MtvUpgradeError`
 carries the tail of both redacted logs plus those paths. A missing or empty `cluster_password` raises before the script starts. A `scope="upgrade"` cluster-state snapshot is
-written before both the outer-timeout raise and the non-zero-exit raise. Under `--skip-data-collector` no file is written: the child inherits the pytest capture streams and the
-error says the output was not captured.
+written before both the outer-timeout raise and the non-zero-exit raise. Under `--skip-data-collector` nothing is persisted: the child still writes its stdout and stderr into a
+temporary directory that is deleted before the function returns, and the error carries the redacted tails of both streams.
 
 ### `utilities/cluster_state.py`
 
-`dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=...)` writes one timestamped, bounded snapshot per failure and never raises, so the failing exception
-stays the error the caller sees. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt` and `run-identity.txt` once per session from
+`dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=..., client=...)` writes one timestamped, bounded snapshot per failure and never raises, so the failing
+exception stays the error the caller sees. Each snapshot also has a total budget (`_SNAPSHOT_DEADLINE_SECONDS`, 120 seconds): probes stop once it expires and the file closes with a
+"snapshot deadline reached … N probes skipped" record, so a hanging cluster cannot delay the original error by minutes. Passing `client` makes the probes use an ephemeral kubeconfig
+built from the run client inside a temporary directory, because a container run has no ambient kubeconfig for `oc` to use; without a client (or without a server in its
+configuration) the ambient `oc` context is used and the snapshot header records which one was in effect. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt` and `run-identity.txt` once per session from
 `pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`; only the xdist controller (or the sole process without xdist) wipes the
 data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces an existing snapshot.
 

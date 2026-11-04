@@ -125,8 +125,10 @@ def _write_redacted_logs(*, artifact_dir: Path, stdout: str, stderr: str) -> tup
     for name, content in ((_UPGRADE_STDOUT_LOG_NAME, stdout), (_UPGRADE_STDERR_LOG_NAME, stderr)):
         path = artifact_dir / name
         try:
-            path.write_text(content)
-        except OSError as exc:
+            # The text came from an ``errors="replace"`` decode, so a non-UTF-8 locale would make
+            # the default encoding fail with UnicodeEncodeError instead of writing the log.
+            path.write_text(content, encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
             # A full or read-only collector must never mask the upgrade failure this artifact
             # describes; the tails are still in the raised error, so losing a file only costs the
             # full stream - but the message must not claim a file that was not written.
