@@ -7,6 +7,7 @@ import filelock
 import pytest
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.hyperconverged import HyperConverged
+from ocp_resources.kubevirt import KubeVirt
 from ocp_resources.provider import Provider
 from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
@@ -41,6 +42,7 @@ from utilities.forklift_controller_populator import (
 )
 from utilities.provider_inventory import wait_for_shared_rdm_disk_in_forklift_inventory
 from utilities.resources import create_and_store_resource
+from timeout_sampler import TimeoutSampler
 from utilities.utils import resolve_providers_json_path
 
 if TYPE_CHECKING:
@@ -337,7 +339,7 @@ def shared_rdm_disks(
     vmware_cloud_init_ready: None,
     rdm_config: None,
     prepared_plan: dict[str, Any],
-    source_provider: BaseProvider,
+    source_provider: VMWareProvider,
     source_provider_inventory: ForkliftInventory,
 ) -> None:
     """Power off cloud-init-ready VMs and link their shared physical RDM LUN.
@@ -346,24 +348,23 @@ def shared_rdm_disks(
     which vSphere backs with a distinct per-VM mapping file -- Forklift never recognizes these as
     shared (see ``VMWareProvider.add_shared_rdm_disk`` docstring). This runs post-clone to attach
     the owner VM's (``migrateSharedDisks: True``) and consumer VM's (``migrateSharedDisks: False``)
-    RDM devices to the identical mapping file, then waits for Forklift inventory to reflect it.
-    Cloud-init readiness is required before both cloned VMs are gracefully shut down, so the
-    shared-disk Plan does not encounter running VMs during readiness checks.
+    RDM devices to the identical mapping file in physical compatibility mode (the shared SCSI
+    controllers use physicalSharing bus sharing, which pairs with physical-mode RDMs), then waits
+    for Forklift inventory to reflect it. Cloud-init readiness is required before both cloned VMs
+    are gracefully shut down, so the shared-disk Plan does not encounter running VMs during
+    readiness checks.
 
     Args:
         vmware_cloud_init_ready (None): Ensures cloud-init has completed before shutdown.
         rdm_config (None): Validates that the RDM LUN is configured before attachment.
         prepared_plan (dict[str, Any]): Prepared plan with VMs already cloned.
-        source_provider (BaseProvider): Source provider instance.
+        source_provider (VMWareProvider): Source provider instance.
         source_provider_inventory (ForkliftInventory): Inventory client for the source provider.
 
     Raises:
-        ValueError: If the source provider is not VMware, or the plan is missing a VM configured
-            as the shared-RDM owner or consumer (``migrateSharedDisks`` True/False).
+        ValueError: If the plan is missing a VM configured as the shared-RDM owner or consumer
+            (``migrateSharedDisks`` True/False).
     """
-    if not isinstance(source_provider, VMWareProvider):
-        raise ValueError(f"shared_rdm_disks requires a VMware source provider, got '{source_provider.type}'")
-
     virtual_machines = prepared_plan["virtual_machines"]
     owner_configs = [vm for vm in virtual_machines if vm.get("migrateSharedDisks") is True]
     consumer_configs = [vm for vm in virtual_machines if vm.get("migrateSharedDisks") is False]
@@ -376,11 +377,11 @@ def shared_rdm_disks(
     owner_config = owner_configs[0]
     consumer_config = consumer_configs[0]
 
-    owner_vm = source_provider.get_vm_by_name(query=owner_config["name"])
-    consumer_vm = source_provider.get_vm_by_name(query=consumer_config["name"])
-    source_provider.shutdown_vm_guest(vm=owner_vm)
-    source_provider.shutdown_vm_guest(vm=consumer_vm)
-    source_provider.add_shared_rdm_disk(owner_vm=owner_vm, consumer_vm=consumer_vm, rdm_type="virtual")
+    source_provider.link_shared_rdm_disks(
+        owner_vm_name=owner_config["name"],
+        consumer_vm_name=consumer_config["name"],
+        rdm_type="physical",
+    )
 
     wait_for_shared_rdm_disk_in_forklift_inventory(
         source_provider=source_provider,
@@ -474,6 +475,35 @@ def scsi_persistent_reservation_hco(ocp_admin_client: DynamicClient) -> Generato
             raise ValueError(
                 f"HyperConverged '{hco.name}' patch for featureGates.persistentReservation did not take effect"
             )
+
+        # HCO propagates the gate to the KubeVirt CR (kubevirt-kubevirt-hyperconverged in the
+        # kubevirt namespace) via its own reconciliation loop, which is asynchronous with the
+        # HyperConverged patch above. The migration must not start before the virt stack picked
+        # the gate up, otherwise KubeVirt does not deploy the pr-helper and lun.reservation has
+        # no effect. Poll defensively for "persistentReservation" anywhere in the KubeVirt CR's
+        # spec.configuration (HCO's exact placement varies by version) rather than a fixed path.
+        kubevirt = next(
+            KubeVirt.get(client=ocp_admin_client, namespace="kubevirt", name="kubevirt-kubevirt-hyperconverged"),
+            None,
+        )
+        if kubevirt is None:
+            raise ValueError("KubeVirt CR 'kubevirt-kubevirt-hyperconverged' not found in namespace 'kubevirt'")
+
+        def _gate_in_kubevirt_cr() -> bool:
+            """Return True once the KubeVirt CR spec.configuration mentions the gate."""
+            kv = next(
+                KubeVirt.get(client=ocp_admin_client, namespace="kubevirt", name="kubevirt-kubevirt-hyperconverged"),
+                None,
+            )
+            if kv is None:
+                return False
+            return "persistentReservation" in str(kv.instance.spec.get("configuration"))
+
+        for gate_present in TimeoutSampler(wait_timeout=300, sleep=10, func=_gate_in_kubevirt_cr):
+            if gate_present:
+                LOGGER.info("persistentReservation feature gate present in the KubeVirt CR")
+                break
+
         yield
     finally:
         editor.restore()

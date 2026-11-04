@@ -1093,6 +1093,34 @@ class VMWareProvider(BaseProvider):
             f"'{owner_filename}', consumer='{consumer_vm.name}' attached to the same file"
         )
 
+    def link_shared_rdm_disks(
+        self,
+        owner_vm_name: str,
+        consumer_vm_name: str,
+        rdm_type: Literal["virtual", "physical"],
+    ) -> None:
+        """Shut down two VMs and link them to the same shared RDM LUN.
+
+        Convenience orchestration over ``add_shared_rdm_disk``: looks up both VMs by name,
+        gracefully shuts down their guest OSes (RDM reconfiguration and Forklift's shared-disk
+        readiness checks require powered-off VMs), then attaches the owner's RDM mapping file
+        to the consumer.
+
+        Args:
+            owner_vm_name: Name of the VM whose RDM mapping file is created fresh.
+            consumer_vm_name: Name of the VM attached to the owner's mapping file.
+            rdm_type: "virtual" or "physical" compatibility mode.
+
+        Raises:
+            ValueError: If either VM cannot be found by name, or propagated from
+                ``add_shared_rdm_disk``.
+        """
+        owner_vm = self.get_vm_by_name(query=owner_vm_name)
+        consumer_vm = self.get_vm_by_name(query=consumer_vm_name)
+        self.shutdown_vm_guest(vm=owner_vm)
+        self.shutdown_vm_guest(vm=consumer_vm)
+        self.add_shared_rdm_disk(owner_vm=owner_vm, consumer_vm=consumer_vm, rdm_type=rdm_type)
+
     def _add_shared_scsi_controller(self, vm: vim.VirtualMachine) -> int:
         """Add a dedicated SCSI controller with physical bus sharing, for shared RDM disks.
 

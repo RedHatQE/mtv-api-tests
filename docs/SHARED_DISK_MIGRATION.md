@@ -55,7 +55,7 @@ virt-v2v cannot update `/etc/fstab` for shared disks. This means:
 ## Code Architecture
 
 ```
-tests/test_shared_disk_migration.py          # Main test class (9 test methods)
+tests/shared_disk/test_shared_disk_rhel_migration.py          # Main test class (6 test methods)
 ├─> tests/tests_config/config.py             # Test configuration
 ├─> utilities/shared_disk.py                 # Shared disk utilities
 │   ├─> verify_shared_disk_data()            # Verify disk accessibility
@@ -69,7 +69,7 @@ tests/test_shared_disk_migration.py          # Main test class (9 test methods)
 
 | File | Purpose |
 |------|---------|
-| `test_shared_disk_migration.py` | 9-step test orchestration (2 VMs migrated, PVC verified, data verified) |
+| `test_shared_disk_rhel_migration.py` | 6-step test orchestration (2 VMs migrated in one plan, PVC verified, data verified) |
 | `utilities/shared_disk.py` | Shared disk specific validation logic |
 | `tests_config/config.py` | VM names and test parameters |
 | `utilities/ssh_utils.py` | SSH infrastructure (CRITICAL FIX for reconnections) |
@@ -269,7 +269,7 @@ check_vms(plan=prepared_plan_vm2, ...)
 ### 1. Test Configuration (tests/tests_config/config.py)
 
 ```python
-"test_shared_disk_migration": {
+"test_shared_disk_rhel_migration": {
     "virtual_machines": [
         {
             "name": "mtv-feature-shared-rhel1",  # Owner VM
@@ -400,36 +400,21 @@ echo 'Data' | sudo tee /mnt/shared_disk/test.txt > /dev/null
    # For VM2 plan: expect 2 PVCs (OS + data, NO shared - reuses VM1's)
 ```
 
-### 3. Test Class (tests/test_shared_disk_migration.py)
+### 3. Test Class (tests/shared_disk/test_shared_disk_rhel_migration.py)
 
 **Class Structure**:
 ```python
 @pytest.mark.parametrize("class_plan_config", [...], indirect=True)
 @pytest.mark.usefixtures("cleanup_migrated_vms")
 @pytest.mark.incremental
-class TestSharedDiskMigration:
-    """Test shared disk migration (MTV-4548)."""
+class TestSharedDiskRhelMigration:
+    """Test shared disk migration (MTV-676)."""
 
-    # VM1 (owner) resources
-    storage_map_vm1: StorageMap
-    network_map_vm1: NetworkMap
-    plan_vm1: Plan
-
-    # VM2 (consumer) resources
-    storage_map_vm2: StorageMap
-    network_map_vm2: NetworkMap
-    plan_vm2: Plan
-
-    # 9 test methods (see workflow above)
-    def test_create_storagemap_vm1(self, ...): ...
-    def test_create_networkmap_vm1(self, ...): ...
-    def test_create_plan_vm1(self, ...): ...
-    def test_migrate_vm1(self, ...): ...
-    def test_create_storagemap_vm2(self, ...): ...
-    def test_create_networkmap_vm2(self, ...): ...
-    def test_create_plan_vm2(self, ...): ...
-    def test_migrate_vm2(self, ...): ...
-    def test_verify_pvc_count(self, ...): ...
+    # 6 test methods (see workflow above)
+    def test_create_storagemap(self, ...): ...
+    def test_create_networkmap(self, ...): ...
+    def test_create_plan(self, ...): ...
+    def test_migrate_vms(self, ...): ...
     def test_verify_shared_disk_data(self, ...): ...
     def test_check_vms(self, ...): ...
 ```
@@ -514,34 +499,29 @@ def _check_existing_virtctl(download_dir: Path) -> Path | None:
 
 ```bash
 # Run shared disk test
-pytest tests/test_shared_disk_migration.py -v
+pytest tests/shared_disk/test_shared_disk_rhel_migration.py -v
 
 # Run with detailed logs
-pytest tests/test_shared_disk_migration.py -v -s
+pytest tests/shared_disk/test_shared_disk_rhel_migration.py -v -s
 
 # Skip teardown to inspect resources
-pytest tests/test_shared_disk_migration.py --skip-teardown
+pytest tests/shared_disk/test_shared_disk_rhel_migration.py --skip-teardown
 
 # Run specific test method
-pytest tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_verify_shared_disk_data -v
+pytest tests/shared_disk/test_shared_disk_rhel_migration.py::TestSharedDiskRhelMigration::test_verify_shared_disk_data -v
 ```
 
 ### Expected Output
 
 ```
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_create_storagemap_vm1 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_create_networkmap_vm1 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_create_plan_vm1 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_migrate_vm1 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_create_storagemap_vm2 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_create_networkmap_vm2 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_create_plan_vm2 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_migrate_vm2 PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_verify_pvc_count PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_verify_shared_disk_data PASSED
-tests/test_shared_disk_migration.py::TestSharedDiskMigration::test_check_vms PASSED
+tests/shared_disk/test_shared_disk_rhel_migration.py::TestSharedDiskRhelMigration::test_create_storagemap PASSED
+tests/shared_disk/test_shared_disk_rhel_migration.py::TestSharedDiskRhelMigration::test_create_networkmap PASSED
+tests/shared_disk/test_shared_disk_rhel_migration.py::TestSharedDiskRhelMigration::test_create_plan PASSED
+tests/shared_disk/test_shared_disk_rhel_migration.py::TestSharedDiskRhelMigration::test_migrate_vms PASSED
+tests/shared_disk/test_shared_disk_rhel_migration.py::TestSharedDiskRhelMigration::test_verify_shared_disk_data PASSED
+tests/shared_disk/test_shared_disk_rhel_migration.py::TestSharedDiskRhelMigration::test_check_vms PASSED
 
-======================== 11 of 11 completed, 11 Pass, 0 Fail ========================
+======================== 6 of 6 completed, 6 Pass, 0 Fail ========================
 ```
 
 ## Troubleshooting
