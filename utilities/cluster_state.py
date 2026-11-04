@@ -10,7 +10,9 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Callable, Sequence
+import socket
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -18,6 +20,7 @@ from time import monotonic
 from typing import TYPE_CHECKING, Any, Literal
 
 from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
+from urllib3.exceptions import MaxRetryError, ProtocolError
 from ocp_resources.cluster_operator import ClusterOperator
 from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.cluster_version import ClusterVersion
@@ -78,6 +81,28 @@ _CSI_POD_PREFIXES = ("csi-rbdplugin-provisioner-", "csi-rbdplugin-")
 _MAX_PENDING_PVC_DUMPS = 20
 # Events of a stalled migration can be hours old, so the lookback covers the whole wait budget.
 _EVENT_LOOKBACK_SECONDS = 24 * 60 * 60
+_GIT_PACKED_REFS_NAME = "packed-refs"
+# The wrapper exposes no per-request timeout, so a stalled API or OAuth endpoint would block past the
+# snapshot deadline and delay the error being reported. The socket default bounds every request made
+# inside the context; it is restored on exit.
+_REQUEST_SOCKET_TIMEOUT_SECONDS = 30
+
+
+@contextmanager
+def _bounded_requests() -> Iterator[None]:
+    """Bound every network request made inside the context with a socket timeout.
+
+    Yields:
+        None: The context only applies and restores the socket timeout.
+    """
+    previous_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(_REQUEST_SOCKET_TIMEOUT_SECONDS)
+    try:
+        yield
+    finally:
+        socket.setdefaulttimeout(previous_timeout)
+
+
 _NODE_ROLE_LABEL_PREFIX = "node-role.kubernetes.io/"
 # Only used to reach a kind's API handle through its wrapper class; nothing is read for it.
 _KIND_HANDLE_NAME = "cluster-state-probe"
@@ -101,10 +126,14 @@ _OUTPUT_ENCODING = "utf-8"
 _CREDENTIAL_KEY_PATTERN = re.compile(r"password|token|secret|api_key|apikey|credential", re.IGNORECASE)
 _URL_USERINFO_PATTERN = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)[^/@\s]+@")
 # The wrapper raises NotImplementedError when a kind is absent from the cluster's API discovery
-# (IDMS on a cluster that only ships ICSP, for example): an empty probe, not a crash.
+# (IDMS on a cluster that only ships ICSP, for example): an empty probe, not a crash. A connection
+# that cannot be established at all surfaces as MaxRetryError, which must not replace the failure
+# the snapshot is describing.
 _PROBE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ApiException,
     DynamicApiError,
+    ProtocolError,
+    MaxRetryError,
     AttributeError,
     KeyError,
     TypeError,
@@ -563,11 +592,12 @@ def _namespace_events(*, client: DynamicClient, namespace: str) -> list[str]:
     Returns:
         list[str]: One line per event, oldest first.
     """
-    events = [
-        event.to_dict()
-        for event in reversed(Event.list(client=client, namespace=namespace, since_seconds=_EVENT_LOOKBACK_SECONDS))
-    ]
-    return _event_summary(events=events)
+    return _event_summary(
+        events=[
+            event.to_dict()
+            for event in reversed(Event.list(client=client, namespace=namespace, since_seconds=_EVENT_LOOKBACK_SECONDS))
+        ]
+    )
 
 
 def _cluster_image(*, client: DynamicClient) -> dict[str, Any]:
@@ -816,16 +846,19 @@ def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
     return sections
 
 
-def _with_deadline_record(*, sections: list[str], probes: _Probes) -> list[str]:
+def _with_deadline_record(*, sections: list[str], probes: _Probes | None) -> list[str]:
     """Close a set of records with the truncation note of a snapshot cut short by its deadline.
 
     Args:
         sections (list[str]): Rendered records collected so far.
-        probes (_Probes): Probe runner whose budget bounded the collection.
+        probes (_Probes | None): Probe runner whose budget bounded the collection, or None when the
+            records came from local data only.
 
     Returns:
         list[str]: The same records, plus one summary line when probes were skipped.
     """
+    if probes is None:
+        return sections
     deadline_record = probes.deadline_record()
     if deadline_record is not None:
         sections.append(deadline_record)
@@ -1032,16 +1065,41 @@ def _git_head() -> str:
         head = (git_dir / "HEAD").read_text(encoding=_OUTPUT_ENCODING).strip()
         if not head.startswith(_GIT_REF_PREFIX):
             return head
-        # HEAD of a worktree holds only the ref name; the ref itself lives in the common directory.
+        # HEAD of a worktree holds only the ref name; the ref itself lives in the common directory
+        # and may be loose or packed (a pack-refs run removes the loose file this used to need).
         ref = head.removeprefix(_GIT_REF_PREFIX)
         for directory in (git_dir, _git_common_directory(git_dir=git_dir)):
             ref_file = directory / ref
             if ref_file.exists():
                 return ref_file.read_text(encoding=_OUTPUT_ENCODING).strip()
+            packed_sha = _packed_ref_sha(packed_refs=directory / _GIT_PACKED_REFS_NAME, ref=ref)
+            if packed_sha:
+                return packed_sha
         LOGGER.warning(f"Could not resolve the git ref '{ref}', recording {_GIT_HEAD_FALLBACK}")
     except (OSError, ValueError) as exc:
         LOGGER.warning(f"Could not read the checkout revision, recording {_GIT_HEAD_FALLBACK}: {exc}")
     return _GIT_HEAD_FALLBACK
+
+
+def _packed_ref_sha(*, packed_refs: Path, ref: str) -> str | None:
+    """Find a branch revision in a repository's packed refs file.
+
+    Args:
+        packed_refs (Path): Path to ``packed-refs`` in the git directory.
+        ref (str): Full ref name, e.g. ``refs/heads/main``.
+
+    Returns:
+        str | None: The packed revision, or None when the file or the ref is absent.
+    """
+    if not packed_refs.exists():
+        return None
+    for line in packed_refs.read_text(encoding=_OUTPUT_ENCODING).splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        sha, _, packed_name = line.partition(" ")
+        if packed_name.strip() == ref:
+            return sha.strip()
+    return None
 
 
 def _redact_invocation(pytest_args: Sequence[str]) -> str:
@@ -1100,12 +1158,15 @@ def _redact_argument(arg: str) -> str:
 
 
 def _session_start_identity_sections(
-    *, probes: _Probes, pytest_args: Sequence[str], skip_teardown: bool, skip_data_collector: bool
+    *, probes: _Probes | None, pytest_args: Sequence[str], skip_teardown: bool, skip_data_collector: bool
 ) -> list[str]:
     """Collect the run identity: checkout revision, pytest invocation and skip flags.
 
+    The identity is local data, so it is collected even when no client could be built - only the
+    cluster-dependent part (the authenticated user) is then omitted.
+
     Args:
-        probes (_Probes): Probe runner of the current snapshot.
+        probes (_Probes | None): Probe runner of the current snapshot, or None without a client.
         pytest_args (Sequence[str]): Arguments pytest was invoked with, including ``--tc`` overrides.
         skip_teardown (bool): Whether ``--skip-teardown`` was set.
         skip_data_collector (bool): Whether ``--skip-data-collector`` was set.
@@ -1113,12 +1174,18 @@ def _session_start_identity_sections(
     Returns:
         list[str]: One rendered record per identity probe.
     """
-    return [
+    sections = [
         f"{_PROBE_LABEL_PREFIX}git HEAD\n{_git_head()}",
         f"{_PROBE_LABEL_PREFIX}pytest\n{_redact_invocation(pytest_args=pytest_args)}",
-        probes.run("current user", partial(_named_instance, User, client=probes.client, name=_CURRENT_USER_NAME)),
-        f"# skip_teardown: {skip_teardown}\n# skip_data_collector: {skip_data_collector}",
     ]
+    if probes is not None:
+        sections.append(
+            probes.run("current user", partial(_named_instance, User, client=probes.client, name=_CURRENT_USER_NAME))
+        )
+    else:
+        sections.append(f"{_PROBE_LABEL_PREFIX}current user\n[not collected: no cluster client]")
+    sections.append(f"# skip_teardown: {skip_teardown}\n# skip_data_collector: {skip_data_collector}")
+    return sections
 
 
 def _write_once_atomic(path: Path, text: str) -> bool:
@@ -1165,7 +1232,8 @@ def _session_client() -> DynamicClient | None:
         DynamicClient | None: Client built from the resolved credentials, or None when building it failed.
     """
     try:
-        return get_cluster_client()
+        with _bounded_requests():
+            return get_cluster_client()
     except (OSError, ValueError, TypeError, ApiException, DynamicApiError, ClientWithBasicAuthError) as exc:
         # A rejected credential is a configuration problem elsewhere in the run: the baseline is a
         # diagnostic, so it degrades to skipping its cluster section instead of raising into pytest.
@@ -1190,7 +1258,8 @@ def _write_session_cluster_snapshot(*, run_client: DynamicClient, path: Path) ->
     """Collect and write the session-start cluster state.
 
     Args:
-        run_client (DynamicClient): Client the probes read the cluster with.
+        run_client (DynamicClient | None): Client the probes read the cluster with, or None to write
+            the local identity only.
         path (Path): Destination file.
 
     Returns:
@@ -1203,7 +1272,7 @@ def _write_session_cluster_snapshot(*, run_client: DynamicClient, path: Path) ->
 
 def _write_session_identity(
     *,
-    run_client: DynamicClient,
+    run_client: DynamicClient | None,
     path: Path,
     pytest_args: Sequence[str],
     skip_teardown: bool,
@@ -1221,7 +1290,7 @@ def _write_session_identity(
     Returns:
         bool: True when this call created the file, False when a snapshot already existed.
     """
-    probes = _Probes(client=run_client)
+    probes = _Probes(client=run_client) if run_client is not None else None
     sections = _session_start_identity_sections(
         probes=probes,
         pytest_args=pytest_args,
@@ -1268,9 +1337,11 @@ def write_session_baseline(
             LOGGER.info(f"Session-start baseline already exists in {directory}, keeping the first snapshot")
             return
         run_client = client or _session_client()
+        cluster_created = False
         if run_client is None:
-            return
-        cluster_created = _write_session_cluster_snapshot(run_client=run_client, path=cluster_path)
+            LOGGER.warning("Session-start baseline has no cluster client, writing the run identity only")
+        else:
+            cluster_created = _write_session_cluster_snapshot(run_client=run_client, path=cluster_path)
         identity_created = _write_session_identity(
             run_client=run_client,
             path=identity_path,
@@ -1286,5 +1357,8 @@ def write_session_baseline(
 
     if cluster_created and identity_created:
         LOGGER.warning(f"Session-start baseline written to {directory}")
+        return
+    if identity_created and not cluster_created:
+        LOGGER.warning(f"Session-start run identity written to {directory}; cluster state skipped (no client)")
         return
     LOGGER.info(f"Session-start baseline already exists in {directory}, keeping the first snapshot")
