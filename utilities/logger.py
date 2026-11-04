@@ -1,5 +1,6 @@
 import logging
 import multiprocessing
+import re
 import shutil
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from typing import Optional
@@ -11,19 +12,40 @@ LOGGER = logging.getLogger(__name__)
 # Credential keys whose value must never reach the console or the log file. simple_logger ships the
 # redaction filter, so masking belongs on the handlers every record passes through - not in the
 # individual writers that happen to remember it.
-_SENSITIVE_LOG_PATTERNS: list[str] = [
-    # Filter order matters: RedactingFilter masks the single word following a pattern, so "bearer"
-    # must run before "authorization" - otherwise "Authorization: Bearer <jwt>" keeps the JWT
-    # visible while only the word Bearer is masked.
-    "bearer",
+#
+# Two groups, because a key is only a credential when it is assigned: RedactingFilter masks the next
+# token after any match, so a bare "secret" would also eat the value in a message such as
+# "Storing Secret auto-abc123 in fixture store". Assignment keys therefore require a ':' or '=' and
+# a value, while "bearer" keeps the prefix form for "Authorization: Bearer <jwt>".
+_ASSIGNMENT_LOG_KEYS: list[str] = [
     "password",
     "passphrase",
-    "token",
     "secret",
+    "token",
     "api_key",
     "apikey",
     "authorization",
 ]
+_PREFIX_LOG_KEYS: list[str] = ["bearer"]
+
+
+class _CredentialRedactingFilter(RedactingFilter):
+    """RedactingFilter that masks assigned values, not every word after a keyword."""
+
+    def redact(self, msg: str) -> str:
+        """Replace credential values in a log record.
+
+        Args:
+            msg (str): Rendered log message.
+
+        Returns:
+            str: The message with credential values replaced by ``*****``.
+        """
+        for pattern in _PREFIX_LOG_KEYS:
+            msg = re.sub(rf"({pattern}\W+[^\s]+)", f"{pattern} {'*' * 5} ", msg, flags=re.IGNORECASE)
+        for pattern in _ASSIGNMENT_LOG_KEYS:
+            msg = re.sub(rf"({pattern}\s*[:=]\s*)[^\s,]+", r"\1*****", msg, flags=re.IGNORECASE)
+        return msg
 
 
 def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> QueueListener:
@@ -59,7 +81,7 @@ def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> Qu
     console_handler = logging.StreamHandler()
     log_file_handler = RotatingFileHandler(filename=log_file, maxBytes=100 * 1024 * 1024, backupCount=20)
 
-    redacting_filter = RedactingFilter(patterns=_SENSITIVE_LOG_PATTERNS)
+    redacting_filter = _CredentialRedactingFilter(patterns=[*_PREFIX_LOG_KEYS, *_ASSIGNMENT_LOG_KEYS])
     console_handler.addFilter(filter=redacting_filter)
     log_file_handler.addFilter(filter=redacting_filter)
 

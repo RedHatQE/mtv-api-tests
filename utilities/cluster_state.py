@@ -11,6 +11,7 @@ import json
 import os
 import re
 import socket
+import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -39,6 +40,7 @@ from ocp_resources.storage_class import StorageClass
 from ocp_resources.user import User
 from simple_logger.logger import get_logger
 
+from exceptions.exceptions import ClusterStateProbeTimeout
 from utilities.data_collector import data_collector_path as shared_data_collector_path
 from utilities.data_collector import redact_secret, utc_timestamp
 from utilities.utils import get_cluster_client, resolve_cluster_credential
@@ -184,6 +186,38 @@ def _truncate_output(text: str) -> str:
     return f"{head}\n{_TRUNCATION_MARKER.format(omitted=len(encoded) - _MAX_PROBE_OUTPUT_BYTES)}"
 
 
+def _call_within_budget(*, probe: Callable[[], Any], budget: float) -> tuple[Any, Exception | None]:
+    """Run one probe with a hard wait limit, regardless of the client's own timeouts.
+
+    The Kubernetes client only bounds a request when the caller passes ``_request_timeout``, which
+    the ocp_resources wrappers never do, so a silent API server would hold the snapshot past its
+    deadline and delay the failure being reported. The probe therefore runs on a daemon thread: the
+    snapshot stops waiting when the budget expires, while the request finishes (or not) on its own.
+
+    Args:
+        probe (Callable[[], Any]): Read performed against the run client.
+        budget (float): Seconds the snapshot may still spend on this probe.
+
+    Returns:
+        tuple[Any, Exception | None]: The probe value, or the exception it raised (including
+            ClusterStateProbeTimeout), with None in the other slot.
+    """
+    outcome: dict[str, Any] = {}
+
+    def _run() -> None:
+        try:
+            outcome["value"] = probe()
+        except _PROBE_EXCEPTIONS as exc:
+            outcome["failure"] = exc
+
+    worker = threading.Thread(target=_run, name="cluster-state-probe", daemon=True)
+    worker.start()
+    worker.join(timeout=budget)
+    if worker.is_alive():
+        return None, ClusterStateProbeTimeout()
+    return outcome.get("value"), outcome.get("failure")
+
+
 @dataclass
 class _Probes:
     """Probe runner of one snapshot: one run client, one total deadline, one skip counter.
@@ -231,11 +265,20 @@ class _Probes:
                 f"{_PROBE_LABEL_PREFIX}{label}\n[skipped: snapshot deadline of {_SNAPSHOT_DEADLINE_SECONDS}s reached]",
                 None,
             )
-        try:
-            value = probe()
-        except _PROBE_EXCEPTIONS as exc:
-            LOGGER.warning(f"Cluster state probe '{label}' failed: {exc}")
-            return f"{_PROBE_LABEL_PREFIX}{label}\n[probe failed: {type(exc).__name__}: {exc}]", None
+        value, failure = _call_within_budget(probe=probe, budget=self._remaining_seconds())
+        if failure is not None:
+            if isinstance(failure, ClusterStateProbeTimeout):
+                # The request itself cannot be cancelled: it keeps its connection until the socket
+                # gives up, but the snapshot no longer waits for it and the original failure is
+                # reported on time.
+                LOGGER.warning(f"Cluster state probe '{label}' exceeded the snapshot budget")
+                return (
+                    f"{_PROBE_LABEL_PREFIX}{label}\n"
+                    f"[probe exceeded the remaining snapshot budget of {_SNAPSHOT_DEADLINE_SECONDS}s]",
+                    None,
+                )
+            LOGGER.warning(f"Cluster state probe '{label}' failed: {failure}")
+            return f"{_PROBE_LABEL_PREFIX}{label}\n[probe failed: {type(failure).__name__}: {failure}]", None
         return self.record(label=label, value=value, render=render), value
 
     def record(self, label: str, value: Any, *, render: Callable[[Any], str] = _render_json) -> str:
