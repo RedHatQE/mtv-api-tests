@@ -905,7 +905,7 @@ def _pod_log_sections(
     )
     if pods is None:
         return [record]
-    if pod_filter:
+    if pod_filter is not None:
         pods = [pod for pod in pods if pod_filter(pod)]
 
     # The summary already carries phase, readiness, restarts and node: the full pod bodies are the
@@ -1109,33 +1109,36 @@ def _storage_class_sections(*, probes: _Probes, claims: list[dict[str, Any]], na
         namespace (str): Migration target namespace.
 
     Returns:
-        list[str]: The class body, the persistent volumes behind the claims that request it, and
-            the logs of the pods using those claims.
+        list[str]: The class body, the persistent volumes and attachments behind the claims that
+            request it, and the logs of the pods using those claims. A failed class read costs the
+            volume probes only: the pod logs are still collected.
     """
     class_name = py_config[_STORAGE_CLASS_CONFIG_KEY]
     record, storage_class = probes.fetch(
         label=f"Storage class {class_name}",
         probe=partial(_named_instance, StorageClass, client=probes.client, name=class_name),
     )
-    if storage_class is None:
-        return [record]
-
     class_claims = _claims_of_class(claims=claims, storage_class_name=class_name)
     claim_names = {_resource_name(claim) for claim in class_claims}
-    volume_names = {volume for claim in class_claims if (volume := (claim.get("spec") or {}).get("volumeName"))}
-    sections = [
-        record,
-        probes.run(
-            f"Persistent volumes of {class_name}",
-            partial(_class_persistent_volumes, client=probes.client, names=volume_names),
-            render=_render_lines,
-        ),
-        probes.run(
-            f"Volume attachments of {class_name}",
-            partial(_volume_attachments, client=probes.client, volume_names=volume_names),
-            render=_render_lines,
-        ),
-    ]
+    sections = [record]
+    if storage_class is not None:
+        # Only the volume probes need the class body; the pod evidence below does not, so a failed
+        # class read must not cost the logs of the pods that are already stuck on the claims.
+        volume_names = {volume for claim in class_claims if (volume := (claim.get("spec") or {}).get("volumeName"))}
+        sections.append(
+            probes.run(
+                f"Persistent volumes of {class_name}",
+                partial(_class_persistent_volumes, client=probes.client, names=volume_names),
+                render=_render_lines,
+            )
+        )
+        sections.append(
+            probes.run(
+                f"Volume attachments of {class_name}",
+                partial(_volume_attachments, client=probes.client, volume_names=volume_names),
+                render=_render_lines,
+            )
+        )
     if not claim_names:
         return sections
     sections.extend(
@@ -1206,20 +1209,6 @@ def _volume_attachments(*, client: DynamicClient, volume_names: set[str]) -> lis
     return lines
 
 
-def _named_instances(resource_cls: type[Resource], *, client: DynamicClient, names: set[str]) -> list[dict[str, Any]]:
-    """Read the named objects of one kind.
-
-    Args:
-        resource_cls (type[Resource]): Wrapper class of the kind.
-        client (DynamicClient): Run client.
-        names (set[str]): Object names to read.
-
-    Returns:
-        list[dict[str, Any]]: The objects, empty when the set is empty.
-    """
-    return [_named_instance(resource_cls, client=client, name=name) for name in sorted(names)]
-
-
 def _class_persistent_volumes(*, client: DynamicClient, names: set[str]) -> list[str]:
     """Render the persistent volumes behind the claims under test.
 
@@ -1230,7 +1219,9 @@ def _class_persistent_volumes(*, client: DynamicClient, names: set[str]) -> list
     Returns:
         list[str]: One summary line per volume, empty when no claim is bound yet.
     """
-    return _persistent_volume_summary(_named_instances(PersistentVolume, client=client, names=names))
+    return _persistent_volume_summary([
+        _named_instance(PersistentVolume, client=client, name=name) for name in sorted(names)
+    ])
 
 
 def _with_deadline_record(*, sections: list[str], probes: _Probes | None) -> list[str]:

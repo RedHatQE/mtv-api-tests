@@ -51,10 +51,13 @@ class _CredentialRedactingFilter(RedactingFilter):
         for pattern in _ASSIGNMENT_LOG_KEYS:
             # Optional quotes on both sides, because repr and JSON forms quote the key and the value.
             # A quoted value is consumed whole, so a multi-word value inside quotes cannot keep its
-            # tail after the first space. The scheme form is listed first because "authorization" is
-            # also an assignment key: without it the scheme word survives the pass below as a value.
+            # tail after the first space. Each quote style is matched on its own, because a single
+            # class allowing either quote would end a double-quoted value at an apostrophe inside it
+            # and leak the rest. The scheme form comes first because "authorization" is also an
+            # assignment key: without it the scheme word survives as a value.
             msg = re.sub(
-                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*)(?:(?:bearer|basic)\s+\S+|['\"][^'\"]*['\"]|[^\s,'\"]+)",
+                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*)"
+                rf"(?:(?:bearer|basic)\s+\S+|'[^']*'|\"[^\"]*\"|[^\s,'\"]+)",
                 r"\1*****",
                 msg,
                 flags=re.IGNORECASE,
