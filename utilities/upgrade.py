@@ -106,7 +106,12 @@ def _prepare_upgrade_artifact_dir() -> Path | None:
         return None
 
     artifact_dir = collector_path / f"{_UPGRADE_ARTIFACT_DIR_PREFIX}-{utc_timestamp()}"
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as err:
+        # The logs are diagnostics: a read-only or full collector path loses them, never the upgrade.
+        LOGGER.warning(f"Upgrade script logs cannot be persisted under {collector_path}: {err}")
+        return None
     return artifact_dir
 
 

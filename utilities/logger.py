@@ -26,7 +26,12 @@ _ASSIGNMENT_LOG_KEYS: list[str] = [
     "apikey",
     "authorization",
 ]
-_PREFIX_LOG_KEYS: list[str] = ["bearer", "basic"]
+# "Authorization: Bearer <jwt>" and "Authorization: Basic <base64>" put the credential after the
+# scheme, but a bare "basic" is ordinary prose ("basic pod info"), so only bearer stands alone.
+_PREFIX_LOG_PATTERNS: list[str] = [
+    r"(?P<label>\bauthorization\b\W+(?:bearer|basic)\s+)\S+",
+    r"(?P<label>\bbearer\s+)\S+",
+]
 
 
 class _CredentialRedactingFilter(RedactingFilter):
@@ -41,16 +46,15 @@ class _CredentialRedactingFilter(RedactingFilter):
         Returns:
             str: The message with credential values replaced by ``*****``.
         """
-        for pattern in _PREFIX_LOG_KEYS:
-            # "Authorization: Bearer <jwt>" and "Basic <base64>" put the credential after the
-            # scheme word, so the scheme is part of the pattern.
-            msg = re.sub(rf"({pattern}\W+[^\s]+)", f"{pattern} {'*' * 5} ", msg, flags=re.IGNORECASE)
+        for pattern in _PREFIX_LOG_PATTERNS:
+            msg = re.sub(pattern, r"\g<label>*****", msg, flags=re.IGNORECASE)
         for pattern in _ASSIGNMENT_LOG_KEYS:
             # Optional quotes on both sides, because repr and JSON forms quote the key and the value.
             # A quoted value is consumed whole, so a multi-word value inside quotes cannot keep its
-            # tail after the first space.
+            # tail after the first space. The scheme form is listed first because "authorization" is
+            # also an assignment key: without it the scheme word survives the pass below as a value.
             msg = re.sub(
-                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*)(?:['\"][^'\"]*['\"]|[^\s,'\"]+)",
+                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*)(?:(?:bearer|basic)\s+\S+|['\"][^'\"]*['\"]|[^\s,'\"]+)",
                 r"\1*****",
                 msg,
                 flags=re.IGNORECASE,
@@ -91,7 +95,7 @@ def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> Qu
     console_handler = logging.StreamHandler()
     log_file_handler = RotatingFileHandler(filename=log_file, maxBytes=100 * 1024 * 1024, backupCount=20)
 
-    redacting_filter = _CredentialRedactingFilter(patterns=[*_PREFIX_LOG_KEYS, *_ASSIGNMENT_LOG_KEYS])
+    redacting_filter = _CredentialRedactingFilter(patterns=[*_PREFIX_LOG_PATTERNS, *_ASSIGNMENT_LOG_KEYS])
     console_handler.addFilter(filter=redacting_filter)
     log_file_handler.addFilter(filter=redacting_filter)
 

@@ -43,7 +43,7 @@ from ocp_resources.volume_attachment import VolumeAttachment
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
-from exceptions.exceptions import ClusterStateProbeTimeout
+from exceptions.exceptions import ClusterStateProbeCrashed, ClusterStateProbeTimeout
 from utilities.data_collector import data_collector_path as shared_data_collector_path
 from utilities.data_collector import redact_secret, utc_timestamp
 from utilities.utils import get_cluster_client, resolve_cluster_credential
@@ -249,6 +249,10 @@ def _call_within_budget(*, probe: Callable[[], Any], budget: float) -> tuple[Any
     worker.join(timeout=budget)
     if worker.is_alive():
         return None, ClusterStateProbeTimeout()
+    if not outcome:
+        # The probe raised outside _PROBE_FAILURES, so the thread died before recording anything.
+        # An empty outcome would otherwise reach fetch() as a successful null result.
+        return None, ClusterStateProbeCrashed()
     return outcome.get("value"), outcome.get("failure")
 
 

@@ -16,6 +16,7 @@ from ocp_resources.virtual_machine_instance import VirtualMachineInstance
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+from urllib3.exceptions import MaxRetryError, ProtocolError
 
 from exceptions.exceptions import (
     MigrationNotFoundError,
@@ -710,7 +711,9 @@ def _plan_target_namespace(plan: Plan) -> str | None:
         ApiException,
         DynamicApiError,
         AttributeError,
+        MaxRetryError,
         OSError,
+        ProtocolError,
         TypeError,
         ValueError,
         ClusterStateProbeTimeout,
