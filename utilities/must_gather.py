@@ -41,12 +41,14 @@ LOGGER = get_logger(__name__)
 _INSPECT_DEST_DIR_PREFIX = "inspect"
 _INSPECT_COMMAND_TIMEOUT_SECONDS = 600
 _MCO_NAMESPACE = "openshift-machine-config-operator"
-_MCO_INSPECT_RESOURCES = (
-    "clusteroperator/machine-config",
+# Explicitly named resources only: inspecting a ClusterOperator follows its .status.relatedObjects
+# and queues whole namespaces (every ``all``-category resource plus all pod logs).
+_MCO_INSPECT_TARGETS = (
     "machineconfigpool",
-    "deployment/machine-config-operator",
-    "daemonset/machine-config-daemon",
+    "deploy/machine-config-operator",
+    "ds/machine-config-daemon",
 )
+_inspect_dump_attempted = False
 
 
 def _get_idms_name(channel: str) -> str:
@@ -275,19 +277,27 @@ def _resolve_must_gather_image(
     return resolved_image
 
 
-def run_inspect_dump(data_collector_path: Path) -> bool:
-    """Write a bounded ``oc adm inspect`` of the Machine Config Operator resources.
+def _run_inspect_dump(data_collector_path: Path) -> bool:
+    """Write a bounded ``oc adm inspect`` of the explicitly named MCO resources, once per session.
 
-    Runs before the image gather so the MCP/ClusterOperator state survives a gather that fails or
-    is killed by the disk-usage checker. Only MCO resources are inspected: whole namespaces are
-    never collected here. Unsupported resources and non-zero exits are reported, never raised.
+    Runs before the image gather so the MCP and MCO pod state survives a gather that fails or is
+    killed by the disk-usage checker. Only explicitly named resources are inspected, so no
+    namespace and no ``.status.relatedObjects`` tree is expanded. The first attempt of a session
+    wins; later calls return without re-running, even when that attempt failed.
 
     Args:
         data_collector_path (Path): Directory where the inspect output is written.
 
     Returns:
-        bool: True when the inspect command ran, False when it did not.
+        bool: True when this call ran the inspect command, False when it was skipped (already
+            attempted in this session) or the command failed.
     """
+    global _inspect_dump_attempted
+    if _inspect_dump_attempted:
+        LOGGER.info("Inspect dump already attempted in this session, skipping")
+        return False
+    _inspect_dump_attempted = True
+
     dest_dir = data_collector_path / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}"
     command = [
         "oc",
@@ -296,7 +306,7 @@ def run_inspect_dump(data_collector_path: Path) -> bool:
         f"--dest-dir={dest_dir}",
         "-n",
         _MCO_NAMESPACE,
-        *_MCO_INSPECT_RESOURCES,
+        *_MCO_INSPECT_TARGETS,
     ]
     resolved_command = " ".join(command)
     LOGGER.warning(f"Running inspect dump before the image gather: {resolved_command}")
@@ -373,8 +383,9 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         bool: True when the gather command ran. False when it did not.
     """
     # The inspect dump runs before any gather attempt on this path, so MCO state is captured even
-    # when image resolution, the gather itself, or the disk-usage checker kills the bundle.
-    run_inspect_dump(data_collector_path=data_collector_path)
+    # when image resolution, the gather itself, or the disk-usage checker kills the bundle. It is
+    # written once per session, not once per failing test.
+    _run_inspect_dump(data_collector_path=data_collector_path)
 
     try:
         # Resource discovery: cluster client, MTV Subscription, and its installed CSV.

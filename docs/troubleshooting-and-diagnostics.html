@@ -528,26 +528,33 @@ and turns the feature off instead of failing the run.
 <li><code>.data-collector/resources.json</code>: a dump of tracked resources created during the run.</li>
 <li>
 <p><code>.data-collector/session-start/cluster.txt</code>: the cluster baseline captured at session start — <code>ClusterVersion</code>, <code>ClusterOperator</code>, the <code>MachineConfigPool</code> manifests plus per-pool counters
-  and conditions, nodes, and the <code>openshift-mtv</code> / <code>openshift-cnv</code> CSVs. It answers "was the cluster already unhealthy before this run?".</p>
+  and conditions, nodes, and the <code>openshift-mtv</code> / <code>openshift-cnv</code> CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run:
+  the first worker to write it wins and every later <code>pytest_sessionstart</code> keeps the existing snapshot.</p>
 </li>
 <li>
 <p><code>.data-collector/session-start/run-identity.txt</code>: the checkout revision, the pytest invocation (with <code>--tc</code> values, cluster password redacted), <code>oc whoami</code>, and whether
-  <code>--skip-teardown</code> / <code>--skip-data-collector</code> were set.</p>
+  <code>--skip-teardown</code> / <code>--skip-data-collector</code> were set. Written once per run, like <code>cluster.txt</code>.</p>
 </li>
 <li>
 <p><code>.data-collector/cluster-state/&lt;timestamp&gt;-&lt;scope&gt;-&lt;reason&gt;[-&lt;worker&gt;].txt</code>: bounded cluster snapshots written just before a real failure is raised (see
   <a href="#failure-evidence-dumps">Failure Evidence Dumps</a>).</p>
 </li>
 <li>
-<p><code>.data-collector/upgrade-script-&lt;timestamp&gt;/upgrade-script-stdout.log</code> and <code>-stderr.log</code>: the upgrade script's own output, persisted instead of deleted. Without
-  <code>--data-collector-path</code> these live under the default <code>.data-collector/</code>; with <code>--skip-data-collector</code> they go to a temporary directory and are removed at exit.</p>
+<p><code>.data-collector/upgrade-script-&lt;timestamp&gt;/upgrade-script-stdout.log</code> and <code>-stderr.log</code>: the upgrade script's own output with <code>CLUSTER_PASSWORD</code> redacted. The child writes
+  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree. Without <code>--data-collector-path</code> the redacted logs live
+  under the default <code>.data-collector/</code>; with <code>--skip-data-collector</code> nothing is written at all and the script output stays in the pytest captured output.</p>
 </li>
 <li>
 <p><code>.data-collector/&lt;encoded-class-plan-identity&gt;/...</code>: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.</p>
 </li>
 <li><code>.data-collector/&lt;encoded-test-node-identity&gt;/...</code>: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.</li>
-<li><code>.data-collector/.../inspect-&lt;timestamp&gt;/</code>: the <code>oc adm inspect</code> dump of the Machine Config Operator resources, written before the image gather of the same failure path.</li>
-<li><code>.data-collector/...</code> at the root: session-level must-gather output when teardown cleanup fails.</li>
+<li>
+<p><code>.data-collector/.../inspect-&lt;timestamp&gt;/</code>: the <code>oc adm inspect</code> dump of the explicitly named Machine Config Operator resources, written before the image gather of the first
+  failure of the session.</p>
+</li>
+<li>
+<p><code>.data-collector/...</code> at the root: session-level must-gather output when teardown cleanup fails.</p>
+</li>
 </ul>
 <p>The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
 were created. The cleanup helper in <code>tools/clean_cluster.py</code> consumes that file directly:</p>
@@ -576,13 +583,13 @@ logged into the snapshot itself, and the original exception is always the error 
 <tbody>
 <tr>
 <td><code>upgrade</code></td>
-<td>The upgrade script hits the outer wait budget</td>
+<td>The upgrade script hits the outer wait budget, or exits non-zero after its own wait times out</td>
 <td><code>clusterversion</code>, <code>co</code>, <code>co machine-config -o yaml</code>, <code>mcp -o yaml</code> plus per-pool <code>ready</code>/<code>updated</code>/<code>degraded</code>/<code>unavailable</code> counters and conditions, nodes, Machine Config Operator pods and their logs, <code>idms</code>, <code>icsp</code>, <code>image.config cluster</code>, and the <code>openshift-mtv</code> CSV</td>
 </tr>
 <tr>
 <td><code>storage</code></td>
 <td>A migration wait times out, or a migrated VM is confirmed unschedulable</td>
-<td><code>pvc,dv,pv -o wide</code> for the target namespace plus <code>-o yaml</code> for the non-Bound PVCs only, namespace events, storage classes, <code>openshift-storage</code> pods, and the ceph-csi provisioner log (<code>--tail=3000</code>, retried without <code>--previous</code> when no previous container exists)</td>
+<td><code>pvc,dv,pv -o wide</code> for the target namespace plus <code>-o yaml</code> for the non-Bound PVCs only, namespace events, storage classes, <code>openshift-storage</code> pods, and the ceph-csi provisioner log for all containers (<code>--all-containers --tail=3000</code>), followed by the <code>--previous</code> container log when one exists</td>
 </tr>
 </tbody>
 </table></div>
@@ -607,10 +614,12 @@ runs the full, cluster-wide gather. Both share image resolution and differ only 
 <p>What this means in practice:</p>
 <ul>
 <li>
-<p>Before the image gather of any failure path, <code>run_inspect_dump()</code> writes an <code>oc adm inspect</code> dump of <code>clusteroperator/machine-config</code>, <code>machineconfigpool</code>, and the Machine Config
-  Operator deployment/daemonset into <code>inspect-&lt;timestamp&gt;/</code>, so the MCO evidence survives a gather that fails or is killed by the disk-usage checker. It only inspects those
-  targeted resources — never whole namespaces, because the gather has already been killed at 83% against a 70% disk cap. The resolved command and the output directory are
-  logged, and unsupported resources or a non-zero exit only produce a warning and a <code>False</code> return.</p>
+<p>Before the image gather of the first failure of the session, <code>_run_inspect_dump()</code> writes an <code>oc adm inspect</code> dump of <code>machineconfigpool</code> and of the Machine Config
+  Operator deployment/daemonset by explicit name in <code>openshift-machine-config-operator</code> into <code>inspect-&lt;timestamp&gt;/</code>, so the MCO evidence survives a gather that fails or is killed
+  by the disk-usage checker. <code>clusteroperator/machine-config</code> is deliberately not inspected: inspect follows a ClusterOperator's <code>.status.relatedObjects</code> and would queue whole
+  namespaces (every <code>all</code>-category resource plus every pod's current and previous logs), which is exactly the overrun that killed the gather at 83 % against a 70 % disk cap.
+  The dump runs once per session — the first attempt wins and later failing tests reuse it — and the resolved command and the output directory are logged. Unsupported resources
+  or a non-zero exit only produce a warning and a <code>False</code> return.</p>
 </li>
 <li>
 <p>If the failure can be tied back to a specific plan, the gather is scoped to that plan with <code>/usr/bin/targeted</code>.</p>

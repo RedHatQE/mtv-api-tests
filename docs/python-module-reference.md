@@ -162,15 +162,18 @@ Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven 
 
 `run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run. Its outer wait budget comes
 from `resolve_upgrade_timeout()`: the `--mtv-upgrade-timeout` option, then `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds, so the budget stays above the upgrade script's own
-internal waits and the script reports its own timeout instead of being killed by the harness. The script's stdout and stderr are persisted under
-`<data-collector>/upgrade-script-<timestamp>/` with `CLUSTER_PASSWORD` redacted, and `MtvUpgradeError` carries only the tail of both logs plus those paths. On an outer wait
-timeout the function also writes a `scope="upgrade"` cluster-state snapshot before raising.
+internal waits and the script reports its own timeout instead of being killed by the harness. The script writes into a temporary directory that is deleted before the function
+returns; only the redacted text is persisted under `<data-collector>/upgrade-script-<timestamp>/`, so `CLUSTER_PASSWORD` never reaches the artifact tree, and `MtvUpgradeError`
+carries the tail of both redacted logs plus those paths. A missing or empty `cluster_password` raises before the script starts. A `scope="upgrade"` cluster-state snapshot is
+written before both the outer-timeout raise and the non-zero-exit raise. Under `--skip-data-collector` no file is written: the child inherits the pytest capture streams and the
+error says the output was not captured.
 
 ### `utilities/cluster_state.py`
 
 `dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=...)` writes one timestamped, bounded snapshot per failure and never raises, so the failing exception
 stays the error the caller sees. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt` and `run-identity.txt` once per session from
-`pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`.
+`pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`; the files are created exclusively, so the first worker's snapshot is kept
+and later workers log that the existing baseline is reused.
 
 ### `utilities/data_collector.py`
 

@@ -19,6 +19,7 @@ from simple_logger.logger import get_logger
 from exceptions.exceptions import MtvUpgradeError
 from utilities.cluster_state import dump_cluster_state
 from utilities.data_collector import data_collector_path, redact_secret, utc_timestamp
+from utilities.utils import resolve_cluster_credential
 
 LOGGER = get_logger(name=__name__)
 
@@ -105,27 +106,64 @@ def _prepare_upgrade_artifact_dir() -> Path | None:
     return artifact_dir
 
 
+def _write_redacted_logs(*, artifact_dir: Path, stdout: str, stderr: str) -> None:
+    """Persist the redacted script output to the artifact directory.
+
+    The raw child output never reaches this directory: it is read from the ephemeral copy and
+    redacted first, so the cluster password cannot travel with the copied artifact tree.
+
+    Args:
+        artifact_dir (Path): Artifact directory of this run.
+        stdout (str): Redacted upgrade script stdout.
+        stderr (str): Redacted upgrade script stderr.
+    """
+    (artifact_dir / _UPGRADE_STDOUT_LOG_NAME).write_text(stdout)
+    (artifact_dir / _UPGRADE_STDERR_LOG_NAME).write_text(stderr)
+
+
 def _upgrade_failure_details(*, stdout: str, stderr: str, artifact_dir: Path | None) -> str:
     """Render the tail of both script logs and, when persisted, the log paths.
 
     Args:
         stdout (str): Redacted upgrade script stdout.
         stderr (str): Redacted upgrade script stderr.
-        artifact_dir (Path | None): Persisted artifact directory, or None when logs are temporary.
+        artifact_dir (Path | None): Directory holding the redacted logs, or None when collection
+            was disabled and the output was never captured.
 
     Returns:
         str: Message fragment carrying the last lines of both streams.
     """
-    persisted_note = (
-        f"\npersisted logs: {artifact_dir / _UPGRADE_STDOUT_LOG_NAME} {artifact_dir / _UPGRADE_STDERR_LOG_NAME}"
-        if artifact_dir is not None
-        else ""
-    )
+    if artifact_dir is None:
+        return "script output was not captured because --skip-data-collector is set; see the pytest captured output"
     return (
         f"stdout tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stdout)}\n"
-        f"stderr tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stderr)}"
-        f"{persisted_note}"
+        f"stderr tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stderr)}\n"
+        f"persisted logs: {artifact_dir / _UPGRADE_STDOUT_LOG_NAME} {artifact_dir / _UPGRADE_STDERR_LOG_NAME}"
     )
+
+
+def _require_cluster_password() -> str:
+    """Return the configured cluster password, refusing to start the script without one.
+
+    Resolved with the same rule as every other cluster credential: pytest config
+    (``--tc=cluster_password:``) first, then the ``CLUSTER_PASSWORD`` environment variable,
+    which is how the CLI and container runs pass it.
+
+    Returns:
+        str: The non-empty cluster password handed to the script and used for redaction.
+
+    Raises:
+        MtvUpgradeError: If ``CLUSTER_PASSWORD`` is missing, empty or whitespace only, because the
+            script output is redacted with it.
+    """
+    password = resolve_cluster_credential("cluster_password")
+    if not password or not password.strip():
+        raise MtvUpgradeError(
+            "CLUSTER_PASSWORD is missing or empty: neither 'cluster_password' in pytest config nor the "
+            "CLUSTER_PASSWORD environment variable is set. The upgrade script needs it and its output is "
+            "redacted with it, so the upgrade cannot start"
+        )
+    return password
 
 
 def _kill_process_group(pgid: int, sig: int) -> None:
@@ -184,19 +222,20 @@ def run_mtv_upgrade(
             only guards against a wedged process.
 
     Raises:
-        MtvUpgradeError: If the upgrade script exits with a non-zero status or times out.
+        MtvUpgradeError: If ``CLUSTER_PASSWORD`` is missing or empty, or the upgrade script exits
+            with a non-zero status or times out.
     """
+    password = _require_cluster_password()
     env = os.environ.copy()
     env.update({
         "MTV_VERSION": mtv_version,
         "MTV_SOURCE": mtv_source.upper(),
         "IMAGE_INDEX": image_index,
         "CLUSTER_USERNAME": py_config["cluster_username"],
-        "CLUSTER_PASSWORD": py_config["cluster_password"],
+        "CLUSTER_PASSWORD": password,
         "CLUSTER_API_URL": py_config["cluster_host"],
         "DEBUG": "true",
     })
-    password = env["CLUSTER_PASSWORD"]
 
     LOGGER.info(f"Running MTV upgrade: {script_path} (version={mtv_version}, source={mtv_source}, index={image_index})")
     LOGGER.info(
@@ -206,35 +245,51 @@ def run_mtv_upgrade(
 
     artifact_dir = _prepare_upgrade_artifact_dir()
 
-    # File redirect (not PIPEs): leftover mtv-upgrade.sh children would keep communicate() blocked.
+    # The child writes into an ephemeral directory so the raw bytes never reach the artifact tree;
+    # only the redacted text below is persisted. File redirect (not PIPEs): leftover
+    # mtv-upgrade.sh children would keep communicate() blocked. With --skip-data-collector the
+    # child inherits the pytest capture streams and no file is written at all.
     with contextlib.ExitStack() as stack:
-        log_dir = artifact_dir or Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="mtv-upgrade-logs-")))
-        stdout_path = log_dir / _UPGRADE_STDOUT_LOG_NAME
-        stderr_path = log_dir / _UPGRADE_STDERR_LOG_NAME
-        with stdout_path.open("wb") as stdout_file, stderr_path.open("wb") as stderr_file:
-            proc = subprocess.Popen(
-                [script_path],
-                env=env,
-                cwd=os.path.dirname(script_path),
-                start_new_session=True,
-                stdout=stdout_file,
-                stderr=stderr_file,
-            )
-            timeout_exc: subprocess.TimeoutExpired | None = None
-            cleanup_exc: MtvUpgradeError | None = None
+        log_dir: Path | None = (
+            Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="mtv-upgrade-logs-")))
+            if artifact_dir is not None
+            else None
+        )
+        stdout_file = (
+            stack.enter_context((log_dir / _UPGRADE_STDOUT_LOG_NAME).open("wb")) if log_dir is not None else None
+        )
+        stderr_file = (
+            stack.enter_context((log_dir / _UPGRADE_STDERR_LOG_NAME).open("wb")) if log_dir is not None else None
+        )
+        proc = subprocess.Popen(
+            [script_path],
+            env=env,
+            cwd=os.path.dirname(script_path),
+            start_new_session=True,
+            stdout=stdout_file,
+            stderr=stderr_file,
+        )
+        timeout_exc: subprocess.TimeoutExpired | None = None
+        cleanup_exc: MtvUpgradeError | None = None
+        try:
+            returncode = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            timeout_exc = exc
+            returncode = None
+        finally:
             try:
-                returncode = proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired as exc:
-                timeout_exc = exc
-                returncode = None
-            finally:
-                try:
-                    _stop_upgrade_process(proc)
-                except MtvUpgradeError as exc:
-                    cleanup_exc = exc
+                _stop_upgrade_process(proc)
+            except MtvUpgradeError as exc:
+                cleanup_exc = exc
 
-        stdout = _read_upgrade_log(log_path=stdout_path, password=password)
-        stderr = _read_upgrade_log(log_path=stderr_path, password=password)
+        stdout = ""
+        stderr = ""
+        # Both are set together: collection enabled keeps the raw output in the ephemeral dir.
+        if log_dir is not None and artifact_dir is not None:
+            stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
+            stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
+            _write_redacted_logs(artifact_dir=artifact_dir, stdout=stdout, stderr=stderr)
+
         failure_details = _upgrade_failure_details(stdout=stdout, stderr=stderr, artifact_dir=artifact_dir)
         cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
         if timeout_exc is not None:
@@ -245,13 +300,18 @@ def run_mtv_upgrade(
                 f"{failure_details}{cleanup_note}"
             ) from timeout_exc
         if returncode is None or returncode != 0:
+            # The script reports its own 60-minute wait first and exits non-zero, so this branch
+            # (not only the outer timeout) needs the snapshot for MCP/CO evidence.
+            dump_cluster_state(reason=f"upgrade-script-exit-{returncode}", scope="upgrade")
             raise MtvUpgradeError(
                 f"MTV upgrade script failed with exit code {returncode}\n{failure_details}{cleanup_note}"
             ) from cleanup_exc
         if cleanup_exc is not None:
             raise cleanup_exc
 
-    LOGGER.info(f"MTV upgrade stdout:\n{stdout}")
-    if stderr:
-        LOGGER.warning(f"MTV upgrade stderr:\n{stderr}")
+        if artifact_dir is not None:
+            LOGGER.info(f"MTV upgrade stdout:\n{stdout}")
+            if stderr:
+                LOGGER.warning(f"MTV upgrade stderr:\n{stderr}")
+
     LOGGER.info(f"MTV upgrade to version {mtv_version} completed successfully")

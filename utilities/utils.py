@@ -1106,7 +1106,7 @@ class VirtualMachineFromInstanceType(VirtualMachine):
             self.res["spec"] = spec
 
 
-def _resolve_cluster_credential(config_key: str) -> str | None:
+def resolve_cluster_credential(config_key: str) -> str | None:
     """Resolve a single cluster credential from pytest config, then the environment.
 
     Args:
@@ -1139,7 +1139,7 @@ def _validate_cluster_credentials() -> None:
     Returns:
         None: Validation passed; the resolved credentials are usable as-is.
     """
-    resolved_credentials = {key: _resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
+    resolved_credentials = {key: resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
     unusable = [key for key, credential in resolved_credentials.items() if not credential or not credential.strip()]
     is_token_path = all(credential is None for credential in resolved_credentials.values())
     if unusable and not is_token_path:
@@ -1171,9 +1171,9 @@ def get_cluster_client() -> DynamicClient:
             if the client cannot be created.
     """
     _validate_cluster_credentials()
-    host = _resolve_cluster_credential("cluster_host")
-    username = _resolve_cluster_credential("cluster_username")
-    password = _resolve_cluster_credential("cluster_password")
+    host = resolve_cluster_credential("cluster_host")
+    username = resolve_cluster_credential("cluster_username")
+    password = resolve_cluster_credential("cluster_password")
     verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
     if verify_ssl_env is not None:
         insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
