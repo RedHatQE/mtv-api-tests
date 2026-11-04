@@ -1033,6 +1033,201 @@ class VMWareProvider(BaseProvider):
         self.wait_task(task=task, action_name=f"Adding RDM disk to VM {vm.name}", wait_timeout=120)
         LOGGER.info(f"Successfully added RDM disk to VM '{vm.name}'")
 
+    def add_shared_rdm_disk(
+        self,
+        owner_vm: vim.VirtualMachine,
+        consumer_vm: vim.VirtualMachine,
+        rdm_type: Literal["virtual", "physical"],
+    ) -> None:
+        """Attach the same physical RDM LUN to two VMs as a disk Forklift recognizes as shared.
+
+        Forklift's shared-disk detection (buildFileCount/applySharedFlags in the vsphere
+        container) keys on the RDM mapping pointer file path (disk.File), not the LUN UUID --
+        vSphere always creates a small per-VM mapping file for RDM, even though it maps a shared
+        physical LUN. Calling add_rdm_disk_to_vm independently on two VMs produces two different
+        mapping file paths, which Forklift never recognizes as shared. This creates the RDM
+        mapping on owner_vm, reads back its actual mapping file path, then attaches consumer_vm
+        to that same file -- vSphere's standard pattern for RDM-backed clustering (e.g. Windows
+        Failover Clustering) -- with matching SCSI bus-sharing mode on dedicated controllers on
+        both VMs.
+
+        Must be called post-clone, after both VMs already exist (RDM requires a VMFS datastore).
+
+        Args:
+            owner_vm: The VM whose RDM mapping file is created fresh.
+            consumer_vm: The VM attached to the owner's existing mapping file.
+            rdm_type: "virtual" or "physical" compatibility mode.
+
+        Raises:
+            ValueError: If no available SCSI unit number is found on either VM's shared
+                controller, or the owner's mapping file cannot be found after attaching it.
+        """
+        lun_uuid = self.copyoffload_config["rdm_lun_uuid"]
+        datastore_id = self.copyoffload_config["datastore_id"]
+        compatibility_mode = "virtualMode" if rdm_type == "virtual" else "physicalMode"
+        vmfs_datastore = self.get_obj([vim.Datastore], datastore_id)
+
+        owner_controller_key = self._add_shared_scsi_controller(owner_vm)
+        consumer_controller_key = self._add_shared_scsi_controller(consumer_vm)
+
+        owner_filename = self._attach_rdm_device(
+            vm=owner_vm,
+            controller_key=owner_controller_key,
+            lun_uuid=lun_uuid,
+            datastore=vmfs_datastore,
+            compatibility_mode=compatibility_mode,
+            rdm_type=rdm_type,
+        )
+
+        self._attach_rdm_device(
+            vm=consumer_vm,
+            controller_key=consumer_controller_key,
+            lun_uuid=lun_uuid,
+            datastore=vmfs_datastore,
+            compatibility_mode=compatibility_mode,
+            rdm_type=rdm_type,
+            existing_filename=owner_filename,
+        )
+        LOGGER.info(
+            f"Shared RDM LUN {lun_uuid} attached: owner='{owner_vm.name}' created mapping file "
+            f"'{owner_filename}', consumer='{consumer_vm.name}' attached to the same file"
+        )
+
+    def _add_shared_scsi_controller(self, vm: vim.VirtualMachine) -> int:
+        """Add a dedicated SCSI controller with physical bus sharing, for shared RDM disks.
+
+        A separate controller (not the boot disk's) is required: vSphere does not allow a
+        controller holding non-shared disks to also use shared bus sharing. physicalSharing
+        (rather than virtualSharing) is used so the two VMs can run on different ESXi hosts,
+        since this suite does not force clone_to_same_host for shared-RDM test scenarios.
+
+        Args:
+            vm: The target VM object.
+
+        Returns:
+            int: The controller key vSphere assigned to the new controller.
+
+        Raises:
+            ValueError: If no SCSI bus number (0-3) is available, or the newly added controller
+                cannot be found after the reconfigure task.
+        """
+        existing_controllers = [
+            dev for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualSCSIController)
+        ]
+        existing_keys = {dev.key for dev in existing_controllers}
+        used_bus_numbers = {dev.busNumber for dev in existing_controllers}
+        bus_number = next((i for i in range(4) if i not in used_bus_numbers), None)
+        if bus_number is None:
+            raise ValueError(f"No available SCSI bus number (0-3) on VM '{vm.name}' for a shared controller")
+
+        controller = vim.vm.device.ParaVirtualSCSIController()
+        controller.key = -200
+        controller.busNumber = bus_number
+        controller.sharedBus = vim.vm.device.VirtualSCSIController.Sharing.physicalSharing
+
+        spec = vim.vm.device.VirtualDeviceSpec()
+        spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        spec.device = controller
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.deviceChange = [spec]
+
+        task = vm.ReconfigVM_Task(spec=config_spec)
+        self.wait_task(task=task, action_name=f"Adding shared SCSI controller to VM {vm.name}", wait_timeout=120)
+
+        new_controller = next(
+            (
+                dev
+                for dev in vm.config.hardware.device
+                if isinstance(dev, vim.vm.device.VirtualSCSIController) and dev.key not in existing_keys
+            ),
+            None,
+        )
+        if new_controller is None:
+            raise ValueError(f"Failed to find newly added shared SCSI controller on VM '{vm.name}'")
+        return new_controller.key
+
+    def _attach_rdm_device(
+        self,
+        vm: vim.VirtualMachine,
+        controller_key: int,
+        lun_uuid: str,
+        datastore: vim.Datastore,
+        compatibility_mode: str,
+        rdm_type: Literal["virtual", "physical"],
+        existing_filename: str | None = None,
+    ) -> str:
+        """Add an RDM disk device to a VM, creating a fresh mapping file or reusing an existing one.
+
+        Args:
+            vm: The target VM object.
+            controller_key: Key of the SCSI controller to attach the disk to.
+            lun_uuid: LUN UUID (naa.xxx) to map.
+            datastore: VMFS datastore for the RDM mapping file.
+            compatibility_mode: "virtualMode" or "physicalMode".
+            rdm_type: "virtual" or "physical" compatibility mode.
+            existing_filename: When set, attaches to this existing mapping file instead of
+                creating a new one -- used to make a second VM share the first VM's RDM mapping.
+
+        Returns:
+            str: The datastore path of the RDM mapping file backing the new disk -- either
+                `existing_filename` or the one vSphere just created.
+
+        Raises:
+            ValueError: If no available SCSI unit number is found on the controller, or the
+                newly added disk cannot be found after the reconfigure task.
+        """
+        existing_disk_keys = {
+            dev.key for dev in vm.config.hardware.device if isinstance(dev, vim.vm.device.VirtualDisk)
+        }
+        used_units = {dev.unitNumber for dev in vm.config.hardware.device if dev.controllerKey == controller_key}
+        unit_number = next((i for i in range(16) if i != 7 and i not in used_units), None)
+        if unit_number is None:
+            raise ValueError(f"No available unit number on shared SCSI controller for VM '{vm.name}'")
+
+        spec = vim.vm.device.VirtualDeviceSpec()
+        spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        if existing_filename is None:
+            spec.fileOperation = vim.vm.device.VirtualDeviceSpec.FileOperation.create
+
+        disk = vim.vm.device.VirtualDisk()
+        disk.key = -101
+        disk.controllerKey = controller_key
+        disk.unitNumber = unit_number
+
+        backing = vim.vm.device.VirtualDisk.RawDiskMappingVer1BackingInfo()
+        backing.compatibilityMode = compatibility_mode
+        backing.datastore = datastore
+        if existing_filename is not None:
+            backing.fileName = existing_filename
+        else:
+            backing.deviceName = f"/vmfs/devices/disks/{lun_uuid}"
+        if rdm_type == "virtual":
+            backing.lunUuid = lun_uuid
+            backing.diskMode = "persistent"
+        else:
+            backing.diskMode = "independent_persistent"
+        disk.backing = backing
+        spec.device = disk
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.deviceChange = [spec]
+
+        task = vm.ReconfigVM_Task(spec=config_spec)
+        self.wait_task(task=task, action_name=f"Attaching shared RDM disk to VM {vm.name}", wait_timeout=120)
+
+        new_disk = next(
+            (
+                dev
+                for dev in vm.config.hardware.device
+                if isinstance(dev, vim.vm.device.VirtualDisk) and dev.key not in existing_disk_keys
+            ),
+            None,
+        )
+        if new_disk is None:
+            raise ValueError(f"Failed to find newly attached RDM disk on VM '{vm.name}'")
+        return new_disk.backing.fileName
+
     @staticmethod
     def _get_nic_network_id(nic: vim.vm.device.VirtualEthernetCard) -> str:
         """Return a stable network identifier from a NIC's backing.

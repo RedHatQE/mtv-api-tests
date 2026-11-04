@@ -265,6 +265,7 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `add_nic` | No | True to add a NIC (vSphere only) |
 | `add_nic_start_connected` | Yes* | Required when `add_nic=True`; bool |
 | `win_os` | No | Hyper-V guest OS override (bool) |
+| `scsi_reservation` | No | Per-VM override of `scsi_reservation` |
 
 ### Plan configuration options
 
@@ -283,6 +284,7 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `per_nic_network_map` | Per-NIC network mappings (duplicate source networks allowed) |
 | `skip_clone` | Skip VM cloning in `prepared_plan` (plan-readiness tests on existing VMs) |
 | `rdm_as_lun` | Map RDM disks as LUN devices with SCSI bus |
+| `scsi_reservation` | Enable SCSI persistent reservation on shared RDM LUN disks (requires `rdm_as_lun`; per-VM override available) |
 | `pre_copy_source_disks` | Hyper-V two-phase VHDX→raw transfer (Hyper-V source only) |
 | `network_map_overrides` | Per-network destination overrides chosen by `source_ip_config`; `pod`/`multus`/`ignored` + optional `network_ip_mode` |
 | `network_name_template` | Forklift network-name template (e.g. `net-{{.NetworkType \| lower}}-{{.NetworkIndex}}`); asserted post-migration |

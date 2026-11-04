@@ -183,6 +183,63 @@ def _get_pvc_device_targets(
     return pvc_devices
 
 
+def _get_vm_pvc_claim_names(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    vm_name: str,
+) -> set[str]:
+    """Get PVC claim names attached in a VM's spec.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where the migrated VM lives.
+        vm_name (str): Destination VM name.
+
+    Returns:
+        set[str]: PVC claim names referenced by the VM.
+    """
+    cnv_vm = VirtualMachine(
+        client=ocp_admin_client,
+        name=vm_name,
+        namespace=target_namespace,
+        ensure_exists=True,
+    )
+    return {
+        volume.persistentVolumeClaim.claimName
+        for volume in cnv_vm.instance.spec.template.spec.volumes
+        if getattr(volume, "persistentVolumeClaim", None)
+    }
+
+
+def verify_vms_share_single_pvc(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    vm1_dest_name: str,
+    vm2_dest_name: str,
+) -> None:
+    """Verify two destination VMs reference exactly one common PVC.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where the migrated VMs live.
+        vm1_dest_name (str): First destination VM name.
+        vm2_dest_name (str): Second destination VM name.
+
+    Raises:
+        ValueError: If the VMs do not reference exactly one common PVC.
+    """
+    vm1_pvc_names = _get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm1_dest_name)
+    vm2_pvc_names = _get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm2_dest_name)
+    shared_pvcs = vm1_pvc_names & vm2_pvc_names
+
+    if len(shared_pvcs) != 1:
+        raise ValueError(
+            f"Expected exactly one shared PVC between '{vm1_dest_name}' and '{vm2_dest_name}', "
+            f"found {sorted(shared_pvcs)}. VM1 PVCs: {sorted(vm1_pvc_names)}, "
+            f"VM2 PVCs: {sorted(vm2_pvc_names)}"
+        )
+
+
 def _get_shared_disk_devices(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
