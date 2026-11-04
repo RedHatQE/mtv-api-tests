@@ -476,28 +476,24 @@ def scsi_persistent_reservation_hco(ocp_admin_client: DynamicClient) -> Generato
                 f"HyperConverged '{hco.name}' patch for featureGates.persistentReservation did not take effect"
             )
 
-        # HCO propagates the gate to the KubeVirt CR (kubevirt-kubevirt-hyperconverged in the
-        # kubevirt namespace) via its own reconciliation loop, which is asynchronous with the
+        # HCO propagates the gate to the KubeVirt CR via its own reconciliation loop
+        # (the CR name varies by deployment, so list the cluster single KubeVirt CR), which is asynchronous with the
         # HyperConverged patch above. The migration must not start before the virt stack picked
         # the gate up, otherwise KubeVirt does not deploy the pr-helper and lun.reservation has
         # no effect. Poll defensively for "persistentReservation" anywhere in the KubeVirt CR's
         # spec.configuration (HCO's exact placement varies by version) rather than a fixed path.
-        kubevirt = next(
-            KubeVirt.get(client=ocp_admin_client, namespace="kubevirt", name="kubevirt-kubevirt-hyperconverged"),
-            None,
-        )
+        kubevirt = next(KubeVirt.get(client=ocp_admin_client), None)
         if kubevirt is None:
-            raise ValueError("KubeVirt CR 'kubevirt-kubevirt-hyperconverged' not found in namespace 'kubevirt'")
+            raise ValueError("No KubeVirt CR found on the cluster - is OpenShift Virtualization installed?")
 
         def _gate_in_kubevirt_cr() -> bool:
             """Return True once the KubeVirt CR spec.configuration mentions the gate."""
-            kv = next(
-                KubeVirt.get(client=ocp_admin_client, namespace="kubevirt", name="kubevirt-kubevirt-hyperconverged"),
-                None,
-            )
+            kv = next(KubeVirt.get(client=ocp_admin_client), None)
             if kv is None:
                 return False
-            return "persistentReservation" in str(kv.instance.spec.get("configuration"))
+            # HCO writes the gate into KubeVirt CR as "PersistentReservation" (capital P) while
+            # the HyperConverged field is lowercase, so compare case-insensitively.
+            return "persistentreservation" in str(kv.instance.spec.get("configuration")).lower()
 
         for gate_present in TimeoutSampler(wait_timeout=300, sleep=10, func=_gate_in_kubevirt_cr):
             if gate_present:
