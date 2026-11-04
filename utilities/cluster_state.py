@@ -72,7 +72,7 @@ _CLUSTER_IMAGE_NAME = "cluster"
 _CURRENT_USER_NAME = "~"
 # Bounded because the probe asks for every container of every replica: the stderr of a busy
 # multi-replica provisioner is otherwise large enough to fill the artifact disk.
-_CSI_LOG_TAIL_LINES = 300
+_CSI_LOG_TAIL_LINES = 3000
 _MCO_LOG_TAIL_LINES = 500
 # A snapshot of one pod's current and previous log covers an operator restart; daemonsets that are
 # not part of the MCO or the ceph-csi path would only add noise.
@@ -524,6 +524,43 @@ def _pod_summary(pods: list[dict[str, Any]]) -> list[str]:
             f"{_resource_name(pod)}: phase={status.get('phase')} ready={ready}/{len(container_statuses)} "
             f"restarts={restarts} node={(pod.get('spec') or {}).get('nodeName')}"
         )
+        # The pod body itself is not dumped, so its container states - the reason a pod is stuck or
+        # crash-looping - are rendered here instead.
+        lines.extend(_container_state_lines(container_statuses=container_statuses, pod_name=_resource_name(pod)))
+    return lines
+
+
+def _container_state_lines(*, container_statuses: list[dict[str, Any]], pod_name: str) -> list[str]:
+    """Render the waiting/terminated state of each container.
+
+    Args:
+        container_statuses (list[dict[str, Any]]): ``status.containerStatuses`` of one pod.
+        pod_name (str): Pod name, prefixed to every line so the state is attributable.
+
+    Returns:
+        list[str]: One line per container state that is not simply running.
+    """
+    lines: list[str] = []
+    for container_status in container_statuses:
+        name = container_status.get("name", "<unnamed>")
+        state = container_status.get("state") or {}
+        waiting = state.get("waiting") or {}
+        terminated = state.get("terminated") or {}
+        last_terminated = (container_status.get("lastState") or {}).get("terminated") or {}
+        if waiting:
+            lines.append(
+                f"  {pod_name}/{name}: waiting reason={waiting.get('reason')} message={waiting.get('message')}"
+            )
+        if terminated:
+            lines.append(
+                f"  {pod_name}/{name}: terminated reason={terminated.get('reason')} "
+                f"exitCode={terminated.get('exitCode')}"
+            )
+        if last_terminated:
+            lines.append(
+                f"  {pod_name}/{name}: lastTerminated reason={last_terminated.get('reason')} "
+                f"exitCode={last_terminated.get('exitCode')}"
+            )
     return lines
 
 
@@ -733,6 +770,8 @@ def _previous_container_log(*, pod: Pod, container: str, tail_lines: int) -> str
         raise
 
 
+# Any: the pod body is a dynamic Kubernetes object whose per-field types the CRD schema cannot
+# express, and only status.containerStatuses is read here.
 def _restarted_containers(*, pod: dict[str, Any]) -> set[str]:
     """Return the containers that have a previous instance to read.
 
@@ -872,12 +911,14 @@ def _dump_upgrade_scope(probes: _Probes) -> list[str]:
             "ClusterOperator machine-config",
             partial(_named_instance, ClusterOperator, client=probes.client, name=_MACHINE_CONFIG_OPERATOR),
         ),
+        # The upgrade scope keeps the full MachineConfigPool bodies: the pool conditions are the
+        # primary evidence for an upgrade that never converged, and the summary only flattens them.
         *_listing_sections(
             probes=probes,
             label="MachineConfigPools",
             resource_cls=MachineConfigPool,
             summarise=_machine_config_pool_summary,
-            include_listing=False,
+            include_listing=True,
         ),
         *_listing_sections(
             probes=probes, label="Nodes", resource_cls=Node, summarise=_node_summary, include_listing=False
