@@ -62,7 +62,6 @@ _MAX_SNAPSHOT_OUTPUT_BYTES = 8 * 1024 * 1024
 _CLIENT_BUILD_BUDGET_SECONDS = 60
 _TRUNCATION_MARKER = "[truncated: {omitted} bytes omitted]"
 _MCO_NAMESPACE = "openshift-machine-config-operator"
-_STORAGE_NAMESPACE = "openshift-storage"
 # The MTV namespace is configurable (--tc=mtv_namespace:), so it is read from the run config.
 _MTV_NAMESPACE_CONFIG_KEY = "mtv_namespace"
 _CNV_NAMESPACE = "openshift-cnv"
@@ -75,28 +74,16 @@ _CLUSTER_IMAGE_KIND = "Image"
 _CLUSTER_IMAGE_NAME = "cluster"
 # ``~`` is the API's self-subject name for the authenticated user, the documented ``oc whoami``.
 _CURRENT_USER_NAME = "~"
-# Bounded because the probe asks for every container of every replica: the stderr of a busy
-# multi-replica provisioner is otherwise large enough to fill the artifact disk.
-_CSI_LOG_TAIL_LINES = 3000
-_MCO_LOG_TAIL_LINES = 500
-# A snapshot of one pod's current and previous log covers an operator restart; daemonsets that are
-# not part of the MCO or the ceph-csi path would only add noise.
+# The storage class under test is an input, not something to discover: it arrives in
+# --tc=storage_class and is the same value the pre-test PVC canary binds a claim on.
+_STORAGE_CLASS_CONFIG_KEY = "storage_class"
+# One claim's consumers are the importer/populator and launcher pods; they log at most a few
+# thousand lines each.
+_STORAGE_CLAIM_LOG_TAIL_LINES = 1000
 # The MCO pods carry a stable k8s-app label; their names encode the node and change between
 # releases, so the label - not the name - is what a snapshot may rely on.
 _MCO_POD_LABEL_SELECTOR = "k8s-app in (machine-config-operator,machine-config-controller,machine-config-daemon)"
-# CSI pod names differ across ODF versions (csi-rbdplugin-provisioner-* upstream, and
-# openshift-storage.rbd.csi.ceph.com-ctrlplugin-* / -nodeplugin-* in ODF), so the pods are selected
-# by what they run - a CSI sidecar or the rbd driver container - rather than by a name prefix that
-# silently matches nothing on a different deployment.
-# Only the two containers that explain a refused volume: the provisioner answers the PVC and the
-# driver performs the RPC. The attacher/resizer/snapshotter sidecars add megabytes of unrelated log.
-_CSI_CONTAINER_NAMES = ("csi-provisioner", "csi-rbdplugin")
-# The node plugin runs once per node, so its tail is kept short: the volume-refusal evidence lives in
-# the controller plugin, and 3+ nodes of 3000-line tails alone exceeded the snapshot budget.
-# The controller plugin runs the provisioner sidecar; the per-node plugin does not, which is how the
-# two are told apart without relying on either deployment's pod naming.
-_CSI_CONTROLLER_CONTAINER = "csi-provisioner"
-_CSI_NODE_LOG_TAIL_LINES = 500
+_MCO_LOG_TAIL_LINES = 500
 # Non-Bound PVC bodies carry their own event history and can be tens of KiB each on a full disk;
 # the listing above already names every PVC with its phase.
 _MAX_PENDING_PVC_DUMPS = 20
@@ -104,17 +91,18 @@ _MAX_PENDING_PVC_DUMPS = 20
 _EVENT_LOOKBACK_SECONDS = 24 * 60 * 60
 _GIT_PACKED_REFS_NAME = "packed-refs"
 _HTTP_BAD_REQUEST = 400
-# The wrapper exposes no per-request timeout, and urllib3 sets the connection timeout from
-# _request_timeout, which the wrappers never pass - so a process-wide socket default does NOT bound a
-# Kubernetes call (measured: a client request to a blackholed address hung past 120s with
-# socket.setdefaulttimeout(3)). Only the socket default for plain socket users is kept; every
-# Kubernetes read the snapshot performs goes through _call_within_budget instead.
-_REQUEST_SOCKET_TIMEOUT_SECONDS = 30
+# Nothing here bounds a Kubernetes call from the socket side: the wrapper exposes no per-request
+# timeout, and urllib3 sets the connection timeout from _request_timeout, which the wrappers never
+# pass - a process-wide socket default does NOT bound them (measured: a client request to a
+# blackholed address hung past 120s with socket.setdefaulttimeout(3)). Every read the snapshot
+# performs goes through _call_within_budget instead.
 
 
 _NODE_ROLE_LABEL_PREFIX = "node-role.kubernetes.io/"
 # Only used to reach a kind's API handle through its wrapper class; nothing is read for it.
 _KIND_HANDLE_NAME = "cluster-state-probe"
+
+
 _PROBE_LABEL_PREFIX = "### "
 _SECTION_SEPARATOR = "\n\n"
 _SNAPSHOT_DIRECTORY = "cluster-state"
@@ -371,12 +359,13 @@ class _Probes:
                 )
             LOGGER.warning(f"Cluster state probe '{label}' failed: {failure}")
             return f"{_PROBE_LABEL_PREFIX}{label}\n[probe failed: {type(failure).__name__}: {failure}]", None
-        record = self.record(label=label, value=value, render=render)
-        self._within_size_budget(record)
-        return record, value
+        return self.record(label=label, value=value, render=render), value
 
     def record(self, label: str, value: Any, *, render: Callable[[Any], str] = _render_json) -> str:
-        """Render data under a probe label, bounded by the per-probe output cap.
+        """Render data under a probe label, bounded by the per-probe cap and the snapshot budget.
+
+        Every record goes through here, so the snapshot total stays within its budget whether the
+        section came from a probe result or was rendered directly.
 
         Args:
             label (str): Readable probe label, written as the section header.
@@ -384,9 +373,15 @@ class _Probes:
             render (Callable[[Any], str]): Renders the value.
 
         Returns:
-            str: The rendered record.
+            str: The rendered record, or a skip note once the snapshot budget is exhausted.
         """
-        return f"{_PROBE_LABEL_PREFIX}{label}\n{_truncate_output(text=render(value))}"
+        record = f"{_PROBE_LABEL_PREFIX}{label}\n{_truncate_output(text=render(value))}"
+        if not self._within_size_budget(record):
+            return (
+                f"{_PROBE_LABEL_PREFIX}{label}\n"
+                f"[skipped: snapshot size budget of {_MAX_SNAPSHOT_OUTPUT_BYTES} bytes reached]"
+            )
+        return record
 
     def deadline_record(self) -> str | None:
         """Render the record that closes a snapshot cut short by its deadline.
@@ -883,7 +878,7 @@ def _pod_log_sections(
     namespace: str,
     tail_lines: int,
     label_selector: str | None = None,
-    container_names: tuple[str, ...] = (),
+    pod_filter: Callable[[dict[str, Any]], bool] | None = None,
 ) -> list[str]:
     """Collect the pods of a namespace and every container log of the matching ones.
 
@@ -897,8 +892,8 @@ def _pod_log_sections(
         namespace (str): Namespace holding the pods.
         tail_lines (int): Lines kept per container log.
         label_selector (str | None): Server-side label filter selecting the pods to read.
-        container_names (tuple[str, ...]): Container names worth collecting, matched per pod so a
-            renamed pod is still selected by the sidecar it runs.
+        pod_filter (Callable[[dict[str, Any]], bool] | None): Keeps only the pods worth reading,
+            applied after the listing because the API cannot select on a pod's volume references.
 
     Returns:
         list[str]: The pod listing, its summary, and one record per container log.
@@ -909,6 +904,8 @@ def _pod_log_sections(
     )
     if pods is None:
         return [record]
+    if pod_filter:
+        pods = [pod for pod in pods if pod_filter(pod)]
 
     # The summary already carries phase, readiness, restarts and node: the full pod bodies are the
     # bulk of the artifact and add nothing the logs below do not show.
@@ -917,18 +914,13 @@ def _pod_log_sections(
     for pod in pods:
         pod_name = _resource_name(pod)
         containers = [container.get("name", "") for container in (pod.get("spec") or {}).get("containers") or []]
-        wanted = not container_names or any(name in container_names for name in containers)
-        if not wanted:
-            continue
         pod_wrapper = Pod(client=probes.client, name=pod_name, namespace=namespace)
-        pod_tail_lines = tail_lines if _CSI_CONTROLLER_CONTAINER in containers else _CSI_NODE_LOG_TAIL_LINES
         restarted_containers = _restarted_containers(pod=pod)
-        selected_containers = [name for name in containers if not container_names or name in container_names]
-        for container in selected_containers:
+        for container in containers:
             sections.append(
                 probes.run(
                     f"log {pod_name}/{container}",
-                    partial(pod_wrapper.log, container=container, tail_lines=pod_tail_lines),
+                    partial(pod_wrapper.log, container=container, tail_lines=tail_lines),
                     render=str,
                 )
             )
@@ -936,16 +928,14 @@ def _pod_log_sections(
                 sections.append(
                     probes.run(
                         f"log {pod_name}/{container} (previous)",
-                        partial(
-                            _previous_container_log, pod=pod_wrapper, container=container, tail_lines=pod_tail_lines
-                        ),
+                        partial(_previous_container_log, pod=pod_wrapper, container=container, tail_lines=tail_lines),
                         render=str,
                     )
                 )
     return sections
 
 
-def _pending_pvc_sections(*, probes: _Probes, namespace: str) -> list[str]:
+def _pending_pvc_sections(*, probes: _Probes, namespace: str) -> tuple[list[str], list[dict[str, Any]]]:
     """Collect the namespace PVCs, their summary, and the full body of the non-Bound ones.
 
     Args:
@@ -953,14 +943,15 @@ def _pending_pvc_sections(*, probes: _Probes, namespace: str) -> list[str]:
         namespace (str): Namespace holding the PVCs.
 
     Returns:
-        list[str]: The PVC summary, and one full-body record per non-Bound PVC.
+        tuple[list[str], list[dict[str, Any]]]: The rendered records, and the listed PVCs so the
+            caller can derive which storage drivers the stalled claims need.
     """
     label = f"PVCs in {namespace}"
     record, claims = probes.fetch(
         label=label, probe=partial(_list_items, PersistentVolumeClaim, client=probes.client, namespace=namespace)
     )
     if claims is None:
-        return [record]
+        return [record], []
 
     sections = [
         probes.record(label=f"{label} summary", value=_persistent_volume_claim_summary(claims), render=_render_lines)
@@ -984,7 +975,7 @@ def _pending_pvc_sections(*, probes: _Probes, namespace: str) -> list[str]:
         )
         for claim in pending[:_MAX_PENDING_PVC_DUMPS]
     )
-    return sections
+    return sections, claims
 
 
 def _dump_upgrade_scope(probes: _Probes) -> list[str]:
@@ -1071,7 +1062,12 @@ def _mtv_csv_sections(*, probes: _Probes) -> list[str]:
 
 
 def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
-    """Collect PVC, DataVolume, event and ceph-csi provisioner state of a stalled migration.
+    """Collect the state of the storage class under test around a stalled migration.
+
+    The class is the value the run was given (``--tc=storage_class``), not something inferred from
+    the cluster: the same class the pre-test PVC canary binds a claim on. That keeps the section
+    honest on any backend - a driver's pod names, sidecar names and even its existence are not
+    assumed anywhere.
 
     Args:
         probes (_Probes): Probe runner of the current snapshot.
@@ -1080,7 +1076,8 @@ def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
     Returns:
         list[str]: One rendered record per probe.
     """
-    sections = _pending_pvc_sections(probes=probes, namespace=namespace)
+    pvc_sections, claims = _pending_pvc_sections(probes=probes, namespace=namespace)
+    sections = list(pvc_sections)
     sections.extend(
         _listing_sections(
             probes=probes,
@@ -1091,15 +1088,6 @@ def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
             include_listing=False,
         )
     )
-    sections.extend(
-        _listing_sections(
-            probes=probes,
-            label="PersistentVolumes",
-            resource_cls=PersistentVolume,
-            summarise=_persistent_volume_summary,
-            include_listing=False,
-        )
-    )
     sections.append(
         probes.run(
             "Events",
@@ -1107,25 +1095,107 @@ def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
             render=_render_lines,
         )
     )
-    sections.extend(
-        _listing_sections(
-            probes=probes,
-            label="StorageClasses",
-            resource_cls=StorageClass,
-            summarise=_storage_class_summary,
-            include_listing=False,
-        )
+    sections.extend(_storage_class_sections(probes=probes, claims=claims, namespace=namespace))
+    return sections
+
+
+def _storage_class_sections(*, probes: _Probes, claims: list[dict[str, Any]], namespace: str) -> list[str]:
+    """Render the storage class under test, its volumes, their attachments and the stuck pods.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        claims (list[dict[str, Any]]): PVC bodies of the migration target namespace.
+        namespace (str): Migration target namespace.
+
+    Returns:
+        list[str]: The class body, the persistent volumes behind the claims that request it, and
+            the logs of the pods using those claims.
+    """
+    class_name = py_config[_STORAGE_CLASS_CONFIG_KEY]
+    record, storage_class = probes.fetch(
+        label=f"Storage class {class_name}",
+        probe=partial(_named_instance, StorageClass, client=probes.client, name=class_name),
     )
+    if storage_class is None:
+        return [record]
+
+    class_claims = _claims_of_class(claims=claims, storage_class_name=class_name)
+    claim_names = {_resource_name(claim) for claim in class_claims}
+    volume_names = {volume for claim in class_claims if (volume := (claim.get("spec") or {}).get("volumeName"))}
+    sections = [
+        record,
+        probes.run(
+            f"Persistent volumes of {class_name}",
+            partial(_class_persistent_volumes, client=probes.client, names=volume_names),
+            render=_render_lines,
+        ),
+    ]
+    if not claim_names:
+        return sections
     sections.extend(
         _pod_log_sections(
             probes=probes,
-            label=f"Pods in {_STORAGE_NAMESPACE}",
-            namespace=_STORAGE_NAMESPACE,
-            container_names=_CSI_CONTAINER_NAMES,
-            tail_lines=_CSI_LOG_TAIL_LINES,
+            label=f"Pods using claims of {class_name}",
+            namespace=namespace,
+            tail_lines=_STORAGE_CLAIM_LOG_TAIL_LINES,
+            pod_filter=partial(_uses_claims, claim_names=claim_names),
         )
     )
     return sections
+
+
+def _claims_of_class(*, claims: list[dict[str, Any]], storage_class_name: str) -> list[dict[str, Any]]:
+    """Return the claims that request the given storage class.
+
+    Args:
+        claims (list[dict[str, Any]]): PVC bodies.
+        storage_class_name (str): Storage class under test.
+
+    Returns:
+        list[dict[str, Any]]: The matching claims, empty when the namespace requests none.
+    """
+    return [claim for claim in claims if (claim.get("spec") or {}).get("storageClassName") == storage_class_name]
+
+
+def _uses_claims(pod: dict[str, Any], *, claim_names: set[str]) -> bool:
+    """Return whether a pod mounts any of the given claims.
+
+    Args:
+        pod (dict[str, Any]): Pod body.
+        claim_names (set[str]): Claims under test.
+
+    Returns:
+        bool: True when a volume of the pod references one of the claims.
+    """
+    volumes = (pod.get("spec") or {}).get("volumes") or []
+    return any((volume.get("persistentVolumeClaim") or {}).get("claimName") in claim_names for volume in volumes)
+
+
+def _named_instances(resource_cls: type[Resource], *, client: DynamicClient, names: set[str]) -> list[dict[str, Any]]:
+    """Read the named objects of one kind.
+
+    Args:
+        resource_cls (type[Resource]): Wrapper class of the kind.
+        client (DynamicClient): Run client.
+        names (set[str]): Object names to read.
+
+    Returns:
+        list[dict[str, Any]]: The objects, empty when the set is empty.
+    """
+    return [_named_instance(resource_cls, client=client, name=name) for name in sorted(names)]
+
+
+def _class_persistent_volumes(*, client: DynamicClient, names: set[str]) -> list[str]:
+    """Render the persistent volumes behind the claims under test.
+
+    Args:
+        client (DynamicClient): Run client.
+        names (set[str]): Persistent volume names.
+
+    Returns:
+        list[str]: One summary line per volume, empty when no claim is bound yet.
+    """
+    return _persistent_volume_summary(_named_instances(PersistentVolume, client=client, names=names))
 
 
 def _with_deadline_record(*, sections: list[str], probes: _Probes | None) -> list[str]:

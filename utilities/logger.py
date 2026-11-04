@@ -46,10 +46,11 @@ class _CredentialRedactingFilter(RedactingFilter):
             # scheme word, so the scheme is part of the pattern.
             msg = re.sub(rf"({pattern}\W+[^\s]+)", f"{pattern} {'*' * 5} ", msg, flags=re.IGNORECASE)
         for pattern in _ASSIGNMENT_LOG_KEYS:
-            # Optional quotes on both sides: repr/JSON forms such as 'token': 'sha256~abc' and
-            # "password": "x" are what --openshift-python-wrapper-log-debug and dict logging emit.
+            # Optional quotes on both sides, because repr and JSON forms quote the key and the value.
+            # A quoted value is consumed whole, so a multi-word value inside quotes cannot keep its
+            # tail after the first space.
             msg = re.sub(
-                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*['\"]?)[^\s,'\"]+",
+                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*)(?:['\"][^'\"]*['\"]|[^\s,'\"]+)",
                 r"\1*****",
                 msg,
                 flags=re.IGNORECASE,
