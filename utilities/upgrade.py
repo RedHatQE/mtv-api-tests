@@ -116,8 +116,13 @@ def _write_redacted_logs(*, artifact_dir: Path, stdout: str, stderr: str) -> Non
         stdout (str): Redacted upgrade script stdout.
         stderr (str): Redacted upgrade script stderr.
     """
-    (artifact_dir / _UPGRADE_STDOUT_LOG_NAME).write_text(stdout)
-    (artifact_dir / _UPGRADE_STDERR_LOG_NAME).write_text(stderr)
+    try:
+        (artifact_dir / _UPGRADE_STDOUT_LOG_NAME).write_text(stdout)
+        (artifact_dir / _UPGRADE_STDERR_LOG_NAME).write_text(stderr)
+    except OSError as exc:
+        # A full or read-only collector must never mask the upgrade failure this artifact describes;
+        # the tails are still in the raised error, so losing the files only costs the full stream.
+        LOGGER.warning(f"Could not persist the upgrade script logs under '{artifact_dir}': {exc}")
 
 
 def _upgrade_failure_details(*, stdout: str, stderr: str, artifact_dir: Path | None) -> str:
@@ -152,12 +157,13 @@ def _require_cluster_password() -> str:
         str: The non-empty cluster password handed to the script and used for redaction.
 
     Raises:
-        MtvUpgradeError: If ``CLUSTER_PASSWORD`` is missing, empty or whitespace only, because the
-            script output is redacted with it.
+        ValueError: If ``CLUSTER_PASSWORD`` is missing, empty or whitespace only, because the script
+            output is redacted with it. Configuration errors are ``ValueError`` by convention, matching
+            ``utilities.utils._validate_cluster_credentials``.
     """
     password = resolve_cluster_credential("cluster_password")
     if not password or not password.strip():
-        raise MtvUpgradeError(
+        raise ValueError(
             "CLUSTER_PASSWORD is missing or empty: neither 'cluster_password' in pytest config nor the "
             "CLUSTER_PASSWORD environment variable is set. The upgrade script needs it and its output is "
             "redacted with it, so the upgrade cannot start"
@@ -221,8 +227,9 @@ def run_mtv_upgrade(
             only guards against a wedged process.
 
     Raises:
-        MtvUpgradeError: If ``CLUSTER_PASSWORD`` is missing or empty, or the upgrade script exits
-            with a non-zero status or times out.
+        ValueError: If ``CLUSTER_PASSWORD``, ``CLUSTER_USERNAME`` or ``CLUSTER_HOST`` is missing or
+            empty.
+        MtvUpgradeError: If the upgrade script exits with a non-zero status or times out.
     """
     password = _require_cluster_password()
     # Every cluster credential is resolved the same way (pytest config, then the CLUSTER_* env var);
@@ -231,12 +238,12 @@ def run_mtv_upgrade(
     username = resolve_cluster_credential("cluster_username")
     cluster_host = resolve_cluster_credential("cluster_host")
     if not username or not username.strip():
-        raise MtvUpgradeError(
+        raise ValueError(
             "CLUSTER_USERNAME is missing or empty: neither 'cluster_username' in pytest config nor the "
             "CLUSTER_USERNAME environment variable is set, so the upgrade script cannot log in"
         )
     if not cluster_host or not cluster_host.strip():
-        raise MtvUpgradeError(
+        raise ValueError(
             "CLUSTER_HOST is missing or empty: neither 'cluster_host' in pytest config nor the CLUSTER_HOST "
             "environment variable is set, so the upgrade script has no API server to upgrade"
         )
