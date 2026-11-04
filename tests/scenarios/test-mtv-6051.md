@@ -8,7 +8,7 @@ Verify that when migrating VMs with shared RDM disks from vSphere using
 disk spec. This enables SCSI-3 Persistent Reservations (pr-helper) for
 clustered workloads and correct I/O error reporting for guest-level failover.
 
-Feature PR: https://github.com/kubev2v/forklift/pull/7351
+Feature PR: <https://github.com/kubev2v/forklift/pull/7351>
 Epic: MTV-6049
 Dev story: MTV-6050
 QE story: MTV-6051

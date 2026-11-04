@@ -17,7 +17,6 @@ because agents trust them over the actual code; changes need user approval.
 | Install dependencies | `uv sync` (never pip) |
 | Lint/format gate (MUST pass before commit, never `--no-verify`) | `pre-commit run --all-files` |
 | Build container | `podman build -f Dockerfile -t mtv-api-tests` |
-| Check test coverage before writing a test | `uv run mtv-api-tests coverage <keywords>` |
 | Regenerate docs site | `uvx pi-docsite --docs-dir docs --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."` |
 
 ## Stack
@@ -265,7 +264,6 @@ imports are elided (`...`) — request only the fixtures each method needs.
 | `add_nic` | No | True to add a NIC (vSphere only) |
 | `add_nic_start_connected` | Yes* | Required when `add_nic=True`; bool |
 | `win_os` | No | Hyper-V guest OS override (bool) |
-| `scsi_reservation` | No | Per-VM override of `scsi_reservation` |
 
 ### Plan configuration options
 
