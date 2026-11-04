@@ -529,13 +529,15 @@ and turns the feature off instead of failing the run.
 <li>
 <p><code>.data-collector/session-start/cluster.txt</code>: the cluster baseline captured at session start — <code>ClusterVersion</code>, <code>ClusterOperator</code>, the <code>MachineConfigPool</code> manifests plus per-pool counters
   and conditions, nodes, and the <code>openshift-mtv</code> / <code>openshift-cnv</code> CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
-  the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it.</p>
+  the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it. A client is built for the baseline when none is passed
+  in, so the probes also work in a container run with no ambient kubeconfig; if that fails the baseline is logged and skipped, never raised. Still set <code>--skip-data-collector</code> to
+  disable it.</p>
 </li>
 <li>
 <p><code>.data-collector/session-start/run-identity.txt</code>: the checkout revision, the pytest invocation, <code>oc whoami</code>, and whether
   <code>--skip-teardown</code> / <code>--skip-data-collector</code> were set. Written once per run, like <code>cluster.txt</code>. Credentials never reach this file: the value of every credential-ish <code>--tc</code>
   (<code>password</code>, <code>token</code>, <code>secret</code>, <code>api_key</code>, <code>apikey</code>, <code>credential</code>), any URL userinfo (<code>scheme://user:pass@host</code> → <code>scheme://***@host</code>) and the resolved cluster password are
-  replaced with <code>***</code>.</p>
+  replaced with <code>***</code>. Both <code>--tc=key:value</code> and the split <code>--tc key:value</code> forms are covered.</p>
 </li>
 <li>
 <p><code>.data-collector/cluster-state/&lt;timestamp&gt;-&lt;scope&gt;-&lt;reason&gt;[-&lt;worker&gt;].txt</code>: bounded cluster snapshots written just before a real failure is raised (see
@@ -583,13 +585,22 @@ logged into the snapshot itself, and the original exception is always the error 
   healthy cluster.</p>
 </li>
 <li>
+<p><strong>Size cap.</strong> Each probe's recorded stdout and stderr are capped at 512 KiB; a longer stream keeps its head and closes with <code>[truncated: &lt;N&gt; bytes omitted]</code>, and the
+  provisioner log tail is 300 lines per container rather than 3000, because the all-pods capture asks for every container of every replica at once. Evidence collection can
+  therefore not fill the disk it is meant to diagnose.</p>
+</li>
+<li>
 <p><strong>Ephemeral kubeconfig.</strong> <code>oc</code> would otherwise use the ambient kubeconfig, which a container or credential-only run does not have — every probe would fail with "no context" and
-  the snapshot would be empty. When the caller passes the run client (<code>client=plan.client</code>), the probes use a kubeconfig built from that client's configuration (server, token or
-  client certificate, CA or <code>insecure-skip-tls-verify</code>) in a temporary directory, mode <code>0600</code>, passed as <code>--kubeconfig=&lt;path&gt;</code> to every <code>oc</code> call and deleted when the snapshot
-  ends. It is never written into the artifact tree, and the token is never logged; the snapshot header records <code># oc context: temporary kubeconfig &lt;path&gt; (deleted after this
-  snapshot)</code> or that the ambient context was used.</p>
+  the snapshot would be empty. When the caller passes the run client (<code>client=plan.client</code> for a stalled migration, <code>client=</code> from <code>run_mtv_upgrade()</code> for the upgrade scope), the
+  probes use a kubeconfig built from that client's configuration (server, token or client certificate, CA or <code>insecure-skip-tls-verify</code>) in a temporary directory, mode <code>0600</code>,
+  passed as <code>--kubeconfig=&lt;path&gt;</code> to every <code>oc</code> call and deleted when the snapshot ends. It is never written into the artifact tree, and the token is never logged; the snapshot
+  header records <code># oc context: temporary kubeconfig &lt;path&gt; (deleted after this snapshot)</code> or that the ambient context was used. A full or unwritable temporary filesystem only
+  degrades to the ambient context with a warning — it never replaces the failure the snapshot documents.</p>
 </li>
 </ul>
+<p>Under <code>--skip-data-collector</code> the collector path is resolved first and the dump returns before any temporary kubeconfig is written or logged, so skip mode creates no credential
+file at all. Every probe output is written with the resolved <code>CLUSTER_PASSWORD</code> redacted, and a probe that hits its timeout keeps the stdout and stderr it produced before the
+limit, marked <code>[timed out after &lt;N&gt;s]</code>.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -607,12 +618,12 @@ logged into the snapshot itself, and the original exception is always the error 
 <tr>
 <td><code>storage</code></td>
 <td>A migration wait times out, or a migrated VM is confirmed unschedulable</td>
-<td><code>pvc,dv,pv -o wide</code> for the target namespace plus <code>-o yaml</code> for the non-Bound PVCs only, namespace events, storage classes, <code>openshift-storage</code> pods, and the ceph-csi provisioner log for all containers (<code>--all-containers --tail=3000</code>), followed by the <code>--previous</code> container log when one exists</td>
+<td><code>pvc,dv,pv -o wide</code> for the target namespace plus <code>-o yaml</code> for the non-Bound PVCs only, namespace events, storage classes, <code>openshift-storage</code> pods, and the ceph-csi provisioner log for all containers (<code>--all-containers --tail=300</code>), followed by the <code>--previous</code> container log when one exists</td>
 </tr>
 </tbody>
 </table></div>
-<p>The target namespace is read defensively and the dump is skipped when the read fails or <code>--skip-data-collector</code> is set, so collecting evidence can never replace the
-<code>MigrationPlanExecError</code> / <code>MigrationVmUnschedulableError</code> the caller is supposed to see.</p>
+<p>The target namespace is read defensively (attribute, transport and parse failures all degrade to no snapshot) and the dump is skipped when the read fails or
+<code>--skip-data-collector</code> is set, so collecting evidence can never replace the <code>MigrationPlanExecError</code> / <code>MigrationVmUnschedulableError</code> the caller is supposed to see.</p>
 <p>Deliberately <strong>not</strong> dumped: the generic <code>MigrationPlanExecError</code>. Expected-failure tests (<code>tests/plan_lifecycle/</code>, <code>TestPostHookRetainFailedVm</code>, resume-conversion) raise it on
 purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under <code>--skip-data-collector</code>.</p>
 <h2 id="must-gather-support">Must-Gather Support</h2>

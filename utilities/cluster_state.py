@@ -8,7 +8,7 @@ import re
 import subprocess
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -16,10 +16,12 @@ from time import monotonic
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
+from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
 from simple_logger.logger import get_logger
 
-from utilities.data_collector import data_collector_path, redact_secret, utc_timestamp
-from utilities.utils import resolve_cluster_credential
+from utilities.data_collector import data_collector_path as shared_data_collector_path
+from utilities.data_collector import redact_secret, utc_timestamp
+from utilities.utils import get_cluster_client, resolve_cluster_credential
 
 if TYPE_CHECKING:
     from kubernetes.client import Configuration
@@ -39,7 +41,9 @@ _STORAGE_NAMESPACE = "openshift-storage"
 _MTV_NAMESPACE = "openshift-mtv"
 _CNV_NAMESPACE = "openshift-cnv"
 _CSI_PROVISIONER_DEPLOYMENT = "csi-rbdplugin-provisioner"
-_CSI_LOG_TAIL_LINES = 3000
+# Bounded because the probe asks for every container of every provisioner replica at once: the
+# stderr of a busy multi-replica provisioner is otherwise large enough to fill the artifact disk.
+_CSI_LOG_TAIL_LINES = 300
 _MCO_LOG_TAIL_LINES = 500
 _ALL_PODS_FLAG = "--all-pods"
 _REASON_SLUG_MAX_LENGTH = 60
@@ -59,17 +63,61 @@ _GIT_HEAD_FALLBACK = "unknown"
 _KUBECONFIG_FILE_NAME = "kubeconfig"
 _KUBECONFIG_DIRECTORY_PREFIX = "mtv-cluster-state-"
 _KUBECONFIG_CONTEXT_NAME = "cluster-state-snapshot"
-_AMBIENT_CONTEXT_NOTE = "ambient oc context (no server in the run client configuration)"
+_AMBIENT_CONTEXT_NOTE = "ambient oc context (no usable temporary kubeconfig from the run client)"
 _KUBECONFIG_FILE_MODE = 0o600
 _REDACTED_VALUE = "***"
 _TC_ARGUMENT_PREFIX = "--tc="
+_TC_ARGUMENT_FLAG = "--tc"
+_TC_KEY_SEPARATOR = ":"
+# One probe's recorded output is capped so a busy cluster cannot inflate the artifact (and the
+# memory used to build it) exactly when the disk is already the failing resource.
+_MAX_PROBE_OUTPUT_BYTES = 512 * 1024
+_TRUNCATION_MARKER = "[truncated: {omitted} bytes omitted]"
+_OUTPUT_ENCODING = "utf-8"
 # Credential-ish ``--tc`` keys whose value must never reach an artifact.
 _CREDENTIAL_KEY_PATTERN = re.compile(r"password|token|secret|api_key|apikey|credential", re.IGNORECASE)
 _URL_USERINFO_PATTERN = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)[^/@\s]+@")
 
 
+def _decode_output(value: str | bytes | None) -> str:
+    """Render a captured stream, whichever form the subprocess helper returned.
+
+    Args:
+        value (str | bytes | None): Captured text, captured bytes (the timeout exception carries
+            bytes even in text mode), or None when nothing was captured.
+
+    Returns:
+        str: The decoded text, or an empty string when nothing was captured.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(_OUTPUT_ENCODING, errors="replace")
+    return value
+
+
+def _truncate_output(text: str) -> str:
+    """Cap one probe stream so a single command cannot inflate the snapshot.
+
+    Args:
+        text (str): Captured stdout or stderr of one probe.
+
+    Returns:
+        str: The text unchanged within the budget, otherwise its head plus a truncation marker
+            naming how many bytes were dropped.
+    """
+    encoded = text.encode(_OUTPUT_ENCODING, errors="replace")
+    if len(encoded) <= _MAX_PROBE_OUTPUT_BYTES:
+        return text
+    head = encoded[:_MAX_PROBE_OUTPUT_BYTES].decode(_OUTPUT_ENCODING, errors="replace")
+    return f"{head}\n{_TRUNCATION_MARKER.format(omitted=len(encoded) - _MAX_PROBE_OUTPUT_BYTES)}"
+
+
 def _run_bounded(cmd: list[str], timeout: float = _COMMAND_TIMEOUT_SECONDS) -> str:
     """Run one command with a bounded wait and render its exit code and both streams.
+
+    A timed-out command still contributes what it printed before the deadline, so a stalled
+    ``oc logs`` keeps the diagnostics it did emit.
 
     Args:
         cmd (list[str]): Command and arguments, run without a shell.
@@ -77,18 +125,31 @@ def _run_bounded(cmd: list[str], timeout: float = _COMMAND_TIMEOUT_SECONDS) -> s
 
     Returns:
         str: Command line, exit code, stdout and stderr; a failure note instead when the command
-            could not be started or did not finish in time.
+            could not be started.
     """
     header = f"$ {' '.join(cmd)}"
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, check=False
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding=_OUTPUT_ENCODING,
+            errors="replace",
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return (
+            f"{header}\n[timed out after {timeout:g}s]\n{_STDOUT_MARKER}\n"
+            f"{_truncate_output(text=_decode_output(value=exc.stdout))}\n{_STDERR_MARKER}\n"
+            f"{_truncate_output(text=_decode_output(value=exc.stderr))}"
         )
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
         return f"{header}\n[command failed after up to {timeout:g}s: {exc}]"
     return (
         f"{header}\n{_EXIT_CODE_LABEL} {result.returncode}\n"
-        f"{_STDOUT_MARKER}\n{result.stdout}\n{_STDERR_MARKER}\n{result.stderr}"
+        f"{_STDOUT_MARKER}\n{_truncate_output(text=result.stdout)}\n"
+        f"{_STDERR_MARKER}\n{_truncate_output(text=result.stderr)}"
     )
 
 
@@ -380,16 +441,28 @@ def _write_snapshot(*, collector_path: Path, scope: str, reason: str, sections: 
     directory.mkdir(parents=True, exist_ok=True)
     snapshot_path = directory / f"{utc_timestamp()}-{scope}-{_reason_slug(reason)}{_worker_suffix()}.txt"
     header = f"# reason: {reason}\n# scope: {scope}\n# oc context: {context_note}\n# collected: {utc_timestamp()}"
-    snapshot_path.write_text(f"{header}\n\n{_SECTION_SEPARATOR.join(sections)}\n", encoding="utf-8")
+    text = f"{header}\n\n{_SECTION_SEPARATOR.join(sections)}\n"
+    # A probe output can echo the cluster password; the artifact is not trusted to be safe raw.
+    cluster_password = resolve_cluster_credential("cluster_password")
+    if cluster_password:
+        text = redact_secret(text=text, secret=cluster_password)
+    snapshot_path.write_text(text, encoding="utf-8")
     return snapshot_path
 
 
 def _collect_and_write(
-    *, reason: str, scope: str, collect: Callable[[_Probes], list[str]], kubeconfig: Path | None, context_note: str
+    *,
+    collector_path: Path,
+    reason: str,
+    scope: str,
+    collect: Callable[[_Probes], list[str]],
+    kubeconfig: Path | None,
+    context_note: str,
 ) -> None:
     """Write one snapshot for a scope, skipping it when collection is disabled and never raising.
 
     Args:
+        collector_path (Path): Data-collector root directory.
         reason (str): Failure reason, used in the file name and header.
         scope (str): Snapshot scope, used in the file name and header.
         collect (Callable[[_Probes], list[str]]): Probe collector of the scope, called only when
@@ -397,10 +470,6 @@ def _collect_and_write(
         kubeconfig (Path | None): Temporary kubeconfig every ``oc`` probe must use, or None for the ambient context.
         context_note (str): Which kubeconfig the probes used, recorded in the snapshot header.
     """
-    collector_path = data_collector_path()
-    if collector_path is None:
-        return
-
     probes = _Probes(kubeconfig=kubeconfig)
     try:
         # A snapshot cut short by its deadline says so, so a short file is never mistaken for a
@@ -419,6 +488,8 @@ def _collect_and_write(
     LOGGER.warning(f"Cluster state snapshot written to {snapshot_path}")
 
 
+# Kubeconfig content is a dynamic YAML document: its per-field types are not expressed by the k8s
+# schema, so the document and its blocks stay ``Any`` and are read with ``.get()``/literal keys.
 def _kubeconfig_document(configuration: Configuration) -> dict[str, Any] | None:
     """Build a kubeconfig document from the run client's configuration.
 
@@ -440,6 +511,7 @@ def _kubeconfig_document(configuration: Configuration) -> dict[str, Any] | None:
     else:
         cluster["insecure-skip-tls-verify"] = True
 
+    # Same free-form kubeconfig YAML as the cluster block above: the k8s schema types none of these fields.
     user: dict[str, Any] = {}
     # The client keeps the token with its scheme prefix ("Bearer <token>"); kubeconfig holds the raw one.
     token = (configuration.api_key or {}).get("authorization", "").split()
@@ -479,24 +551,40 @@ def _temporary_kubeconfig(client: DynamicClient | None) -> Iterator[tuple[Path |
         tuple[Path | None, str]: Kubeconfig path passed to every probe (None for the ambient context)
             and the note recorded in the snapshot header. The token is never logged or persisted.
     """
-    document = _kubeconfig_document(configuration=client.configuration) if client is not None else None
-    if document is None:
-        yield None, _AMBIENT_CONTEXT_NOTE
-        return
+    with ExitStack() as stack:
+        yield _prepare_kubeconfig(stack=stack, client=client)
 
-    with tempfile.TemporaryDirectory(prefix=_KUBECONFIG_DIRECTORY_PREFIX, ignore_cleanup_errors=True) as directory:
+
+def _prepare_kubeconfig(*, stack: ExitStack, client: DynamicClient | None) -> tuple[Path | None, str]:
+    """Write the throwaway kubeconfig of one snapshot and return what the probes need.
+
+    Every setup step is guarded, so an unwritable or full temporary filesystem degrades to the
+    ambient context instead of replacing the failure the snapshot documents.
+
+    Args:
+        stack (ExitStack): Stack that owns the temporary directory, so it is removed when unwound.
+        client (DynamicClient | None): Live cluster client, or None to use the ambient oc context.
+
+    Returns:
+        tuple[Path | None, str]: Kubeconfig path for every probe (None for the ambient context) and
+            the note recorded in the snapshot header.
+    """
+    try:
+        document = _kubeconfig_document(configuration=client.configuration) if client is not None else None
+        if document is None:
+            return None, _AMBIENT_CONTEXT_NOTE
+        directory = stack.enter_context(
+            tempfile.TemporaryDirectory(prefix=_KUBECONFIG_DIRECTORY_PREFIX, ignore_cleanup_errors=True)
+        )
         kubeconfig = Path(directory) / _KUBECONFIG_FILE_NAME
-        try:
-            kubeconfig.write_text(yaml.safe_dump(data=document), encoding="utf-8")
-            kubeconfig.chmod(_KUBECONFIG_FILE_MODE)
-        except OSError as exc:
-            LOGGER.warning(
-                f"Could not write the temporary kubeconfig {kubeconfig}, using the ambient oc context: {exc}"
-            )
-            yield None, _AMBIENT_CONTEXT_NOTE
-            return
-        LOGGER.info(f"Cluster state probes use the temporary kubeconfig {kubeconfig}, deleted after this snapshot")
-        yield kubeconfig, f"temporary kubeconfig {kubeconfig} (deleted after this snapshot)"
+        kubeconfig.write_text(yaml.safe_dump(data=document), encoding=_OUTPUT_ENCODING)
+        kubeconfig.chmod(_KUBECONFIG_FILE_MODE)
+    except OSError as exc:
+        LOGGER.warning(f"Could not prepare a temporary kubeconfig, using the ambient oc context: {exc}")
+        return None, _AMBIENT_CONTEXT_NOTE
+
+    LOGGER.info(f"Cluster state probes use the temporary kubeconfig {kubeconfig}, deleted after this snapshot")
+    return kubeconfig, f"temporary kubeconfig {kubeconfig} (deleted after this snapshot)"
 
 
 def dump_cluster_state(
@@ -505,6 +593,7 @@ def dump_cluster_state(
     scope: Literal["upgrade", "storage"],
     namespace: str | None = None,
     client: DynamicClient | None = None,
+    data_collector_path: Path | None = None,
 ) -> None:
     """Write a bounded cluster-state snapshot for a real failure.
 
@@ -517,6 +606,7 @@ def dump_cluster_state(
         namespace (str | None): Migration target namespace, required by the storage scope.
         client (DynamicClient | None): Run client; when given, the probes use an ephemeral kubeconfig
             built from it instead of the ambient oc context.
+        data_collector_path (Path | None): Artifact root; the configured root when None.
 
     Raises:
         ValueError: If the storage scope is requested without a namespace.
@@ -529,9 +619,20 @@ def dump_cluster_state(
     else:
         collect = _dump_upgrade_scope
 
+    # Resolved before the temporary kubeconfig, so skip mode never writes - or logs - a credential
+    # file for a snapshot that will not be collected at all.
+    collector_path = data_collector_path or shared_data_collector_path()
+    if collector_path is None:
+        return
+
     with _temporary_kubeconfig(client=client) as (kubeconfig, context_note):
         _collect_and_write(
-            reason=reason, scope=scope, collect=collect, kubeconfig=kubeconfig, context_note=context_note
+            collector_path=collector_path,
+            reason=reason,
+            scope=scope,
+            collect=collect,
+            kubeconfig=kubeconfig,
+            context_note=context_note,
         )
 
 
@@ -594,10 +695,36 @@ def _redact_invocation(pytest_args: Sequence[str]) -> str:
     Returns:
         str: The invocation with credential ``--tc`` values and URL userinfo replaced by ``***``.
     """
-    command_line = " ".join(_redact_argument(arg=arg) for arg in pytest_args)
+    redacted: list[str] = []
+    value_follows_flag = False
+    for arg in pytest_args:
+        redacted_arg = _redact_argument(arg=arg)
+        # pytest accepts ``--tc key:value`` as two argv entries, so the value is only recognized
+        # through the argument before it.
+        if value_follows_flag:
+            redacted_arg = _redact_tc_value(value=redacted_arg)
+        value_follows_flag = arg == _TC_ARGUMENT_FLAG
+        redacted.append(redacted_arg)
+
+    command_line = " ".join(redacted)
     # The credential may come from CLUSTER_PASSWORD alone, so it can appear outside any --tc value;
     # a missing password leaves the text as is instead of aborting the whole baseline.
     return redact_secret(text=command_line, secret=resolve_cluster_credential("cluster_password") or "")
+
+
+def _redact_tc_value(value: str) -> str:
+    """Redact a credential ``--tc`` value of the ``key:value`` form.
+
+    Args:
+        value (str): ``--tc`` value, or the argument that follows a bare ``--tc``.
+
+    Returns:
+        str: The value with a credential-ish key's value replaced by ``***``.
+    """
+    key, separator, _ = value.partition(_TC_KEY_SEPARATOR)
+    if separator and _CREDENTIAL_KEY_PATTERN.search(key):
+        return f"{key}{_TC_KEY_SEPARATOR}{_REDACTED_VALUE}"
+    return value
 
 
 def _redact_argument(arg: str) -> str:
@@ -610,9 +737,7 @@ def _redact_argument(arg: str) -> str:
         str: The argument with a credential ``--tc`` value and any URL userinfo redacted.
     """
     if arg.startswith(_TC_ARGUMENT_PREFIX):
-        key, separator, _ = arg[len(_TC_ARGUMENT_PREFIX) :].partition(":")
-        if separator and _CREDENTIAL_KEY_PATTERN.search(key):
-            arg = f"{_TC_ARGUMENT_PREFIX}{key}:{_REDACTED_VALUE}"
+        arg = f"{_TC_ARGUMENT_PREFIX}{_redact_tc_value(value=arg[len(_TC_ARGUMENT_PREFIX) :])}"
     return _URL_USERINFO_PATTERN.sub(rf"\g<scheme>{_REDACTED_VALUE}@", arg)
 
 
@@ -663,18 +788,42 @@ def _write_once_atomic(path: Path, text: str) -> bool:
     return True
 
 
-def write_session_baseline(*, pytest_args: Sequence[str], skip_teardown: bool, skip_data_collector: bool) -> None:
+def _session_client() -> DynamicClient | None:
+    """Return a client for the baseline probes, or None when the run has none.
+
+    The baseline is a diagnostic: a run without usable credentials keeps its ambient ``oc``
+    context instead of failing the session over a missing snapshot.
+
+    Returns:
+        DynamicClient | None: Client built from the resolved credentials, or None when building it failed.
+    """
+    try:
+        return get_cluster_client()
+    except (OSError, ValueError, TypeError, ApiException, DynamicApiError) as exc:
+        LOGGER.warning(f"Session-start baseline has no cluster client, using the ambient oc context: {exc}")
+        return None
+
+
+def write_session_baseline(
+    *,
+    pytest_args: Sequence[str],
+    skip_teardown: bool,
+    skip_data_collector: bool,
+    client: DynamicClient | None = None,
+) -> None:
     """Write the session-start cluster state and run identity once per session, never raising.
 
     Args:
         pytest_args (Sequence[str]): Arguments pytest was invoked with, including ``--tc`` overrides.
         skip_teardown (bool): Whether ``--skip-teardown`` was set.
         skip_data_collector (bool): Whether ``--skip-data-collector`` was set.
+        client (DynamicClient | None): Run client; when None, one is built defensively so the probes
+            also work in a container run with no ambient kubeconfig.
     """
     if skip_data_collector:
         return
 
-    collector_path = data_collector_path()
+    collector_path = shared_data_collector_path()
     if collector_path is None:
         return
 
@@ -686,27 +835,28 @@ def write_session_baseline(*, pytest_args: Sequence[str], skip_teardown: bool, s
         if cluster_path.exists() and identity_path.exists():
             LOGGER.info(f"Session-start baseline already exists in {directory}, keeping the first snapshot")
             return
-        cluster_probes = _Probes()
-        cluster_sections = _with_deadline_record(
-            sections=_session_start_cluster_sections(probes=cluster_probes), probes=cluster_probes
-        )
-        cluster_created = _write_once_atomic(
-            path=cluster_path,
-            text=f"{_SECTION_SEPARATOR.join(cluster_sections)}\n",
-        )
-        identity_probes = _Probes()
-        identity_sections = _session_start_identity_sections(
-            probes=identity_probes,
-            pytest_args=pytest_args,
-            skip_teardown=skip_teardown,
-            skip_data_collector=skip_data_collector,
-        )
-        identity_created = _write_once_atomic(
-            path=identity_path,
-            text=(
-                f"{_SECTION_SEPARATOR.join(_with_deadline_record(sections=identity_sections, probes=identity_probes))}\n"
-            ),
-        )
+        with _temporary_kubeconfig(client=client or _session_client()) as (kubeconfig, _):
+            cluster_probes = _Probes(kubeconfig=kubeconfig)
+            cluster_sections = _with_deadline_record(
+                sections=_session_start_cluster_sections(probes=cluster_probes), probes=cluster_probes
+            )
+            cluster_created = _write_once_atomic(
+                path=cluster_path,
+                text=f"{_SECTION_SEPARATOR.join(cluster_sections)}\n",
+            )
+            identity_probes = _Probes(kubeconfig=kubeconfig)
+            identity_sections = _session_start_identity_sections(
+                probes=identity_probes,
+                pytest_args=pytest_args,
+                skip_teardown=skip_teardown,
+                skip_data_collector=skip_data_collector,
+            )
+            identity_created = _write_once_atomic(
+                path=identity_path,
+                text=(
+                    f"{_SECTION_SEPARATOR.join(_with_deadline_record(sections=identity_sections, probes=identity_probes))}\n"
+                ),
+            )
     except (OSError, subprocess.SubprocessError, ValueError, TypeError) as exc:
         # Best-effort evidence: a failing probe skips the baseline instead of aborting session start.
         LOGGER.warning(f"Session-start baseline could not be written to {directory}: {exc}")

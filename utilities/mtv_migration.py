@@ -704,7 +704,7 @@ def _plan_target_namespace(plan: Plan) -> str | None:
     """
     try:
         return plan.instance.spec.targetNamespace
-    except (ApiException, DynamicApiError, TypeError, ValueError) as err:
+    except (ApiException, DynamicApiError, AttributeError, OSError, TypeError, ValueError) as err:
         LOGGER.info(f"Could not read the target namespace of plan '{plan.name}', skipping the snapshot: {err}")
         return None
 

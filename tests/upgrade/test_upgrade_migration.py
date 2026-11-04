@@ -98,7 +98,13 @@ class TestUpgradeColdMigration:
         the VM's failed step.
     """
 
-    def test_upgrade_mtv(self, upgrade_script_path: str, pre_upgrade_plan_resource: Plan, upgrade_timeout: int) -> None:
+    def test_upgrade_mtv(
+        self,
+        upgrade_script_path: str,
+        pre_upgrade_plan_resource: Plan,
+        upgrade_timeout: int,
+        ocp_admin_client: DynamicClient,
+    ) -> None:
         """Upgrade the MTV operator to the target version."""
         run_mtv_upgrade(
             script_path=upgrade_script_path,
@@ -106,6 +112,7 @@ class TestUpgradeColdMigration:
             mtv_source=py_config["mtv_upgrade_to_source"],
             image_index=py_config["mtv_upgrade_image_index"],
             timeout=upgrade_timeout,
+            client=ocp_admin_client,
         )
 
     def test_verify_post_upgrade(

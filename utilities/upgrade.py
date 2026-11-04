@@ -12,6 +12,7 @@ import signal
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from simple_logger.logger import get_logger
 
@@ -19,6 +20,9 @@ from exceptions.exceptions import MtvUpgradeError
 from utilities.cluster_state import dump_cluster_state
 from utilities.data_collector import data_collector_path, redact_secret, utc_timestamp
 from utilities.utils import require_cluster_credential
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(name=__name__)
 
@@ -311,6 +315,7 @@ def run_mtv_upgrade(
     image_index: str = "",
     *,
     timeout: int,
+    client: DynamicClient | None = None,
 ) -> None:
     """Run the MTV operator upgrade using the specified upgrade script.
 
@@ -321,6 +326,8 @@ def run_mtv_upgrade(
         image_index (str): Optional image index override for the upgrade.
         timeout (int): Outer wait budget in seconds. The script owns its own internal waits; this
             only guards against a wedged process.
+        client (DynamicClient | None): Run client, so the failure snapshot also probes a container
+            run that has no ambient kubeconfig.
 
     Raises:
         ValueError: If ``CLUSTER_PASSWORD``, ``CLUSTER_USERNAME`` or ``CLUSTER_HOST`` is missing or
@@ -345,7 +352,7 @@ def run_mtv_upgrade(
     )
     cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
     if timeout_exc is not None:
-        dump_cluster_state(reason=f"upgrade-script-timeout-{timeout}", scope="upgrade")
+        dump_cluster_state(reason=f"upgrade-script-timeout-{timeout}", scope="upgrade", client=client)
         raise MtvUpgradeError(
             f"MTV upgrade script timed out after {timeout_exc.timeout} seconds "
             f"(plus up to {_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS} seconds process-group cleanup)\n"
@@ -354,7 +361,7 @@ def run_mtv_upgrade(
     if returncode is None or returncode != 0:
         # The script reports its own 60-minute wait first and exits non-zero, so this branch
         # (not only the outer timeout) needs the snapshot for MCP/CO evidence.
-        dump_cluster_state(reason=f"upgrade-script-exit-{returncode}", scope="upgrade")
+        dump_cluster_state(reason=f"upgrade-script-exit-{returncode}", scope="upgrade", client=client)
         raise MtvUpgradeError(
             f"MTV upgrade script failed with exit code {returncode}\n{failure_details}{cleanup_note}"
         ) from cleanup_exc

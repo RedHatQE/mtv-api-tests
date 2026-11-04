@@ -572,15 +572,21 @@ from <code>resolve_upgrade_timeout()</code>: the <code>--mtv-upgrade-timeout</co
 internal waits and the script reports its own timeout instead of being killed by the harness. The script writes into a temporary directory that is deleted before the function
 returns; only the redacted text is persisted under <code>&lt;data-collector&gt;/upgrade-script-&lt;timestamp&gt;/</code>, so <code>CLUSTER_PASSWORD</code> never reaches the artifact tree, and <code>MtvUpgradeError</code>
 carries the tail of both redacted logs plus those paths. A missing or empty <code>cluster_password</code> raises before the script starts. A <code>scope="upgrade"</code> cluster-state snapshot is
-written before both the outer-timeout raise and the non-zero-exit raise. Under <code>--skip-data-collector</code> nothing is persisted: the child still writes its stdout and stderr into a
+written before both the outer-timeout raise and the non-zero-exit raise, using the <code>client</code> the caller passes so the probes also work in a container run with no ambient kubeconfig.
+Under <code>--skip-data-collector</code> nothing is persisted: the child still writes its stdout and stderr into a
 temporary directory that is deleted before the function returns, and the error carries the redacted tails of both streams.</p>
 <h3 id="utilitiescluster_statepy"><code>utilities/cluster_state.py</code></h3>
-<p><code>dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=..., client=...)</code> writes one timestamped, bounded snapshot per failure and never raises, so the failing
-exception stays the error the caller sees. Each snapshot also has a total budget (<code>_SNAPSHOT_DEADLINE_SECONDS</code>, 120 seconds): probes stop once it expires and the file closes with a
-"snapshot deadline reached … N probes skipped" record, so a hanging cluster cannot delay the original error by minutes. Passing <code>client</code> makes the probes use an ephemeral kubeconfig
-built from the run client inside a temporary directory, because a container run has no ambient kubeconfig for <code>oc</code> to use; without a client (or without a server in its
-configuration) the ambient <code>oc</code> context is used and the snapshot header records which one was in effect. <code>write_session_baseline()</code> writes <code>&lt;data-collector&gt;/session-start/cluster.txt</code> and <code>run-identity.txt</code> once per session from
-<code>pytest_sessionstart</code>, tolerating a missing <code>.git</code> and skipping cleanly under <code>--skip-data-collector</code>; only the xdist controller (or the sole process without xdist) wipes the
+<p><code>dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=..., client=..., data_collector_path=...)</code> writes one timestamped, bounded snapshot per failure and never
+raises, so the failing exception stays the error the caller sees. <code>data_collector_path</code> overrides the configured root when given. The collector root is resolved first, so
+<code>--skip-data-collector</code> returns before any temporary kubeconfig is written or logged, and every probe output is written with the resolved <code>CLUSTER_PASSWORD</code> redacted. Each snapshot
+also has a total budget (<code>_SNAPSHOT_DEADLINE_SECONDS</code>, 120 seconds): probes stop once it expires and the file closes with a "snapshot deadline reached … N probes skipped"
+record, so a hanging cluster cannot delay the original error by minutes. Each stream is capped at <code>_MAX_PROBE_OUTPUT_BYTES</code> (512 KiB) with an explicit
+<code>[truncated: &lt;N&gt; bytes omitted]</code> marker, and a probe that times out keeps the partial stdout/stderr it produced, marked <code>[timed out after &lt;N&gt;s]</code>. Passing <code>client</code> makes the probes
+use an ephemeral kubeconfig built from the run client inside a temporary directory, because a container run has no ambient kubeconfig for <code>oc</code> to use; without a client (or without
+a server in its configuration) the ambient <code>oc</code> context is used and the snapshot header records which one was in effect, and a setup failure such as a full temporary filesystem
+degrades to the ambient context with a warning instead of escaping. <code>write_session_baseline()</code> writes <code>&lt;data-collector&gt;/session-start/cluster.txt</code> and <code>run-identity.txt</code> once per session from
+<code>pytest_sessionstart</code>, tolerating a missing <code>.git</code> and skipping cleanly under <code>--skip-data-collector</code>; it builds a client for the cluster probes when none is passed and keeps the
+ambient context if that fails, so the hook never raises. Only the xdist controller (or the sole process without xdist) wipes the
 data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces an existing snapshot.</p>
 <h3 id="utilitiesdata_collectorpy"><code>utilities/data_collector.py</code></h3>
 <p>Holds the resolved artifact directory as module state, because most writers have no pytest <code>config</code> to read it from: <code>configure_data_collector_path()</code> is called once in
