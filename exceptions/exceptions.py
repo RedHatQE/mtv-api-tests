@@ -46,6 +46,25 @@ class MigrationPlanExecError(Exception):
     pass
 
 
+class MigrationVmUnschedulableError(Exception):
+    """Raised when a migrated VM cannot be scheduled on any destination node.
+
+    The scheduler condition is terminal for a test run: the suite never frees destination node
+    capacity, so waiting for the plan timeout only delays a certain failure.
+    """
+
+    def __init__(self, vm_name: str, scheduler_message: str) -> None:
+        """Initialize MigrationVmUnschedulableError.
+
+        Args:
+            vm_name (str): Name of the destination VM the scheduler rejected.
+            scheduler_message (str): Raw message from the PodScheduled Unschedulable condition.
+        """
+        self.vm_name = vm_name
+        self.scheduler_message = scheduler_message
+        super().__init__(f"Migrated VM '{vm_name}' is unschedulable on the destination cluster: {scheduler_message}")
+
+
 class SessionTeardownError(Exception):
     pass
 

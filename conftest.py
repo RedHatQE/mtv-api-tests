@@ -113,6 +113,7 @@ from utilities.utils import (
     get_value_from_py_config,
     load_source_providers,
     resolve_providers_json_path,
+    restore_skip_clone_power_states,
 )
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
 from utilities.vmware_guest_operations import collect_linux_guest_static_ip_metadata
@@ -1241,6 +1242,7 @@ def multus_network_name(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
     class_plan_config: dict[str, Any],
+    prepared_plan: dict[str, Any],
     request: pytest.FixtureRequest,
 ) -> dict[str, str]:
     """Create NADs based on network requirements with unique names per test class.
@@ -1260,6 +1262,9 @@ def multus_network_name(
         source_provider (BaseProvider): Source provider instance
         source_provider_inventory (ForkliftInventory): Source provider inventory
         class_plan_config (dict[str, Any]): Plan configuration from class parametrization
+        prepared_plan (dict[str, Any]): Processed plan; its VM names are the post-clone names that
+            the Forklift inventory and the Plan use. Heterogeneous pytest fixture dict — schema
+            varies by test scenario, so the values stay ``Any``.
         request (pytest.FixtureRequest): Pytest fixture request
 
     Returns:
@@ -1283,40 +1288,30 @@ def multus_network_name(
     else:
         nad_namespace = target_namespace
 
-    virtual_machines = [dict(vm) for vm in class_plan_config["virtual_machines"]]
     network_map_overrides = class_plan_config.get("network_map_overrides")
     if network_map_overrides:
         # Overrides drive the map: one NAD per multus destination, in override order
         # (must match _gen_network_map_entries_from_overrides NAD assignment).
         multus_count = sum(1 for override in network_map_overrides if override["destination"]["type"] == "multus")
     else:
-        # Copy-offload configs use a placeholder VM name; the real name comes from .providers.json
-        apply_copyoffload_vm_name_override(virtual_machines=virtual_machines, source_provider=source_provider)
-        vms = [vm["name"] for vm in virtual_machines]
+        # Prepared-plan names: cloned VMs are the ones in the inventory and in the Plan, so the raw
+        # config names (pre-clone, and copy-offload placeholders) are never looked up.
+        vms = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         LOGGER.info(f"Found VMs for network lookup: {vms}")
 
-        # Query networks using provider abstraction (handles templates vs VMs internally)
-        networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)
-        if not networks:
-            raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")
-
-        # Calculate how many multus NADs we need
+        # Calculate how many multus NADs we need; same lookup as gen_network_map_list() so the
+        # created NADs match the map entries built later from the same post-clone data. NICs added
+        # by the add_nic clone option are already part of that data.
         if class_plan_config.get("per_nic_network_map", False):
-            extra_nics = sum(1 for vm in virtual_machines if vm.get("add_nic"))
-            multus_count = max(
-                0,
-                len(
-                    get_per_nic_networks(
-                        source_provider=source_provider,
-                        source_provider_inventory=source_provider_inventory,
-                        vms=vms,
-                    )
-                )
-                - 1
-                + extra_nics,
+            networks = get_per_nic_networks(
+                source_provider=source_provider,
+                source_provider_inventory=source_provider_inventory,
+                vms=vms,
             )
         else:
-            multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
+            networks = source_provider_inventory.vms_networks_mappings(vms=vms)
+
+        multus_count = max(0, len(networks) - 1)  # First network goes to pod, rest to multus
 
     created_nads = []
     # Create all required NADs with consistent naming
@@ -1553,7 +1548,9 @@ def prepared_plan(
         class_plan_config (dict[str, Any]): Plan configuration from parametrization
         validated_source_vms (None): Ensures source VMs/templates exist before setup
         fixture_store (dict[str, Any]): Fixture store for resource tracking
-        source_provider: Source provider instance (VMWareProvider, OvirtProvider, etc.)
+        source_provider (Any): Source provider instance (VMWareProvider, OvirtProvider, etc.);
+            typed ``Any`` because the provider-specific VM APIs used here are not declared on
+            ``BaseProvider``.
         source_vms_namespace (str): Source VMs namespace
         ocp_admin_client (DynamicClient): OpenShift client
         multus_cni_config (str): Multus CNI configuration
@@ -1603,6 +1600,15 @@ def prepared_plan(
     # Original power states of skip_clone VMs, restored in teardown below since these are
     # shared, real VMs (not disposable clones) that other tests may depend on.
     original_power_states: list[tuple[str, str]] = []
+    # Restore also when setup fails between starting those VMs and the yield; the helper drains
+    # the list so this finalizer and the teardown call below never restore twice.
+    request.addfinalizer(
+        partial(
+            restore_skip_clone_power_states,
+            source_provider=source_provider,
+            original_power_states=original_power_states,
+        )
+    )
 
     if source_provider.type != Provider.ProviderType.OVA:
         openshift_source_provider: bool = source_provider.type == Provider.ProviderType.OPENSHIFT
@@ -1967,12 +1973,10 @@ def prepared_plan(
 
     # Restore original power states of skip_clone VMs. Unlike cloned VMs (disposable), these
     # are real, shared VMs that other tests may depend on.
-    for vm_name, original_power in original_power_states:
-        provider_vm_api = source_provider.get_vm_by_name(vm_name)
-        if original_power == "on":
-            source_provider.start_vm(provider_vm_api)
-        else:
-            source_provider.stop_vm(provider_vm_api)
+    restore_skip_clone_power_states(
+        source_provider=source_provider,
+        original_power_states=original_power_states,
+    )
 
     # Reattach orphaned VMDKs to consumer clones so normal VM deletion cleans them up.
     # During relink, consumer clones' shared disks are redirected to the owner's VMDK,
