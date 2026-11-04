@@ -630,6 +630,24 @@ cluster at all.</p>
 </li>
 <li>Warm migration timing is wrong for the environment.</li>
 </ul>
+<h3 id="starting-a-migrated-vm">Starting a Migrated VM</h3>
+<p><code>OCPProvider.vm_dict()</code> starts the destination VM and waits for it to run before any post-migration check reads its
+power state. Both waits are bounded and sample the VM's <code>printableStatus</code>, because the intermediate statuses are normal
+and not failures:</p>
+<ul>
+<li>The power-state read waits up to 120 seconds for <code>Running</code> or <code>Stopped</code> before recording <code>power_state</code>.</li>
+<li>
+<p>The start verdict waits up to 300 seconds for <code>Running</code>. <code>Starting</code> with the condition
+  <code>Ready: GuestNotRunning</code> only means the guest has not booted yet — the wrapper's <code>status.ready</code> turns true before
+  <code>printableStatus</code> reaches <code>Running</code>, so a single sample is not a valid verdict.</p>
+</li>
+<li>
+<p>The "did not reach status" <code>ValueError</code> reports the last observed status together with the VM conditions, so a
+  genuine start failure names the state the VM ended in instead of the first sample.</p>
+</li>
+</ul>
+<p>The 300-second bound matches the explicit <code>timeout=300</code> the copy-offload tests already use for slow-booting multi-disk
+VMs. If a VM legitimately needs longer, raise the timeout rather than reintroducing a single-sample check.</p>
 <p>The repo’s default timeout config is important here:</p>
 <ul>
 <li><code>plan_wait_timeout</code> defaults to <code>3600</code> seconds.</li>
@@ -864,6 +882,7 @@ later test in the same class.</p>
 <li><a href="#before-migration-starts">Before Migration Starts</a></li>
 <li><a href="#during-provider-map-or-plan-setup">During Provider, Map, or Plan Setup</a></li>
 <li><a href="#during-migration-execution">During Migration Execution</a></li>
+<li><a href="#starting-a-migrated-vm">Starting a Migrated VM</a></li>
 <li><a href="#after-migration-completes">After Migration Completes</a></li>
 </ul>
 </li>

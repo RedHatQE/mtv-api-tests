@@ -277,6 +277,13 @@ is `connect()`, `disconnect()`, `test`, `vm_dict`, `clone_vm()`, `delete_vm()`, 
 `vmware.py` also exposes `format_insufficient_capacity_message()`, `format_capacity_validation_log()`, and `verify_kept_disks_attached()` (vSphere-source per-VM kept-disk verification for disk exclusion: bus-address partitioning, source disk UUID serial prefixes, volume-mode-aware capacity checks); module constant `VSPHERE_NIC_DEVICE_KEY_OFFSET` documents the vSphere
 device-key space used when adding NICs.
 
+`openshift.py` starts destination VMs through `OCPProvider.vm_dict()`, which polls `printableStatus` via
+`_wait_for_printable_status()` instead of sampling once: up to 120s for a stable `Running`/`Stopped` state when recording
+`power_state`, and up to 300s for `Running` after `start_vm()`. `Starting` (`Ready: GuestNotRunning`) is a normal pre-boot
+state and never fails the test on its own; a real failure raises `ValueError` naming the last observed status and conditions.
+The module constants `_VM_STABLE_STATE_TIMEOUT_SECONDS`, `_VM_RUNNING_TIMEOUT_SECONDS`, and `_VM_STATUS_POLL_SECONDS` own
+those numbers.
+
 ### `libs/forklift_inventory.py`
 
 `create_forklift_inventory(client, mtv_namespace, provider)` returns the inventory implementation matching the provider type: `VsphereForkliftInventory`, `OvirtForkliftInventory`,

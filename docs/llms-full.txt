@@ -11404,6 +11404,13 @@ is `connect()`, `disconnect()`, `test`, `vm_dict`, `clone_vm()`, `delete_vm()`, 
 `vmware.py` also exposes `format_insufficient_capacity_message()`, `format_capacity_validation_log()`, and `verify_kept_disks_attached()` (vSphere-source per-VM kept-disk verification for disk exclusion: bus-address partitioning, source disk UUID serial prefixes, volume-mode-aware capacity checks); module constant `VSPHERE_NIC_DEVICE_KEY_OFFSET` documents the vSphere
 device-key space used when adding NICs.
 
+`openshift.py` starts destination VMs through `OCPProvider.vm_dict()`, which polls `printableStatus` via
+`_wait_for_printable_status()` instead of sampling once: up to 120s for a stable `Running`/`Stopped` state when recording
+`power_state`, and up to 300s for `Running` after `start_vm()`. `Starting` (`Ready: GuestNotRunning`) is a normal pre-boot
+state and never fails the test on its own; a real failure raises `ValueError` naming the last observed status and conditions.
+The module constants `_VM_STABLE_STATE_TIMEOUT_SECONDS`, `_VM_RUNNING_TIMEOUT_SECONDS`, and `_VM_STATUS_POLL_SECONDS` own
+those numbers.
+
 ### `libs/forklift_inventory.py`
 
 `create_forklift_inventory(client, mtv_namespace, provider)` returns the inventory implementation matching the provider type: `VsphereForkliftInventory`, `OvirtForkliftInventory`,
@@ -11785,6 +11792,22 @@ These issues usually show up as setup failures, plan readiness timeouts, or earl
   `plan_wait_timeout`. The suite never frees node capacity, so this state does not recover within a run.
 - Hook execution fails at `PreHook` or `PostHook`.
 - Warm migration timing is wrong for the environment.
+
+### Starting a Migrated VM
+
+`OCPProvider.vm_dict()` starts the destination VM and waits for it to run before any post-migration check reads its
+power state. Both waits are bounded and sample the VM's `printableStatus`, because the intermediate statuses are normal
+and not failures:
+
+- The power-state read waits up to 120 seconds for `Running` or `Stopped` before recording `power_state`.
+- The start verdict waits up to 300 seconds for `Running`. `Starting` with the condition
+  `Ready: GuestNotRunning` only means the guest has not booted yet — the wrapper's `status.ready` turns true before
+  `printableStatus` reaches `Running`, so a single sample is not a valid verdict.
+- The "did not reach status" `ValueError` reports the last observed status together with the VM conditions, so a
+  genuine start failure names the state the VM ended in instead of the first sample.
+
+The 300-second bound matches the explicit `timeout=300` the copy-offload tests already use for slow-booting multi-disk
+VMs. If a VM legitimately needs longer, raise the timeout rather than reintroducing a single-sample check.
 
 The repo’s default timeout config is important here:
 

@@ -23,6 +23,50 @@ if TYPE_CHECKING:
 
 LOGGER = get_logger(__name__)
 
+# A destination VM reports transitional printable statuses (Starting, Stopping, Provisioning,
+# Migrating) that are not failures, so both the power-state read and the start verdict wait for a
+# terminal status instead of trusting a single sample. 300s mirrors the slow-booting copy-offload
+# VMs that already start with an explicit timeout=300.
+_VM_STABLE_STATE_TIMEOUT_SECONDS: int = 120
+_VM_RUNNING_TIMEOUT_SECONDS: int = 300
+_VM_STATUS_POLL_SECONDS: int = 5
+
+
+def _wait_for_printable_status(
+    cnv_vm: VirtualMachine,
+    statuses: tuple[str, ...],
+    timeout: int,
+) -> str | None:
+    """Wait for a destination VM to reach one of the expected printable statuses.
+
+    ``VirtualMachine.printable_status`` reads ``instance.status``, and ``instance`` is a property
+    that re-fetches the VM on every access, so each sample is already a fresh cluster read — no
+    explicit ``get()`` is needed.
+
+    Args:
+        cnv_vm (VirtualMachine): Destination VM to poll.
+        statuses (tuple[str, ...]): Printable statuses that end the wait.
+        timeout (int): Maximum time in seconds to keep polling.
+
+    Returns:
+        str | None: The last observed printable status, or None when the VM reported none. When
+            the status never matched, this is the value to report, not the first sample.
+    """
+    last_status: str | None = None
+    try:
+        for status in TimeoutSampler(
+            wait_timeout=timeout,
+            sleep=_VM_STATUS_POLL_SECONDS,
+            func=lambda: cnv_vm.printable_status,
+        ):
+            last_status = status
+            if status in statuses:
+                return status
+    except TimeoutExpiredError:
+        return last_status
+
+    return last_status
+
 
 class OCPProvider(BaseProvider):
     def __init__(self, ocp_resource: Provider | None = None, **kwargs: Any) -> None:
@@ -258,28 +302,21 @@ class OCPProvider(BaseProvider):
         result_vm_info["provider_vm_api"] = cnv_vm
         result_vm_info["id"] = cnv_vm.instance.metadata.uid
 
-        # Wait for VM to reach stable state before recording power state
-        # Transitional states (Starting, Stopping, Provisioning, Migrating) would cause incorrect state recording
-        STABLE_STATES = (cnv_vm.Status.RUNNING, cnv_vm.Status.STOPPED)
-
-        try:
-            for sample in TimeoutSampler(
-                wait_timeout=120,
-                sleep=2,
-                func=lambda: cnv_vm.instance.status.printableStatus in STABLE_STATES,
-            ):
-                if sample:
-                    break
-        except TimeoutExpiredError:
+        # Wait for VM to reach stable state before recording power state. Transitional states
+        # (Starting, Stopping, Provisioning, Migrating) would record the wrong power state.
+        stable_status = _wait_for_printable_status(
+            cnv_vm=cnv_vm,
+            statuses=(cnv_vm.Status.RUNNING, cnv_vm.Status.STOPPED),
+            timeout=_VM_STABLE_STATE_TIMEOUT_SECONDS,
+        )
+        if stable_status not in (cnv_vm.Status.RUNNING, cnv_vm.Status.STOPPED):
             LOGGER.warning(
-                f"VM {cnv_vm_name} did not reach stable state within 120s. "
-                f"Current state: {cnv_vm.instance.status.printableStatus}"
+                f"VM {cnv_vm_name} did not reach a stable state within {_VM_STABLE_STATE_TIMEOUT_SECONDS}s. "
+                f"Last state: '{stable_status}'"
             )
 
         # Power state
-        result_vm_info["power_state"] = (
-            "on" if cnv_vm.instance.status.printableStatus == cnv_vm.Status.RUNNING else "off"
-        )
+        result_vm_info["power_state"] = "on" if stable_status == cnv_vm.Status.RUNNING else "off"
 
         # Serial number (from firmware) - for serial preservation verification
         domain: dict[str, Any] = cnv_vm.instance.spec.template.spec.domain
@@ -322,15 +359,23 @@ class OCPProvider(BaseProvider):
 
         self.start_vm(cnv_vm)
 
-        printable_status = cnv_vm.instance.status.printableStatus
-        if printable_status != cnv_vm.Status.RUNNING:
+        # start_vm() waits for status.ready, which turns true while printableStatus is still
+        # 'Starting' (Ready: GuestNotRunning on a VM that has not booted yet), so the running
+        # verdict needs its own bounded wait instead of a single sample.
+        running_status = _wait_for_printable_status(
+            cnv_vm=cnv_vm,
+            statuses=(cnv_vm.Status.RUNNING,),
+            timeout=_VM_RUNNING_TIMEOUT_SECONDS,
+        )
+        if running_status != cnv_vm.Status.RUNNING:
             conditions: list[dict[str, Any]] = cnv_vm.instance.status.get("conditions", [])
             condition_details = "; ".join(
                 f"{c['type']}: {c.get('reason', '')} - {c.get('message', '')}" for c in conditions
             )
             raise ValueError(
-                f"VM '{cnv_vm_name}' in namespace '{cnv_vm_namespace}' failed to start. "
-                f"Status: '{printable_status}'. Conditions: {condition_details}"
+                f"VM '{cnv_vm_name}' in namespace '{cnv_vm_namespace}' did not reach status "
+                f"'{cnv_vm.Status.RUNNING}' within {_VM_RUNNING_TIMEOUT_SECONDS}s. "
+                f"Last status: '{running_status}'. Conditions: {condition_details}"
             )
 
         # True guest agent is reporting all ok
