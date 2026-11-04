@@ -82,6 +82,7 @@ A few pytest options change what diagnostics you get back:
 - `--skip-teardown` leaves created resources in place so you can inspect them live.
 - `--openshift-python-wrapper-log-debug` turns on deeper wrapper-level logging, which is useful when CR creation or wait logic is failing.
 - `--providers-json` points at a providers file other than the default, which is the fastest way to tell "wrong file" from "wrong provider".
+- `--mtv-upgrade-timeout` sets the outer wait budget of the upgrade script; raise it when an upgrade legitimately takes longer than 90 minutes.
 
 `--openshift-python-wrapper-log-debug` works by exporting `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` into the environment at session start,
 so it affects every wrapper log record in the run, not just a single test.
@@ -212,8 +213,17 @@ Unless you use `--skip-data-collector`, the suite prepares a clean `.data-collec
 The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
+- `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, `ClusterOperator`, the `MachineConfigPool` manifests plus per-pool counters
+  and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?".
+- `.data-collector/session-start/run-identity.txt`: the checkout revision, the pytest invocation (with `--tc` values, cluster password redacted), `oc whoami`, and whether
+  `--skip-teardown` / `--skip-data-collector` were set.
+- `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see
+  [Failure Evidence Dumps](#failure-evidence-dumps)).
+- `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output, persisted instead of deleted. Without
+  `--data-collector-path` these live under the default `.data-collector/`; with `--skip-data-collector` they go to a temporary directory and are removed at exit.
 - `.data-collector/<encoded-class-plan-identity>/...`: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.
 - `.data-collector/<encoded-test-node-identity>/...`: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.
+- `.data-collector/.../inspect-<timestamp>/`: the `oc adm inspect` dump of the Machine Config Operator resources, written before the image gather of the same failure path.
 - `.data-collector/...` at the root: session-level must-gather output when teardown cleanup fails.
 
 The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
@@ -229,6 +239,21 @@ The suite stores resource metadata as it creates objects, including `name`, `nam
 failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` should I inspect?”
 
 > **Tip:** If you rerun the test suite, the base data collector path is recreated. Move or archive old artifacts first if you want to keep them.
+
+## Failure Evidence Dumps
+
+`utilities/cluster_state.py::dump_cluster_state()` writes a bounded cluster snapshot immediately before a real failure is raised, so the analyzer never has to re-run the
+failing job to learn the cluster state. It is observation only and never raises: every `oc` command runs through one `subprocess` helper with a 20-second timeout, failures are
+logged into the snapshot itself, and the original exception is always the error you see. Each invocation writes one file,
+`cluster-state/<UTC timestamp>-<scope>-<reason slug>[-<xdist worker>].txt`, so parallel workers cannot collide.
+
+| Scope | Where it fires | What it collects |
+| --- | --- | --- |
+| `upgrade` | The upgrade script hits the outer wait budget | `clusterversion`, `co`, `co machine-config -o yaml`, `mcp -o yaml` plus per-pool `ready`/`updated`/`degraded`/`unavailable` counters and conditions, nodes, Machine Config Operator pods and their logs, `idms`, `icsp`, `image.config cluster`, and the `openshift-mtv` CSV |
+| `storage` | A migration wait times out, or a migrated VM is confirmed unschedulable | `pvc,dv,pv -o wide` for the target namespace plus `-o yaml` for the non-Bound PVCs only, namespace events, storage classes, `openshift-storage` pods, and the ceph-csi provisioner log (`--tail=3000`, retried without `--previous` when no previous container exists) |
+
+Deliberately **not** dumped: the generic `MigrationPlanExecError`. Expected-failure tests (`tests/plan_lifecycle/`, `TestPostHookRetainFailedVm`, resume-conversion) raise it on
+purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under `--skip-data-collector`.
 
 ## Must-Gather Support
 
@@ -251,6 +276,10 @@ runs the full, cluster-wide gather. Both share image resolution and differ only 
 
 What this means in practice:
 
+- Before the image gather of any failure path, `run_inspect_dump()` writes an `oc adm inspect` dump of `clusteroperator/machine-config`, `machineconfigpool`, and the Machine Config
+  Operator deployment/daemonset into `inspect-<timestamp>/`, so the MCO evidence survives a gather that fails or is killed by the disk-usage checker. It only inspects those
+  targeted resources — never whole namespaces, because the gather has already been killed at 83% against a 70% disk cap. The resolved command and the output directory are
+  logged, and unsupported resources or a non-zero exit only produce a warning and a `False` return.
 - If the failure can be tied back to a specific plan, the gather is scoped to that plan with `/usr/bin/targeted`.
 - Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.
 - `pytest_exception_interact` records a failing class item. A `tryfirst` `pytest_runtest_protocol` wrapper clears stale `plan_resource` on entry to a different class-plan identity before setup hooks run, but preserves it across consecutive methods of the same plan. The pre-finalizer boundary binds the current Plan or explicit None, even if no failure is pending yet, and retains it for retries. Updates before that boundary are observed. If setup fails before this plan exists, the gather is full, not targeted.

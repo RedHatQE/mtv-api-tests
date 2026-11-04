@@ -27,6 +27,7 @@ from urllib3.exceptions import TimeoutError as HTTPTimeoutError
 
 from exceptions.exceptions import MustGatherImageError
 from utilities.constants import MTV_OPERATOR_NAME
+from utilities.data_collector import utc_timestamp
 from utilities.utils import get_cluster_client
 
 if TYPE_CHECKING:
@@ -34,6 +35,18 @@ if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(__name__)
+
+# Inspect dump written before the image gather: Machine Config Operator state only, so it stays
+# inside the job's disk budget (the gather has already been killed at 83% against a 70% cap).
+_INSPECT_DEST_DIR_PREFIX = "inspect"
+_INSPECT_COMMAND_TIMEOUT_SECONDS = 600
+_MCO_NAMESPACE = "openshift-machine-config-operator"
+_MCO_INSPECT_RESOURCES = (
+    "clusteroperator/machine-config",
+    "machineconfigpool",
+    "deployment/machine-config-operator",
+    "daemonset/machine-config-daemon",
+)
 
 
 def _get_idms_name(channel: str) -> str:
@@ -262,6 +275,51 @@ def _resolve_must_gather_image(
     return resolved_image
 
 
+def run_inspect_dump(data_collector_path: Path) -> bool:
+    """Write a bounded ``oc adm inspect`` of the Machine Config Operator resources.
+
+    Runs before the image gather so the MCP/ClusterOperator state survives a gather that fails or
+    is killed by the disk-usage checker. Only MCO resources are inspected: whole namespaces are
+    never collected here. Unsupported resources and non-zero exits are reported, never raised.
+
+    Args:
+        data_collector_path (Path): Directory where the inspect output is written.
+
+    Returns:
+        bool: True when the inspect command ran, False when it did not.
+    """
+    dest_dir = data_collector_path / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}"
+    command = [
+        "oc",
+        "adm",
+        "inspect",
+        f"--dest-dir={dest_dir}",
+        "-n",
+        _MCO_NAMESPACE,
+        *_MCO_INSPECT_RESOURCES,
+    ]
+    resolved_command = " ".join(command)
+    LOGGER.warning(f"Running inspect dump before the image gather: {resolved_command}")
+
+    try:
+        success, _, stderr = run_command(
+            command,
+            verify_stderr=False,
+            check=False,
+            timeout=_INSPECT_COMMAND_TIMEOUT_SECONDS,
+        )
+    except (CalledProcessError, TimeoutExpired, OSError) as ex:
+        LOGGER.warning(f"Inspect dump failed for dest-dir '{dest_dir}' via '{resolved_command}': {ex}")
+        return False
+
+    if not success:
+        LOGGER.warning(f"Inspect dump exited non-zero for dest-dir '{dest_dir}' via '{resolved_command}': {stderr}")
+        return False
+
+    LOGGER.warning(f"Inspect dump written to '{dest_dir}' by: {resolved_command}")
+    return True
+
+
 def run_must_gather(data_collector_path: Path) -> bool:
     """Run ``oc adm must-gather`` to collect the full MTV diagnostic bundle.
 
@@ -314,6 +372,10 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
     Returns:
         bool: True when the gather command ran. False when it did not.
     """
+    # The inspect dump runs before any gather attempt on this path, so MCO state is captured even
+    # when image resolution, the gather itself, or the disk-usage checker kills the bundle.
+    run_inspect_dump(data_collector_path=data_collector_path)
+
     try:
         # Resource discovery: cluster client, MTV Subscription, and its installed CSV.
         # https://github.com/kubev2v/forklift-must-gather
@@ -349,7 +411,7 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         # image resolution as a fallback to the CSV image, not a gather that cannot run.
         if not any(_is_missing_resource_api(ex, resource) for resource in (Subscription, ClusterServiceVersion)):
             raise
-        LOGGER.exception(f"Must-gather resource API is unavailable. {ex}")
+        LOGGER.exception(f"Must-gather resource API is unavailable, no bundle in '{data_collector_path}'. {ex}")
         return False
     except (
         CalledProcessError,
@@ -370,7 +432,7 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
     ) as ex:
         # Retryable operational failures: log and report the gather as not run; the caller keeps
         # the class-plan identity pending for the session-end retry.
-        LOGGER.exception(f"Failed to run must-gather. {ex}")
+        LOGGER.exception(f"Failed to run must-gather, no bundle in '{data_collector_path}'. {ex}")
         return False
 
 
@@ -388,10 +450,14 @@ def collect_must_gather_for_item(node: pytest.Item, artifact_name: str, plan_obj
     # Percent encoding is reversible, unlike replacing punctuation with dashes.
     data_collector_path = Path(node.session.config.getoption("data_collector_path")) / quote(artifact_name, safe="")
     if plan_obj is None:
-        return run_must_gather(data_collector_path=data_collector_path)
+        gathered = run_must_gather(data_collector_path=data_collector_path)
+    else:
+        plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
+        gathered = run_plan_must_gather(data_collector_path=data_collector_path, plan=plan)
 
-    plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
-    return run_plan_must_gather(data_collector_path=data_collector_path, plan=plan)
+    if not gathered:
+        LOGGER.warning(f"No must-gather bundle for '{artifact_name}' in '{data_collector_path}'")
+    return gathered
 
 
 def class_plan_identity(item: pytest.Item | None) -> str | None:
@@ -543,6 +609,7 @@ def _collect_pending_class_must_gather(session: pytest.Session, identity: str, i
         pending.pop(identity, None)
         mark_class_must_gather_collected(session, identity)
         return True
+    LOGGER.warning(f"Must-gather for class-plan '{identity}' produced no bundle, keeping it pending for the retry")
     return False
 
 

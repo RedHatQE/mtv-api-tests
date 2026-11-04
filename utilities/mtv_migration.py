@@ -27,6 +27,7 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
+from utilities.cluster_state import dump_cluster_state
 from utilities.naming import resolve_destination_vm_name
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
@@ -722,6 +723,11 @@ def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]
         f"(check {hits}/{_UNSCHEDULABLE_CONFIRMATIONS_REQUIRED}): {scheduler_message}"
     )
     if hits >= _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED:
+        dump_cluster_state(
+            reason=f"vm-unschedulable-{vm_name}",
+            scope="storage",
+            namespace=plan.instance.spec.targetNamespace,
+        )
         raise MigrationVmUnschedulableError(vm_name=vm_name, scheduler_message=scheduler_message)
 
 
@@ -773,7 +779,15 @@ def wait_for_migration_complate(
                 next_unschedulable_check = monotonic() + _UNSCHEDULABLE_CHECK_INTERVAL_SECONDS
                 _confirm_unschedulable_destination_vm(plan=plan, hits_by_vm=unschedulable_hits)
 
-    except (TimeoutExpiredError, MigrationPlanExecError):
+    except (TimeoutExpiredError, MigrationPlanExecError) as err:
+        # Storage evidence is collected for a wait timeout only: expected-failure tests raise the
+        # MigrationPlanExecError below on purpose and must not pay for a dump.
+        if isinstance(err, TimeoutExpiredError):
+            dump_cluster_state(
+                reason="plan-wait-timeout",
+                scope="storage",
+                namespace=plan.instance.spec.targetNamespace,
+            )
         raise MigrationPlanExecError(
             f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
         )

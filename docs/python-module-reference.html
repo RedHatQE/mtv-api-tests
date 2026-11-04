@@ -381,6 +381,16 @@
 <td><code>collect_created_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code></td>
 </tr>
 <tr>
+<td><code>utilities/data_collector.py</code></td>
+<td>the run's artifact directory, artifact-name timestamps and secret redaction, shared by every artifact writer</td>
+<td><code>configure_data_collector_path()</code>, <code>data_collector_path()</code>, <code>utc_timestamp()</code>, <code>redact_secret()</code></td>
+</tr>
+<tr>
+<td><code>utilities/cluster_state.py</code></td>
+<td>bounded, never-raising cluster snapshots for failures and the session-start baseline</td>
+<td><code>dump_cluster_state()</code>, <code>write_session_baseline()</code></td>
+</tr>
+<tr>
 <td><code>utilities/ssh_utils.py</code></td>
 <td>SSH into migrated VMs via <code>virtctl</code> port-forward plus <code>python-rrmngmnt</code></td>
 <td><code>VMSSHConnection</code>, <code>SSHConnectionManager</code>, <code>create_vm_ssh_connection()</code></td>
@@ -388,7 +398,7 @@
 <tr>
 <td><code>utilities/upgrade.py</code></td>
 <td>MTV operator upgrade run</td>
-<td><code>run_mtv_upgrade()</code></td>
+<td><code>run_mtv_upgrade()</code>, <code>resolve_upgrade_timeout()</code></td>
 </tr>
 <tr>
 <td><code>libs/providers/</code></td>
@@ -557,7 +567,19 @@ helpers <code>ensure_secure_shared_lock_dir()</code>, <code>get_forkliftcontroll
 <code>wait_for_di_snapshot_cleanup()</code>, <code>verify_di_results()</code>, <code>verify_captured_di_results()</code>, <code>verify_di_concerns_block_migration()</code>, <code>get_plan_conversion_crs()</code>,
 <code>wait_for_critical_conditions()</code>, <code>create_di_capture_callback()</code>.</p>
 <h3 id="utilitiesupgradepy"><code>utilities/upgrade.py</code></h3>
-<p><code>run_mtv_upgrade()</code> runs the MTV operator upgrade used by the <code>upgrade</code> suite, with process-group timeouts so a stuck upgrade cannot hang the run.</p>
+<p><code>run_mtv_upgrade()</code> runs the MTV operator upgrade used by the <code>upgrade</code> suite, with process-group timeouts so a stuck upgrade cannot hang the run. Its outer wait budget comes
+from <code>resolve_upgrade_timeout()</code>: the <code>--mtv-upgrade-timeout</code> option, then <code>MTV_UPGRADE_TIMEOUT_SECONDS</code>, then 5400 seconds, so the budget stays above the upgrade script's own
+internal waits and the script reports its own timeout instead of being killed by the harness. The script's stdout and stderr are persisted under
+<code>&lt;data-collector&gt;/upgrade-script-&lt;timestamp&gt;/</code> with <code>CLUSTER_PASSWORD</code> redacted, and <code>MtvUpgradeError</code> carries only the tail of both logs plus those paths. On an outer wait
+timeout the function also writes a <code>scope="upgrade"</code> cluster-state snapshot before raising.</p>
+<h3 id="utilitiescluster_statepy"><code>utilities/cluster_state.py</code></h3>
+<p><code>dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=...)</code> writes one timestamped, bounded snapshot per failure and never raises, so the failing exception
+stays the error the caller sees. <code>write_session_baseline()</code> writes <code>&lt;data-collector&gt;/session-start/cluster.txt</code> and <code>run-identity.txt</code> once per session from
+<code>pytest_sessionstart</code>, tolerating a missing <code>.git</code> and skipping cleanly under <code>--skip-data-collector</code>.</p>
+<h3 id="utilitiesdata_collectorpy"><code>utilities/data_collector.py</code></h3>
+<p>Holds the resolved artifact directory as module state, because most writers have no pytest <code>config</code> to read it from: <code>configure_data_collector_path()</code> is called once in
+<code>pytest_sessionstart</code> (<code>None</code> under <code>--skip-data-collector</code>), <code>data_collector_path()</code> returns it, <code>utc_timestamp()</code> names timestamped artifacts, and <code>redact_secret()</code> keeps the
+cluster password out of every artifact.</p>
 <h2 id="validation">Validation</h2>
 <h3 id="utilitiespost_migrationpy"><code>utilities/post_migration.py</code></h3>
 <p>Validation of migrated VMs (2083 lines). <code>check_vms()</code> is the entry point used by <code>test_check_vms</code>; everything else is a focused check it composes. <code>verify_excluded_disks()</code> orchestrates the disk-exclusion verification (per-VM kept-disk loop plus the namespace PVC-count assertion) and delegates per-VM disk-identity verification to the vSphere provider module <code>libs.providers.vmware.verify_kept_disks_attached</code>, since exclude_disks uses vSphere bus addresses.</p>
@@ -867,6 +889,8 @@ helpers.</p>
 <li><a href="#utilitieshookspy">utilities/hooks.py</a></li>
 <li><a href="#utilitiesdeep_inspectionpy">utilities/deep_inspection.py</a></li>
 <li><a href="#utilitiesupgradepy">utilities/upgrade.py</a></li>
+<li><a href="#utilitiescluster_statepy">utilities/cluster_state.py</a></li>
+<li><a href="#utilitiesdata_collectorpy">utilities/data_collector.py</a></li>
 </ul>
 </li>
 <li><a href="#validation">Validation</a><ul>

@@ -25,8 +25,10 @@ Most test authors never import these modules directly. They consume them through
 | `utilities/hooks.py` | Forklift `Hook` CR creation and failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
 | `utilities/provider_inventory.py` | Forklift inventory refresh and clone waits | `wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()` |
 | `utilities/pytest_utils.py` | failure data collection, session teardown, JUnit enrichment | `collect_created_resources()`, `session_teardown()`, `enrich_junit_xml()` |
+| `utilities/data_collector.py` | the run's artifact directory, artifact-name timestamps and secret redaction, shared by every artifact writer | `configure_data_collector_path()`, `data_collector_path()`, `utc_timestamp()`, `redact_secret()` |
+| `utilities/cluster_state.py` | bounded, never-raising cluster snapshots for failures and the session-start baseline | `dump_cluster_state()`, `write_session_baseline()` |
 | `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward plus `python-rrmngmnt` | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
-| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()` |
+| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()`, `resolve_upgrade_timeout()` |
 | `libs/providers/` | one adapter per source provider type | `VMWareProvider`, `OvirtProvider`, `OpenStackProvider`, `OCPProvider`, `OVAProvider`, `HyperVProvider` |
 | `exceptions/exceptions.py` | every custom exception the suite raises | 24 exception classes, all in one module |
 
@@ -158,7 +160,23 @@ Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven 
 
 ### `utilities/upgrade.py`
 
-`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run.
+`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run. Its outer wait budget comes
+from `resolve_upgrade_timeout()`: the `--mtv-upgrade-timeout` option, then `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds, so the budget stays above the upgrade script's own
+internal waits and the script reports its own timeout instead of being killed by the harness. The script's stdout and stderr are persisted under
+`<data-collector>/upgrade-script-<timestamp>/` with `CLUSTER_PASSWORD` redacted, and `MtvUpgradeError` carries only the tail of both logs plus those paths. On an outer wait
+timeout the function also writes a `scope="upgrade"` cluster-state snapshot before raising.
+
+### `utilities/cluster_state.py`
+
+`dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=...)` writes one timestamped, bounded snapshot per failure and never raises, so the failing exception
+stays the error the caller sees. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt` and `run-identity.txt` once per session from
+`pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`.
+
+### `utilities/data_collector.py`
+
+Holds the resolved artifact directory as module state, because most writers have no pytest `config` to read it from: `configure_data_collector_path()` is called once in
+`pytest_sessionstart` (`None` under `--skip-data-collector`), `data_collector_path()` returns it, `utc_timestamp()` names timestamped artifacts, and `redact_secret()` keeps the
+cluster password out of every artifact.
 
 ## Validation
 

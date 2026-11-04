@@ -9666,7 +9666,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 
 ## Suite-specific pytest options
 
-`conftest.py` registers six custom options across five groups. All of them are real flags you can pass on any run.
+`conftest.py` registers seven custom options across six groups. All of them are real flags you can pass on any run.
 
 ```python
     def pytest_addoption(parser: pytest.Parser) -> None:
@@ -9686,6 +9686,18 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
             "--providers-json",
             help="Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json",
             default=None,
+        )
+
+        mtv_upgrade_group = parser.getgroup(name="MTV Upgrade")
+        mtv_upgrade_group.addoption(
+            "--mtv-upgrade-timeout",
+            type=int,
+            default=None,
+            help=(
+                "Outer timeout in seconds for the MTV upgrade script wait. Falls back to "
+                "MTV_UPGRADE_TIMEOUT_SECONDS, then 5400 seconds. The upgrade script owns its own internal "
+                "waits; this only guards against a wedged process"
+            ),
         )
 
         data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
@@ -9710,6 +9722,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 | `--data-collector-path PATH` | `DataCollector` | Output directory; default `.data-collector`. Wiped at session start, written at session finish |
 | `--skip-teardown` | `Teardown` | Preserves resources after the run instead of deleting them |
 | `--openshift-python-wrapper-log-debug` | `Openshift Python Wrapper` | Sets `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` during session startup |
+| `--mtv-upgrade-timeout SECONDS` | `MTV Upgrade` | Outer wait budget for the upgrade script. Falls back to `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds. It only guards against a wedged process: the script owns its own internal waits, so this budget must stay above them |
 
 The real-run guard for required config lives in `pytest_sessionstart` too:
 
@@ -11152,8 +11165,10 @@ Most test authors never import these modules directly. They consume them through
 | `utilities/hooks.py` | Forklift `Hook` CR creation and failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
 | `utilities/provider_inventory.py` | Forklift inventory refresh and clone waits | `wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()` |
 | `utilities/pytest_utils.py` | failure data collection, session teardown, JUnit enrichment | `collect_created_resources()`, `session_teardown()`, `enrich_junit_xml()` |
+| `utilities/data_collector.py` | the run's artifact directory, artifact-name timestamps and secret redaction, shared by every artifact writer | `configure_data_collector_path()`, `data_collector_path()`, `utc_timestamp()`, `redact_secret()` |
+| `utilities/cluster_state.py` | bounded, never-raising cluster snapshots for failures and the session-start baseline | `dump_cluster_state()`, `write_session_baseline()` |
 | `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward plus `python-rrmngmnt` | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
-| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()` |
+| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()`, `resolve_upgrade_timeout()` |
 | `libs/providers/` | one adapter per source provider type | `VMWareProvider`, `OvirtProvider`, `OpenStackProvider`, `OCPProvider`, `OVAProvider`, `HyperVProvider` |
 | `exceptions/exceptions.py` | every custom exception the suite raises | 24 exception classes, all in one module |
 
@@ -11285,7 +11300,23 @@ Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven 
 
 ### `utilities/upgrade.py`
 
-`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run.
+`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run. Its outer wait budget comes
+from `resolve_upgrade_timeout()`: the `--mtv-upgrade-timeout` option, then `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds, so the budget stays above the upgrade script's own
+internal waits and the script reports its own timeout instead of being killed by the harness. The script's stdout and stderr are persisted under
+`<data-collector>/upgrade-script-<timestamp>/` with `CLUSTER_PASSWORD` redacted, and `MtvUpgradeError` carries only the tail of both logs plus those paths. On an outer wait
+timeout the function also writes a `scope="upgrade"` cluster-state snapshot before raising.
+
+### `utilities/cluster_state.py`
+
+`dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=...)` writes one timestamped, bounded snapshot per failure and never raises, so the failing exception
+stays the error the caller sees. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt` and `run-identity.txt` once per session from
+`pytest_sessionstart`, tolerating a missing `.git` and skipping cleanly under `--skip-data-collector`.
+
+### `utilities/data_collector.py`
+
+Holds the resolved artifact directory as module state, because most writers have no pytest `config` to read it from: `configure_data_collector_path()` is called once in
+`pytest_sessionstart` (`None` under `--skip-data-collector`), `data_collector_path()` returns it, `utc_timestamp()` names timestamped artifacts, and `redact_secret()` keeps the
+cluster password out of every artifact.
 
 ## Validation
 
@@ -11558,6 +11589,7 @@ A few pytest options change what diagnostics you get back:
 - `--skip-teardown` leaves created resources in place so you can inspect them live.
 - `--openshift-python-wrapper-log-debug` turns on deeper wrapper-level logging, which is useful when CR creation or wait logic is failing.
 - `--providers-json` points at a providers file other than the default, which is the fastest way to tell "wrong file" from "wrong provider".
+- `--mtv-upgrade-timeout` sets the outer wait budget of the upgrade script; raise it when an upgrade legitimately takes longer than 90 minutes.
 
 `--openshift-python-wrapper-log-debug` works by exporting `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` into the environment at session start,
 so it affects every wrapper log record in the run, not just a single test.
@@ -11688,8 +11720,17 @@ Unless you use `--skip-data-collector`, the suite prepares a clean `.data-collec
 The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
+- `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, `ClusterOperator`, the `MachineConfigPool` manifests plus per-pool counters
+  and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?".
+- `.data-collector/session-start/run-identity.txt`: the checkout revision, the pytest invocation (with `--tc` values, cluster password redacted), `oc whoami`, and whether
+  `--skip-teardown` / `--skip-data-collector` were set.
+- `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see
+  [Failure Evidence Dumps](#failure-evidence-dumps)).
+- `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output, persisted instead of deleted. Without
+  `--data-collector-path` these live under the default `.data-collector/`; with `--skip-data-collector` they go to a temporary directory and are removed at exit.
 - `.data-collector/<encoded-class-plan-identity>/...`: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.
 - `.data-collector/<encoded-test-node-identity>/...`: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.
+- `.data-collector/.../inspect-<timestamp>/`: the `oc adm inspect` dump of the Machine Config Operator resources, written before the image gather of the same failure path.
 - `.data-collector/...` at the root: session-level must-gather output when teardown cleanup fails.
 
 The tracked resource file is especially useful after a partial or messy failure because it tells you exactly which names and namespaces
@@ -11705,6 +11746,21 @@ The suite stores resource metadata as it creates objects, including `name`, `nam
 failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` should I inspect?”
 
 > **Tip:** If you rerun the test suite, the base data collector path is recreated. Move or archive old artifacts first if you want to keep them.
+
+## Failure Evidence Dumps
+
+`utilities/cluster_state.py::dump_cluster_state()` writes a bounded cluster snapshot immediately before a real failure is raised, so the analyzer never has to re-run the
+failing job to learn the cluster state. It is observation only and never raises: every `oc` command runs through one `subprocess` helper with a 20-second timeout, failures are
+logged into the snapshot itself, and the original exception is always the error you see. Each invocation writes one file,
+`cluster-state/<UTC timestamp>-<scope>-<reason slug>[-<xdist worker>].txt`, so parallel workers cannot collide.
+
+| Scope | Where it fires | What it collects |
+| --- | --- | --- |
+| `upgrade` | The upgrade script hits the outer wait budget | `clusterversion`, `co`, `co machine-config -o yaml`, `mcp -o yaml` plus per-pool `ready`/`updated`/`degraded`/`unavailable` counters and conditions, nodes, Machine Config Operator pods and their logs, `idms`, `icsp`, `image.config cluster`, and the `openshift-mtv` CSV |
+| `storage` | A migration wait times out, or a migrated VM is confirmed unschedulable | `pvc,dv,pv -o wide` for the target namespace plus `-o yaml` for the non-Bound PVCs only, namespace events, storage classes, `openshift-storage` pods, and the ceph-csi provisioner log (`--tail=3000`, retried without `--previous` when no previous container exists) |
+
+Deliberately **not** dumped: the generic `MigrationPlanExecError`. Expected-failure tests (`tests/plan_lifecycle/`, `TestPostHookRetainFailedVm`, resume-conversion) raise it on
+purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under `--skip-data-collector`.
 
 ## Must-Gather Support
 
@@ -11727,6 +11783,10 @@ runs the full, cluster-wide gather. Both share image resolution and differ only 
 
 What this means in practice:
 
+- Before the image gather of any failure path, `run_inspect_dump()` writes an `oc adm inspect` dump of `clusteroperator/machine-config`, `machineconfigpool`, and the Machine Config
+  Operator deployment/daemonset into `inspect-<timestamp>/`, so the MCO evidence survives a gather that fails or is killed by the disk-usage checker. It only inspects those
+  targeted resources — never whole namespaces, because the gather has already been killed at 83% against a 70% disk cap. The resolved command and the output directory are
+  logged, and unsupported resources or a non-zero exit only produce a warning and a `False` return.
 - If the failure can be tied back to a specific plan, the gather is scoped to that plan with `/usr/bin/targeted`.
 - Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.
 - `pytest_exception_interact` records a failing class item. A `tryfirst` `pytest_runtest_protocol` wrapper clears stale `plan_resource` on entry to a different class-plan identity before setup hooks run, but preserves it across consecutive methods of the same plan. The pre-finalizer boundary binds the current Plan or explicit None, even if no failure is pending yet, and retains it for retries. Updates before that boundary are observed. If setup fails before this plan exists, the gather is full, not targeted.

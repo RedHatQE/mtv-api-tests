@@ -16,6 +16,7 @@ from utilities.mtv_migration import (
     get_network_migration_map,
     get_storage_migration_map,
 )
+from utilities.upgrade import resolve_upgrade_timeout
 from utilities.utils import populate_vm_ids
 
 if TYPE_CHECKING:
@@ -26,6 +27,23 @@ if TYPE_CHECKING:
     from libs.providers.openshift import OCPProvider
 
 LOGGER = get_logger(name=__name__)
+
+
+@pytest.fixture(scope="session")
+def upgrade_timeout(request: pytest.FixtureRequest) -> int:
+    """Return the outer upgrade script wait budget for this run.
+
+    Args:
+        request (pytest.FixtureRequest): Fixture request exposing the session configuration.
+
+    Returns:
+        int: Timeout in seconds, resolved from ``--mtv-upgrade-timeout``, then
+            ``MTV_UPGRADE_TIMEOUT_SECONDS``, then the 5400 second default.
+
+    Raises:
+        ValueError: If the resolved value is not a positive integer.
+    """
+    return resolve_upgrade_timeout(request.config.getoption("mtv_upgrade_timeout"))
 
 
 @pytest.fixture(scope="session")
