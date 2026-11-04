@@ -18,7 +18,7 @@ from simple_logger.logger import get_logger
 from exceptions.exceptions import MtvUpgradeError
 from utilities.cluster_state import dump_cluster_state
 from utilities.data_collector import data_collector_path, redact_secret, utc_timestamp
-from utilities.utils import resolve_cluster_credential
+from utilities.utils import require_cluster_credential
 
 LOGGER = get_logger(name=__name__)
 
@@ -33,6 +33,7 @@ _UPGRADE_ARTIFACT_DIR_PREFIX = "upgrade-script"
 _UPGRADE_STDOUT_LOG_NAME = "upgrade-script-stdout.log"
 _UPGRADE_STDERR_LOG_NAME = "upgrade-script-stderr.log"
 _UPGRADE_ERROR_LOG_TAIL_LINES = 200
+_CLUSTER_PASSWORD_ENV_VAR = "CLUSTER_PASSWORD"  # pragma: allowlist secret
 
 
 def resolve_upgrade_timeout(cli_value: int | None) -> int:
@@ -146,29 +147,36 @@ def _upgrade_failure_details(*, stdout: str, stderr: str, artifact_dir: Path | N
     )
 
 
-def _require_cluster_password() -> str:
-    """Return the configured cluster password, refusing to start the script without one.
+def _upgrade_script_env(*, mtv_version: str, mtv_source: str, image_index: str) -> dict[str, str]:
+    """Resolve the cluster credentials and build the upgrade script environment.
 
-    Resolved with the same rule as every other cluster credential: pytest config
-    (``--tc=cluster_password:``) first, then the ``CLUSTER_PASSWORD`` environment variable,
-    which is how the CLI and container runs pass it.
+    Every cluster credential is resolved the same way (pytest config first, then the
+    ``CLUSTER_*`` environment variable); the CLI passes the username and password only through
+    the environment, so reading pytest config directly would KeyError before the script starts.
+
+    Args:
+        mtv_version (str): Target MTV version to upgrade to.
+        mtv_source (str): MTV source identifier (e.g., "brew", "released").
+        image_index (str): Optional image index override for the upgrade.
 
     Returns:
-        str: The non-empty cluster password handed to the script and used for redaction.
+        dict[str, str]: Environment for the upgrade script process.
 
     Raises:
-        ValueError: If ``CLUSTER_PASSWORD`` is missing, empty or whitespace only, because the script
-            output is redacted with it. Configuration errors are ``ValueError`` by convention, matching
-            ``utilities.utils._validate_cluster_credentials``.
+        ValueError: If ``cluster_password``, ``cluster_username`` or ``cluster_host`` is missing or
+            blank in both pytest config and the environment.
     """
-    password = resolve_cluster_credential("cluster_password")
-    if not password or not password.strip():
-        raise ValueError(
-            "CLUSTER_PASSWORD is missing or empty: neither 'cluster_password' in pytest config nor the "
-            "CLUSTER_PASSWORD environment variable is set. The upgrade script needs it and its output is "
-            "redacted with it, so the upgrade cannot start"
-        )
-    return password
+    env = os.environ.copy()
+    env.update({
+        "MTV_VERSION": mtv_version,
+        "MTV_SOURCE": mtv_source.upper(),
+        "IMAGE_INDEX": image_index,
+        "CLUSTER_USERNAME": require_cluster_credential("cluster_username"),
+        _CLUSTER_PASSWORD_ENV_VAR: require_cluster_credential("cluster_password"),
+        "CLUSTER_API_URL": require_cluster_credential("cluster_host"),
+        "DEBUG": "true",
+    })
+    return env
 
 
 def _kill_process_group(pgid: int, sig: int) -> None:
@@ -208,6 +216,80 @@ def _stop_upgrade_process(proc: subprocess.Popen[bytes]) -> None:
         raise MtvUpgradeError(f"Upgrade process group {proc.pid} did not exit after SIGTERM and SIGKILL") from exc
 
 
+def _supervise_upgrade_process(
+    script_path: str,
+    env: dict[str, str],
+    timeout: int,
+    artifact_dir: Path | None,
+) -> tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str]:
+    """Run the upgrade script and supervise its process group.
+
+    The child writes into an ephemeral directory so the raw bytes never reach the artifact tree;
+    only the redacted text is persisted. File redirect (not PIPEs): leftover mtv-upgrade.sh
+    children would keep communicate() blocked. With --skip-data-collector the child inherits the
+    pytest capture streams and no file is written at all.
+
+    Args:
+        script_path (str): Full path to the upgrade script.
+        env (dict[str, str]): Environment for the upgrade script, including the credentials.
+        timeout (int): Outer wait budget in seconds.
+        artifact_dir (Path | None): Directory that persists the redacted logs, or None when data
+            collection is disabled.
+
+    Returns:
+        tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str]: Exit
+            code (None on timeout), the timeout exception, a process-group cleanup failure, and the
+            redacted stdout and stderr. Both streams are empty when data collection is disabled.
+
+    Raises:
+        MtvUpgradeError: If the process group is still running after SIGKILL.
+        OSError: If the ephemeral log files cannot be created.
+    """
+    password = env[_CLUSTER_PASSWORD_ENV_VAR]
+    with contextlib.ExitStack() as stack:
+        log_dir: Path | None = (
+            Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="mtv-upgrade-logs-")))
+            if artifact_dir is not None
+            else None
+        )
+        stdout_file = (
+            stack.enter_context((log_dir / _UPGRADE_STDOUT_LOG_NAME).open("wb")) if log_dir is not None else None
+        )
+        stderr_file = (
+            stack.enter_context((log_dir / _UPGRADE_STDERR_LOG_NAME).open("wb")) if log_dir is not None else None
+        )
+        proc = subprocess.Popen(
+            [script_path],
+            env=env,
+            cwd=os.path.dirname(script_path),
+            start_new_session=True,
+            stdout=stdout_file,
+            stderr=stderr_file,
+        )
+        timeout_exc: subprocess.TimeoutExpired | None = None
+        cleanup_exc: MtvUpgradeError | None = None
+        stdout = ""
+        stderr = ""
+        try:
+            returncode = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            timeout_exc = exc
+            returncode = None
+        finally:
+            try:
+                _stop_upgrade_process(proc)
+            except MtvUpgradeError as exc:
+                cleanup_exc = exc
+            # Persist the redacted copy here (not after the try) so an unexpected wait failure still
+            # leaves a redacted artifact, and the raw bytes stay in the ephemeral directory only.
+            if log_dir is not None and artifact_dir is not None:
+                stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
+                stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
+                _write_redacted_logs(artifact_dir=artifact_dir, stdout=stdout, stderr=stderr)
+
+    return returncode, timeout_exc, cleanup_exc, stdout, stderr
+
+
 def run_mtv_upgrade(
     script_path: str,
     mtv_version: str,
@@ -231,32 +313,7 @@ def run_mtv_upgrade(
             empty.
         MtvUpgradeError: If the upgrade script exits with a non-zero status or times out.
     """
-    password = _require_cluster_password()
-    # Every cluster credential is resolved the same way (pytest config, then the CLUSTER_* env var);
-    # the CLI passes the username and password only through the environment, so reading pytest config
-    # directly here would KeyError before the script starts.
-    username = resolve_cluster_credential("cluster_username")
-    cluster_host = resolve_cluster_credential("cluster_host")
-    if not username or not username.strip():
-        raise ValueError(
-            "CLUSTER_USERNAME is missing or empty: neither 'cluster_username' in pytest config nor the "
-            "CLUSTER_USERNAME environment variable is set, so the upgrade script cannot log in"
-        )
-    if not cluster_host or not cluster_host.strip():
-        raise ValueError(
-            "CLUSTER_HOST is missing or empty: neither 'cluster_host' in pytest config nor the CLUSTER_HOST "
-            "environment variable is set, so the upgrade script has no API server to upgrade"
-        )
-    env = os.environ.copy()
-    env.update({
-        "MTV_VERSION": mtv_version,
-        "MTV_SOURCE": mtv_source.upper(),
-        "IMAGE_INDEX": image_index,
-        "CLUSTER_USERNAME": username,
-        "CLUSTER_PASSWORD": password,
-        "CLUSTER_API_URL": cluster_host,
-        "DEBUG": "true",
-    })
+    env = _upgrade_script_env(mtv_version=mtv_version, mtv_source=mtv_source, image_index=image_index)
 
     LOGGER.info(f"Running MTV upgrade: {script_path} (version={mtv_version}, source={mtv_source}, index={image_index})")
     LOGGER.info(
@@ -265,77 +322,32 @@ def run_mtv_upgrade(
     )
 
     artifact_dir = _prepare_upgrade_artifact_dir()
+    returncode, timeout_exc, cleanup_exc, stdout, stderr = _supervise_upgrade_process(
+        script_path=script_path, env=env, timeout=timeout, artifact_dir=artifact_dir
+    )
 
-    # The child writes into an ephemeral directory so the raw bytes never reach the artifact tree;
-    # only the redacted text below is persisted. File redirect (not PIPEs): leftover
-    # mtv-upgrade.sh children would keep communicate() blocked. With --skip-data-collector the
-    # child inherits the pytest capture streams and no file is written at all.
-    with contextlib.ExitStack() as stack:
-        log_dir: Path | None = (
-            Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="mtv-upgrade-logs-")))
-            if artifact_dir is not None
-            else None
-        )
-        stdout_file = (
-            stack.enter_context((log_dir / _UPGRADE_STDOUT_LOG_NAME).open("wb")) if log_dir is not None else None
-        )
-        stderr_file = (
-            stack.enter_context((log_dir / _UPGRADE_STDERR_LOG_NAME).open("wb")) if log_dir is not None else None
-        )
-        proc = subprocess.Popen(
-            [script_path],
-            env=env,
-            cwd=os.path.dirname(script_path),
-            start_new_session=True,
-            stdout=stdout_file,
-            stderr=stderr_file,
-        )
-        timeout_exc: subprocess.TimeoutExpired | None = None
-        cleanup_exc: MtvUpgradeError | None = None
-        try:
-            returncode = proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired as exc:
-            timeout_exc = exc
-            returncode = None
-        finally:
-            try:
-                _stop_upgrade_process(proc)
-            except MtvUpgradeError as exc:
-                cleanup_exc = exc
-            # Persist the redacted copy here (not after the try) so an unexpected wait failure still
-            # leaves a redacted artifact, and the raw bytes stay in the ephemeral directory only.
-            persisted_stdout = ""
-            persisted_stderr = ""
-            if log_dir is not None and artifact_dir is not None:
-                persisted_stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
-                persisted_stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
-                _write_redacted_logs(artifact_dir=artifact_dir, stdout=persisted_stdout, stderr=persisted_stderr)
+    failure_details = _upgrade_failure_details(stdout=stdout, stderr=stderr, artifact_dir=artifact_dir)
+    cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
+    if timeout_exc is not None:
+        dump_cluster_state(reason=f"upgrade-script-timeout-{timeout}", scope="upgrade")
+        raise MtvUpgradeError(
+            f"MTV upgrade script timed out after {timeout_exc.timeout} seconds "
+            f"(plus up to {_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS} seconds process-group cleanup)\n"
+            f"{failure_details}{cleanup_note}"
+        ) from timeout_exc
+    if returncode is None or returncode != 0:
+        # The script reports its own 60-minute wait first and exits non-zero, so this branch
+        # (not only the outer timeout) needs the snapshot for MCP/CO evidence.
+        dump_cluster_state(reason=f"upgrade-script-exit-{returncode}", scope="upgrade")
+        raise MtvUpgradeError(
+            f"MTV upgrade script failed with exit code {returncode}\n{failure_details}{cleanup_note}"
+        ) from cleanup_exc
+    if cleanup_exc is not None:
+        raise cleanup_exc
 
-        stdout = persisted_stdout
-        stderr = persisted_stderr
-
-        failure_details = _upgrade_failure_details(stdout=stdout, stderr=stderr, artifact_dir=artifact_dir)
-        cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
-        if timeout_exc is not None:
-            dump_cluster_state(reason=f"upgrade-script-timeout-{timeout}", scope="upgrade")
-            raise MtvUpgradeError(
-                f"MTV upgrade script timed out after {timeout_exc.timeout} seconds "
-                f"(plus up to {_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS} seconds process-group cleanup)\n"
-                f"{failure_details}{cleanup_note}"
-            ) from timeout_exc
-        if returncode is None or returncode != 0:
-            # The script reports its own 60-minute wait first and exits non-zero, so this branch
-            # (not only the outer timeout) needs the snapshot for MCP/CO evidence.
-            dump_cluster_state(reason=f"upgrade-script-exit-{returncode}", scope="upgrade")
-            raise MtvUpgradeError(
-                f"MTV upgrade script failed with exit code {returncode}\n{failure_details}{cleanup_note}"
-            ) from cleanup_exc
-        if cleanup_exc is not None:
-            raise cleanup_exc
-
-        if artifact_dir is not None:
-            LOGGER.info(f"MTV upgrade stdout:\n{stdout}")
-            if stderr:
-                LOGGER.warning(f"MTV upgrade stderr:\n{stderr}")
+    if artifact_dir is not None:
+        LOGGER.info(f"MTV upgrade stdout:\n{stdout}")
+        if stderr:
+            LOGGER.warning(f"MTV upgrade stderr:\n{stderr}")
 
     LOGGER.info(f"MTV upgrade to version {mtv_version} completed successfully")

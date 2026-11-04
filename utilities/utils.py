@@ -1123,6 +1123,38 @@ def resolve_cluster_credential(config_key: str) -> str | None:
     return None if configured is None else str(configured)
 
 
+def _is_blank(value: str | None) -> bool:
+    """Return True when a credential value is absent, empty or whitespace only.
+
+    Args:
+        value (str | None): Credential value to inspect.
+
+    Returns:
+        bool: True when the value cannot be used as a credential.
+    """
+    return not value or not value.strip()
+
+
+def require_cluster_credential(config_key: str) -> str:
+    """Resolve a required cluster credential, rejecting a missing or blank value.
+
+    Args:
+        config_key (str): Pytest config key, e.g. ``cluster_password``; the environment fallback is
+            the same key uppercased.
+
+    Returns:
+        str: The non-empty credential value.
+
+    Raises:
+        ValueError: If neither the pytest config nor the environment variable supplies a non-blank
+            value. Configuration errors are ``ValueError`` by repository convention.
+    """
+    credential = resolve_cluster_credential(config_key) or ""
+    if _is_blank(credential):
+        raise ValueError(f"Missing cluster credential: set '{config_key}' in pytest config or {config_key.upper()}")
+    return credential
+
+
 def _validate_cluster_credentials() -> None:
     """Fail fast when cluster credentials are configured incompletely.
 
@@ -1140,7 +1172,7 @@ def _validate_cluster_credentials() -> None:
         None: Validation passed; the resolved credentials are usable as-is.
     """
     resolved_credentials = {key: resolve_cluster_credential(key) for key in CLUSTER_CREDENTIAL_KEYS}
-    unusable = [key for key, credential in resolved_credentials.items() if not credential or not credential.strip()]
+    unusable = [key for key, credential in resolved_credentials.items() if _is_blank(credential)]
     is_token_path = all(credential is None for credential in resolved_credentials.values())
     if unusable and not is_token_path:
         names = ", ".join(f"'{key}' in pytest config or {key.upper()}" for key in unusable)
