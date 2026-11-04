@@ -102,6 +102,36 @@ def get_ready_schedulable_worker_nodes(
     ]
 
 
+# Scheduler conditions arrive in free-form status blocks, so their values are typed Any: the
+# Kubernetes CRD schema does not express the per-condition value types.
+def has_unschedulable_condition(conditions: list[dict[str, Any]] | None) -> bool:
+    """Check whether a scheduler condition reports the object as unschedulable.
+
+    Args:
+        conditions (list[dict[str, Any]] | None): Pod or VirtualMachineInstance status conditions.
+
+    Returns:
+        bool: True when the scheduler rejected scheduling for this object.
+
+    Raises:
+        ValueError: If ``conditions`` is neither None nor a list of condition mappings.
+    """
+    if conditions is None:
+        return False
+
+    if not isinstance(conditions, list) or not all(isinstance(condition, dict) for condition in conditions):
+        raise ValueError(
+            f"Expected a list of scheduler condition mappings or None, got {type(conditions).__name__}: {conditions!r}"
+        )
+
+    return any(
+        condition.get("type") == "PodScheduled"
+        and condition.get("status") == "False"
+        and condition.get("reason") == "Unschedulable"
+        for condition in conditions
+    )
+
+
 def get_session_unique_label_key(label_key: str, session_uuid: str) -> str:
     """Append a session identifier to a Kubernetes label key without exceeding 63 characters.
 

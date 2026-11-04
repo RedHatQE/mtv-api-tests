@@ -15,6 +15,7 @@ from typing import Any
 
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.virtual_machine import VirtualMachine
+from paramiko.ssh_exception import SSHException
 from pytest_testconfig import config as py_config
 from rrmngmnt import Host, RootUser, User, UserWithPKey
 from simple_logger.logger import get_logger
@@ -251,7 +252,15 @@ class VMSSHConnection:
         return executor.is_connective(tcp_timeout=tcp_timeout)
 
     def connect(self) -> Host:
-        """Establish SSH connection using virtctl port-forward and rrmngmnt."""
+        """Establish SSH connection using virtctl port-forward and rrmngmnt.
+
+        Returns:
+            Host: The connected rrmngmnt host.
+
+        Raises:
+            RuntimeError: If the port-forward cannot be established.
+            ConnectionError: If the SSH session to the guest cannot be established.
+        """
         LOGGER.info(f"Connecting to VM {self.vm.name} via SSH using rrmngmnt")
 
         if not self.local_port:
@@ -290,6 +299,11 @@ class VMSSHConnection:
             connected = True
             return self.rrmngmnt_host
 
+        # paramiko reports a session that is not serving sessions (e.g. OpenSSH still starting
+        # on a freshly migrated guest) as SSHException; surface it as a transport failure.
+        except SSHException as e:
+            LOGGER.error(f"Failed to establish SSH connection to VM {self.vm.name}: {e}")
+            raise ConnectionError(f"Failed to establish SSH connection to VM {self.vm.name}: {e}") from e
         except (RuntimeError, OSError, ConnectionError) as e:
             LOGGER.error(f"Failed to establish SSH connection to VM {self.vm.name}: {e}")
             raise

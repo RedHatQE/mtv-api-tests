@@ -312,6 +312,10 @@ These issues usually show up as setup failures, plan readiness timeouts, or earl
 - The `Plan` becomes ready, but the migration never reaches `Succeeded`.
 - The migration reaches `Failed`.
 - The run times out waiting for migration completion.
+- A migrated VM stays unschedulable on the destination cluster (for example a `target_node_selector` pinning it to one worker
+  that lacks memory). `wait_for_migration_complate()` fails fast here with `MigrationVmUnschedulableError` after the destination
+  `VirtualMachineInstance` reports `PodScheduled=False`/`Unschedulable` for 3 consecutive 30-second checks, instead of waiting for
+  `plan_wait_timeout`. The suite never frees node capacity, so this state does not recover within a run.
 - Hook execution fails at `PreHook` or `PostHook`.
 - Warm migration timing is wrong for the environment.
 

@@ -42,7 +42,11 @@ supported source type, and `create_source_cnv_vms()` builds the target VMs from 
 
 Other public helpers: `resolve_providers_json_path()`, `generate_class_hash_prefix()`, `gen_network_map_list()`, `get_per_nic_networks()`, `populate_vm_ids()`,
 `extract_vm_from_plan()`, `get_cluster_version()`, `get_cluster_version_str()`, `get_mtv_version()`, `has_mtv_minimum_version()`, `delete_all_vms()`, `generate_ca_cert_file()`,
-`background()`.
+`background()`, `restore_skip_clone_power_states()`.
+
+`restore_skip_clone_power_states()` puts shared `skip_clone` source VMs back to the power state recorded before plan setup changed it. It drains
+its list, so the setup-failure finalizer and the class teardown call never restore twice, and it attempts every VM before re-raising the first
+provider failure.
 
 Provider shortcuts used by fixtures: `vmware_provider()`, `rhv_provider()`, `openstack_provider()`, `ova_provider()`, `ocp_provider()`, `hyperv_provider()`.
 
@@ -83,12 +87,20 @@ The module most test authors reuse first. It owns `StorageMap`, `NetworkMap`, `P
 | `create_plan_resource()` | build and deploy the `Plan`, including plan flags |
 | `execute_migration()` | create the `Migration` and poll it to completion |
 | `get_migration_for_plan()` | locate the `Migration` CR belonging to a `Plan` |
-| `wait_for_migration_complate()` | poll a migration, with an optional per-poll status callback |
+| `wait_for_migration_complate()` | poll a migration, with an optional per-poll status callback and an unschedulable-VM fail-fast |
 | `wait_for_dual_migration_completion()` | wait for two plans migrating concurrently |
 | `wait_for_concurrent_migration_execution()` | start several migrations and wait for all of them |
 | `get_plan_migration_status()` / `get_vm_suffix()` | status parsing helpers |
 | `resolve_pvc_name_template()` | resolve the per-provider PVC name template |
 | `verify_vm_disk_count()` | assert the migrated disk count matches the source |
+
+`wait_for_migration_complate()` polls `Plan` status every second until `Succeeded` or `Failed`, and additionally re-reads the destination
+`VirtualMachineInstance` objects of the plan's VMs every 30 seconds. When the scheduler reports `PodScheduled=False` with reason
+`Unschedulable` on the same VM for 3 consecutive checks, the wait raises `MigrationVmUnschedulableError` naming the VM and the raw
+scheduler message. The probe matches the destination names the plan reports plus each spec VM's resolved destination name (`targetName`, or the
+sanitised source name), keeps a consecutive count per VM, and runs only on non-terminal polls — a plan that reports `Failed` still raises
+`MigrationPlanExecError` carrying its status. The suite never frees destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
+is preferable to running to `plan_wait_timeout` (1 hour) for a VM that can never start.
 
 ### `utilities/migration_utils.py`
 
@@ -166,6 +178,11 @@ Validation of migrated VMs (2083 lines). `check_vms()` is the entry point used b
 
 Static-IP preservation applies to vSphere and Hyper-V sources and supports both Windows (`ipconfig /all`) and Linux (`nmcli device show`) guests.
 
+`check_ssh_connectivity()` waits for the guest to serve SSH sessions through the shared `_wait_for_ssh_connection()`
+retry (300s), because a freshly migrated guest accepts the port-forward tunnel before its OpenSSH server is ready.
+`check_vbs_status()` retries the DeviceGuard query itself in the same window, since a guest that answered a probe can
+still refuse the next session.
+
 ### `utilities/shared_disk.py`
 
 `verify_shared_disk_data()` mounts, writes, and reads a shared disk from both migrated VMs (Linux, 6-step pattern). `label_shared_disk_on_source_windows()` labels the shared NTFS
@@ -175,6 +192,9 @@ volume on the source through the VMware Guest Operations API before migration, a
 
 SSH into migrated VMs through `virtctl` port-forward plus `python-rrmngmnt`, so it works when cluster nodes have no external IPs. `VMSSHConnection` wraps a connection,
 `SSHConnectionManager` manages one connection per VM for fixtures, `create_vm_ssh_connection()` builds a single connection, and `run_cmd_in_vm()` runs a command in the guest.
+`VMSSHConnection.connect()` raises `ConnectionError` for a paramiko `SSHException` (a guest that
+is not yet serving sessions), `RuntimeError` when the port-forward cannot be established and when the `echo test` probe fails, and re-raises
+`OSError` unchanged.
 
 ### `utilities/virtctl.py`
 
@@ -190,6 +210,7 @@ Commands executed inside vSphere guests via the Guest Operations API: `run_comma
 ### `utilities/worker_node_selection.py`
 
 Target worker node selection for placement tests: `get_worker_nodes()`, `parse_prometheus_value()`, `parse_prometheus_memory_metrics()`, `select_node_by_available_memory()`.
+`has_unschedulable_condition()` is shared with the migration unschedulable probe and validates its input: a list of condition mappings or `None`, else `ValueError`.
 
 ### `utilities/esxi.py`
 
@@ -272,7 +293,7 @@ Every custom exception lives in this one module, enforced by the `check-exceptio
 | --- | --- |
 | Provider and cluster | `MissingProvidersFileError`, `ProviderEmptyContentError`, `MtvOperatorNotInstalledError`, `ForkliftPodsNotRunningError`, `RemoteClusterAndLocalCluterNamesError` |
 | VM lifecycle | `VmNotFoundError`, `VmCloneError`, `VmMissingVmxError`, `VmBadDatastoreError`, `VmPipelineError`, `VmMigrationStepMismatchError`, `InvalidVMNameError` |
-| Migration | `MigrationNotFoundError`, `MigrationStatusError`, `MigrationPlanExecError` |
+| Migration | `MigrationNotFoundError`, `MigrationStatusError`, `MigrationPlanExecError`, `MigrationVmUnschedulableError` |
 | Guest access | `GuestCommandError`, `SSHConnectionSetupError`, `PowerShellCommandError`, `ConversionError` |
 | Suite lifecycle | `SessionTeardownError`, `ResourceNameNotStartedWithSessionUUIDError`, `OvirtMTVDatacenterNotFoundError`, `OvirtMTVDatacenterStatusError`, `MtvUpgradeError` |
 

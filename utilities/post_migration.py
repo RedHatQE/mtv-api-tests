@@ -69,6 +69,23 @@ _multus_network_name_always_qualified_cache: bool | None = None
 
 _WINDOWS_NETWORK_CMD = ["ipconfig", "/all"]
 
+# A freshly migrated guest (notably Windows) can take minutes before its OpenSSH server serves
+# sessions, and every attempt opens a new port-forwarded session.
+_SSH_RETRY_TIMEOUT_SECONDS: int = 300
+_SSH_RETRY_DELAY_SECONDS: int = 15
+
+# Transport failures a retry can recover from: the guest may not serve sessions yet, and
+# connect() surfaces those as ConnectionError, RuntimeError or a re-raised OSError.
+_SSH_TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+    SSHException,
+    AuthenticationException,
+    NoValidConnectionsError,
+    ChannelException,
+    ConnectionError,
+    RuntimeError,
+    OSError,
+)
+
 
 def get_ssh_credentials_from_provider_config(
     source_provider_data: dict[str, Any], source_vm_info: dict[str, Any]
@@ -115,6 +132,52 @@ def get_ssh_credentials_from_provider_config(
     return username, password
 
 
+def _wait_for_ssh_connection(
+    ssh_conn: VMSSHConnection,
+    vm_name: str,
+    timeout: int = _SSH_RETRY_TIMEOUT_SECONDS,
+    retry_delay: int = _SSH_RETRY_DELAY_SECONDS,
+) -> None:
+    """Retry opening an SSH connection until the guest serves sessions.
+
+    A freshly migrated guest (notably Windows) accepts the port-forward tunnel before its
+    OpenSSH server serves sessions, so a single connect attempt is not enough.
+
+    Args:
+        ssh_conn (VMSSHConnection): Connection created by the SSH connection manager; reused on every attempt.
+        vm_name (str): Name of the VM, used in log and error messages.
+        timeout (int): Maximum time in seconds to keep retrying.
+        retry_delay (int): Delay in seconds between attempts.
+
+    Raises:
+        TimeoutExpiredError: If SSH connectivity cannot be established within the timeout period.
+    """
+
+    def _test_connectivity() -> bool:
+        """Test SSH connectivity with retry support.
+
+        Returns:
+            bool: True when connectivity is verified; False to retry.
+        """
+        try:
+            with ssh_conn:
+                if ssh_conn.is_connective(tcp_timeout=10):
+                    LOGGER.info(f"SSH connectivity to VM {vm_name} verified successfully")
+                    return True
+                LOGGER.warning(f"SSH connectivity test failed for VM {vm_name} - retrying...")
+                return False
+        except _SSH_TRANSIENT_ERRORS as e:
+            LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
+            return False
+
+    try:
+        for sample in TimeoutSampler(wait_timeout=timeout, sleep=retry_delay, func=_test_connectivity):
+            if sample:
+                return
+    except TimeoutExpiredError as e:
+        raise TimeoutExpiredError(f"SSH connectivity to VM {vm_name} could not be established after {timeout}s") from e
+
+
 def check_ssh_connectivity(
     vm_name: str,
     vm_ssh_connections: SSHConnectionManager,
@@ -147,30 +210,7 @@ def check_ssh_connectivity(
 
     # Create SSH connection
     ssh_conn = vm_ssh_connections.create(vm_name=vm_name, username=ssh_username, password=ssh_password)
-
-    def _test_connectivity() -> bool:
-        """Test SSH connectivity with retry support.
-
-        Returns:
-            bool: True when connectivity is verified; False to retry.
-        """
-        try:
-            with ssh_conn:
-                if ssh_conn.is_connective(tcp_timeout=10):
-                    LOGGER.info(f"SSH connectivity to VM {vm_name} verified successfully")
-                    return True
-                LOGGER.warning(f"SSH connectivity test failed for VM {vm_name} - retrying...")
-                return False
-        except (SSHException, AuthenticationException, NoValidConnectionsError, ChannelException) as e:
-            LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
-            return False
-
-    try:
-        for sample in TimeoutSampler(wait_timeout=timeout, sleep=retry_delay, func=_test_connectivity):
-            if sample:
-                return
-    except TimeoutExpiredError as e:
-        raise TimeoutExpiredError(f"SSH connectivity to VM {vm_name} could not be established after {timeout}s") from e
+    _wait_for_ssh_connection(ssh_conn=ssh_conn, vm_name=vm_name, timeout=timeout, retry_delay=retry_delay)
 
 
 def verify_data_integrity(
@@ -226,7 +266,7 @@ def verify_data_integrity(
                     LOGGER.warning(f"Failed to read marker file on VM {vm_name}: {err} - retrying...")
                     return None
                 return stdout.strip()
-        except (SSHException, AuthenticationException, NoValidConnectionsError, ChannelException) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
             return None
 
@@ -315,7 +355,7 @@ def verify_luks_encryption(
                     return None
 
                 return _find_luks_devices(lsblk_data["blockdevices"])
-        except (SSHException, AuthenticationException, NoValidConnectionsError, ChannelException) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
             return None
 
@@ -839,7 +879,7 @@ def check_static_ip_preservation(
 
         except CommandExecFailed:
             raise
-        except (SSHException, ChannelException, NoValidConnectionsError, AuthenticationException) as e:
+        except _SSH_TRANSIENT_ERRORS as e:
             LOGGER.warning(f"SSH connection failed: {e}")
             return None
         except Exception as e:
@@ -997,7 +1037,8 @@ def check_vbs_status(
     Connects via SSH to the Windows guest and queries the DeviceGuard WMI class
     to confirm VirtualizationBasedSecurityStatus is not 2 (running).
     Status 1 (enabled but not running) is expected when nested virtualization
-    extensions are disabled at the emulator level.
+    extensions are disabled at the emulator level. The query retries for 300s
+    because a freshly migrated guest can refuse SSH sessions intermittently.
 
     Args:
         vm_name (str): Name of the VM to check
@@ -1006,7 +1047,7 @@ def check_vbs_status(
         source_vm_info (dict[str, Any]): VM information including OS type
 
     Raises:
-        ConnectionError: If SSH connection cannot be established to the VM
+        TimeoutExpiredError: If an SSH session cannot be opened within 300s
         ValueError: If credentials are not found or VBS status command fails
         AssertionError: If VBS is still running (status 2)
     """
@@ -1020,23 +1061,58 @@ def check_vbs_status(
         "-ClassName Win32_DeviceGuard).VirtualizationBasedSecurityStatus",
     ]
 
-    with ssh_conn:
-        if not ssh_conn.rrmngmnt_host:
-            raise ConnectionError(f"SSH connection not established for VM {vm_name}")
+    def _query_vbs_status() -> tuple[int, str, str] | None:
+        """Run the VBS command over a fresh session.
 
-        executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)
-        executor.port = ssh_conn.local_port
-        rc, stdout, err = executor.run_cmd(vbs_cmd)
+        The session is what has to be retried, not the guest's reachability: a guest that
+        answered one probe can still refuse the next session, so the command runs on every attempt.
+        Only transport outcomes are reported here, so a failed command is not mistaken for a
+        connectivity timeout.
 
-        if rc != 0:
-            raise ValueError(f"VBS status command failed on VM '{vm_name}'. rc={rc}, stderr={err}")
+        Returns:
+            tuple[int, str, str] | None: The command result, or None when the session could not be
+                opened (retry).
+        """
+        try:
+            with ssh_conn:
+                if not ssh_conn.rrmngmnt_host:
+                    raise ConnectionError(f"SSH connection not established for VM {vm_name}")
 
-        vbs_status = stdout.strip()
-        assert vbs_status != _VBS_STATUS_RUNNING, (
-            f"VBS is still running on VM '{vm_name}'. "
-            f"VirtualizationBasedSecurityStatus: {vbs_status}, expected: not 2 (not running)"
-        )
-        LOGGER.info(f"VBS verification passed for VM '{vm_name}': VirtualizationBasedSecurityStatus={vbs_status}")
+                executor = ssh_conn.rrmngmnt_host.executor(user=ssh_conn.rrmngmnt_user)
+                executor.port = ssh_conn.local_port
+                rc, stdout, err = executor.run_cmd(vbs_cmd)
+        except _SSH_TRANSIENT_ERRORS as e:
+            LOGGER.warning(f"SSH connection failed for VM {vm_name}: {type(e).__name__}: {e} - retrying...")
+            return None
+
+        return rc, stdout, err
+
+    vbs_result: tuple[int, str, str] | None = None
+    try:
+        for sample in TimeoutSampler(
+            wait_timeout=_SSH_RETRY_TIMEOUT_SECONDS,
+            sleep=_SSH_RETRY_DELAY_SECONDS,
+            func=_query_vbs_status,
+        ):
+            if sample is not None:
+                vbs_result = sample
+                break
+    except TimeoutExpiredError as e:
+        raise TimeoutExpiredError(
+            f"SSH connectivity to VM {vm_name} could not be established after {_SSH_RETRY_TIMEOUT_SECONDS}s"
+        ) from e
+
+    assert vbs_result is not None, "TimeoutSampler yielded without a command result"
+    rc, stdout, err = vbs_result
+    if rc != 0:
+        raise ValueError(f"VBS status command failed on VM '{vm_name}'. rc={rc}, stderr={err}")
+
+    vbs_status = stdout.strip()
+    assert vbs_status != _VBS_STATUS_RUNNING, (
+        f"VBS is still running on VM '{vm_name}'. "
+        f"VirtualizationBasedSecurityStatus: {vbs_status}, expected: not 2 (not running)"
+    )
+    LOGGER.info(f"VBS verification passed for VM '{vm_name}': VirtualizationBasedSecurityStatus={vbs_status}")
 
 
 def check_memory(source_vm: dict[str, Any], destination_vm: dict[str, Any]) -> None:
