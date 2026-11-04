@@ -106,7 +106,7 @@ def _prepare_upgrade_artifact_dir() -> Path | None:
     return artifact_dir
 
 
-def _write_redacted_logs(*, artifact_dir: Path, stdout: str, stderr: str) -> None:
+def _write_redacted_logs(*, artifact_dir: Path, stdout: str, stderr: str) -> tuple[Path, ...]:
     """Persist the redacted script output to the artifact directory.
 
     The raw child output never reaches this directory: it is read from the ephemeral copy and
@@ -116,33 +116,47 @@ def _write_redacted_logs(*, artifact_dir: Path, stdout: str, stderr: str) -> Non
         artifact_dir (Path): Artifact directory of this run.
         stdout (str): Redacted upgrade script stdout.
         stderr (str): Redacted upgrade script stderr.
+
+    Returns:
+        tuple[Path, ...]: The log files that were actually written. Empty when the collector refused
+            the write, so the failure message never points at files that do not exist.
     """
-    try:
-        (artifact_dir / _UPGRADE_STDOUT_LOG_NAME).write_text(stdout)
-        (artifact_dir / _UPGRADE_STDERR_LOG_NAME).write_text(stderr)
-    except OSError as exc:
-        # A full or read-only collector must never mask the upgrade failure this artifact describes;
-        # the tails are still in the raised error, so losing the files only costs the full stream.
-        LOGGER.warning(f"Could not persist the upgrade script logs under '{artifact_dir}': {exc}")
+    written: list[Path] = []
+    for name, content in ((_UPGRADE_STDOUT_LOG_NAME, stdout), (_UPGRADE_STDERR_LOG_NAME, stderr)):
+        path = artifact_dir / name
+        try:
+            path.write_text(content)
+        except OSError as exc:
+            # A full or read-only collector must never mask the upgrade failure this artifact
+            # describes; the tails are still in the raised error, so losing a file only costs the
+            # full stream - but the message must not claim a file that was not written.
+            LOGGER.warning(f"Could not persist the upgrade script log '{path}': {exc}")
+            continue
+        written.append(path)
+    return tuple(written)
 
 
-def _upgrade_failure_details(*, stdout: str, stderr: str, artifact_dir: Path | None) -> str:
+def _upgrade_failure_details(
+    *, stdout: str, stderr: str, artifact_dir: Path | None, persisted_logs: tuple[Path, ...] = ()
+) -> str:
     """Render the tail of both script logs and, when persisted, the log paths.
 
     Args:
         stdout (str): Redacted upgrade script stdout.
         stderr (str): Redacted upgrade script stderr.
-        artifact_dir (Path | None): Directory holding the redacted logs, or None when collection was
-            disabled - the tails are still rendered, they are simply not persisted.
+        artifact_dir (Path | None): Directory intended to hold the redacted logs, or None when
+            collection was disabled - the tails are still rendered, they are simply not persisted.
+        persisted_logs (tuple[Path, ...]): Files actually written by _write_redacted_logs().
 
     Returns:
         str: Message fragment carrying the last lines of both streams.
     """
-    persisted_note = (
-        f"\npersisted logs: {artifact_dir / _UPGRADE_STDOUT_LOG_NAME} {artifact_dir / _UPGRADE_STDERR_LOG_NAME}"
-        if artifact_dir is not None
-        else "\n(not persisted: --skip-data-collector)"
-    )
+    if artifact_dir is None:
+        persisted_note = "\n(not persisted: --skip-data-collector)"
+    elif persisted_logs:
+        persisted_note = f"\npersisted logs: {' '.join(str(path) for path in persisted_logs)}"
+    else:
+        persisted_note = f"\n(not persisted: the collector at '{artifact_dir}' rejected the write)"
     return (
         f"stdout tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stdout)}\n"
         f"stderr tail (last {_UPGRADE_ERROR_LOG_TAIL_LINES} lines):\n{_log_tail(stderr)}"
@@ -224,7 +238,7 @@ def _supervise_upgrade_process(
     env: dict[str, str],
     timeout: int,
     artifact_dir: Path | None,
-) -> tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str]:
+) -> tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str, tuple[Path, ...]]:
     """Run the upgrade script and supervise its process group.
 
     The child always writes into an ephemeral directory, never the inherited streams: the script
@@ -241,7 +255,7 @@ def _supervise_upgrade_process(
             collection is disabled.
 
     Returns:
-        tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str]: Exit
+        tuple[int | None, subprocess.TimeoutExpired | None, MtvUpgradeError | None, str, str, tuple[Path, ...]]: Exit
             code (None on timeout), the timeout exception, a process-group cleanup failure, and the
             redacted stdout and stderr. The redacted tails are always returned; they are persisted to
             the artifact tree only when collection is enabled.
@@ -267,6 +281,7 @@ def _supervise_upgrade_process(
         cleanup_exc: MtvUpgradeError | None = None
         stdout = ""
         stderr = ""
+        persisted_logs: tuple[Path, ...] = ()
         try:
             returncode = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
@@ -282,7 +297,9 @@ def _supervise_upgrade_process(
             stdout = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDOUT_LOG_NAME, password=password)
             stderr = _read_upgrade_log(log_path=log_dir / _UPGRADE_STDERR_LOG_NAME, password=password)
             if artifact_dir is not None:
-                _write_redacted_logs(artifact_dir=artifact_dir, stdout=stdout, stderr=stderr)
+                persisted_logs = _write_redacted_logs(artifact_dir=artifact_dir, stdout=stdout, stderr=stderr)
+
+    return returncode, timeout_exc, cleanup_exc, stdout, stderr, persisted_logs
 
     return returncode, timeout_exc, cleanup_exc, stdout, stderr
 
@@ -319,11 +336,13 @@ def run_mtv_upgrade(
     )
 
     artifact_dir = _prepare_upgrade_artifact_dir()
-    returncode, timeout_exc, cleanup_exc, stdout, stderr = _supervise_upgrade_process(
+    returncode, timeout_exc, cleanup_exc, stdout, stderr, persisted_logs = _supervise_upgrade_process(
         script_path=script_path, env=env, timeout=timeout, artifact_dir=artifact_dir
     )
 
-    failure_details = _upgrade_failure_details(stdout=stdout, stderr=stderr, artifact_dir=artifact_dir)
+    failure_details = _upgrade_failure_details(
+        stdout=stdout, stderr=stderr, artifact_dir=artifact_dir, persisted_logs=persisted_logs
+    )
     cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
     if timeout_exc is not None:
         dump_cluster_state(reason=f"upgrade-script-timeout-{timeout}", scope="upgrade")
