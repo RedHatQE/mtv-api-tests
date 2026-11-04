@@ -716,6 +716,15 @@ the provider patch, key installation, and cleanup for you.</p>
   cross-checks populate pod logs against the <code>xcopyUsed</code> annotation on each <code>DiskTransfer</code> task of
   the <code>Plan</code> CR.</li>
 </ul>
+<p>Every <code>test_check_xcopy_used</code> step also verifies the storage-offload observability annotations
+Forklift propagates from the volume populator to the <code>DiskTransfer</code> tasks of the <code>Plan</code> CR
+(<a href="https://redhat.atlassian.net/browse/MTV-6086">MTV-6086</a>): <code>result</code> must be <code>success</code>,
+<code>copyDurationSeconds</code> and <code>provisionedBytes</code> must be positive numbers, <code>allocatedBytes</code> must not be
+negative, and <code>storageVendor</code>, <code>cloneMethod</code>, and <code>storageProtocol</code> must be present. Forklift reports
+these on both XCOPY and software-fallback copies, so the fallback classes rely on the same checks.
+These annotations were introduced by the MTV-6086 epic; the checks require an MTV release that
+propagates them (2.12.6 and newer, including MTV 5.0.0) and are skipped automatically on older
+releases via a cluster MTV version check.</p>
 <blockquote>
 <p><strong>Warning:</strong> <code>non_xcopy_datastore_id</code> must point to a real datastore that does not support XCOPY/VAAI. If it is missing, the <code>mixed_datastore_config</code> fixture fails the class
 before migration starts.</p>
@@ -1044,7 +1053,7 @@ with that template name for every VM marked <code>clone: True</code>.</p>
 <li>It patches <code>esxiCloneMethod</code> to <code>ssh</code> when you choose SSH cloning.</li>
 <li>It waits for Forklift to create the plan-specific copy-offload secret once the migration starts.</li>
 <li>It forces <code>pvc_name_template</code> to <code>pvc</code> for copy-offload plans.</li>
-<li>It captures populate pod logs during the migration so <code>test_check_xcopy_used</code> can verify <code>xcopyUsed</code> after MTV has already deleted the pods.</li>
+<li>It captures populate pod logs during the migration so <code>test_check_xcopy_used</code> can verify <code>xcopyUsed</code> and the storage-offload observability annotations after MTV has already deleted the pods.</li>
 </ul>
 <p>That is why the user-facing setup is mostly about getting the provider config, datastore IDs, storage array credentials, and clone method right.</p>
 <h2 id="running-the-copy-offload-markers">Running The Copy-Offload Markers</h2>
