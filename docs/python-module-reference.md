@@ -280,9 +280,11 @@ device-key space used when adding NICs.
 `openshift.py` starts destination VMs through `OCPProvider.vm_dict()`, which polls `printableStatus` via
 `_wait_for_printable_status()` instead of sampling once: up to 120s for a stable `Running`/`Stopped` state when recording
 `power_state`, and up to 300s for `Running` after `start_vm()`. `Starting` (`Ready: GuestNotRunning`) is a normal pre-boot
-state and never fails the test on its own; a real failure raises `ValueError` naming the last observed status and conditions.
-The module constants `_VM_STABLE_STATE_TIMEOUT_SECONDS`, `_VM_RUNNING_TIMEOUT_SECONDS`, and `_VM_STATUS_POLL_SECONDS` own
-those numbers.
+state and does not fail the test immediately — but a VM that is still `Starting` when the 300s wait expires does raise
+`ValueError`, which names the last observed status and conditions. Only a confirmed `Stopped` reading is recorded as
+`power_state="off"` (it drives the restore-to-off path); an unresolved pre-start status stays unset until the start wait
+confirms `Running`. The module constants `_VM_STABLE_STATE_TIMEOUT_SECONDS`, `_VM_RUNNING_TIMEOUT_SECONDS`, and
+`_VM_STATUS_POLL_SECONDS` own those numbers.
 
 ### `libs/forklift_inventory.py`
 

@@ -639,7 +639,12 @@ and not failures:</p>
 <li>
 <p>The start verdict waits up to 300 seconds for <code>Running</code>. <code>Starting</code> with the condition
   <code>Ready: GuestNotRunning</code> only means the guest has not booted yet — the wrapper's <code>status.ready</code> turns true before
-  <code>printableStatus</code> reaches <code>Running</code>, so a single sample is not a valid verdict.</p>
+  <code>printableStatus</code> reaches <code>Running</code>, so a single sample is not a valid verdict. A VM still in <code>Starting</code> when the
+  300-second wait expires does raise <code>ValueError</code>; the state is tolerated, not ignored.</p>
+</li>
+<li>
+<p>Only a confirmed <code>Stopped</code> reading is recorded as <code>power_state="off"</code> — that value drives the restore-to-off path, so
+  an unresolved pre-start status is left unset and becomes <code>on</code> once the start wait confirms <code>Running</code>.</p>
 </li>
 <li>
 <p>The "did not reach status" <code>ValueError</code> reports the last observed status together with the VM conditions, so a

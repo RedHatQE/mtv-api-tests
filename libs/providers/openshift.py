@@ -315,8 +315,15 @@ class OCPProvider(BaseProvider):
                 f"Last state: '{stable_status}'"
             )
 
-        # Power state
-        result_vm_info["power_state"] = "on" if stable_status == cnv_vm.Status.RUNNING else "off"
+        # Only a confirmed terminal reading may be recorded: "off" drives the restore path at the
+        # end of this function, so a VM that never left a transitional status in time must stay
+        # unresolved (None) instead of being recorded as off and then stopped after it boots.
+        if stable_status == cnv_vm.Status.RUNNING:
+            result_vm_info["power_state"] = "on"
+        elif stable_status == cnv_vm.Status.STOPPED:
+            result_vm_info["power_state"] = "off"
+        else:
+            result_vm_info["power_state"] = None
 
         # Serial number (from firmware) - for serial preservation verification
         domain: dict[str, Any] = cnv_vm.instance.spec.template.spec.domain
@@ -377,6 +384,11 @@ class OCPProvider(BaseProvider):
                 f"'{cnv_vm.Status.RUNNING}' within {_VM_RUNNING_TIMEOUT_SECONDS}s. "
                 f"Last status: '{running_status}'. Conditions: {condition_details}"
             )
+
+        if result_vm_info["power_state"] is None:
+            # The pre-start read never resolved; the confirmed Running state is the truth now, and
+            # leaving it unset would make the restore path below stop a VM that just booted.
+            result_vm_info["power_state"] = "on"
 
         # True guest agent is reporting all ok
         result_vm_info["guest_agent_running"] = (

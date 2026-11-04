@@ -706,9 +706,11 @@ device-key space used when adding NICs.</p>
 <p><code>openshift.py</code> starts destination VMs through <code>OCPProvider.vm_dict()</code>, which polls <code>printableStatus</code> via
 <code>_wait_for_printable_status()</code> instead of sampling once: up to 120s for a stable <code>Running</code>/<code>Stopped</code> state when recording
 <code>power_state</code>, and up to 300s for <code>Running</code> after <code>start_vm()</code>. <code>Starting</code> (<code>Ready: GuestNotRunning</code>) is a normal pre-boot
-state and never fails the test on its own; a real failure raises <code>ValueError</code> naming the last observed status and conditions.
-The module constants <code>_VM_STABLE_STATE_TIMEOUT_SECONDS</code>, <code>_VM_RUNNING_TIMEOUT_SECONDS</code>, and <code>_VM_STATUS_POLL_SECONDS</code> own
-those numbers.</p>
+state and does not fail the test immediately — but a VM that is still <code>Starting</code> when the 300s wait expires does raise
+<code>ValueError</code>, which names the last observed status and conditions. Only a confirmed <code>Stopped</code> reading is recorded as
+<code>power_state="off"</code> (it drives the restore-to-off path); an unresolved pre-start status stays unset until the start wait
+confirms <code>Running</code>. The module constants <code>_VM_STABLE_STATE_TIMEOUT_SECONDS</code>, <code>_VM_RUNNING_TIMEOUT_SECONDS</code>, and
+<code>_VM_STATUS_POLL_SECONDS</code> own those numbers.</p>
 <h3 id="libsforklift_inventorypy"><code>libs/forklift_inventory.py</code></h3>
 <p><code>create_forklift_inventory(client, mtv_namespace, provider)</code> returns the inventory implementation matching the provider type: <code>VsphereForkliftInventory</code>, <code>OvirtForkliftInventory</code>,
 <code>OpenstackForliftinventory</code>, <code>OpenshiftForkliftInventory</code>, <code>OvaForkliftInventory</code>, <code>HypervForkliftInventory</code> — all subclasses of <code>ForkliftInventory</code>.</p>

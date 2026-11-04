@@ -328,7 +328,10 @@ and not failures:
 - The power-state read waits up to 120 seconds for `Running` or `Stopped` before recording `power_state`.
 - The start verdict waits up to 300 seconds for `Running`. `Starting` with the condition
   `Ready: GuestNotRunning` only means the guest has not booted yet — the wrapper's `status.ready` turns true before
-  `printableStatus` reaches `Running`, so a single sample is not a valid verdict.
+  `printableStatus` reaches `Running`, so a single sample is not a valid verdict. A VM still in `Starting` when the
+  300-second wait expires does raise `ValueError`; the state is tolerated, not ignored.
+- Only a confirmed `Stopped` reading is recorded as `power_state="off"` — that value drives the restore-to-off path, so
+  an unresolved pre-start status is left unset and becomes `on` once the start wait confirms `Running`.
 - The "did not reach status" `ValueError` reports the last observed status together with the VM conditions, so a
   genuine start failure names the state the VM ended in instead of the first sample.
 
