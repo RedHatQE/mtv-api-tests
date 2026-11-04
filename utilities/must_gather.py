@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
@@ -40,6 +41,9 @@ LOGGER = get_logger(__name__)
 # Inspect dump written before the image gather: Machine Config Operator state only, so it stays
 # inside the job's disk budget (the gather has already been killed at 83% against a 70% cap).
 _INSPECT_DEST_DIR_PREFIX = "inspect"
+# Atomic claim: the winner of a simultaneous start creates this directory, so two xdist workers can
+# never write inspect output into the same tree.
+_INSPECT_CLAIM_DIR_NAME = ".inspect-claim"
 _INSPECT_COMMAND_TIMEOUT_SECONDS = 600
 _MCO_NAMESPACE = "openshift-machine-config-operator"
 # Explicitly named resources only: inspecting a ClusterOperator follows its .status.relatedObjects
@@ -278,6 +282,16 @@ def _resolve_must_gather_image(
     return resolved_image
 
 
+def _inspect_worker_suffix() -> str:
+    """Return a file-name suffix naming the xdist worker, empty for a single-process run.
+
+    Returns:
+        str: ``-<worker id>`` when running under xdist, otherwise an empty string.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    return f"-{worker}" if worker else ""
+
+
 def _run_inspect_dump(data_collector_path: Path) -> bool:
     """Write a bounded ``oc adm inspect`` of the explicitly named MCO resources, once per session.
 
@@ -300,19 +314,24 @@ def _run_inspect_dump(data_collector_path: Path) -> bool:
         return False
     _inspect_dump_attempted = True
 
-    # The caller passes a per-identity subdir, so the guard and the destination must use the shared
-    # collector root or one worker cannot see a dump written by another.
-    # shortcut: check-then-act, two workers starting together can both pass the guard; at most one
-    # extra dump per worker, add locking if the dump count must be exact.
-    collector_root = shared_data_collector_path() or data_collector_path
     # Another xdist worker may already have collected it: the module flag is per process, so the
-    # artifact directory is the cross-worker guard that keeps the dump to one per run.
+    # collector root is the cross-worker view of what the run already has.
+    collector_root = shared_data_collector_path() or data_collector_path
     existing_dumps = sorted(collector_root.glob(f"{_INSPECT_DEST_DIR_PREFIX}-*"))
     if existing_dumps:
         LOGGER.info(f"Inspect dump already collected at {existing_dumps[0]}, skipping")
         return False
 
-    dest_dir = collector_root / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}"
+    # Claim the dump atomically: creating the directory fails for the loser of a simultaneous start,
+    # so two workers can never write into the same tree and interleave their diagnostics.
+    claim = collector_root / _INSPECT_CLAIM_DIR_NAME
+    try:
+        claim.mkdir()
+    except FileExistsError:
+        LOGGER.info(f"Inspect dump already claimed at {claim}, skipping")
+        return False
+
+    dest_dir = collector_root / f"{_INSPECT_DEST_DIR_PREFIX}-{utc_timestamp()}{_inspect_worker_suffix()}"
     command = [
         "oc",
         "adm",
