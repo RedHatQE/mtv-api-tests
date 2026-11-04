@@ -27,7 +27,7 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.cluster_state import dump_cluster_state
+from utilities.cluster_state import ClusterStateProbeTimeout, dump_cluster_state, read_with_deadline
 from utilities.data_collector import data_collector_path
 from utilities.naming import resolve_destination_vm_name
 from utilities.resources import create_and_store_resource
@@ -703,8 +703,18 @@ def _plan_target_namespace(plan: Plan) -> str | None:
         str | None: The target namespace, or None when the read failed or the spec carries none.
     """
     try:
-        return plan.instance.spec.targetNamespace
-    except (ApiException, DynamicApiError, AttributeError, OSError, TypeError, ValueError) as err:
+        # Bounded read: the wrapper sets no request timeout, so a silent API server must not block
+        # the failure path this namespace is needed for.
+        return read_with_deadline(probe=lambda: plan.instance.spec.targetNamespace)
+    except (
+        ApiException,
+        DynamicApiError,
+        AttributeError,
+        OSError,
+        TypeError,
+        ValueError,
+        ClusterStateProbeTimeout,
+    ) as err:
         LOGGER.info(f"Could not read the target namespace of plan '{plan.name}', skipping the snapshot: {err}")
         return None
 

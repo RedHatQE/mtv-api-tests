@@ -11733,7 +11733,7 @@ Unless you use `--skip-data-collector`, the suite prepares a clean `.data-collec
 The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
-- `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, `ClusterOperator`, the `MachineConfigPool` manifests plus per-pool counters
+- `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, a `ClusterOperator` summary, the `MachineConfigPool` counters and conditions (summaries, not the pool manifests), a `Node` summary, and the installed MTV and OpenShift Virtualization CSV versions
   and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
   the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it. The probes read the cluster through the run's
   `DynamicClient` and the `ocp_resources` wrappers, so no `oc` binary and no kubeconfig are involved; a client is built from the resolved credentials when none is passed in,
@@ -11778,9 +11778,10 @@ Two limits keep a snapshot from delaying the error it documents:
 - **Total deadline.** One snapshot has 120 seconds of budget in total (`_SNAPSHOT_DEADLINE_SECONDS`, measured with `monotonic()`). Probes that would start after it expires are
   not run: the file ends with `# snapshot deadline reached after <N>s of 120s, <M> probes skipped`. A short snapshot is therefore visibly truncated, never silently mistaken for a
   healthy cluster.
-- **Size cap.** Each probe's rendered output is capped at 512 KiB (`_MAX_PROBE_OUTPUT_BYTES`); a longer record keeps its head and closes with `[truncated: <N> bytes omitted]`, and
-  every container log keeps 300 lines (ceph-csi) or 500 lines (Machine Config Operator) rather than the whole stream. Evidence collection can therefore not fill the disk it is
-  meant to diagnose.
+- **Size caps, per probe and per snapshot.** Each probe's rendered output is capped at 512 KiB (`_MAX_PROBE_OUTPUT_BYTES`); a longer record keeps its head and closes with
+  `[truncated: <N> bytes omitted]`, and every container log keeps a bounded tail rather than the whole stream. A whole snapshot is additionally capped at 8 MiB
+  (`_MAX_SNAPSHOT_OUTPUT_BYTES`): once it is exhausted no further probe runs and the file closes with `# snapshot size budget reached: <M> records not collected`. The
+  per-node daemon pods make the log volume grow with the cluster size, so the snapshot budget — not the per-probe cap — is what keeps a large cluster's dump bounded.
 
 Collection has no fallback path: the probe set is the wrapper's own API calls, and a run that passes no client (for example `run_mtv_upgrade()` without one) skips the snapshot
 instead of reaching for a CLI. Under `--skip-data-collector` the collector path is resolved first and the dump returns before the first probe, so skip mode costs no API request.
@@ -11789,7 +11790,7 @@ Every artifact is written with the resolved `CLUSTER_PASSWORD` redacted, and the
 | Scope | Where it fires | What it collects |
 | --- | --- | --- |
 | `upgrade` | The upgrade script hits the outer wait budget, or exits non-zero after its own wait times out | `ClusterVersion`, `ClusterOperator` status plus the `machine-config` operator body, `MachineConfigPool` objects plus per-pool `ready`/`updated`/`degraded`/`unavailable` counters and conditions, nodes, Machine Config Operator pods with every container log (current and previous), `ImageDigestMirrorSet`, `ImageContentSourcePolicy`, the cluster-wide `Image` config, and the `openshift-mtv` CSVs |
-| `storage` | A migration wait times out, or a migrated VM is confirmed unschedulable | the target namespace's PVCs, DataVolumes and PersistentVolumes plus the full body of the non-Bound PVCs only, namespace events oldest first, storage classes, `openshift-storage` pods, and every container log of the ceph-csi provisioner and driver pods (300 lines each, current and previous) |
+| `storage` | A migration wait times out, or a migrated VM is confirmed unschedulable | the target namespace's PVCs, DataVolumes and PersistentVolumes plus the full body of the non-Bound PVCs only, namespace events oldest first, storage classes, `openshift-storage` pods, and the current plus previous logs of the ceph-csi `csi-provisioner` and `csi-rbdplugin` containers (3000-line tails on the controller plugin, 500 on the per-node plugin), selected by the sidecar a pod runs rather than by its name — ODF names those pods `openshift-storage.rbd.csi.ceph.com-ctrlplugin-*` while upstream uses `csi-rbdplugin-provisioner-*` |
 
 The target namespace is read defensively (attribute, transport and parse failures all degrade to no snapshot) and the dump is skipped when the read fails or
 `--skip-data-collector` is set, so collecting evidence can never replace the `MigrationPlanExecError` / `MigrationVmUnschedulableError` the caller is supposed to see.

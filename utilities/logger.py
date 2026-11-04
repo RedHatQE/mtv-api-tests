@@ -26,7 +26,7 @@ _ASSIGNMENT_LOG_KEYS: list[str] = [
     "apikey",
     "authorization",
 ]
-_PREFIX_LOG_KEYS: list[str] = ["bearer"]
+_PREFIX_LOG_KEYS: list[str] = ["bearer", "basic"]
 
 
 class _CredentialRedactingFilter(RedactingFilter):
@@ -42,9 +42,18 @@ class _CredentialRedactingFilter(RedactingFilter):
             str: The message with credential values replaced by ``*****``.
         """
         for pattern in _PREFIX_LOG_KEYS:
+            # "Authorization: Bearer <jwt>" and "Basic <base64>" put the credential after the
+            # scheme word, so the scheme is part of the pattern.
             msg = re.sub(rf"({pattern}\W+[^\s]+)", f"{pattern} {'*' * 5} ", msg, flags=re.IGNORECASE)
         for pattern in _ASSIGNMENT_LOG_KEYS:
-            msg = re.sub(rf"({pattern}\s*[:=]\s*)[^\s,]+", r"\1*****", msg, flags=re.IGNORECASE)
+            # Optional quotes on both sides: repr/JSON forms such as 'token': 'sha256~abc' and
+            # "password": "x" are what --openshift-python-wrapper-log-debug and dict logging emit.
+            msg = re.sub(
+                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*['\"]?)[^\s,'\"]+",
+                r"\1*****",
+                msg,
+                flags=re.IGNORECASE,
+            )
         return msg
 
 

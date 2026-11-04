@@ -56,6 +56,9 @@ _SNAPSHOT_DEADLINE_SECONDS = 120
 # One probe's recorded output is capped so a busy cluster cannot inflate the artifact (and the
 # memory used to build it) exactly when the disk is already the failing resource.
 _MAX_PROBE_OUTPUT_BYTES = 512 * 1024
+_MAX_SNAPSHOT_OUTPUT_BYTES = 8 * 1024 * 1024
+# A client build performs an OAuth/API round trip; bound it so session start is never blocked.
+_CLIENT_BUILD_BUDGET_SECONDS = 60
 _TRUNCATION_MARKER = "[truncated: {omitted} bytes omitted]"
 _MCO_NAMESPACE = "openshift-machine-config-operator"
 _STORAGE_NAMESPACE = "openshift-storage"
@@ -77,7 +80,18 @@ _MCO_LOG_TAIL_LINES = 500
 # A snapshot of one pod's current and previous log covers an operator restart; daemonsets that are
 # not part of the MCO or the ceph-csi path would only add noise.
 _MCO_POD_PREFIXES = ("machine-config-operator-", "machine-config-daemon-", "machine-config-controller-")
-_CSI_POD_PREFIXES = ("csi-rbdplugin-provisioner-", "csi-rbdplugin-")
+# CSI pod names differ across ODF versions (csi-rbdplugin-provisioner-* upstream, and
+# openshift-storage.rbd.csi.ceph.com-ctrlplugin-* / -nodeplugin-* in ODF), so the pods are selected
+# by what they run - a CSI sidecar or the rbd driver container - rather than by a name prefix that
+# silently matches nothing on a different deployment.
+_CSI_POD_NAME_FRAGMENTS = ("rbd.csi.ceph.com", "csi-rbdplugin")
+# Only the two containers that explain a refused volume: the provisioner answers the PVC and the
+# driver performs the RPC. The attacher/resizer/snapshotter sidecars add megabytes of unrelated log.
+_CSI_CONTAINER_NAMES = ("csi-provisioner", "csi-rbdplugin")
+# The node plugin runs once per node, so its tail is kept short: the volume-refusal evidence lives in
+# the controller plugin, and 3+ nodes of 3000-line tails alone exceeded the snapshot budget.
+_CSI_NODE_POD_FRAGMENTS = ("nodeplugin",)
+_CSI_NODE_LOG_TAIL_LINES = 500
 # Non-Bound PVC bodies carry their own event history and can be tens of KiB each on a full disk;
 # the listing above already names every PVC with its phase.
 _MAX_PENDING_PVC_DUMPS = 20
@@ -85,25 +99,12 @@ _MAX_PENDING_PVC_DUMPS = 20
 _EVENT_LOOKBACK_SECONDS = 24 * 60 * 60
 _GIT_PACKED_REFS_NAME = "packed-refs"
 _HTTP_BAD_REQUEST = 400
-# The wrapper exposes no per-request timeout, so a stalled API or OAuth endpoint would block past the
-# snapshot deadline and delay the error being reported. The socket default bounds every request made
-# inside the context; it is restored on exit.
+# The wrapper exposes no per-request timeout, and urllib3 sets the connection timeout from
+# _request_timeout, which the wrappers never pass - so a process-wide socket default does NOT bound a
+# Kubernetes call (measured: a client request to a blackholed address hung past 120s with
+# socket.setdefaulttimeout(3)). Only the socket default for plain socket users is kept; every
+# Kubernetes read the snapshot performs goes through _call_within_budget instead.
 _REQUEST_SOCKET_TIMEOUT_SECONDS = 30
-
-
-@contextmanager
-def _bounded_requests() -> Iterator[None]:
-    """Bound every network request made inside the context with a socket timeout.
-
-    Yields:
-        None: The context only applies and restores the socket timeout.
-    """
-    previous_timeout = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(_REQUEST_SOCKET_TIMEOUT_SECONDS)
-    try:
-        yield
-    finally:
-        socket.setdefaulttimeout(previous_timeout)
 
 
 _NODE_ROLE_LABEL_PREFIX = "node-role.kubernetes.io/"
@@ -191,6 +192,32 @@ def _truncate_output(text: str) -> str:
     return f"{head}\n{_TRUNCATION_MARKER.format(omitted=len(encoded) - _MAX_PROBE_OUTPUT_BYTES)}"
 
 
+def read_with_deadline(probe: Callable[[], Any], timeout: float = _CLIENT_BUILD_BUDGET_SECONDS) -> Any:
+    """Run one cluster read with a hard wait limit, for callers outside the snapshot itself.
+
+    The wrapper applies no request timeout, so a caller that reads the cluster outside a snapshot
+    needs the same protection the probes get - otherwise a silent API server blocks the failure path
+    that the read is part of.
+
+    Args:
+        probe (Callable[[], Any]): Read performed against the run client.
+        timeout (float): Seconds to wait before abandoning the read.
+
+    Returns:
+        Any: Whatever the read returned; dynamic cluster data, hence Any.
+
+    Raises:
+        ClusterStateProbeTimeout: If the read did not finish inside ``timeout``.
+        Exception: Whatever the read raised, unchanged.
+    """
+    value, failure = _call_within_budget(probe=probe, budget=timeout)
+    if isinstance(failure, ClusterStateProbeTimeout):
+        raise failure
+    if failure is not None:
+        raise failure
+    return value
+
+
 def _call_within_budget(*, probe: Callable[[], Any], budget: float) -> tuple[Any, Exception | None]:
     """Run one probe with a hard wait limit, regardless of the client's own timeouts.
 
@@ -249,6 +276,40 @@ class _Probes:
     client: DynamicClient
     started: float = field(default_factory=monotonic)
     skipped: int = 0
+    collected_bytes: int = 0
+    over_budget: int = 0
+
+    def _within_size_budget(self, record: str) -> bool:
+        """Return whether one more record still fits the snapshot byte budget.
+
+        The per-probe cap bounds a single log; without a total budget the artifact grows with the
+        node count (every per-node daemon pod contributes its container logs), which is exactly the
+        disk pressure this evidence is meant to survive.
+
+        Args:
+            record (str): Rendered record about to be added.
+
+        Returns:
+            bool: True when the record fits, False when the snapshot budget is exhausted.
+        """
+        if self.collected_bytes + len(record.encode(_OUTPUT_ENCODING)) <= _MAX_SNAPSHOT_OUTPUT_BYTES:
+            self.collected_bytes += len(record.encode(_OUTPUT_ENCODING))
+            return True
+        self.over_budget += 1
+        return False
+
+    def size_record(self) -> str | None:
+        """Return the note that closes a snapshot cut short by its byte budget.
+
+        Returns:
+            str | None: The note, or None when the budget was never exhausted.
+        """
+        if not self.over_budget:
+            return None
+        return (
+            f"# snapshot size budget reached: {{omitted}} records not collected "
+            f"(limit {_MAX_SNAPSHOT_OUTPUT_BYTES} bytes)".replace("{omitted}", str(self.over_budget))
+        )
 
     def run(self, label: str, probe: Callable[[], Any], *, render: Callable[[Any], str] = _render_json) -> str:
         """Run one probe inside the snapshot budget and render its record.
@@ -283,6 +344,14 @@ class _Probes:
                 f"{_PROBE_LABEL_PREFIX}{label}\n[skipped: snapshot deadline of {_SNAPSHOT_DEADLINE_SECONDS}s reached]",
                 None,
             )
+        # Enforce the total size budget before spending a request on a record that cannot be kept.
+        if self.over_budget or self.collected_bytes >= _MAX_SNAPSHOT_OUTPUT_BYTES:
+            self.over_budget += 1
+            return (
+                f"{_PROBE_LABEL_PREFIX}{label}\n"
+                f"[skipped: snapshot size budget of {_MAX_SNAPSHOT_OUTPUT_BYTES} bytes reached]",
+                None,
+            )
         value, failure = _call_within_budget(probe=probe, budget=self._remaining_seconds())
         if failure is not None:
             if isinstance(failure, ClusterStateProbeTimeout):
@@ -297,7 +366,9 @@ class _Probes:
                 )
             LOGGER.warning(f"Cluster state probe '{label}' failed: {failure}")
             return f"{_PROBE_LABEL_PREFIX}{label}\n[probe failed: {type(failure).__name__}: {failure}]", None
-        return self.record(label=label, value=value, render=render), value
+        record = self.record(label=label, value=value, render=render)
+        self._within_size_budget(record)
+        return record, value
 
     def record(self, label: str, value: Any, *, render: Callable[[Any], str] = _render_json) -> str:
         """Render data under a probe label, bounded by the per-probe output cap.
@@ -793,7 +864,14 @@ def _restarted_containers(*, pod: dict[str, Any]) -> set[str]:
 
 
 def _pod_log_sections(
-    *, probes: _Probes, label: str, namespace: str, pod_prefixes: tuple[str, ...], tail_lines: int
+    *,
+    probes: _Probes,
+    label: str,
+    namespace: str,
+    tail_lines: int,
+    pod_prefixes: tuple[str, ...] = (),
+    pod_name_fragments: tuple[str, ...] = (),
+    container_names: tuple[str, ...] = (),
 ) -> list[str]:
     """Collect the pods of a namespace and every container log of the matching ones.
 
@@ -805,8 +883,12 @@ def _pod_log_sections(
         probes (_Probes): Probe runner of the current snapshot.
         label (str): Readable label of the pod listing.
         namespace (str): Namespace holding the pods.
-        pod_prefixes (tuple[str, ...]): Pod name prefixes whose logs are worth the artifact space.
         tail_lines (int): Lines kept per container log.
+        pod_prefixes (tuple[str, ...]): Pod name prefixes worth collecting.
+        pod_name_fragments (tuple[str, ...]): Name fragments worth collecting, for deployments whose
+            pod names differ across versions.
+        container_names (tuple[str, ...]): Container names worth collecting, matched per pod so a
+            renamed pod is still selected by the sidecar it runs.
 
     Returns:
         list[str]: The pod listing, its summary, and one record per container log.
@@ -821,15 +903,29 @@ def _pod_log_sections(
     sections = [probes.record(label=f"{label} summary", value=_pod_summary(pods=pods), render=_render_lines)]
     for pod in pods:
         pod_name = _resource_name(pod)
-        if not pod_name.startswith(pod_prefixes):
+        containers = [container.get("name", "") for container in (pod.get("spec") or {}).get("containers") or []]
+        wanted = (
+            pod_name.startswith(pod_prefixes)
+            or any(fragment in pod_name for fragment in pod_name_fragments)
+            or any(name in container_names for name in containers)
+        )
+        if not wanted:
             continue
         pod_wrapper = Pod(client=probes.client, name=pod_name, namespace=namespace)
+        pod_tail_lines = (
+            _CSI_NODE_LOG_TAIL_LINES
+            if any(fragment in pod_name for fragment in _CSI_NODE_POD_FRAGMENTS)
+            else tail_lines
+        )
         restarted_containers = _restarted_containers(pod=pod)
-        for container in (container.get("name") for container in (pod.get("spec") or {}).get("containers") or []):
+        selected_containers = [
+            name for name in containers if not container_names or name in container_names or pod_prefixes
+        ]
+        for container in selected_containers:
             sections.append(
                 probes.run(
                     f"log {pod_name}/{container}",
-                    partial(pod_wrapper.log, container=container, tail_lines=tail_lines),
+                    partial(pod_wrapper.log, container=container, tail_lines=pod_tail_lines),
                     render=str,
                 )
             )
@@ -837,7 +933,9 @@ def _pod_log_sections(
                 sections.append(
                     probes.run(
                         f"log {pod_name}/{container} (previous)",
-                        partial(_previous_container_log, pod=pod_wrapper, container=container, tail_lines=tail_lines),
+                        partial(
+                            _previous_container_log, pod=pod_wrapper, container=container, tail_lines=pod_tail_lines
+                        ),
                         render=str,
                     )
                 )
@@ -998,7 +1096,8 @@ def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
             probes=probes,
             label=f"Pods in {_STORAGE_NAMESPACE}",
             namespace=_STORAGE_NAMESPACE,
-            pod_prefixes=_CSI_POD_PREFIXES,
+            pod_name_fragments=_CSI_POD_NAME_FRAGMENTS,
+            container_names=_CSI_CONTAINER_NAMES,
             tail_lines=_CSI_LOG_TAIL_LINES,
         )
     )
@@ -1018,9 +1117,9 @@ def _with_deadline_record(*, sections: list[str], probes: _Probes | None) -> lis
     """
     if probes is None:
         return sections
-    deadline_record = probes.deadline_record()
-    if deadline_record is not None:
-        sections.append(deadline_record)
+    for note in (probes.deadline_record(), probes.size_record()):
+        if note is not None:
+            sections.append(note)
     return sections
 
 
@@ -1461,8 +1560,11 @@ def _session_client() -> DynamicClient | None:
         DynamicClient | None: Client built from the resolved credentials, or None when building it failed.
     """
     try:
-        with _bounded_requests():
-            return get_cluster_client()
+        client, failure = _call_within_budget(probe=get_cluster_client, budget=_CLIENT_BUILD_BUDGET_SECONDS)
+        if failure is not None:
+            LOGGER.warning(f"Session-start baseline has no cluster client: {failure}")
+            return None
+        return client
     except (OSError, ValueError, TypeError, ApiException, DynamicApiError, ClientWithBasicAuthError) as exc:
         # A rejected credential is a configuration problem elsewhere in the run: the baseline is a
         # diagnostic, so it degrades to skipping its cluster section instead of raising into pytest.

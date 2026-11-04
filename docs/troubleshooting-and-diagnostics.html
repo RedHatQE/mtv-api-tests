@@ -527,7 +527,7 @@ and turns the feature off instead of failing the run.
 <ul>
 <li><code>.data-collector/resources.json</code>: a dump of tracked resources created during the run.</li>
 <li>
-<p><code>.data-collector/session-start/cluster.txt</code>: the cluster baseline captured at session start — <code>ClusterVersion</code>, <code>ClusterOperator</code>, the <code>MachineConfigPool</code> manifests plus per-pool counters
+<p><code>.data-collector/session-start/cluster.txt</code>: the cluster baseline captured at session start — <code>ClusterVersion</code>, a <code>ClusterOperator</code> summary, the <code>MachineConfigPool</code> counters and conditions (summaries, not the pool manifests), a <code>Node</code> summary, and the installed MTV and OpenShift Virtualization CSV versions
   and conditions, nodes, and the <code>openshift-mtv</code> / <code>openshift-cnv</code> CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
   the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it. The probes read the cluster through the run's
   <code>DynamicClient</code> and the <code>ocp_resources</code> wrappers, so no <code>oc</code> binary and no kubeconfig are involved; a client is built from the resolved credentials when none is passed in,
@@ -579,9 +579,10 @@ error you see. Each invocation writes one file, <code>cluster-state/&lt;UTC time
   healthy cluster.</p>
 </li>
 <li>
-<p><strong>Size cap.</strong> Each probe's rendered output is capped at 512 KiB (<code>_MAX_PROBE_OUTPUT_BYTES</code>); a longer record keeps its head and closes with <code>[truncated: &lt;N&gt; bytes omitted]</code>, and
-  every container log keeps 300 lines (ceph-csi) or 500 lines (Machine Config Operator) rather than the whole stream. Evidence collection can therefore not fill the disk it is
-  meant to diagnose.</p>
+<p><strong>Size caps, per probe and per snapshot.</strong> Each probe's rendered output is capped at 512 KiB (<code>_MAX_PROBE_OUTPUT_BYTES</code>); a longer record keeps its head and closes with
+  <code>[truncated: &lt;N&gt; bytes omitted]</code>, and every container log keeps a bounded tail rather than the whole stream. A whole snapshot is additionally capped at 8 MiB
+  (<code>_MAX_SNAPSHOT_OUTPUT_BYTES</code>): once it is exhausted no further probe runs and the file closes with <code># snapshot size budget reached: &lt;M&gt; records not collected</code>. The
+  per-node daemon pods make the log volume grow with the cluster size, so the snapshot budget — not the per-probe cap — is what keeps a large cluster's dump bounded.</p>
 </li>
 </ul>
 <p>Collection has no fallback path: the probe set is the wrapper's own API calls, and a run that passes no client (for example <code>run_mtv_upgrade()</code> without one) skips the snapshot
@@ -604,7 +605,7 @@ Every artifact is written with the resolved <code>CLUSTER_PASSWORD</code> redact
 <tr>
 <td><code>storage</code></td>
 <td>A migration wait times out, or a migrated VM is confirmed unschedulable</td>
-<td>the target namespace's PVCs, DataVolumes and PersistentVolumes plus the full body of the non-Bound PVCs only, namespace events oldest first, storage classes, <code>openshift-storage</code> pods, and every container log of the ceph-csi provisioner and driver pods (300 lines each, current and previous)</td>
+<td>the target namespace's PVCs, DataVolumes and PersistentVolumes plus the full body of the non-Bound PVCs only, namespace events oldest first, storage classes, <code>openshift-storage</code> pods, and the current plus previous logs of the ceph-csi <code>csi-provisioner</code> and <code>csi-rbdplugin</code> containers (3000-line tails on the controller plugin, 500 on the per-node plugin), selected by the sidecar a pod runs rather than by its name — ODF names those pods <code>openshift-storage.rbd.csi.ceph.com-ctrlplugin-*</code> while upstream uses <code>csi-rbdplugin-provisioner-*</code></td>
 </tr>
 </tbody>
 </table></div>
