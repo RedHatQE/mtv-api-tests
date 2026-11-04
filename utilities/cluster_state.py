@@ -1125,8 +1125,9 @@ def _write_once_atomic(path: Path, text: str) -> bool:
     """Publish a complete file only when the destination does not exist yet.
 
     Every xdist worker writes the same session-start files. The content is written to a
-    process-unique temporary sibling and hard-linked into place, so the file appears complete and
-    the first writer wins instead of a later worker overwriting the true start-of-run snapshot.
+    process-unique temporary sibling and then published - by hard link when the filesystem allows
+    it, otherwise by an exclusive create - so the file appears complete and the first writer wins
+    instead of a later worker overwriting the true start-of-run snapshot.
 
     Args:
         path (Path): Destination file.
@@ -1141,6 +1142,14 @@ def _write_once_atomic(path: Path, text: str) -> bool:
         os.link(temporary_path, path)
     except FileExistsError:
         return False
+    except OSError:
+        # Some artifact mounts reject hard links (EPERM/EXDEV/EOPNOTSUPP); an exclusive create is
+        # equally atomic and keeps the first-writer-wins behaviour instead of losing the baseline.
+        try:
+            with path.open("x", encoding=_OUTPUT_ENCODING) as handle:
+                handle.write(text)
+        except FileExistsError:
+            return False
     finally:
         temporary_path.unlink(missing_ok=True)
     return True
@@ -1162,6 +1171,69 @@ def _session_client() -> DynamicClient | None:
         # diagnostic, so it degrades to skipping its cluster section instead of raising into pytest.
         LOGGER.warning(f"Session-start baseline has no cluster client, skipping its cluster state: {exc}")
         return None
+
+
+def _redact_cluster_password(text: str) -> str:
+    """Redact the configured cluster password from artifact text.
+
+    Args:
+        text (str): Text about to be written into an artifact.
+
+    Returns:
+        str: The text with the password replaced, unchanged when no password is configured.
+    """
+    cluster_password = resolve_cluster_credential("cluster_password")
+    return redact_secret(text=text, secret=cluster_password) if cluster_password else text
+
+
+def _write_session_cluster_snapshot(*, run_client: DynamicClient, path: Path) -> bool:
+    """Collect and write the session-start cluster state.
+
+    Args:
+        run_client (DynamicClient): Client the probes read the cluster with.
+        path (Path): Destination file.
+
+    Returns:
+        bool: True when this call created the file, False when a snapshot already existed.
+    """
+    probes = _Probes(client=run_client)
+    sections = _with_deadline_record(sections=_session_start_cluster_sections(probes=probes), probes=probes)
+    return _write_once_atomic(path=path, text=_redact_cluster_password(f"{_SECTION_SEPARATOR.join(sections)}\n"))
+
+
+def _write_session_identity(
+    *,
+    run_client: DynamicClient,
+    path: Path,
+    pytest_args: Sequence[str],
+    skip_teardown: bool,
+    skip_data_collector: bool,
+) -> bool:
+    """Collect and write the run identity of this session.
+
+    Args:
+        run_client (DynamicClient): Client the probes read the cluster with.
+        path (Path): Destination file.
+        pytest_args (Sequence[str]): Arguments pytest was invoked with, including ``--tc`` overrides.
+        skip_teardown (bool): Whether ``--skip-teardown`` was set.
+        skip_data_collector (bool): Whether ``--skip-data-collector`` was set.
+
+    Returns:
+        bool: True when this call created the file, False when a snapshot already existed.
+    """
+    probes = _Probes(client=run_client)
+    sections = _session_start_identity_sections(
+        probes=probes,
+        pytest_args=pytest_args,
+        skip_teardown=skip_teardown,
+        skip_data_collector=skip_data_collector,
+    )
+    return _write_once_atomic(
+        path=path,
+        text=_redact_cluster_password(
+            f"{_SECTION_SEPARATOR.join(_with_deadline_record(sections=sections, probes=probes))}\n"
+        ),
+    )
 
 
 def write_session_baseline(
@@ -1198,23 +1270,13 @@ def write_session_baseline(
         run_client = client or _session_client()
         if run_client is None:
             return
-        cluster_probes = _Probes(client=run_client)
-        cluster_sections = _with_deadline_record(
-            sections=_session_start_cluster_sections(probes=cluster_probes), probes=cluster_probes
-        )
-        cluster_created = _write_once_atomic(path=cluster_path, text=f"{_SECTION_SEPARATOR.join(cluster_sections)}\n")
-        identity_probes = _Probes(client=run_client)
-        identity_sections = _session_start_identity_sections(
-            probes=identity_probes,
+        cluster_created = _write_session_cluster_snapshot(run_client=run_client, path=cluster_path)
+        identity_created = _write_session_identity(
+            run_client=run_client,
+            path=identity_path,
             pytest_args=pytest_args,
             skip_teardown=skip_teardown,
             skip_data_collector=skip_data_collector,
-        )
-        identity_created = _write_once_atomic(
-            path=identity_path,
-            text=(
-                f"{_SECTION_SEPARATOR.join(_with_deadline_record(sections=identity_sections, probes=identity_probes))}\n"
-            ),
         )
     except (OSError, ValueError, TypeError, ClientWithBasicAuthError) as exc:
         # Best-effort evidence: a failing probe or a rejected credential skips the baseline instead of
