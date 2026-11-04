@@ -301,8 +301,6 @@ def _supervise_upgrade_process(
 
     return returncode, timeout_exc, cleanup_exc, stdout, stderr, persisted_logs
 
-    return returncode, timeout_exc, cleanup_exc, stdout, stderr
-
 
 def run_mtv_upgrade(
     script_path: str,
