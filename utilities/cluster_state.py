@@ -717,24 +717,6 @@ def _persistent_volume_summary(volumes: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _storage_class_summary(storage_classes: list[dict[str, Any]]) -> list[str]:
-    """Render each StorageClass' provisioner and binding behaviour, like ``oc get sc -o wide``.
-
-    Args:
-        storage_classes (list[dict[str, Any]]): StorageClass bodies.
-
-    Returns:
-        list[str]: One line per storage class.
-    """
-    return [
-        f"{_resource_name(storage_class)}: provisioner={storage_class.get('provisioner')} "
-        f"reclaimPolicy={storage_class.get('reclaimPolicy')} "
-        f"volumeBindingMode={storage_class.get('volumeBindingMode')} "
-        f"allowVolumeExpansion={storage_class.get('allowVolumeExpansion')}"
-        for storage_class in storage_classes
-    ]
-
-
 def _cluster_service_version_summary(versions: list[dict[str, Any]]) -> list[str]:
     """Render each ClusterServiceVersion's phase and version, like ``oc get csv``.
 
