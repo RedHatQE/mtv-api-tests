@@ -950,6 +950,25 @@ tests_params: dict = {
         "migrate_shared_disks": True,
         "target_power_state": "on",
     },
+    "test_shared_disk_remigrate": {
+        "virtual_machines": [
+            {
+                "name": "mtv-feature-shared-rhel1",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "migrate_shared_disks": True,
+            },
+            {
+                "name": "mtv-feature-shared-rhel2",
+                "source_vm_power": "off",
+                "guest_agent": True,
+                "migrate_shared_disks": False,
+            },
+        ],
+        "warm_migration": False,
+        "migrate_shared_disks": True,
+        "target_power_state": "on",
+    },
     "test_luks_cold_migration": {
         "virtual_machines": [
             {
