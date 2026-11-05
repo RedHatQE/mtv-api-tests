@@ -228,6 +228,66 @@ def wait_for_added_nics_in_forklift_inventory(
             return
 
 
+def wait_for_shared_rdm_disk_in_forklift_inventory(
+    source_provider: BaseProvider,
+    source_provider_inventory: ForkliftInventory,
+    vm_names: list[str],
+    timeout: int = _INVENTORY_REFRESH_READY_TIMEOUT,
+    sleep: int = 10,
+) -> None:
+    """Force a provider refresh and wait until each VM's RDM disk is reported as shared.
+
+    Linking two VMs to the same RDM mapping file (``VMWareProvider.add_shared_rdm_disk``) is a
+    live vCenter reconfiguration performed after the VMs already synced to Forklift inventory, so
+    inventory can still report the RDM disk as unshared. Building the Plan from that stale
+    inventory would compute ``shouldSCSIReservation()`` as false regardless of the configured
+    ``scsiReservation`` setting. This forces a refresh and blocks until each VM's inventory RDM
+    disk (``rdm: true``) reports ``shared: true``.
+
+    Args:
+        source_provider: Source provider instance (must have ocp_resource set).
+        source_provider_inventory: Forklift inventory client for the source provider.
+        vm_names: Names of the VMs sharing the RDM disk.
+        timeout: Maximum time to wait for every VM's RDM disk to report shared.
+        sleep: Seconds between inventory polls.
+
+    Raises:
+        ValueError: If source_provider.ocp_resource is not set.
+        TimeoutExpiredError: If any VM's RDM disk does not report shared within the timeout.
+    """
+    if source_provider.ocp_resource is None:
+        raise ValueError("source_provider.ocp_resource is not set")
+
+    LOGGER.info(f"Forcing inventory refresh to sync shared RDM disk for VMs: {vm_names}")
+    force_inventory_refresh(source_provider.ocp_resource)
+
+    def _all_rdm_disks_shared() -> bool:
+        """Return True once every VM's RDM disk reports shared: true.
+
+        A transient VM absence (ValueError from get_vm) or a VM with no RDM disk yet counts as
+        not-ready, letting TimeoutSampler keep retrying while the forced refresh reconciles.
+        """
+        for vm_name in vm_names:
+            try:
+                disks = source_provider_inventory.get_vm(name=vm_name).get("disks", [])
+            except ValueError:
+                LOGGER.info(f"VM '{vm_name}' not yet in inventory after refresh, retrying")
+                return False
+            rdm_disk = next((disk for disk in disks if disk.get("rdm")), None)
+            if rdm_disk is None:
+                LOGGER.info(f"VM '{vm_name}' has no RDM disk in inventory yet, retrying")
+                return False
+            if not rdm_disk.get("shared"):
+                LOGGER.info(f"VM '{vm_name}' RDM disk not yet reported as shared, retrying")
+                return False
+        return True
+
+    for is_shared in TimeoutSampler(wait_timeout=timeout, sleep=sleep, func=_all_rdm_disks_shared):
+        if is_shared:
+            LOGGER.info("Shared RDM disk present and marked shared in Forklift inventory for all VMs")
+            return
+
+
 def _wait_for_inventory_mac_convergence(
     source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,

@@ -64,8 +64,14 @@ from utilities.mtv_migration import (
     wait_for_dual_migration_completion,
     wait_for_migration_complate,
 )
-from utilities.naming import sanitize_kubernetes_name
-from utilities.post_migration import check_vms, verify_data_integrity, verify_rdm_disk_bus_types
+from utilities.naming import resolve_destination_vm_name, sanitize_kubernetes_name
+from utilities.shared_disk import verify_vms_share_single_pvc
+from utilities.post_migration import (
+    check_vms,
+    verify_data_integrity,
+    verify_rdm_disk_bus_types,
+    verify_scsi_reservation,
+)
 from utilities.vmware_guest_operations import create_data_integrity_marker
 from utilities.resources import create_and_store_resource
 from utilities.ssh_utils import SSHConnectionManager
@@ -2632,6 +2638,239 @@ class TestCopyoffloadWarmRdmVirtualDiskMigration:
 
 @pytest.mark.vsphere
 @pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_scsi_reservation_plan_enabled"])],
+    indirect=True,
+    ids=["MTV-6071:copyoffload-scsi-reservation-plan-enabled"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "copyoffload_ssh_key",
+    "rdm_config",
+    "shared_rdm_disks",
+    "xfs_repair_ignore_forkliftcontroller",
+    "scsi_persistent_reservation_hco",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadRdmScsiReservationPlanEnabled:
+    """Shared RDM LUN disks keep SCSI persistent reservation when enabled at the Plan level.
+
+    Purpose/Regression:
+        Verify the scsiReservation Plan setting (MTV-6070/MTV-6071). Before this setting
+        existed, SCSI persistent reservation was tied unconditionally to any RDM disk shared
+        between migrated VMs, which could break workloads that share an RDM disk without
+        relying on SCSI-3 persistent reservation. This scenario migrates two VMs that share
+        one physical RDM LUN with the Plan-level setting enabled. Both VMs inherit the Plan
+        setting, so the migration verifies reservation on each VM in one end-to-end run.
+
+    Prerequisites:
+        Register and connect a vSphere source provider with copy-offload (XCOPY) support and
+        an OpenShift destination. Prepare accessible destination block storage and network.
+        On the destination cluster, enable SCSI persistent reservation support in the
+        OpenShift Virtualization HyperConverged settings (Virtualization overview ->
+        Settings -> Live migration/storage -> SCSI persistent reservation), and on the MTV
+        operator configuration, enable ignoring XFS repair warnings for iSCSI-backed
+        destination storage (ForkliftController's feature_xfs_repair_ignore setting) to
+        prevent virt-v2v conversion failures against the offload target. Use two
+        disposable, powered-off source VMs, each with a disk mapped via Raw Device Mapping
+        (RDM) to the identical physical LUN on shared storage, so the hypervisor and
+        Forklift inventory recognize the disk as shared between the two VMs. Enable RDM-as-LUN
+        mapping on the Plan. Have permission to create a dedicated target namespace, maps, and
+        a Plan with copy-offload enabled.
+
+    Test plan:
+        1. Prepare both source VMs with their RDM disk attached to the same physical LUN.
+           Wait until both VMs appear in Forklift inventory with the disk marked shared.
+        2. Create a StorageMap (with copy-offload offload-plugin configuration) and a
+           NetworkMap covering both VMs. Create a cold Plan with RDM-as-LUN and
+           scsiReservation enabled at the Plan level. Configure the second VM to attach to
+           the first VM's volume instead of creating its own; do not set VM-level overrides.
+        3. Run the migration and confirm it succeeds.
+        4. Confirm XCOPY acceleration was used for the transfer.
+        5. On both migrated VMs, confirm the shared disk is mapped as a SCSI LUN device and
+           SCSI persistent reservation is enabled from the Plan-level setting. Confirm both
+           VMs otherwise boot and are reachable.
+
+    Expected result:
+        The migration succeeds and both VMs' RDM disk is mapped as a LUN device with SCSI
+        bus, and both VMs' LUN devices report persistent reservation enabled from the
+        Plan-level setting. If a check fails, inspect the migrated VM disk device specs and
+        the Plan and Migration conditions/events.
+    """
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    def test_create_storagemap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: BaseProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with copy-offload configuration."""
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: BaseProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource."""
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource."""
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan.get("copyoffload", False),
+            rdm_as_lun=prepared_plan["rdm_as_lun"],
+            scsi_reservation=prepared_plan["scsi_reservation"],
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    def test_migrate_vms(
+        self, fixture_store: dict[str, Any], ocp_admin_client: DynamicClient, target_namespace: str
+    ) -> None:
+        """Execute migration."""
+        execute_copyoffload_migration(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(
+        self, ocp_admin_client: DynamicClient, target_namespace: str, fixture_store: dict[str, Any]
+    ) -> None:
+        """Verify XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+            fixture_store=fixture_store,
+        )
+
+    def test_check_vms(
+        self,
+        prepared_plan: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs and verify SCSI reservation state."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+        virtual_machines = prepared_plan["virtual_machines"]
+        verify_vms_share_single_pvc(
+            ocp_admin_client=ocp_admin_client,
+            target_namespace=target_namespace,
+            vm1_dest_name=resolve_destination_vm_name(virtual_machines[0]),
+            vm2_dest_name=resolve_destination_vm_name(virtual_machines[1]),
+        )
+        verify_vm_disk_count(
+            destination_provider=destination_provider,
+            plan=prepared_plan,
+            target_namespace=target_namespace,
+            additional_disks=1,
+        )
+        verify_rdm_disk_bus_types(destination_provider=destination_provider, plan=prepared_plan)
+        verify_scsi_reservation(destination_provider=destination_provider, plan=prepared_plan)
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
 @pytest.mark.copyoffload_sanity
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -3625,7 +3864,7 @@ class TestCopyoffloadFallbackLargeMigration:
         self,
         prepared_plan: dict,
         source_provider: BaseProvider,
-        destination_provider: BaseProvider,
+        destination_provider: OCPProvider,
         source_provider_data: dict,
         target_namespace: str,
         source_vms_namespace: str,

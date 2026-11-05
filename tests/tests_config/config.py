@@ -327,6 +327,36 @@ tests_params: dict = {
         "warm_migration": True,
         "copyoffload": True,
     },
+    "test_copyoffload_scsi_reservation_plan_enabled": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "clone_name": "xcopy-scsi-reservation-enabled-vm1",
+                "guest_agent": True,
+                "clone": True,
+                # Raw camelCase key (not migrate_shared_disks): delivers the real Plan field so this
+                # VM owns the shared PVC, while deliberately skipping relink_shared_disks. That helper
+                # keys off the snake_case migrate_shared_disks name and assumes distinct source VMs;
+                # both VMs here clone the same xcopy-template-test source, so it would misidentify
+                # every disk on the template (including the boot disk) as shared and corrupt a clone.
+                # The actual RDM LUN linking (owner/consumer attached to the identical mapping file,
+                # required for Forklift to see the disk as Shared) is done post-clone by the
+                # shared_rdm_disks fixture, which reads this True/False marker to find the owner/consumer.
+                "migrateSharedDisks": True,
+            },
+            {
+                "name": "xcopy-template-test",
+                "clone_name": "xcopy-scsi-reservation-enabled-vm2",
+                "guest_agent": True,
+                "clone": True,
+                "migrateSharedDisks": False,  # Attaches to VM1's PVC instead of creating its own
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+        "rdm_as_lun": True,
+        "scsi_reservation": True,
+    },
     "test_copyoffload_thick_lazy_snapshots_migration": {
         "virtual_machines": [
             {

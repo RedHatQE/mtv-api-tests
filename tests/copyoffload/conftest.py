@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING, Any
 import filelock
 import pytest
 from ocp_resources.forklift_controller import ForkliftController
+from ocp_resources.hyperconverged import HyperConverged
+from ocp_resources.kubevirt import KubeVirt
 from ocp_resources.provider import Provider
+from ocp_resources.resource import ResourceEditor
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
 
@@ -37,11 +40,14 @@ from utilities.forklift_controller_populator import (
     populator_inflight_limit,
     vm_inflight_limit,
 )
+from utilities.provider_inventory import wait_for_shared_rdm_disk_in_forklift_inventory
 from utilities.resources import create_and_store_resource
+from timeout_sampler import TimeoutSampler
 from utilities.utils import resolve_providers_json_path
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
 
@@ -326,6 +332,177 @@ def rdm_config(source_provider_data: dict[str, Any]) -> None:
         raise ValueError("RDM copy-offload tests require 'rdm_lun_uuid' to be configured in the copyoffload section.")
 
     LOGGER.info("✓ RDM configuration validated: rdm_lun_uuid = %s", rdm_lun_uuid)
+
+
+@pytest.fixture(scope="class")
+def shared_rdm_disks(
+    vmware_cloud_init_ready: None,
+    rdm_config: None,
+    prepared_plan: dict[str, Any],
+    source_provider: VMWareProvider,
+    source_provider_inventory: ForkliftInventory,
+) -> None:
+    """Power off cloud-init-ready VMs and link their shared physical RDM LUN.
+
+    Each VM's ``add_disks: [{"rdm_type": ...}]`` clone option independently maps the RDM LUN,
+    which vSphere backs with a distinct per-VM mapping file -- Forklift never recognizes these as
+    shared (see ``VMWareProvider.add_shared_rdm_disk`` docstring). This runs post-clone to attach
+    the owner VM's (``migrateSharedDisks: True``) and consumer VM's (``migrateSharedDisks: False``)
+    RDM devices to the identical mapping file in physical compatibility mode (the shared SCSI
+    controllers use physicalSharing bus sharing, which pairs with physical-mode RDMs), then waits
+    for Forklift inventory to reflect it. Cloud-init readiness is required before both cloned VMs
+    are gracefully shut down, so the shared-disk Plan does not encounter running VMs during
+    readiness checks.
+
+    Args:
+        vmware_cloud_init_ready (None): Ensures cloud-init has completed before shutdown.
+        rdm_config (None): Validates that the RDM LUN is configured before attachment.
+        prepared_plan (dict[str, Any]): Prepared plan with VMs already cloned.
+        source_provider (VMWareProvider): Source provider instance.
+        source_provider_inventory (ForkliftInventory): Inventory client for the source provider.
+
+    Raises:
+        ValueError: If the plan is missing a VM configured as the shared-RDM owner or consumer
+            (``migrateSharedDisks`` True/False).
+    """
+    virtual_machines = prepared_plan["virtual_machines"]
+    owner_configs = [vm for vm in virtual_machines if vm.get("migrateSharedDisks") is True]
+    consumer_configs = [vm for vm in virtual_machines if vm.get("migrateSharedDisks") is False]
+    if len(owner_configs) != 1 or len(consumer_configs) != 1:
+        raise ValueError(
+            "shared_rdm_disks requires exactly one VM with migrateSharedDisks=True (owner) and "
+            "one with migrateSharedDisks=False (consumer)"
+        )
+
+    owner_config = owner_configs[0]
+    consumer_config = consumer_configs[0]
+
+    source_provider.link_shared_rdm_disks(
+        owner_vm_name=owner_config["name"],
+        consumer_vm_name=consumer_config["name"],
+        rdm_type="physical",
+    )
+
+    wait_for_shared_rdm_disk_in_forklift_inventory(
+        source_provider=source_provider,
+        source_provider_inventory=source_provider_inventory,
+        vm_names=[owner_config["name"], consumer_config["name"]],
+    )
+
+
+@pytest.fixture(scope="session")
+def xfs_repair_ignore_forkliftcontroller(
+    ocp_admin_client: DynamicClient, mtv_namespace: str
+) -> Generator[None, None, None]:
+    """Enable feature_xfs_repair_ignore on ForkliftController for RDM/iSCSI copy-offload migrations.
+
+    Prevents xfs_repair/fsync failures during virt-v2v conversion against iSCSI-backed
+    destination storage (e.g. ONTAP XCOPY offload), required for shared RDM LUN migrations.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        mtv_namespace (str): MTV operator namespace (e.g., openshift-mtv).
+
+    Yields:
+        None
+    """
+    forklift_controller = ForkliftController(
+        client=ocp_admin_client,
+        name=FORKLIFT_CONTROLLER_NAME,
+        namespace=mtv_namespace,
+        ensure_exists=True,
+    )
+
+    LOGGER.info("Patching ForkliftController with feature_xfs_repair_ignore=true")
+    editor = ResourceEditor(patches={forklift_controller: {"spec": {"feature_xfs_repair_ignore": "true"}}})
+    editor.update(backup_resources=True)
+    try:
+        forklift_controller.wait_for_condition(
+            status=forklift_controller.Condition.Status.TRUE,
+            condition=forklift_controller.Condition.Type.SUCCESSFUL,
+            timeout=FORKLIFT_CONTROLLER_CONDITION_TIMEOUT,
+        )
+        yield
+    finally:
+        editor.restore()
+
+
+@pytest.fixture(scope="session")
+def scsi_persistent_reservation_hco(ocp_admin_client: DynamicClient) -> Generator[None, None, None]:
+    """Enable SCSI persistent reservation support on the cluster's HyperConverged CR.
+
+    Required for shared RDM LUN migrations with scsiReservation enabled: without it, KubeVirt's
+    pr-helper daemon is not deployed, so lun.reservation has no effect even when Forklift sets it
+    on the target VM. Enables the "persistentReservation" entry in spec.featureGates.
+
+    Note: the HyperConverged CRD serves two incompatible shapes of spec.featureGates: v1 exposes
+    an array of {name, state} objects, while v1beta1 (this cluster's actual storage version, per
+    `oc get crd hyperconvergeds.hco.kubevirt.io -o jsonpath='{.spec.versions[*].storage}'`) uses a
+    flat {name: bool} map. The installed openshift-python-wrapper auto-discovers the highest
+    served version (v1) by default, but the v1<->v1beta1 conversion webhook does not round-trip
+    the array's "state" field correctly (confirmed live: a v1 patch with state="Enabled" silently
+    loses "state" on readback, both via this wrapper and raw `oc patch`). Patching v1beta1
+    directly, in its real map-shaped schema, avoids that conversion entirely and was verified to
+    round-trip correctly (enable, then restore back to the original value) against a live cluster.
+
+    The HyperConverged CR is a cluster-wide singleton; its name and namespace are discovered
+    dynamically via HyperConverged.get() rather than assumed, since this repo has no existing
+    config for the CNV operator namespace.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+
+    Yields:
+        None
+
+    Raises:
+        ValueError: If no HyperConverged resource is found, or the patch doesn't take effect.
+    """
+    hco = next(HyperConverged.get(client=ocp_admin_client), None)
+    if hco is None:
+        raise ValueError("No HyperConverged resource found on the cluster - is OpenShift Virtualization installed?")
+    hco.api_version = f"{HyperConverged.api_group}/{HyperConverged.ApiVersion.V1BETA1}"
+
+    updated_gates: dict[str, bool] = dict(hco.instance.spec.get("featureGates") or {})
+    updated_gates["persistentReservation"] = True
+
+    LOGGER.info(f"Patching HyperConverged '{hco.name}' (v1beta1) with featureGates.persistentReservation=true")
+    editor = ResourceEditor(patches={hco: {"spec": {"featureGates": updated_gates}}})
+    editor.update(backup_resources=True)
+    try:
+        patched_gates = hco.instance.spec.get("featureGates") or {}
+        if not patched_gates.get("persistentReservation"):
+            raise ValueError(
+                f"HyperConverged '{hco.name}' patch for featureGates.persistentReservation did not take effect"
+            )
+
+        # HCO propagates the gate to the KubeVirt CR via its own reconciliation loop
+        # (the CR name varies by deployment, so list the cluster single KubeVirt CR), which is asynchronous with the
+        # HyperConverged patch above. The migration must not start before the virt stack picked
+        # the gate up, otherwise KubeVirt does not deploy the pr-helper and lun.reservation has
+        # no effect. Poll defensively for "persistentReservation" anywhere in the KubeVirt CR's
+        # spec.configuration (HCO's exact placement varies by version) rather than a fixed path.
+        kubevirt = next(KubeVirt.get(client=ocp_admin_client), None)
+        if kubevirt is None:
+            raise ValueError("No KubeVirt CR found on the cluster - is OpenShift Virtualization installed?")
+
+        def _gate_in_kubevirt_cr() -> bool:
+            """Return True once the KubeVirt CR spec.configuration mentions the gate."""
+            kv = next(KubeVirt.get(client=ocp_admin_client), None)
+            if kv is None:
+                return False
+            # HCO writes the gate into KubeVirt CR as "PersistentReservation" (capital P) while
+            # the HyperConverged field is lowercase, so compare case-insensitively.
+            return "persistentreservation" in str(kv.instance.spec.get("configuration")).lower()
+
+        for gate_present in TimeoutSampler(wait_timeout=300, sleep=10, func=_gate_in_kubevirt_cr):
+            if gate_present:
+                LOGGER.info("persistentReservation feature gate present in the KubeVirt CR")
+                break
+
+        yield
+    finally:
+        editor.restore()
 
 
 @pytest.fixture(scope="class")

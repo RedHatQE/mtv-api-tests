@@ -2538,6 +2538,63 @@ def check_vm_instance_type(vm: dict[str, Any], destination_vm: dict[str, Any]) -
     )
 
 
+def verify_scsi_reservation(
+    destination_provider: OCPProvider,
+    plan: dict[str, Any],
+) -> None:
+    """Verify SCSI persistent reservation on migrated shared RDM LUN disks.
+
+    A VM's effective scsiReservation is its own per-VM override when set, otherwise the
+    plan-level value (mirrors Forklift's own precedence). When enabled, the shared RDM LUN
+    disk must have lun.reservation: true; when disabled, the reservation key must be absent.
+
+    Args:
+        destination_provider: OCP destination provider instance.
+        plan: Test plan dictionary containing VM configuration.
+
+    Raises:
+        AssertionError: If reservation state doesn't match the expected per-VM configuration.
+        ValueError: If destination_provider.ocp_resource is not set.
+    """
+    if not destination_provider.ocp_resource:
+        raise ValueError("destination_provider.ocp_resource is not set")
+
+    plan_scsi_reservation = plan.get("scsi_reservation", False)
+
+    for vm_config in plan["virtual_machines"]:
+        vm_name = vm_config["name"]
+        vm_override = vm_config.get("scsi_reservation")
+        expected_reservation = vm_override if vm_override is not None else plan_scsi_reservation
+        dest_vm_name = resolve_destination_vm_name(vm_config)
+        LOGGER.info(f"Verifying SCSI reservation for migrated VM '{vm_name}' (expected={expected_reservation})")
+
+        migrated_vm = VirtualMachine(
+            client=destination_provider.ocp_resource.client,
+            name=dest_vm_name,
+            namespace=plan["_vm_target_namespace"],
+            ensure_exists=True,
+        )
+        disks: list[dict[str, Any]] = migrated_vm.instance.spec.template.spec.domain.devices.disks
+        lun_disks = [d for d in disks if d.get("lun")]
+
+        assert lun_disks, f"No LUN-type disks found on VM '{vm_name}'. Expected a shared RDM LUN disk. Disks: {disks}"
+
+        for lun_disk in lun_disks:
+            reservation = lun_disk["lun"].get("reservation")
+            if expected_reservation:
+                assert reservation is True, (
+                    f"LUN disk '{lun_disk.get('name')}' on VM '{vm_name}' expected reservation=true, "
+                    f"got {reservation!r}"
+                )
+            else:
+                assert reservation is None, (
+                    f"LUN disk '{lun_disk.get('name')}' on VM '{vm_name}' expected no reservation field, "
+                    f"got {reservation!r}"
+                )
+
+        LOGGER.info(f"VM '{vm_name}': scsiReservation={expected_reservation} verified on {len(lun_disks)} LUN disk(s)")
+
+
 def check_vms(
     plan: dict[str, Any],
     source_provider: BaseProvider,

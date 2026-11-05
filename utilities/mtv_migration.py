@@ -45,6 +45,7 @@ CONVERSION_POD_LABEL_SELECTOR: str = "forklift.app=virt-v2v"
 _VM_CONFIG_TO_SPEC_KEY_RENAMES: dict[str, str] = {
     "migrate_shared_disks": "migrateSharedDisks",
     "instance_type": "instanceType",
+    "scsi_reservation": "scsiReservation",
 }
 
 LOGGER = get_logger(__name__)
@@ -281,6 +282,7 @@ def create_plan_resource(
     convertor_node_selector: dict[str, str] | None = None,
     # Any: Plan option values are heterogeneous/provider-defined and intentionally untyped to pass arbitrary kubevirt Plan spec fields through.
     additional_plan_options: dict[str, Any] | None = None,
+    scsi_reservation: bool | None = None,
 ) -> Plan:
     """Create MTV Plan CR resource.
 
@@ -329,6 +331,9 @@ def create_plan_resource(
         additional_plan_options (dict[str, Any] | None): Additional Plan constructor options not already handled by
             this helper. Defaults to None. Keys consumed by create_and_store_resource ("name", "kind_dict", "yaml_file",
             "test_name") are not allowed.
+        scsi_reservation (bool | None): Whether to enable SCSI persistent reservation on
+            shared RDM LUN disks (requires rdm_as_lun=True). Individual VMs can override
+            via per-VM scsiReservation. Defaults to None.
 
     Returns:
         Plan: The created Plan CR resource.
@@ -409,6 +414,9 @@ def create_plan_resource(
 
     if convertor_node_selector is not None:
         plan_kwargs["convertor_node_selector"] = convertor_node_selector
+
+    if scsi_reservation is not None:
+        plan_kwargs["scsi_reservation"] = scsi_reservation
 
     # Add copy-offload specific parameters if enabled
     if copyoffload:
@@ -1103,22 +1111,26 @@ def get_network_migration_map(
     return network_map
 
 
-def verify_vm_disk_count(destination_provider, plan, target_namespace):
-    """
-    Verifies that the number of disks on each migrated VM matches the expected count from the plan.
+def verify_vm_disk_count(
+    destination_provider: OCPProvider,
+    plan: dict[str, Any],
+    target_namespace: str,
+    additional_disks: int = 0,
+) -> None:
+    """Verify migrated VM disk counts against plan and fixture-attached disks.
 
     Args:
-        destination_provider: The provider object for the destination cluster (OCP).
-        plan (dict): The test plan dictionary containing VM configuration.
-        target_namespace (str): The namespace where the VM was migrated.
+        destination_provider (OCPProvider): Provider for the destination cluster.
+        plan (dict[str, Any]): Test plan dictionary containing VM configuration.
+        target_namespace (str): Namespace where the VM was migrated.
+        additional_disks (int): Number of disks attached outside the plan configuration.
     """
     LOGGER.info("Verifying disks on migrated VM in OpenShift.")
     for vm_config in plan["virtual_machines"]:
         source_vm_name = vm_config["name"]
 
-        # Calculate expected disks: 1 base disk + number of disks in "add_disks"
         num_added_disks = len(vm_config.get("add_disks", []))
-        expected_disks = 1 + num_added_disks
+        expected_disks = 1 + num_added_disks + additional_disks
 
         LOGGER.info(f"Fetching details for migrated VM: {source_vm_name} in namespace {target_namespace}")
         migrated_vm_info = destination_provider.vm_dict(name=source_vm_name, namespace=target_namespace)
