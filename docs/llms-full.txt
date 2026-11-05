@@ -3644,14 +3644,14 @@ The suite reads provider definitions from `.providers.json` and builds the OpenS
 ```python
     def get_cluster_client() -> DynamicClient:
         _validate_cluster_credentials()
-        host = _resolve_cluster_credential("cluster_host")
-        username = _resolve_cluster_credential("cluster_username")
-        password = _resolve_cluster_credential("cluster_password")
+        host = resolve_cluster_credential("cluster_host")
+        username = resolve_cluster_credential("cluster_username")
+        password = resolve_cluster_credential("cluster_password")
         ...
         client = get_client(host=host, username=username, password=password, verify_ssl=not insecure_verify_skip)
 ```
 
-Each credential is resolved by `_resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. `_validate_cluster_credentials()`
+Each credential is resolved by `resolve_cluster_credential()`: the `--tc` value first, then the matching `CLUSTER_*` environment variable. `_validate_cluster_credentials()`
 requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment. Otherwise, it fails fast with a `ValueError`
 naming each absent, empty, or whitespace-only value, for example `Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME`.
 Omitting all three is legitimate: the client library then authenticates from the ambient kubeconfig, which must be available to the test process; containers do not
@@ -7774,9 +7774,9 @@ falling back to the matching `CLUSTER_*` environment variable:
     def get_cluster_client() -> DynamicClient:
         ...
         _validate_cluster_credentials()
-        host = _resolve_cluster_credential("cluster_host")
-        username = _resolve_cluster_credential("cluster_username")
-        password = _resolve_cluster_credential("cluster_password")
+        host = resolve_cluster_credential("cluster_host")
+        username = resolve_cluster_credential("cluster_username")
+        password = resolve_cluster_credential("cluster_password")
         verify_ssl_env = os.environ.get("CLUSTER_VERIFY_SSL")
         if verify_ssl_env is not None:
             insecure_verify_skip = verify_ssl_env.lower() not in ("true", "1", "yes")
@@ -7790,7 +7790,7 @@ falling back to the matching `CLUSTER_*` environment variable:
         return client
 ```
 
-Each credential resolves through `_resolve_cluster_credential()`, which reads the `--tc` value first and falls back to the matching `CLUSTER_*` environment variable.
+Each credential resolves through `resolve_cluster_credential()`, which reads the `--tc` value first and falls back to the matching `CLUSTER_*` environment variable.
 `_validate_cluster_credentials()` requires all three resolved values to be nonblank unless all three keys are absent from both pytest config and the environment.
 Otherwise, it raises `ValueError("Missing cluster credentials: set 'cluster_username' in pytest config or CLUSTER_USERNAME")` naming each absent, empty, or whitespace-only value.
 Omitting all three is legitimate: the CLI takes that path when it authenticates with an existing `oc` token, and the client library then authenticates from the ambient kubeconfig.
@@ -9666,7 +9666,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 
 ## Suite-specific pytest options
 
-`conftest.py` registers six custom options across five groups. All of them are real flags you can pass on any run.
+`conftest.py` registers seven custom options across six groups. All of them are real flags you can pass on any run.
 
 ```python
     def pytest_addoption(parser: pytest.Parser) -> None:
@@ -9686,6 +9686,18 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
             "--providers-json",
             help="Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json",
             default=None,
+        )
+
+        mtv_upgrade_group = parser.getgroup(name="MTV Upgrade")
+        mtv_upgrade_group.addoption(
+            "--mtv-upgrade-timeout",
+            type=int,
+            default=None,
+            help=(
+                "Outer timeout in seconds for the MTV upgrade script wait. Falls back to "
+                "MTV_UPGRADE_TIMEOUT_SECONDS, then 5400 seconds. The upgrade script owns its own internal "
+                "waits; this only guards against a wedged process"
+            ),
         )
 
         data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
@@ -9710,6 +9722,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 | `--data-collector-path PATH` | `DataCollector` | Output directory; default `.data-collector`. Wiped at session start, written at session finish |
 | `--skip-teardown` | `Teardown` | Preserves resources after the run instead of deleting them |
 | `--openshift-python-wrapper-log-debug` | `Openshift Python Wrapper` | Sets `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` during session startup |
+| `--mtv-upgrade-timeout SECONDS` | `MTV Upgrade` | Outer wait budget for the upgrade script. Falls back to `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds. It only guards against a wedged process: the script owns its own internal waits, so this budget must stay above them |
 
 The real-run guard for required config lives in `pytest_sessionstart` too:
 
@@ -11152,8 +11165,10 @@ Most test authors never import these modules directly. They consume them through
 | `utilities/hooks.py` | Forklift `Hook` CR creation and failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
 | `utilities/provider_inventory.py` | Forklift inventory refresh and clone waits | `wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()` |
 | `utilities/pytest_utils.py` | failure data collection, session teardown, JUnit enrichment | `collect_created_resources()`, `session_teardown()`, `enrich_junit_xml()` |
+| `utilities/data_collector.py` | the run's artifact directory, artifact-name timestamps and secret redaction, shared by every artifact writer | `configure_data_collector_path()`, `data_collector_path()`, `utc_timestamp()`, `redact_secret()` |
+| `utilities/cluster_state.py` | bounded, never-raising cluster snapshots for failures and the session-start baseline | `dump_cluster_state()`, `write_session_baseline()` |
 | `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward plus `python-rrmngmnt` | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
-| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()` |
+| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()`, `resolve_upgrade_timeout()` |
 | `libs/providers/` | one adapter per source provider type | `VMWareProvider`, `OvirtProvider`, `OpenStackProvider`, `OCPProvider`, `OVAProvider`, `HyperVProvider` |
 | `exceptions/exceptions.py` | every custom exception the suite raises | 24 exception classes, all in one module |
 
@@ -11285,7 +11300,36 @@ Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven 
 
 ### `utilities/upgrade.py`
 
-`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run.
+`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run. Its outer wait budget comes
+from `resolve_upgrade_timeout()`: the `--mtv-upgrade-timeout` option, then `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds, so the budget stays above the upgrade script's own
+internal waits and the script reports its own timeout instead of being killed by the harness. The script writes into a temporary directory that is deleted before the function
+returns; only the redacted text is persisted under `<data-collector>/upgrade-script-<timestamp>/`, so `CLUSTER_PASSWORD` never reaches the artifact tree, and `MtvUpgradeError`
+carries the tail of both redacted logs plus those paths. A missing or empty `cluster_password` raises before the script starts. A `scope="upgrade"` cluster-state snapshot is
+written before both the outer-timeout raise and the non-zero-exit raise, reading the cluster through the `client` the caller passes; without a client the snapshot is skipped rather than collected some other way.
+Under `--skip-data-collector` nothing is persisted: the child still writes its stdout and stderr into a
+temporary directory that is deleted before the function returns, and the error carries the redacted tails of both streams.
+
+### `utilities/cluster_state.py`
+
+`dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=..., client=..., data_collector_path=...)` writes one timestamped, bounded snapshot per failure and never
+raises, so the failing exception stays the error the caller sees. `client` is required: every probe reads the cluster through an `ocp_resources` wrapper (a small summary-list
+helper reads a kind's listing in one request), so collection uses no `oc` binary, no `subprocess` and no kubeconfig — a token never reaches the disk. There is no `ocp_resources`
+wrapper for the cluster-wide image config in this release, so that one probe reads `config.openshift.io/v1` `Image` through the client's generic kind API. Each probe runs under
+its own `try`/`except` over the exceptions the client can raise, including the wrapper's missing-API `NotImplementedError`, and renders as `[probe failed: …]` instead of escaping.
+`data_collector_path` overrides the configured root when given; the collector root is resolved first, so `--skip-data-collector` returns before the first probe, and every artifact
+is written with the resolved `CLUSTER_PASSWORD` redacted. Each snapshot also has a total budget (`_SNAPSHOT_DEADLINE_SECONDS`, 120 seconds, `monotonic()`): probes stop once it
+expires and the file closes with a "snapshot deadline reached … N probes skipped" record, so a hanging API server cannot delay the original error by minutes. Each probe's output is
+capped at `_MAX_PROBE_OUTPUT_BYTES` (512 KiB) with an explicit `[truncated: <N> bytes omitted]` marker. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt`
+and `run-identity.txt` once per session from `pytest_sessionstart`, tolerating a missing `.git` (the revision is read from git's files, no subprocess) and skipping cleanly under
+`--skip-data-collector`; it builds a client for the cluster probes when none is passed and skips the cluster section if that fails, so the hook never raises. Only the xdist
+controller (or the sole process without xdist) wipes the data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces
+an existing snapshot.
+
+### `utilities/data_collector.py`
+
+Holds the resolved artifact directory as module state, because most writers have no pytest `config` to read it from: `configure_data_collector_path()` is called once in
+`pytest_sessionstart` (`None` under `--skip-data-collector`), `data_collector_path()` returns it, `utc_timestamp()` names timestamped artifacts, and `redact_secret()` keeps the
+cluster password out of every artifact.
 
 ## Validation
 
@@ -11558,6 +11602,7 @@ A few pytest options change what diagnostics you get back:
 - `--skip-teardown` leaves created resources in place so you can inspect them live.
 - `--openshift-python-wrapper-log-debug` turns on deeper wrapper-level logging, which is useful when CR creation or wait logic is failing.
 - `--providers-json` points at a providers file other than the default, which is the fastest way to tell "wrong file" from "wrong provider".
+- `--mtv-upgrade-timeout` sets the outer wait budget of the upgrade script; raise it when an upgrade legitimately takes longer than 90 minutes.
 
 `--openshift-python-wrapper-log-debug` works by exporting `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` into the environment at session start,
 so it affects every wrapper log record in the run, not just a single test.
@@ -11688,6 +11733,21 @@ Unless you use `--skip-data-collector`, the suite prepares a clean `.data-collec
 The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
+- `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, a `ClusterOperator` summary, the `MachineConfigPool` counters and conditions (summaries, not the pool manifests), a `Node` summary, and the installed MTV and OpenShift Virtualization CSV versions
+  and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
+  the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it. The probes read the cluster through the run's
+  `DynamicClient` and the `ocp_resources` wrappers, so no `oc` binary and no kubeconfig are involved; a client is built from the resolved credentials when none is passed in,
+  and if that fails the baseline is logged and skipped, never raised. Still set `--skip-data-collector` to disable it.
+- `.data-collector/session-start/run-identity.txt`: the checkout revision read from git's own files (no subprocess), the pytest invocation, the authenticated user, and whether
+  `--skip-teardown` / `--skip-data-collector` were set. Written once per run, like `cluster.txt`. Credentials never reach this file: the value of every credential-ish `--tc`
+  (`password`, `token`, `secret`, `api_key`, `apikey`, `credential`), any URL userinfo (`scheme://user:pass@host` → `scheme://***@host`) and the resolved cluster password are
+  replaced with `***`. Both `--tc=key:value` and the split `--tc key:value` forms are covered.
+- `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see
+  [Failure Evidence Dumps](#failure-evidence-dumps)).
+- `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output with `CLUSTER_PASSWORD` redacted. The child always writes
+  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree — and never the inherited streams either, because the
+  script receives the cluster password and pytest runs with `-s`. Without `--data-collector-path` the redacted logs live under the default `.data-collector/`;
+  with `--skip-data-collector` nothing is persisted at all, while the failure message still carries the redacted tails.
 - `.data-collector/<encoded-class-plan-identity>/...`: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.
 - `.data-collector/<encoded-test-node-identity>/...`: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.
 - `.data-collector/...` at the root: session-level must-gather output when teardown cleanup fails.
@@ -11705,6 +11765,38 @@ The suite stores resource metadata as it creates objects, including `name`, `nam
 failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` should I inspect?”
 
 > **Tip:** If you rerun the test suite, the base data collector path is recreated. Move or archive old artifacts first if you want to keep them.
+
+## Failure Evidence Dumps
+
+`utilities/cluster_state.py::dump_cluster_state()` writes a bounded cluster snapshot immediately before a real failure is raised, so the analyzer never has to re-run the
+failing job to learn the cluster state. It is observation only and never raises: every probe reads the cluster through an `ocp_resources` wrapper on the run's `DynamicClient`
+(never the `oc` binary, never a generated kubeconfig), each probe is guarded on its own and a failure is logged into the snapshot itself, and the original exception is always the
+error you see. Each invocation writes one file, `cluster-state/<UTC timestamp>-<scope>-<reason slug>[-<xdist worker>].txt`, so parallel workers cannot collide.
+
+Two limits keep a snapshot from delaying the error it documents:
+
+- **Total deadline.** One snapshot has 120 seconds of budget in total (`_SNAPSHOT_DEADLINE_SECONDS`, measured with `monotonic()`). Probes that would start after it expires are
+  not run: the file ends with `# snapshot deadline reached after <N>s of 120s, <M> probes skipped`. A short snapshot is therefore visibly truncated, never silently mistaken for a
+  healthy cluster.
+- **Size caps, per probe and per snapshot.** Each probe's rendered output is capped at 512 KiB (`_MAX_PROBE_OUTPUT_BYTES`); a longer record keeps its head and closes with
+  `[truncated: <N> bytes omitted]`, and every container log keeps a bounded tail rather than the whole stream. A whole snapshot is additionally capped at 8 MiB
+  (`_MAX_SNAPSHOT_OUTPUT_BYTES`): once it is exhausted no further probe runs and the file closes with `# snapshot size budget reached: <M> records not collected`. The
+  per-node daemon pods make the log volume grow with the cluster size, so the snapshot budget — not the per-probe cap — is what keeps a large cluster's dump bounded.
+
+Collection has no fallback path: the probe set is the wrapper's own API calls, and a run that passes no client (for example `run_mtv_upgrade()` without one) skips the snapshot
+instead of reaching for a CLI. Under `--skip-data-collector` the collector path is resolved first and the dump returns before the first probe, so skip mode costs no API request.
+Every artifact is written with the resolved `CLUSTER_PASSWORD` redacted, and the header records that the data came from the run `DynamicClient` through `ocp_resources` wrappers.
+
+| Scope | Where it fires | What it collects |
+| --- | --- | --- |
+| `upgrade` | The upgrade script hits the outer wait budget, or exits non-zero after its own wait times out | `ClusterVersion`, `ClusterOperator` status plus the `machine-config` operator body, `MachineConfigPool` objects plus per-pool `ready`/`updated`/`degraded`/`unavailable` counters and conditions, nodes, Machine Config Operator pods with every container log (current and previous), `ImageDigestMirrorSet`, `ImageContentSourcePolicy`, the cluster-wide `Image` config, and the `openshift-mtv` CSVs |
+| `storage` | A migration wait times out, or a migrated VM is confirmed unschedulable | the target namespace's PVCs, DataVolumes and PersistentVolumes plus the full body of the non-Bound PVCs only, namespace events oldest first, storage classes, `openshift-storage` pods, and the current plus previous logs of the ceph-csi `csi-provisioner` and `csi-rbdplugin` containers (3000-line tails on the controller plugin, 500 on the per-node plugin), selected by the sidecar a pod runs rather than by its name — ODF names those pods `openshift-storage.rbd.csi.ceph.com-ctrlplugin-*` while upstream uses `csi-rbdplugin-provisioner-*` |
+
+The target namespace is read defensively (attribute, transport and parse failures all degrade to no snapshot) and the dump is skipped when the read fails or
+`--skip-data-collector` is set, so collecting evidence can never replace the `MigrationPlanExecError` / `MigrationVmUnschedulableError` the caller is supposed to see.
+
+Deliberately **not** dumped: the generic `MigrationPlanExecError`. Expected-failure tests (`tests/plan_lifecycle/`, `TestPostHookRetainFailedVm`, resume-conversion) raise it on
+purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under `--skip-data-collector`.
 
 ## Must-Gather Support
 
@@ -11727,6 +11819,8 @@ runs the full, cluster-wide gather. Both share image resolution and differ only 
 
 What this means in practice:
 
+- Machine Config Operator state before the image gather is covered by the upgrade-scope failure snapshot above (`dump_cluster_state()`), which reads the same MCP, node and MCO
+  pod evidence through the wrapper. No separate `oc adm inspect` dump runs any more.
 - If the failure can be tied back to a specific plan, the gather is scoped to that plan with `/usr/bin/targeted`.
 - Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.
 - `pytest_exception_interact` records a failing class item. A `tryfirst` `pytest_runtest_protocol` wrapper clears stale `plan_resource` on entry to a different class-plan identity before setup hooks run, but preserves it across consecutive methods of the same plan. The pre-finalizer boundary binds the current Plan or explicit None, even if no failure is pending yet, and retains it for retries. Updates before that boundary are observed. If setup fails before this plan exists, the gather is full, not targeted.

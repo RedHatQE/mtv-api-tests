@@ -378,6 +378,7 @@ failure back to the exact environment that ran.</p>
 <li><code>--skip-teardown</code> leaves created resources in place so you can inspect them live.</li>
 <li><code>--openshift-python-wrapper-log-debug</code> turns on deeper wrapper-level logging, which is useful when CR creation or wait logic is failing.</li>
 <li><code>--providers-json</code> points at a providers file other than the default, which is the fastest way to tell "wrong file" from "wrong provider".</li>
+<li><code>--mtv-upgrade-timeout</code> sets the outer wait budget of the upgrade script; raise it when an upgrade legitimately takes longer than 90 minutes.</li>
 </ul>
 <p><code>--openshift-python-wrapper-log-debug</code> works by exporting <code>OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG</code> into the environment at session start,
 so it affects every wrapper log record in the run, not just a single test.</p>
@@ -525,7 +526,32 @@ and turns the feature off instead of failing the run.
 <p>The most important files are:</p>
 <ul>
 <li><code>.data-collector/resources.json</code>: a dump of tracked resources created during the run.</li>
-<li><code>.data-collector/&lt;encoded-class-plan-identity&gt;/...</code>: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.</li>
+<li>
+<p><code>.data-collector/session-start/cluster.txt</code>: the cluster baseline captured at session start — <code>ClusterVersion</code>, a <code>ClusterOperator</code> summary, the <code>MachineConfigPool</code> counters and conditions (summaries, not the pool manifests), a <code>Node</code> summary, and the installed MTV and OpenShift Virtualization CSV versions
+  and conditions, nodes, and the <code>openshift-mtv</code> / <code>openshift-cnv</code> CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
+  the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it. The probes read the cluster through the run's
+  <code>DynamicClient</code> and the <code>ocp_resources</code> wrappers, so no <code>oc</code> binary and no kubeconfig are involved; a client is built from the resolved credentials when none is passed in,
+  and if that fails the baseline is logged and skipped, never raised. Still set <code>--skip-data-collector</code> to disable it.</p>
+</li>
+<li>
+<p><code>.data-collector/session-start/run-identity.txt</code>: the checkout revision read from git's own files (no subprocess), the pytest invocation, the authenticated user, and whether
+  <code>--skip-teardown</code> / <code>--skip-data-collector</code> were set. Written once per run, like <code>cluster.txt</code>. Credentials never reach this file: the value of every credential-ish <code>--tc</code>
+  (<code>password</code>, <code>token</code>, <code>secret</code>, <code>api_key</code>, <code>apikey</code>, <code>credential</code>), any URL userinfo (<code>scheme://user:pass@host</code> → <code>scheme://***@host</code>) and the resolved cluster password are
+  replaced with <code>***</code>. Both <code>--tc=key:value</code> and the split <code>--tc key:value</code> forms are covered.</p>
+</li>
+<li>
+<p><code>.data-collector/cluster-state/&lt;timestamp&gt;-&lt;scope&gt;-&lt;reason&gt;[-&lt;worker&gt;].txt</code>: bounded cluster snapshots written just before a real failure is raised (see
+  <a href="#failure-evidence-dumps">Failure Evidence Dumps</a>).</p>
+</li>
+<li>
+<p><code>.data-collector/upgrade-script-&lt;timestamp&gt;/upgrade-script-stdout.log</code> and <code>-stderr.log</code>: the upgrade script's own output with <code>CLUSTER_PASSWORD</code> redacted. The child always writes
+  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree — and never the inherited streams either, because the
+  script receives the cluster password and pytest runs with <code>-s</code>. Without <code>--data-collector-path</code> the redacted logs live under the default <code>.data-collector/</code>;
+  with <code>--skip-data-collector</code> nothing is persisted at all, while the failure message still carries the redacted tails.</p>
+</li>
+<li>
+<p><code>.data-collector/&lt;encoded-class-plan-identity&gt;/...</code>: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.</p>
+</li>
 <li><code>.data-collector/&lt;encoded-test-node-identity&gt;/...</code>: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.</li>
 <li><code>.data-collector/...</code> at the root: session-level must-gather output when teardown cleanup fails.</li>
 </ul>
@@ -540,6 +566,53 @@ failed” to “which exact <code>Plan</code>, <code>Provider</code>, <code>Stor
 <blockquote>
 <p><strong>Tip:</strong> If you rerun the test suite, the base data collector path is recreated. Move or archive old artifacts first if you want to keep them.</p>
 </blockquote>
+<h2 id="failure-evidence-dumps">Failure Evidence Dumps</h2>
+<p><code>utilities/cluster_state.py::dump_cluster_state()</code> writes a bounded cluster snapshot immediately before a real failure is raised, so the analyzer never has to re-run the
+failing job to learn the cluster state. It is observation only and never raises: every probe reads the cluster through an <code>ocp_resources</code> wrapper on the run's <code>DynamicClient</code>
+(never the <code>oc</code> binary, never a generated kubeconfig), each probe is guarded on its own and a failure is logged into the snapshot itself, and the original exception is always the
+error you see. Each invocation writes one file, <code>cluster-state/&lt;UTC timestamp&gt;-&lt;scope&gt;-&lt;reason slug&gt;[-&lt;xdist worker&gt;].txt</code>, so parallel workers cannot collide.</p>
+<p>Two limits keep a snapshot from delaying the error it documents:</p>
+<ul>
+<li>
+<p><strong>Total deadline.</strong> One snapshot has 120 seconds of budget in total (<code>_SNAPSHOT_DEADLINE_SECONDS</code>, measured with <code>monotonic()</code>). Probes that would start after it expires are
+  not run: the file ends with <code># snapshot deadline reached after &lt;N&gt;s of 120s, &lt;M&gt; probes skipped</code>. A short snapshot is therefore visibly truncated, never silently mistaken for a
+  healthy cluster.</p>
+</li>
+<li>
+<p><strong>Size caps, per probe and per snapshot.</strong> Each probe's rendered output is capped at 512 KiB (<code>_MAX_PROBE_OUTPUT_BYTES</code>); a longer record keeps its head and closes with
+  <code>[truncated: &lt;N&gt; bytes omitted]</code>, and every container log keeps a bounded tail rather than the whole stream. A whole snapshot is additionally capped at 8 MiB
+  (<code>_MAX_SNAPSHOT_OUTPUT_BYTES</code>): once it is exhausted no further probe runs and the file closes with <code># snapshot size budget reached: &lt;M&gt; records not collected</code>. The
+  per-node daemon pods make the log volume grow with the cluster size, so the snapshot budget — not the per-probe cap — is what keeps a large cluster's dump bounded.</p>
+</li>
+</ul>
+<p>Collection has no fallback path: the probe set is the wrapper's own API calls, and a run that passes no client (for example <code>run_mtv_upgrade()</code> without one) skips the snapshot
+instead of reaching for a CLI. Under <code>--skip-data-collector</code> the collector path is resolved first and the dump returns before the first probe, so skip mode costs no API request.
+Every artifact is written with the resolved <code>CLUSTER_PASSWORD</code> redacted, and the header records that the data came from the run <code>DynamicClient</code> through <code>ocp_resources</code> wrappers.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>Where it fires</th>
+<th>What it collects</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>upgrade</code></td>
+<td>The upgrade script hits the outer wait budget, or exits non-zero after its own wait times out</td>
+<td><code>ClusterVersion</code>, <code>ClusterOperator</code> status plus the <code>machine-config</code> operator body, <code>MachineConfigPool</code> objects plus per-pool <code>ready</code>/<code>updated</code>/<code>degraded</code>/<code>unavailable</code> counters and conditions, nodes, Machine Config Operator pods with every container log (current and previous), <code>ImageDigestMirrorSet</code>, <code>ImageContentSourcePolicy</code>, the cluster-wide <code>Image</code> config, and the <code>openshift-mtv</code> CSVs</td>
+</tr>
+<tr>
+<td><code>storage</code></td>
+<td>A migration wait times out, or a migrated VM is confirmed unschedulable</td>
+<td>the target namespace's PVCs, DataVolumes and PersistentVolumes plus the full body of the non-Bound PVCs only, namespace events oldest first, storage classes, <code>openshift-storage</code> pods, and the current plus previous logs of the ceph-csi <code>csi-provisioner</code> and <code>csi-rbdplugin</code> containers (3000-line tails on the controller plugin, 500 on the per-node plugin), selected by the sidecar a pod runs rather than by its name — ODF names those pods <code>openshift-storage.rbd.csi.ceph.com-ctrlplugin-*</code> while upstream uses <code>csi-rbdplugin-provisioner-*</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>The target namespace is read defensively (attribute, transport and parse failures all degrade to no snapshot) and the dump is skipped when the read fails or
+<code>--skip-data-collector</code> is set, so collecting evidence can never replace the <code>MigrationPlanExecError</code> / <code>MigrationVmUnschedulableError</code> the caller is supposed to see.</p>
+<p>Deliberately <strong>not</strong> dumped: the generic <code>MigrationPlanExecError</code>. Expected-failure tests (<code>tests/plan_lifecycle/</code>, <code>TestPostHookRetainFailedVm</code>, resume-conversion) raise it on
+purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under <code>--skip-data-collector</code>.</p>
 <h2 id="must-gather-support">Must-Gather Support</h2>
 <p>The suite has built-in must-gather support. <code>run_plan_must_gather()</code> matches a failure to a specific plan and runs a targeted gather; <code>run_must_gather()</code>
 runs the full, cluster-wide gather. Both share image resolution and differ only in the arguments passed to the collector script.</p>
@@ -558,7 +631,13 @@ runs the full, cluster-wide gather. Both share image resolution and differ only 
 
 <p>What this means in practice:</p>
 <ul>
-<li>If the failure can be tied back to a specific plan, the gather is scoped to that plan with <code>/usr/bin/targeted</code>.</li>
+<li>
+<p>Machine Config Operator state before the image gather is covered by the upgrade-scope failure snapshot above (<code>dump_cluster_state()</code>), which reads the same MCP, node and MCO
+  pod evidence through the wrapper. No separate <code>oc adm inspect</code> dump runs any more.</p>
+</li>
+<li>
+<p>If the failure can be tied back to a specific plan, the gather is scoped to that plan with <code>/usr/bin/targeted</code>.</p>
+</li>
 <li>Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.</li>
 <li><code>pytest_exception_interact</code> records a failing class item. A <code>tryfirst</code> <code>pytest_runtest_protocol</code> wrapper clears stale <code>plan_resource</code> on entry to a different class-plan identity before setup hooks run, but preserves it across consecutive methods of the same plan. The pre-finalizer boundary binds the current Plan or explicit None, even if no failure is pending yet, and retains it for retries. Updates before that boundary are observed. If setup fails before this plan exists, the gather is full, not targeted.</li>
 <li>Setup and call failures queue one gather per class-plan instance per worker. Ordinary methods with the same class-scoped parameter indices share state; different plan parameter sets and same-named classes in different modules do not.</li>
@@ -882,6 +961,7 @@ later test in the same class.</p>
 <li><a href="#junit-output">JUnit Output</a></li>
 <li><a href="#ai-enrichment">AI Enrichment</a></li>
 <li><a href="#collected-resource-artifacts">Collected Resource Artifacts</a></li>
+<li><a href="#failure-evidence-dumps">Failure Evidence Dumps</a></li>
 <li><a href="#must-gather-support">Must-Gather Support</a></li>
 <li><a href="#common-failure-points">Common Failure Points</a><ul>
 <li><a href="#before-migration-starts">Before Migration Starts</a></li>

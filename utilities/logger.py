@@ -1,12 +1,68 @@
 import logging
 import multiprocessing
+import re
 import shutil
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from typing import Optional
 
-from simple_logger.logger import DuplicateFilter, WrapperLogFormatter
+from simple_logger.logger import DuplicateFilter, RedactingFilter, WrapperLogFormatter
 
 LOGGER = logging.getLogger(__name__)
+
+# Credential keys whose value must never reach the console or the log file. simple_logger ships the
+# redaction filter, so masking belongs on the handlers every record passes through - not in the
+# individual writers that happen to remember it.
+#
+# Two groups, because a key is only a credential when it is assigned: RedactingFilter masks the next
+# token after any match, so a bare "secret" would also eat the value in a message such as
+# "Storing Secret auto-abc123 in fixture store". Assignment keys therefore require a ':' or '=' and
+# a value, while "bearer" keeps the prefix form for "Authorization: Bearer <jwt>".
+_ASSIGNMENT_LOG_KEYS: list[str] = [
+    "password",
+    "passphrase",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "authorization",
+]
+# "Authorization: Bearer <jwt>" and "Authorization: Basic <base64>" put the credential after the
+# scheme, but a bare "basic" is ordinary prose ("basic pod info"), so only bearer stands alone.
+_PREFIX_LOG_PATTERNS: list[str] = [
+    r"(?P<label>\bauthorization\b\W+(?:bearer|basic)\s+)\S+",
+    r"(?P<label>\bbearer\s+)\S+",
+]
+
+
+class _CredentialRedactingFilter(RedactingFilter):
+    """RedactingFilter that masks assigned values, not every word after a keyword."""
+
+    def redact(self, msg: str) -> str:
+        """Replace credential values in a log record.
+
+        Args:
+            msg (str): Rendered log message.
+
+        Returns:
+            str: The message with credential values replaced by ``*****``.
+        """
+        for pattern in _PREFIX_LOG_PATTERNS:
+            msg = re.sub(pattern, r"\g<label>*****", msg, flags=re.IGNORECASE)
+        for pattern in _ASSIGNMENT_LOG_KEYS:
+            # Optional quotes on both sides, because repr and JSON forms quote the key and the value.
+            # A quoted value is consumed whole, so a multi-word value inside quotes cannot keep its
+            # tail after the first space. Each quote style is matched on its own, because a single
+            # class allowing either quote would end a double-quoted value at an apostrophe inside it
+            # and leak the rest. The scheme form comes first because "authorization" is also an
+            # assignment key: without it the scheme word survives as a value.
+            msg = re.sub(
+                rf"(['\"]?{pattern}['\"]?\s*[:=]\s*)"
+                rf"(?:(?:bearer|basic)\s+\S+|'[^']*'|\"[^\"]*\"|[^\s,'\"]+)",
+                r"\1*****",
+                msg,
+                flags=re.IGNORECASE,
+            )
+        return msg
 
 
 def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> QueueListener:
@@ -41,6 +97,10 @@ def setup_logging(log_level: int, log_file: str = "/tmp/pytest-tests.log") -> Qu
 
     console_handler = logging.StreamHandler()
     log_file_handler = RotatingFileHandler(filename=log_file, maxBytes=100 * 1024 * 1024, backupCount=20)
+
+    redacting_filter = _CredentialRedactingFilter(patterns=[*_PREFIX_LOG_PATTERNS, *_ASSIGNMENT_LOG_KEYS])
+    console_handler.addFilter(filter=redacting_filter)
+    log_file_handler.addFilter(filter=redacting_filter)
 
     log_queue = multiprocessing.Queue(maxsize=-1)  # type: ignore[var-annotated]
     log_listener = QueueListener(

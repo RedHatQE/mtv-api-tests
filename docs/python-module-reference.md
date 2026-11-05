@@ -25,8 +25,10 @@ Most test authors never import these modules directly. They consume them through
 | `utilities/hooks.py` | Forklift `Hook` CR creation and failure validation | `create_hook_if_configured()`, `validate_hook_failure_and_check_vms()` |
 | `utilities/provider_inventory.py` | Forklift inventory refresh and clone waits | `wait_for_cloned_vms_in_forklift_inventory()`, `validate_source_vms_exist()` |
 | `utilities/pytest_utils.py` | failure data collection, session teardown, JUnit enrichment | `collect_created_resources()`, `session_teardown()`, `enrich_junit_xml()` |
+| `utilities/data_collector.py` | the run's artifact directory, artifact-name timestamps and secret redaction, shared by every artifact writer | `configure_data_collector_path()`, `data_collector_path()`, `utc_timestamp()`, `redact_secret()` |
+| `utilities/cluster_state.py` | bounded, never-raising cluster snapshots for failures and the session-start baseline | `dump_cluster_state()`, `write_session_baseline()` |
 | `utilities/ssh_utils.py` | SSH into migrated VMs via `virtctl` port-forward plus `python-rrmngmnt` | `VMSSHConnection`, `SSHConnectionManager`, `create_vm_ssh_connection()` |
-| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()` |
+| `utilities/upgrade.py` | MTV operator upgrade run | `run_mtv_upgrade()`, `resolve_upgrade_timeout()` |
 | `libs/providers/` | one adapter per source provider type | `VMWareProvider`, `OvirtProvider`, `OpenStackProvider`, `OCPProvider`, `OVAProvider`, `HyperVProvider` |
 | `exceptions/exceptions.py` | every custom exception the suite raises | 24 exception classes, all in one module |
 
@@ -158,7 +160,36 @@ Deep Inspection (`Conversion` CR) lifecycle for both standalone and plan-driven 
 
 ### `utilities/upgrade.py`
 
-`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run.
+`run_mtv_upgrade()` runs the MTV operator upgrade used by the `upgrade` suite, with process-group timeouts so a stuck upgrade cannot hang the run. Its outer wait budget comes
+from `resolve_upgrade_timeout()`: the `--mtv-upgrade-timeout` option, then `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds, so the budget stays above the upgrade script's own
+internal waits and the script reports its own timeout instead of being killed by the harness. The script writes into a temporary directory that is deleted before the function
+returns; only the redacted text is persisted under `<data-collector>/upgrade-script-<timestamp>/`, so `CLUSTER_PASSWORD` never reaches the artifact tree, and `MtvUpgradeError`
+carries the tail of both redacted logs plus those paths. A missing or empty `cluster_password` raises before the script starts. A `scope="upgrade"` cluster-state snapshot is
+written before both the outer-timeout raise and the non-zero-exit raise, reading the cluster through the `client` the caller passes; without a client the snapshot is skipped rather than collected some other way.
+Under `--skip-data-collector` nothing is persisted: the child still writes its stdout and stderr into a
+temporary directory that is deleted before the function returns, and the error carries the redacted tails of both streams.
+
+### `utilities/cluster_state.py`
+
+`dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=..., client=..., data_collector_path=...)` writes one timestamped, bounded snapshot per failure and never
+raises, so the failing exception stays the error the caller sees. `client` is required: every probe reads the cluster through an `ocp_resources` wrapper (a small summary-list
+helper reads a kind's listing in one request), so collection uses no `oc` binary, no `subprocess` and no kubeconfig — a token never reaches the disk. There is no `ocp_resources`
+wrapper for the cluster-wide image config in this release, so that one probe reads `config.openshift.io/v1` `Image` through the client's generic kind API. Each probe runs under
+its own `try`/`except` over the exceptions the client can raise, including the wrapper's missing-API `NotImplementedError`, and renders as `[probe failed: …]` instead of escaping.
+`data_collector_path` overrides the configured root when given; the collector root is resolved first, so `--skip-data-collector` returns before the first probe, and every artifact
+is written with the resolved `CLUSTER_PASSWORD` redacted. Each snapshot also has a total budget (`_SNAPSHOT_DEADLINE_SECONDS`, 120 seconds, `monotonic()`): probes stop once it
+expires and the file closes with a "snapshot deadline reached … N probes skipped" record, so a hanging API server cannot delay the original error by minutes. Each probe's output is
+capped at `_MAX_PROBE_OUTPUT_BYTES` (512 KiB) with an explicit `[truncated: <N> bytes omitted]` marker. `write_session_baseline()` writes `<data-collector>/session-start/cluster.txt`
+and `run-identity.txt` once per session from `pytest_sessionstart`, tolerating a missing `.git` (the revision is read from git's files, no subprocess) and skipping cleanly under
+`--skip-data-collector`; it builds a client for the cluster probes when none is passed and skips the cluster section if that fails, so the hook never raises. Only the xdist
+controller (or the sole process without xdist) wipes the data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces
+an existing snapshot.
+
+### `utilities/data_collector.py`
+
+Holds the resolved artifact directory as module state, because most writers have no pytest `config` to read it from: `configure_data_collector_path()` is called once in
+`pytest_sessionstart` (`None` under `--skip-data-collector`), `data_collector_path()` returns it, `utc_timestamp()` names timestamped artifacts, and `redact_secret()` keeps the
+cluster password out of every artifact.
 
 ## Validation
 

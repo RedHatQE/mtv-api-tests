@@ -82,6 +82,7 @@ A few pytest options change what diagnostics you get back:
 - `--skip-teardown` leaves created resources in place so you can inspect them live.
 - `--openshift-python-wrapper-log-debug` turns on deeper wrapper-level logging, which is useful when CR creation or wait logic is failing.
 - `--providers-json` points at a providers file other than the default, which is the fastest way to tell "wrong file" from "wrong provider".
+- `--mtv-upgrade-timeout` sets the outer wait budget of the upgrade script; raise it when an upgrade legitimately takes longer than 90 minutes.
 
 `--openshift-python-wrapper-log-debug` works by exporting `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` into the environment at session start,
 so it affects every wrapper log record in the run, not just a single test.
@@ -212,6 +213,21 @@ Unless you use `--skip-data-collector`, the suite prepares a clean `.data-collec
 The most important files are:
 
 - `.data-collector/resources.json`: a dump of tracked resources created during the run.
+- `.data-collector/session-start/cluster.txt`: the cluster baseline captured at session start — `ClusterVersion`, a `ClusterOperator` summary, the `MachineConfigPool` counters and conditions (summaries, not the pool manifests), a `Node` summary, and the installed MTV and OpenShift Virtualization CSV versions
+  and conditions, nodes, and the `openshift-mtv` / `openshift-cnv` CSVs. It answers "was the cluster already unhealthy before this run?". The file is written once per run by
+  the xdist controller (or the sole process without xdist) before any worker starts, and workers never wipe or rewrite it. The probes read the cluster through the run's
+  `DynamicClient` and the `ocp_resources` wrappers, so no `oc` binary and no kubeconfig are involved; a client is built from the resolved credentials when none is passed in,
+  and if that fails the baseline is logged and skipped, never raised. Still set `--skip-data-collector` to disable it.
+- `.data-collector/session-start/run-identity.txt`: the checkout revision read from git's own files (no subprocess), the pytest invocation, the authenticated user, and whether
+  `--skip-teardown` / `--skip-data-collector` were set. Written once per run, like `cluster.txt`. Credentials never reach this file: the value of every credential-ish `--tc`
+  (`password`, `token`, `secret`, `api_key`, `apikey`, `credential`), any URL userinfo (`scheme://user:pass@host` → `scheme://***@host`) and the resolved cluster password are
+  replaced with `***`. Both `--tc=key:value` and the split `--tc key:value` forms are covered.
+- `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see
+  [Failure Evidence Dumps](#failure-evidence-dumps)).
+- `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output with `CLUSTER_PASSWORD` redacted. The child always writes
+  into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree — and never the inherited streams either, because the
+  script receives the cluster password and pytest runs with `-s`. Without `--data-collector-path` the redacted logs live under the default `.data-collector/`;
+  with `--skip-data-collector` nothing is persisted at all, while the failure message still carries the redacted tails.
 - `.data-collector/<encoded-class-plan-identity>/...`: must-gather output per failing class-plan instance per worker. The identity includes the class node ID, class-scoped parameter indices and worker ID.
 - `.data-collector/<encoded-test-node-identity>/...`: must-gather output per failing standalone test per worker. Identities use reversible percent encoding to avoid path collisions.
 - `.data-collector/...` at the root: session-level must-gather output when teardown cleanup fails.
@@ -229,6 +245,38 @@ The suite stores resource metadata as it creates objects, including `name`, `nam
 failed” to “which exact `Plan`, `Provider`, `StorageMap`, or `NetworkMap` should I inspect?”
 
 > **Tip:** If you rerun the test suite, the base data collector path is recreated. Move or archive old artifacts first if you want to keep them.
+
+## Failure Evidence Dumps
+
+`utilities/cluster_state.py::dump_cluster_state()` writes a bounded cluster snapshot immediately before a real failure is raised, so the analyzer never has to re-run the
+failing job to learn the cluster state. It is observation only and never raises: every probe reads the cluster through an `ocp_resources` wrapper on the run's `DynamicClient`
+(never the `oc` binary, never a generated kubeconfig), each probe is guarded on its own and a failure is logged into the snapshot itself, and the original exception is always the
+error you see. Each invocation writes one file, `cluster-state/<UTC timestamp>-<scope>-<reason slug>[-<xdist worker>].txt`, so parallel workers cannot collide.
+
+Two limits keep a snapshot from delaying the error it documents:
+
+- **Total deadline.** One snapshot has 120 seconds of budget in total (`_SNAPSHOT_DEADLINE_SECONDS`, measured with `monotonic()`). Probes that would start after it expires are
+  not run: the file ends with `# snapshot deadline reached after <N>s of 120s, <M> probes skipped`. A short snapshot is therefore visibly truncated, never silently mistaken for a
+  healthy cluster.
+- **Size caps, per probe and per snapshot.** Each probe's rendered output is capped at 512 KiB (`_MAX_PROBE_OUTPUT_BYTES`); a longer record keeps its head and closes with
+  `[truncated: <N> bytes omitted]`, and every container log keeps a bounded tail rather than the whole stream. A whole snapshot is additionally capped at 8 MiB
+  (`_MAX_SNAPSHOT_OUTPUT_BYTES`): once it is exhausted no further probe runs and the file closes with `# snapshot size budget reached: <M> records not collected`. The
+  per-node daemon pods make the log volume grow with the cluster size, so the snapshot budget — not the per-probe cap — is what keeps a large cluster's dump bounded.
+
+Collection has no fallback path: the probe set is the wrapper's own API calls, and a run that passes no client (for example `run_mtv_upgrade()` without one) skips the snapshot
+instead of reaching for a CLI. Under `--skip-data-collector` the collector path is resolved first and the dump returns before the first probe, so skip mode costs no API request.
+Every artifact is written with the resolved `CLUSTER_PASSWORD` redacted, and the header records that the data came from the run `DynamicClient` through `ocp_resources` wrappers.
+
+| Scope | Where it fires | What it collects |
+| --- | --- | --- |
+| `upgrade` | The upgrade script hits the outer wait budget, or exits non-zero after its own wait times out | `ClusterVersion`, `ClusterOperator` status plus the `machine-config` operator body, `MachineConfigPool` objects plus per-pool `ready`/`updated`/`degraded`/`unavailable` counters and conditions, nodes, Machine Config Operator pods with every container log (current and previous), `ImageDigestMirrorSet`, `ImageContentSourcePolicy`, the cluster-wide `Image` config, and the `openshift-mtv` CSVs |
+| `storage` | A migration wait times out, or a migrated VM is confirmed unschedulable | the target namespace's PVC and DataVolume listings, the full body of at most 20 non-Bound PVCs (the listing names every claim with its phase), the namespace's events of the last 24 hours oldest first, the body of the storage class under test (the `--tc=storage_class` value the PVC canary also binds on), the PersistentVolumes the bound claims of that class point at, and the `VolumeAttachment` of each of those volumes with driver, node, `attached`, `attachError` and `detachError`. Container logs are collected for two pod selections — every pod whose `spec.volumes` references one of those claims, and the storage driver's pods — as current logs plus, for containers that have restarted at least once, their previous logs. The driver is named by the cluster, never hardcoded: the class's `provisioner` while its claim is Pending (no volume, so no attachment to read), the attachment's `attacher` once it binds. A `kubernetes.io/no-provisioner` class names no driver of its own, so it contributes nothing to the selection: a claim on such a class still gets driver pods when its bound volume has an attachment that names a driver, and the one-line notice appears only when no attachment supplies a name either. Driver pods are collected only when the namespace holds a claim of that class |
+
+The target namespace is read defensively (attribute, transport and parse failures all degrade to no snapshot) and the dump is skipped when the read fails or
+`--skip-data-collector` is set, so collecting evidence can never replace the `MigrationPlanExecError` / `MigrationVmUnschedulableError` the caller is supposed to see.
+
+Deliberately **not** dumped: the generic `MigrationPlanExecError`. Expected-failure tests (`tests/plan_lifecycle/`, `TestPostHookRetainFailedVm`, resume-conversion) raise it on
+purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under `--skip-data-collector`.
 
 ## Must-Gather Support
 
@@ -251,6 +299,8 @@ runs the full, cluster-wide gather. Both share image resolution and differ only 
 
 What this means in practice:
 
+- Machine Config Operator state before the image gather is covered by the upgrade-scope failure snapshot above (`dump_cluster_state()`), which reads the same MCP, node and MCO
+  pod evidence through the wrapper. No separate `oc adm inspect` dump runs any more.
 - If the failure can be tied back to a specific plan, the gather is scoped to that plan with `/usr/bin/targeted`.
 - Otherwise the gather runs unscoped and collects everything. That path is slow, so it is worth avoiding.
 - `pytest_exception_interact` records a failing class item. A `tryfirst` `pytest_runtest_protocol` wrapper clears stale `plan_resource` on entry to a different class-plan identity before setup hooks run, but preserves it across consecutive methods of the same plan. The pre-finalizer boundary binds the current Plan or explicit None, even if no failure is pending yet, and retains it for retries. Updates before that boundary are observed. If setup fails before this plan exists, the gather is full, not targeted.

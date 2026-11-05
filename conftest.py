@@ -56,12 +56,14 @@ from libs.providers.openshift import OCPProvider
 from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.constants import MTV_OPERATOR_NAME
+from utilities.cluster_state import write_session_baseline
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from utilities.copyoffload_migration import (
     apply_copyoffload_vm_name_override,
     resolve_dedicated_esxi_host,
     resolve_non_dedicated_esxi_host,
 )
+from utilities.data_collector import configure_data_collector_path
 from utilities.debug import remote_debugger_enabled, remote_post_mortem
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
@@ -146,6 +148,18 @@ def pytest_addoption(parser):
         "--providers-json",
         help="Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json",
         default=None,
+    )
+
+    mtv_upgrade_group = parser.getgroup(name="MTV Upgrade")
+    mtv_upgrade_group.addoption(
+        "--mtv-upgrade-timeout",
+        type=int,
+        default=None,
+        help=(
+            "Outer timeout in seconds for the MTV upgrade script wait. Falls back to "
+            "MTV_UPGRADE_TIMEOUT_SECONDS, then 5400 seconds. The upgrade script owns its own internal "
+            "waits; this only guards against a wedged process"
+        ),
     )
 
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
@@ -285,9 +299,26 @@ def pytest_sessionstart(session):
     _session_store = get_fixture_store(session)
     _session_store["teardown"] = {}
 
+    # pytest_sessionstart runs on the xdist controller and in every worker, but the controller runs
+    # it before spawning the workers. Only the controller may wipe the root and write the baseline:
+    # a worker wipe would remove the session-start baseline and every earlier worker's artifacts.
+    is_xdist_worker = getattr(session.config, "workerinput", None) is not None
+
+    _data_collector_path: Path | None = None
     if not session.config.getoption("skip_data_collector"):
         _data_collector_path = Path(session.config.getoption("data_collector_path"))
-        prepare_base_path(base_path=_data_collector_path)
+        if is_xdist_worker:
+            _data_collector_path.mkdir(parents=True, exist_ok=True)
+        else:
+            prepare_base_path(base_path=_data_collector_path)
+    configure_data_collector_path(_data_collector_path)
+
+    if not is_dry_run(session.config) and not is_xdist_worker:
+        write_session_baseline(
+            pytest_args=session.config.invocation_params.args,
+            skip_teardown=session.config.getoption("skip_teardown"),
+            skip_data_collector=session.config.getoption("skip_data_collector"),
+        )
 
     tests_log_file = session.config.getoption("log_file") or "pytest-tests.log"
     if os.path.exists(tests_log_file):

@@ -16,6 +16,7 @@ from ocp_resources.virtual_machine_instance import VirtualMachineInstance
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+from urllib3.exceptions import MaxRetryError, ProtocolError
 
 from exceptions.exceptions import (
     MigrationNotFoundError,
@@ -27,6 +28,8 @@ from exceptions.exceptions import (
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
+from utilities.cluster_state import ClusterStateProbeTimeout, dump_cluster_state, read_with_deadline
+from utilities.data_collector import data_collector_path
 from utilities.naming import resolve_destination_vm_name
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
@@ -691,6 +694,56 @@ def _get_unschedulable_destination_vm(plan: Plan) -> tuple[str, str] | None:
     return None
 
 
+def _plan_target_namespace(plan: Plan) -> str | None:
+    """Read the migration target namespace without masking the failure being reported.
+
+    Args:
+        plan (Plan): Plan whose migration is being waited on.
+
+    Returns:
+        str | None: The target namespace, or None when the read failed or the spec carries none.
+    """
+    try:
+        # Bounded read: the wrapper sets no request timeout, so a silent API server must not block
+        # the failure path this namespace is needed for.
+        return read_with_deadline(probe=lambda: plan.instance.spec.targetNamespace)
+    except (
+        ApiException,
+        DynamicApiError,
+        AttributeError,
+        MaxRetryError,
+        OSError,
+        ProtocolError,
+        TypeError,
+        ValueError,
+        ClusterStateProbeTimeout,
+    ) as err:
+        LOGGER.info(f"Could not read the target namespace of plan '{plan.name}', skipping the snapshot: {err}")
+        return None
+
+
+def _dump_plan_storage_state(plan: Plan, *, reason: str) -> None:
+    """Collect a storage snapshot for a plan failure, at no cost when evidence is disabled.
+
+    Args:
+        plan (Plan): Plan the failure belongs to.
+        reason (str): Short cause, used in the snapshot file name and header.
+    """
+    # Resolved before the namespace so --skip-data-collector costs no API request either.
+    if data_collector_path() is None:
+        return
+    namespace = _plan_target_namespace(plan=plan)
+    if namespace is None:
+        return
+    dump_cluster_state(
+        reason=reason,
+        scope="storage",
+        namespace=namespace,
+        client=plan.client,
+        subject=plan.name,
+    )
+
+
 def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]) -> None:
     """Count consecutive destination scheduler rejections per VM and fail once they are confirmed.
 
@@ -722,6 +775,7 @@ def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]
         f"(check {hits}/{_UNSCHEDULABLE_CONFIRMATIONS_REQUIRED}): {scheduler_message}"
     )
     if hits >= _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED:
+        _dump_plan_storage_state(plan=plan, reason=f"vm-unschedulable-{vm_name}")
         raise MigrationVmUnschedulableError(vm_name=vm_name, scheduler_message=scheduler_message)
 
 
@@ -773,7 +827,11 @@ def wait_for_migration_complate(
                 next_unschedulable_check = monotonic() + _UNSCHEDULABLE_CHECK_INTERVAL_SECONDS
                 _confirm_unschedulable_destination_vm(plan=plan, hits_by_vm=unschedulable_hits)
 
-    except (TimeoutExpiredError, MigrationPlanExecError):
+    except (TimeoutExpiredError, MigrationPlanExecError) as err:
+        # Storage evidence is collected for a wait timeout only: expected-failure tests raise the
+        # MigrationPlanExecError below on purpose and must not pay for a dump.
+        if isinstance(err, TimeoutExpiredError):
+            _dump_plan_storage_state(plan=plan, reason="plan-wait-timeout")
         raise MigrationPlanExecError(
             f"Plan {plan.name} failed to reach the expected condition. \nstatus:\n\t{plan.instance}"
         )

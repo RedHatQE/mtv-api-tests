@@ -194,3 +194,19 @@ class ConversionError(Exception):
         self.phase = phase
         detail = f": {message}" if message else ""
         super().__init__(f"Conversion '{conversion_name}' reached phase '{phase}'{detail}")
+
+
+class ClusterStateProbeTimeout(Exception):
+    """Raised internally when a cluster-state probe did not finish inside the snapshot budget.
+
+    The probe runs on a daemon thread and cannot be cancelled; this signals the snapshot to stop
+    waiting so the failure it is documenting is reported on time.
+    """
+
+
+class ClusterStateProbeCrashed(Exception):
+    """Raised internally when a cluster-state probe raised an exception the snapshot does not model.
+
+    Without it an empty probe outcome would be indistinguishable from a probe that legitimately
+    read nothing, and the artifact would show a healthy null for a read that never happened.
+    """

@@ -381,6 +381,16 @@
 <td><code>collect_created_resources()</code>, <code>session_teardown()</code>, <code>enrich_junit_xml()</code></td>
 </tr>
 <tr>
+<td><code>utilities/data_collector.py</code></td>
+<td>the run's artifact directory, artifact-name timestamps and secret redaction, shared by every artifact writer</td>
+<td><code>configure_data_collector_path()</code>, <code>data_collector_path()</code>, <code>utc_timestamp()</code>, <code>redact_secret()</code></td>
+</tr>
+<tr>
+<td><code>utilities/cluster_state.py</code></td>
+<td>bounded, never-raising cluster snapshots for failures and the session-start baseline</td>
+<td><code>dump_cluster_state()</code>, <code>write_session_baseline()</code></td>
+</tr>
+<tr>
 <td><code>utilities/ssh_utils.py</code></td>
 <td>SSH into migrated VMs via <code>virtctl</code> port-forward plus <code>python-rrmngmnt</code></td>
 <td><code>VMSSHConnection</code>, <code>SSHConnectionManager</code>, <code>create_vm_ssh_connection()</code></td>
@@ -388,7 +398,7 @@
 <tr>
 <td><code>utilities/upgrade.py</code></td>
 <td>MTV operator upgrade run</td>
-<td><code>run_mtv_upgrade()</code></td>
+<td><code>run_mtv_upgrade()</code>, <code>resolve_upgrade_timeout()</code></td>
 </tr>
 <tr>
 <td><code>libs/providers/</code></td>
@@ -557,7 +567,32 @@ helpers <code>ensure_secure_shared_lock_dir()</code>, <code>get_forkliftcontroll
 <code>wait_for_di_snapshot_cleanup()</code>, <code>verify_di_results()</code>, <code>verify_captured_di_results()</code>, <code>verify_di_concerns_block_migration()</code>, <code>get_plan_conversion_crs()</code>,
 <code>wait_for_critical_conditions()</code>, <code>create_di_capture_callback()</code>.</p>
 <h3 id="utilitiesupgradepy"><code>utilities/upgrade.py</code></h3>
-<p><code>run_mtv_upgrade()</code> runs the MTV operator upgrade used by the <code>upgrade</code> suite, with process-group timeouts so a stuck upgrade cannot hang the run.</p>
+<p><code>run_mtv_upgrade()</code> runs the MTV operator upgrade used by the <code>upgrade</code> suite, with process-group timeouts so a stuck upgrade cannot hang the run. Its outer wait budget comes
+from <code>resolve_upgrade_timeout()</code>: the <code>--mtv-upgrade-timeout</code> option, then <code>MTV_UPGRADE_TIMEOUT_SECONDS</code>, then 5400 seconds, so the budget stays above the upgrade script's own
+internal waits and the script reports its own timeout instead of being killed by the harness. The script writes into a temporary directory that is deleted before the function
+returns; only the redacted text is persisted under <code>&lt;data-collector&gt;/upgrade-script-&lt;timestamp&gt;/</code>, so <code>CLUSTER_PASSWORD</code> never reaches the artifact tree, and <code>MtvUpgradeError</code>
+carries the tail of both redacted logs plus those paths. A missing or empty <code>cluster_password</code> raises before the script starts. A <code>scope="upgrade"</code> cluster-state snapshot is
+written before both the outer-timeout raise and the non-zero-exit raise, reading the cluster through the <code>client</code> the caller passes; without a client the snapshot is skipped rather than collected some other way.
+Under <code>--skip-data-collector</code> nothing is persisted: the child still writes its stdout and stderr into a
+temporary directory that is deleted before the function returns, and the error carries the redacted tails of both streams.</p>
+<h3 id="utilitiescluster_statepy"><code>utilities/cluster_state.py</code></h3>
+<p><code>dump_cluster_state(reason=..., scope="upgrade"|"storage", namespace=..., client=..., data_collector_path=...)</code> writes one timestamped, bounded snapshot per failure and never
+raises, so the failing exception stays the error the caller sees. <code>client</code> is required: every probe reads the cluster through an <code>ocp_resources</code> wrapper (a small summary-list
+helper reads a kind's listing in one request), so collection uses no <code>oc</code> binary, no <code>subprocess</code> and no kubeconfig — a token never reaches the disk. There is no <code>ocp_resources</code>
+wrapper for the cluster-wide image config in this release, so that one probe reads <code>config.openshift.io/v1</code> <code>Image</code> through the client's generic kind API. Each probe runs under
+its own <code>try</code>/<code>except</code> over the exceptions the client can raise, including the wrapper's missing-API <code>NotImplementedError</code>, and renders as <code>[probe failed: …]</code> instead of escaping.
+<code>data_collector_path</code> overrides the configured root when given; the collector root is resolved first, so <code>--skip-data-collector</code> returns before the first probe, and every artifact
+is written with the resolved <code>CLUSTER_PASSWORD</code> redacted. Each snapshot also has a total budget (<code>_SNAPSHOT_DEADLINE_SECONDS</code>, 120 seconds, <code>monotonic()</code>): probes stop once it
+expires and the file closes with a "snapshot deadline reached … N probes skipped" record, so a hanging API server cannot delay the original error by minutes. Each probe's output is
+capped at <code>_MAX_PROBE_OUTPUT_BYTES</code> (512 KiB) with an explicit <code>[truncated: &lt;N&gt; bytes omitted]</code> marker. <code>write_session_baseline()</code> writes <code>&lt;data-collector&gt;/session-start/cluster.txt</code>
+and <code>run-identity.txt</code> once per session from <code>pytest_sessionstart</code>, tolerating a missing <code>.git</code> (the revision is read from git's files, no subprocess) and skipping cleanly under
+<code>--skip-data-collector</code>; it builds a client for the cluster probes when none is passed and skips the cluster section if that fails, so the hook never raises. Only the xdist
+controller (or the sole process without xdist) wipes the data-collector root and writes the baseline, and the files are created exclusively, so a concurrent writer never replaces
+an existing snapshot.</p>
+<h3 id="utilitiesdata_collectorpy"><code>utilities/data_collector.py</code></h3>
+<p>Holds the resolved artifact directory as module state, because most writers have no pytest <code>config</code> to read it from: <code>configure_data_collector_path()</code> is called once in
+<code>pytest_sessionstart</code> (<code>None</code> under <code>--skip-data-collector</code>), <code>data_collector_path()</code> returns it, <code>utc_timestamp()</code> names timestamped artifacts, and <code>redact_secret()</code> keeps the
+cluster password out of every artifact.</p>
 <h2 id="validation">Validation</h2>
 <h3 id="utilitiespost_migrationpy"><code>utilities/post_migration.py</code></h3>
 <p>Validation of migrated VMs (2083 lines). <code>check_vms()</code> is the entry point used by <code>test_check_vms</code>; everything else is a focused check it composes. <code>verify_excluded_disks()</code> orchestrates the disk-exclusion verification (per-VM kept-disk loop plus the namespace PVC-count assertion) and delegates per-VM disk-identity verification to the vSphere provider module <code>libs.providers.vmware.verify_kept_disks_attached</code>, since exclude_disks uses vSphere bus addresses.</p>
@@ -867,6 +902,8 @@ helpers.</p>
 <li><a href="#utilitieshookspy">utilities/hooks.py</a></li>
 <li><a href="#utilitiesdeep_inspectionpy">utilities/deep_inspection.py</a></li>
 <li><a href="#utilitiesupgradepy">utilities/upgrade.py</a></li>
+<li><a href="#utilitiescluster_statepy">utilities/cluster_state.py</a></li>
+<li><a href="#utilitiesdata_collectorpy">utilities/data_collector.py</a></li>
 </ul>
 </li>
 <li><a href="#validation">Validation</a><ul>

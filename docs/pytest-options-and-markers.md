@@ -457,7 +457,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 
 ## Suite-specific pytest options
 
-`conftest.py` registers six custom options across five groups. All of them are real flags you can pass on any run.
+`conftest.py` registers seven custom options across six groups. All of them are real flags you can pass on any run.
 
 ```python
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -477,6 +477,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--providers-json",
         help="Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json",
         default=None,
+    )
+
+    mtv_upgrade_group = parser.getgroup(name="MTV Upgrade")
+    mtv_upgrade_group.addoption(
+        "--mtv-upgrade-timeout",
+        type=int,
+        default=None,
+        help=(
+            "Outer timeout in seconds for the MTV upgrade script wait. Falls back to "
+            "MTV_UPGRADE_TIMEOUT_SECONDS, then 5400 seconds. The upgrade script owns its own internal "
+            "waits; this only guards against a wedged process"
+        ),
     )
 
     data_collector_group.addoption("--skip-data-collector", action="store_true", help="Collect data for failed tests")
@@ -501,6 +513,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 | `--data-collector-path PATH` | `DataCollector` | Output directory; default `.data-collector`. Wiped at session start, written at session finish |
 | `--skip-teardown` | `Teardown` | Preserves resources after the run instead of deleting them |
 | `--openshift-python-wrapper-log-debug` | `Openshift Python Wrapper` | Sets `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` during session startup |
+| `--mtv-upgrade-timeout SECONDS` | `MTV Upgrade` | Outer wait budget for the upgrade script. Falls back to `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds. It only guards against a wedged process: the script owns its own internal waits, so this budget must stay above them |
 
 The real-run guard for required config lives in `pytest_sessionstart` too:
 

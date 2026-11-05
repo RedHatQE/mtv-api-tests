@@ -349,7 +349,7 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         # image resolution as a fallback to the CSV image, not a gather that cannot run.
         if not any(_is_missing_resource_api(ex, resource) for resource in (Subscription, ClusterServiceVersion)):
             raise
-        LOGGER.exception(f"Must-gather resource API is unavailable. {ex}")
+        LOGGER.exception(f"Must-gather resource API is unavailable, no bundle in '{data_collector_path}'. {ex}")
         return False
     except (
         CalledProcessError,
@@ -370,7 +370,7 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
     ) as ex:
         # Retryable operational failures: log and report the gather as not run; the caller keeps
         # the class-plan identity pending for the session-end retry.
-        LOGGER.exception(f"Failed to run must-gather. {ex}")
+        LOGGER.exception(f"Failed to run must-gather, no bundle in '{data_collector_path}'. {ex}")
         return False
 
 
@@ -388,10 +388,14 @@ def collect_must_gather_for_item(node: pytest.Item, artifact_name: str, plan_obj
     # Percent encoding is reversible, unlike replacing punctuation with dashes.
     data_collector_path = Path(node.session.config.getoption("data_collector_path")) / quote(artifact_name, safe="")
     if plan_obj is None:
-        return run_must_gather(data_collector_path=data_collector_path)
+        gathered = run_must_gather(data_collector_path=data_collector_path)
+    else:
+        plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
+        gathered = run_plan_must_gather(data_collector_path=data_collector_path, plan=plan)
 
-    plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
-    return run_plan_must_gather(data_collector_path=data_collector_path, plan=plan)
+    if not gathered:
+        LOGGER.warning(f"No must-gather bundle for '{artifact_name}' in '{data_collector_path}'")
+    return gathered
 
 
 def class_plan_identity(item: pytest.Item | None) -> str | None:
@@ -543,6 +547,7 @@ def _collect_pending_class_must_gather(session: pytest.Session, identity: str, i
         pending.pop(identity, None)
         mark_class_must_gather_collected(session, identity)
         return True
+    LOGGER.warning(f"Must-gather for class-plan '{identity}' produced no bundle, keeping it pending for the retry")
     return False
 
 

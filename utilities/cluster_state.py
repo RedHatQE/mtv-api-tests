@@ -1,0 +1,1881 @@
+"""Bounded, never-raising cluster state snapshots for failure and session-start evidence.
+
+Every probe reads the cluster through ``ocp_resources`` wrappers on the run's ``DynamicClient``:
+collection never shells out to the ``oc`` CLI and never builds a kubeconfig or writes a token to
+disk. Keep it that way — a new probe belongs to a wrapper class, not to a subprocess.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import socket
+import threading
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from functools import partial
+from pathlib import Path
+from time import monotonic
+from typing import TYPE_CHECKING, Any, Literal
+
+from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
+from urllib3.exceptions import MaxRetryError, ProtocolError
+from ocp_resources.cluster_operator import ClusterOperator
+from ocp_resources.cluster_service_version import ClusterServiceVersion
+from ocp_resources.cluster_version import ClusterVersion
+from ocp_resources.datavolume import DataVolume
+from ocp_resources.event import Event
+from ocp_resources.exceptions import ClientWithBasicAuthError
+from ocp_resources.image_content_source_policy import ImageContentSourcePolicy
+from ocp_resources.image_config_openshift_io import Image
+from ocp_resources.image_digest_mirror_set import ImageDigestMirrorSet
+from ocp_resources.machine_config_pool import MachineConfigPool
+from ocp_resources.node import Node
+from ocp_resources.persistent_volume import PersistentVolume
+from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
+from ocp_resources.pod import Pod
+from ocp_resources.resource import NamespacedResource, Resource
+from ocp_resources.storage_class import StorageClass
+from ocp_resources.user import User
+from ocp_resources.volume_attachment import VolumeAttachment
+from pytest_testconfig import config as py_config
+from simple_logger.logger import get_logger
+
+from exceptions.exceptions import ClusterStateProbeCrashed, ClusterStateProbeTimeout
+from utilities.data_collector import data_collector_path as shared_data_collector_path
+from utilities.data_collector import redact_secret, utc_timestamp
+from utilities.utils import get_cluster_client, resolve_cluster_credential
+
+if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
+
+LOGGER = get_logger(name=__name__)
+
+# A snapshot must never delay the failure it documents: the storage scope alone can run dozens of
+# probes, so a hanging API server would otherwise cost minutes before the error shows.
+_SNAPSHOT_DEADLINE_SECONDS = 120
+# One probe's recorded output is capped so a busy cluster cannot inflate the artifact (and the
+# memory used to build it) exactly when the disk is already the failing resource.
+_MAX_PROBE_OUTPUT_BYTES = 512 * 1024
+_MAX_SNAPSHOT_OUTPUT_BYTES = 8 * 1024 * 1024
+# A client build performs an OAuth/API round trip; bound it so session start is never blocked.
+_CLIENT_BUILD_BUDGET_SECONDS = 60
+_TRUNCATION_MARKER = "[truncated: {omitted} bytes omitted]"
+_MCO_NAMESPACE = "openshift-machine-config-operator"
+# The MTV namespace is configurable (--tc=mtv_namespace:), so it is read from the run config.
+_MTV_NAMESPACE_CONFIG_KEY = "mtv_namespace"
+_CNV_NAMESPACE = "openshift-cnv"
+_MACHINE_CONFIG_OPERATOR = "machine-config"
+_CLUSTER_VERSION_NAME = "version"
+_CLUSTER_IMAGE_NAME = "cluster"
+# ``~`` is the API's self-subject name for the authenticated user, the documented ``oc whoami``.
+_CURRENT_USER_NAME = "~"
+# The storage class under test is an input, not something to discover: it arrives in
+# --tc=storage_class and is the same value the pre-test PVC canary binds a claim on.
+_STORAGE_CLASS_CONFIG_KEY = "storage_class"
+# One claim's consumers are the importer/populator and launcher pods; they log at most a few
+# thousand lines each.
+_STORAGE_CLAIM_LOG_TAIL_LINES = 1000
+# A driver's pods exist once per node and repeat the same lines, so a failure tail is enough.
+_DRIVER_LOG_TAIL_LINES = 300
+# A storage class with this provisioner is bound by hand, so no driver pod serves it.
+_NO_PROVISIONER = "kubernetes.io/no-provisioner"
+# The MCO pods carry a stable k8s-app label; their names encode the node and change between
+# releases, so the label - not the name - is what a snapshot may rely on.
+_MCO_POD_LABEL_SELECTOR = "k8s-app in (machine-config-operator,machine-config-controller,machine-config-daemon)"
+_MCO_LOG_TAIL_LINES = 500
+# Non-Bound PVC bodies carry their own event history and can be tens of KiB each on a full disk;
+# the listing above already names every PVC with its phase.
+_MAX_PENDING_PVC_DUMPS = 20
+# Events of a stalled migration can be hours old, so the lookback covers the whole wait budget.
+_EVENT_LOOKBACK_SECONDS = 24 * 60 * 60
+_GIT_PACKED_REFS_NAME = "packed-refs"
+_HTTP_BAD_REQUEST = 400
+# Nothing here bounds a Kubernetes call from the socket side: the wrapper exposes no per-request
+# timeout, and urllib3 sets the connection timeout from _request_timeout, which the wrappers never
+# pass - a process-wide socket default does NOT bound them (measured: a client request to a
+# blackholed address hung past 120s with socket.setdefaulttimeout(3)). Every read the snapshot
+# performs goes through _call_within_budget instead.
+
+
+_NODE_ROLE_LABEL_PREFIX = "node-role.kubernetes.io/"
+# Only used to reach a kind's API handle through its wrapper class; nothing is read for it.
+_KIND_HANDLE_NAME = "cluster-state-probe"
+
+
+# Handle for a listing across every namespace; the wrapper's own name for it.
+_ALL_NAMESPACES = "*"
+_PROBE_LABEL_PREFIX = "### "
+_SECTION_SEPARATOR = "\n\n"
+_SNAPSHOT_DIRECTORY = "cluster-state"
+_SESSION_START_DIRECTORY = "session-start"
+_SESSION_START_CLUSTER_NAME = "cluster.txt"
+_SESSION_START_RUN_IDENTITY_NAME = "run-identity.txt"
+_GIT_HEAD_FALLBACK = "unknown"
+_GIT_REF_PREFIX = "ref: "
+_REASON_SLUG_MAX_LENGTH = 60
+_REASON_SLUG_SEPARATOR = "-"
+_UNSPECIFIED_REASON = "unspecified"
+_TC_ARGUMENT_PREFIX = "--tc="
+_TC_ARGUMENT_FLAG = "--tc"
+_TC_KEY_SEPARATOR = ":"
+_REDACTED_VALUE = "***"
+_OUTPUT_ENCODING = "utf-8"
+# Credential-ish ``--tc`` keys whose value must never reach an artifact.
+_CREDENTIAL_KEY_PATTERN = re.compile(r"password|token|secret|api_key|apikey|credential", re.IGNORECASE)
+_URL_USERINFO_PATTERN = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)[^/@\s]+@")
+# The wrapper raises NotImplementedError when a kind is absent from the cluster's API discovery
+# (IDMS on a cluster that only ships ICSP, for example): an empty probe, not a crash. A connection
+# that cannot be established at all surfaces as MaxRetryError, which must not replace the failure
+# the snapshot is describing.
+_PROBE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ApiException,
+    DynamicApiError,
+    ProtocolError,
+    MaxRetryError,
+    AttributeError,
+    KeyError,
+    TypeError,
+    ValueError,
+    OSError,
+    NotImplementedError,
+)
+# RuntimeError is not raised by this module: it is caught so a probe that fails that way records a
+# failure instead of dying silently on its worker thread and leaving the snapshot looking healthy.
+# mypy rejects a starred tuple inside an except clause, hence the explicit constant.
+_PROBE_FAILURES: tuple[type[Exception], ...] = (*_PROBE_EXCEPTIONS, RuntimeError)
+
+
+def _render_json(value: Any) -> str:
+    """Render probe data as JSON: cluster objects are dynamic, provider-shaped data.
+
+    Args:
+        value (Any): Data a probe returned, usually plain dicts from ``to_dict()``.
+
+    Returns:
+        str: Indented JSON; leaves the serializer cannot type are stringified.
+    """
+    return json.dumps(value, indent=2, default=str)
+
+
+def _render_lines(lines: list[str]) -> str:
+    """Render a line summary as plain text, one line per record.
+
+    Args:
+        lines (list[str]): Summary lines built from provider data.
+
+    Returns:
+        str: The lines joined by newlines.
+    """
+    return "\n".join(lines)
+
+
+def _truncate_output(text: str) -> str:
+    """Cap one probe's output so a single probe cannot inflate the snapshot.
+
+    Args:
+        text (str): Rendered output of one probe.
+
+    Returns:
+        str: The text unchanged within the budget, otherwise its head plus a truncation marker
+            naming how many bytes were dropped.
+    """
+    encoded = text.encode(_OUTPUT_ENCODING, errors="replace")
+    if len(encoded) <= _MAX_PROBE_OUTPUT_BYTES:
+        return text
+    head = encoded[:_MAX_PROBE_OUTPUT_BYTES].decode(_OUTPUT_ENCODING, errors="replace")
+    return f"{head}\n{_TRUNCATION_MARKER.format(omitted=len(encoded) - _MAX_PROBE_OUTPUT_BYTES)}"
+
+
+def read_with_deadline(probe: Callable[[], Any], timeout: float = _CLIENT_BUILD_BUDGET_SECONDS) -> Any:
+    """Run one cluster read with a hard wait limit, for callers outside the snapshot itself.
+
+    The wrapper applies no request timeout, so a caller that reads the cluster outside a snapshot
+    needs the same protection the probes get - otherwise a silent API server blocks the failure path
+    that the read is part of.
+
+    Args:
+        probe (Callable[[], Any]): Read performed against the run client.
+        timeout (float): Seconds to wait before abandoning the read.
+
+    Returns:
+        Any: Whatever the read returned; dynamic cluster data, hence Any.
+
+    Raises:
+        ClusterStateProbeTimeout: If the read did not finish inside ``timeout``.
+        Exception: Whatever the read raised, unchanged.
+    """
+    value, failure = _call_within_budget(probe=probe, budget=timeout)
+    if isinstance(failure, ClusterStateProbeTimeout):
+        raise failure
+    if failure is not None:
+        raise failure
+    return value
+
+
+def _call_within_budget(*, probe: Callable[[], Any], budget: float) -> tuple[Any, Exception | None]:
+    """Run one probe with a hard wait limit, regardless of the client's own timeouts.
+
+    The Kubernetes client only bounds a request when the caller passes ``_request_timeout``, which
+    the ocp_resources wrappers never do, so a silent API server would hold the snapshot past its
+    deadline and delay the failure being reported. The probe therefore runs on a daemon thread: the
+    snapshot stops waiting when the budget expires, while the request finishes (or not) on its own.
+
+    Args:
+        probe (Callable[[], Any]): Read performed against the run client; its value is provider-shaped
+            cluster data the wrapper exposes dynamically, so the type stays Any.
+        budget (float): Seconds the snapshot may still spend on this probe.
+
+    Returns:
+        tuple[Any, Exception | None]: The probe value, or the exception it raised (including
+            ClusterStateProbeTimeout), with None in the other slot. The value is Any because it is
+            whatever the probe read from the cluster, rendered by the caller.
+
+    Raises:
+        RuntimeError: Never raised here; a probe that fails records its exception instead of
+            propagating it, so the snapshot always renders a failure record.
+    """
+    # Any: the probe returns dynamic cluster data (a resource list or its instance dict) that has no
+    # narrower static type, and the dict only carries the two outcomes of the thread below.
+    outcome: dict[str, Any] = {}
+
+    def _execute_probe() -> None:
+        """Run the probe and record either its value or the exception it raised."""
+        try:
+            outcome["value"] = probe()
+        except _PROBE_FAILURES as exc:
+            # RuntimeError is not raised here: it is caught so a probe that fails that way records a
+            # failure record instead of dying silently and leaving the snapshot looking healthy.
+            outcome["failure"] = exc
+
+    worker = threading.Thread(target=_execute_probe, name="cluster-state-probe", daemon=True)
+    worker.start()
+    worker.join(timeout=budget)
+    if worker.is_alive():
+        return None, ClusterStateProbeTimeout()
+    if not outcome:
+        # The probe raised outside _PROBE_FAILURES, so the thread died before recording anything.
+        # An empty outcome would otherwise reach fetch() as a successful null result.
+        return None, ClusterStateProbeCrashed()
+    return outcome.get("value"), outcome.get("failure")
+
+
+@dataclass
+class _Probes:
+    """Probe runner of one snapshot: one run client, one total deadline, one skip counter.
+
+    Args:
+        client (DynamicClient): Run client every probe reads the cluster with.
+        data_collector_path (Path | None): Artifact root; the configured root when None.
+        subject (str | None): Plan name the snapshot belongs to, for the file name and header.
+        started (float): ``monotonic()`` value the snapshot deadline is measured from.
+        skipped (int): Probes not run because the snapshot deadline had already passed.
+    """
+
+    client: DynamicClient
+    started: float = field(default_factory=monotonic)
+    skipped: int = 0
+    collected_bytes: int = 0
+    over_budget: int = 0
+
+    def _within_size_budget(self, record: str) -> bool:
+        """Return whether one more record still fits the snapshot byte budget.
+
+        The per-probe cap bounds a single log; without a total budget the artifact grows with the
+        node count (every per-node daemon pod contributes its container logs), which is exactly the
+        disk pressure this evidence is meant to survive.
+
+        Args:
+            record (str): Rendered record about to be added.
+
+        Returns:
+            bool: True when the record fits, False when the snapshot budget is exhausted.
+        """
+        if self.collected_bytes + len(record.encode(_OUTPUT_ENCODING)) <= _MAX_SNAPSHOT_OUTPUT_BYTES:
+            self.collected_bytes += len(record.encode(_OUTPUT_ENCODING))
+            return True
+        self.over_budget += 1
+        return False
+
+    def size_record(self) -> str | None:
+        """Return the note that closes a snapshot cut short by its byte budget.
+
+        Returns:
+            str | None: The note, or None when the budget was never exhausted.
+        """
+        if not self.over_budget:
+            return None
+        return (
+            f"# snapshot size budget reached: {{omitted}} records not collected "
+            f"(limit {_MAX_SNAPSHOT_OUTPUT_BYTES} bytes)".replace("{omitted}", str(self.over_budget))
+        )
+
+    def run(self, label: str, probe: Callable[[], Any], *, render: Callable[[Any], str] = _render_json) -> str:
+        """Run one probe inside the snapshot budget and render its record.
+
+        Args:
+            label (str): Readable probe label, written as the section header.
+            probe (Callable[[], Any]): Read performed against the run client.
+            render (Callable[[Any], str]): Renders the value the probe returned.
+
+        Returns:
+            str: The rendered record, or a skip/failure note when the probe did not produce data.
+        """
+        return self.fetch(label=label, probe=probe, render=render)[0]
+
+    def fetch(
+        self, label: str, probe: Callable[[], Any], *, render: Callable[[Any], str] = _render_json
+    ) -> tuple[str, Any]:
+        """Run one probe and also return the data behind its record, for probes that feed another.
+
+        Args:
+            label (str): Readable probe label, written as the section header.
+            probe (Callable[[], Any]): Read performed against the run client.
+            render (Callable[[Any], str]): Renders the value the probe returned.
+
+        Returns:
+            tuple[str, Any]: The record and the raw value, which is None when the probe was
+                skipped or failed.
+        """
+        if self._remaining_seconds() <= 0:
+            self.skipped += 1
+            return (
+                f"{_PROBE_LABEL_PREFIX}{label}\n[skipped: snapshot deadline of {_SNAPSHOT_DEADLINE_SECONDS}s reached]",
+                None,
+            )
+        # Enforce the total size budget before spending a request on a record that cannot be kept.
+        if self.over_budget or self.collected_bytes >= _MAX_SNAPSHOT_OUTPUT_BYTES:
+            self.over_budget += 1
+            return (
+                f"{_PROBE_LABEL_PREFIX}{label}\n"
+                f"[skipped: snapshot size budget of {_MAX_SNAPSHOT_OUTPUT_BYTES} bytes reached]",
+                None,
+            )
+        value, failure = _call_within_budget(probe=probe, budget=self._remaining_seconds())
+        if failure is not None:
+            if isinstance(failure, ClusterStateProbeTimeout):
+                # The request itself cannot be cancelled: it keeps its connection until the socket
+                # gives up, but the snapshot no longer waits for it and the original failure is
+                # reported on time.
+                LOGGER.warning(f"Cluster state probe '{label}' exceeded the snapshot budget")
+                return (
+                    f"{_PROBE_LABEL_PREFIX}{label}\n"
+                    f"[probe exceeded the remaining snapshot budget of {_SNAPSHOT_DEADLINE_SECONDS}s]",
+                    None,
+                )
+            LOGGER.warning(f"Cluster state probe '{label}' failed: {failure}")
+            return f"{_PROBE_LABEL_PREFIX}{label}\n[probe failed: {type(failure).__name__}: {failure}]", None
+        return self.record(label=label, value=value, render=render), value
+
+    def record(self, label: str, value: Any, *, render: Callable[[Any], str] = _render_json) -> str:
+        """Render data under a probe label, bounded by the per-probe cap and the snapshot budget.
+
+        Every record goes through here, so the snapshot total stays within its budget whether the
+        section came from a probe result or was rendered directly.
+
+        Args:
+            label (str): Readable probe label, written as the section header.
+            value (Any): Data to render.
+            render (Callable[[Any], str]): Renders the value.
+
+        Returns:
+            str: The rendered record, or a skip note once the snapshot budget is exhausted.
+        """
+        record = f"{_PROBE_LABEL_PREFIX}{label}\n{_truncate_output(text=render(value))}"
+        if not self._within_size_budget(record):
+            return (
+                f"{_PROBE_LABEL_PREFIX}{label}\n"
+                f"[skipped: snapshot size budget of {_MAX_SNAPSHOT_OUTPUT_BYTES} bytes reached]"
+            )
+        return record
+
+    def deadline_record(self) -> str | None:
+        """Render the record that closes a snapshot cut short by its deadline.
+
+        Returns:
+            str | None: One summary line, or None when the whole snapshot fit in the budget.
+        """
+        if not self.skipped:
+            return None
+        elapsed = int(monotonic() - self.started)
+        return (
+            f"# snapshot deadline reached after {elapsed}s of {_SNAPSHOT_DEADLINE_SECONDS}s, "
+            f"{self.skipped} probes skipped"
+        )
+
+    def _remaining_seconds(self) -> float:
+        """Return the time left in the snapshot budget.
+
+        Returns:
+            float: Seconds remaining, or a value of zero or less once the deadline has passed.
+        """
+        return self.started + _SNAPSHOT_DEADLINE_SECONDS - monotonic()
+
+
+def _wrapper(
+    resource_cls: type[Resource], *, client: DynamicClient, name: str, namespace: str | None = None
+) -> Resource:
+    """Instantiate a wrapper class without reading anything from the cluster.
+
+    Args:
+        resource_cls (type[Resource]): Wrapper class of the kind.
+        client (DynamicClient): Run client.
+        name (str): Object name, or the placeholder name when only the kind's API handle is needed.
+        namespace (str | None): Namespace of a namespaced kind.
+
+    Returns:
+        Resource: The wrapper instance.
+    """
+    if issubclass(resource_cls, NamespacedResource):
+        return resource_cls(client=client, name=name, namespace=namespace)
+    return resource_cls(client=client, name=name)
+
+
+def _named_instance(
+    resource_cls: type[Resource], *, client: DynamicClient, name: str, namespace: str | None = None
+) -> dict[str, Any]:
+    """Read one object's full body through its wrapper class.
+
+    Args:
+        resource_cls (type[Resource]): Wrapper class of the kind.
+        client (DynamicClient): Run client.
+        name (str): Object name.
+        namespace (str | None): Namespace of a namespaced kind.
+
+    Returns:
+        dict[str, Any]: The object as a plain dict.
+    """
+    return _wrapper(resource_cls, client=client, name=name, namespace=namespace).instance.to_dict()
+
+
+def _list_items(
+    resource_cls: type[Resource],
+    *,
+    client: DynamicClient,
+    namespace: str | None = None,
+    label_selector: str | None = None,
+) -> list[dict[str, Any]]:
+    """Read one kind's listing in a single request.
+
+    ``Resource.get()`` yields a wrapper per object and reading each object's ``instance`` would be
+    one extra GET per object: too slow for hundreds of PVCs inside the snapshot deadline.
+
+    Args:
+        resource_cls (type[Resource]): Wrapper class of the kind; it resolves the API version.
+        client (DynamicClient): Run client.
+        namespace (str | None): Namespace of a namespaced kind; None or _ALL_NAMESPACES lists
+            every namespace.
+        label_selector (str | None): Server-side label filter, so a caller never has to match on
+            object names, which differ between product versions.
+
+    Returns:
+        list[dict[str, Any]]: The listed objects as plain dicts, empty when the kind has none.
+    """
+    # A namespaced wrapper such as Pod requires a namespace to build its API handle, so the
+    # cluster-wide listing goes through the "*" handle and omits the namespace from the query.
+    api = _wrapper(resource_cls, client=client, name=_KIND_HANDLE_NAME, namespace=namespace or _ALL_NAMESPACES).api
+    query: dict[str, Any] = {"label_selector": label_selector} if label_selector else {}
+    if namespace and namespace != _ALL_NAMESPACES:
+        query["namespace"] = namespace
+    return [item.to_dict() for item in api.get(**query).items]
+
+
+def _resource_name(instance: dict[str, Any]) -> str:
+    """Return an object's name for the one-line summaries below.
+
+    Args:
+        instance (dict[str, Any]): Object body.
+
+    Returns:
+        str: The name, or a placeholder for an object the API returned without one.
+    """
+    return (instance.get("metadata") or {}).get("name") or "<unnamed>"
+
+
+def _conditions(*, instance: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index one object's status conditions by their type.
+
+    Args:
+        instance (dict[str, Any]): Object body.
+
+    Returns:
+        dict[str, dict[str, Any]]: Condition per type, empty when the object reports none.
+    """
+    return {
+        condition.get("type", ""): condition for condition in (instance.get("status") or {}).get("conditions") or []
+    }
+
+
+def _condition_status(*, conditions: dict[str, dict[str, Any]], condition_type: str) -> str:
+    """Return one condition's status.
+
+    Args:
+        conditions (dict[str, dict[str, Any]]): Conditions indexed by type.
+        condition_type (str): Condition type to read.
+
+    Returns:
+        str: The reported status, or ``<missing>`` when the object never reported that condition.
+    """
+    return conditions.get(condition_type, {}).get("status") or "<missing>"
+
+
+def _cluster_operator_summary(operators: list[dict[str, Any]]) -> list[str]:
+    """Render each ClusterOperator's availability and current version, like ``oc get co``.
+
+    Args:
+        operators (list[dict[str, Any]]): ClusterOperator bodies.
+
+    Returns:
+        list[str]: One line per operator.
+    """
+    lines: list[str] = []
+    for operator in operators:
+        conditions = _conditions(instance=operator)
+        status = operator.get("status") or {}
+        versions = ",".join(version.get("version", "") for version in status.get("versions") or [])
+        lines.append(
+            f"{_resource_name(operator)}: "
+            f"available={_condition_status(conditions=conditions, condition_type='Available')} "
+            f"progressing={_condition_status(conditions=conditions, condition_type='Progressing')} "
+            f"degraded={_condition_status(conditions=conditions, condition_type='Degraded')} "
+            f"version={versions}"
+        )
+    return lines
+
+
+def _machine_config_pool_summary(pools: list[dict[str, Any]]) -> list[str]:
+    """Render the counters and conditions of every MachineConfigPool.
+
+    Args:
+        pools (list[dict[str, Any]]): MachineConfigPool bodies.
+
+    Returns:
+        list[str]: One line per pool, followed by one line per condition.
+    """
+    lines: list[str] = []
+    for pool in pools:
+        status = pool.get("status") or {}
+        lines.append(
+            f"{_resource_name(pool)}: ready={status.get('readyMachineCount')} "
+            f"updated={status.get('updatedMachineCount')} degraded={status.get('degradedMachineCount')} "
+            f"unavailable={status.get('unavailableMachineCount')}"
+        )
+        for condition in status.get("conditions") or []:
+            lines.append(
+                f"  {condition.get('type')}={condition.get('status')} "
+                f"reason={condition.get('reason')} message={condition.get('message')}"
+            )
+    return lines
+
+
+def _node_summary(nodes: list[dict[str, Any]]) -> list[str]:
+    """Render each node's readiness, roles and kubelet version, like ``oc get nodes -o wide``.
+
+    Args:
+        nodes (list[dict[str, Any]]): Node bodies.
+
+    Returns:
+        list[str]: One line per node.
+    """
+    lines: list[str] = []
+    for node in nodes:
+        conditions = _conditions(instance=node)
+        labels = (node.get("metadata") or {}).get("labels") or {}
+        roles = sorted(
+            label.removeprefix(_NODE_ROLE_LABEL_PREFIX) for label in labels if label.startswith(_NODE_ROLE_LABEL_PREFIX)
+        )
+        node_info = (node.get("status") or {}).get("nodeInfo") or {}
+        lines.append(
+            f"{_resource_name(node)}: Ready={_condition_status(conditions=conditions, condition_type='Ready')} "
+            f"unschedulable={bool((node.get('spec') or {}).get('unschedulable'))} "
+            f"roles={','.join(roles) or 'none'} version={node_info.get('kubeletVersion')}"
+        )
+    return lines
+
+
+def _pod_summary(pods: list[dict[str, Any]]) -> list[str]:
+    """Render each pod's phase, readiness, restarts and node, like ``oc get pods -o wide``.
+
+    Args:
+        pods (list[dict[str, Any]]): Pod bodies.
+
+    Returns:
+        list[str]: One line per pod.
+    """
+    lines: list[str] = []
+    for pod in pods:
+        status = pod.get("status") or {}
+        container_statuses = status.get("containerStatuses") or []
+        ready = sum(1 for container_status in container_statuses if container_status.get("ready"))
+        restarts = sum(container_status.get("restartCount") or 0 for container_status in container_statuses)
+        lines.append(
+            f"{_resource_name(pod)}: phase={status.get('phase')} ready={ready}/{len(container_statuses)} "
+            f"restarts={restarts} node={(pod.get('spec') or {}).get('nodeName')}"
+        )
+        # The pod body itself is not dumped, so its container states - the reason a pod is stuck or
+        # crash-looping - are rendered here instead.
+        lines.extend(_container_state_lines(container_statuses=container_statuses, pod_name=_resource_name(pod)))
+    return lines
+
+
+def _container_state_lines(*, container_statuses: list[dict[str, Any]], pod_name: str) -> list[str]:
+    """Render the waiting/terminated state of each container.
+
+    Args:
+        container_statuses (list[dict[str, Any]]): ``status.containerStatuses`` of one pod.
+        pod_name (str): Pod name, prefixed to every line so the state is attributable.
+
+    Returns:
+        list[str]: One line per container state that is not simply running.
+    """
+    lines: list[str] = []
+    for container_status in container_statuses:
+        name = container_status.get("name", "<unnamed>")
+        state = container_status.get("state") or {}
+        waiting = state.get("waiting") or {}
+        terminated = state.get("terminated") or {}
+        last_terminated = (container_status.get("lastState") or {}).get("terminated") or {}
+        if waiting:
+            lines.append(
+                f"  {pod_name}/{name}: waiting reason={waiting.get('reason')} message={waiting.get('message')}"
+            )
+        if terminated:
+            lines.append(
+                f"  {pod_name}/{name}: terminated reason={terminated.get('reason')} "
+                f"exitCode={terminated.get('exitCode')}"
+            )
+        if last_terminated:
+            lines.append(
+                f"  {pod_name}/{name}: lastTerminated reason={last_terminated.get('reason')} "
+                f"exitCode={last_terminated.get('exitCode')}"
+            )
+    return lines
+
+
+def _persistent_volume_claim_summary(claims: list[dict[str, Any]]) -> list[str]:
+    """Render each PVC's phase, bound volume, capacity and storage class.
+
+    Args:
+        claims (list[dict[str, Any]]): PersistentVolumeClaim bodies.
+
+    Returns:
+        list[str]: One line per PVC.
+    """
+    lines: list[str] = []
+    for claim in claims:
+        status = claim.get("status") or {}
+        spec = claim.get("spec") or {}
+        lines.append(
+            f"{_resource_name(claim)}: phase={status.get('phase')} volume={spec.get('volumeName')} "
+            f"capacity={(status.get('capacity') or {}).get('storage')} "
+            f"storageClass={spec.get('storageClassName')}"
+        )
+    return lines
+
+
+def _data_volume_summary(data_volumes: list[dict[str, Any]]) -> list[str]:
+    """Render each DataVolume's phase, progress and PVC.
+
+    Args:
+        data_volumes (list[dict[str, Any]]): DataVolume bodies.
+
+    Returns:
+        list[str]: One line per DataVolume.
+    """
+    lines: list[str] = []
+    for data_volume in data_volumes:
+        status = data_volume.get("status") or {}
+        lines.append(
+            f"{_resource_name(data_volume)}: phase={status.get('phase')} progress={status.get('progress')} "
+            f"pvc={status.get('claimName')}"
+        )
+    return lines
+
+
+def _persistent_volume_summary(volumes: list[dict[str, Any]]) -> list[str]:
+    """Render each PersistentVolume's phase, claim, capacity and storage class.
+
+    Args:
+        volumes (list[dict[str, Any]]): PersistentVolume bodies.
+
+    Returns:
+        list[str]: One line per volume.
+    """
+    lines: list[str] = []
+    for volume in volumes:
+        spec = volume.get("spec") or {}
+        status = volume.get("status") or {}
+        claim = spec.get("claimRef") or {}
+        lines.append(
+            f"{_resource_name(volume)}: phase={status.get('phase')} "
+            f"claim={claim.get('namespace')}/{claim.get('name')} "
+            f"capacity={(spec.get('capacity') or {}).get('storage')} storageClass={spec.get('storageClassName')} "
+            f"reason={status.get('reason')}"
+        )
+    return lines
+
+
+def _cluster_service_version_summary(versions: list[dict[str, Any]]) -> list[str]:
+    """Render each ClusterServiceVersion's phase and version, like ``oc get csv``.
+
+    Args:
+        versions (list[dict[str, Any]]): ClusterServiceVersion bodies.
+
+    Returns:
+        list[str]: One line per CSV.
+    """
+    return [
+        f"{_resource_name(version)}: phase={(version.get('status') or {}).get('phase')} "
+        f"version={(version.get('spec') or {}).get('version')}"
+        for version in versions
+    ]
+
+
+def _event_summary(events: list[dict[str, Any]]) -> list[str]:
+    """Render each event as one timeline line: when, what, and which object.
+
+    Args:
+        events (list[dict[str, Any]]): Event bodies in the order they happened.
+
+    Returns:
+        list[str]: One line per event.
+    """
+    lines: list[str] = []
+    for event in events:
+        involved = event.get("involvedObject") or {}
+        lines.append(
+            f"{event.get('lastTimestamp') or event.get('eventTime')} {event.get('type')} {event.get('reason')} "
+            f"{involved.get('kind')}/{involved.get('name')}: {event.get('message')} (count={event.get('count')})"
+        )
+    return lines
+
+
+def _namespace_events(*, client: DynamicClient, namespace: str) -> list[str]:
+    """Read a namespace's recent events oldest first, so the snapshot reads like a timeline.
+
+    Args:
+        client (DynamicClient): Run client.
+        namespace (str): Namespace holding the events.
+
+    Returns:
+        list[str]: One line per event, oldest first.
+    """
+    return _event_summary(
+        events=[
+            event.to_dict()
+            for event in reversed(Event.list(client=client, namespace=namespace, since_seconds=_EVENT_LOOKBACK_SECONDS))
+        ]
+    )
+
+
+def _cluster_image(*, client: DynamicClient) -> dict[str, Any]:
+    """Read the cluster-wide image configuration: its digest mirrors and blocked registries.
+
+    Args:
+        client (DynamicClient): Run client.
+
+    Returns:
+        dict[str, Any]: The ``image.config.openshift.io`` cluster object as a plain dict.
+    """
+    return _named_instance(Image, client=client, name=_CLUSTER_IMAGE_NAME)
+
+
+def _listing_sections(
+    *,
+    probes: _Probes,
+    label: str,
+    resource_cls: type[Resource],
+    namespace: str | None = None,
+    summarise: Callable[[list[dict[str, Any]]], list[str]] | None = None,
+    include_listing: bool = True,
+) -> list[str]:
+    """Collect one kind's listing, followed by a line summary of it when a summariser is given.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        label (str): Readable label of the listing.
+        resource_cls (type[Resource]): Wrapper class of the kind.
+        namespace (str | None): Namespace of a namespaced kind.
+        summarise (Callable[[list[dict[str, Any]]], list[str]] | None): Builds readable lines
+            from the listing, so the artifact never needs the full objects to answer "what state?".
+        include_listing (bool): Write the full objects too; off for kinds whose bodies are large
+            enough to fill the snapshot on their own (nodes, CSVs) and whose summary carries the
+            state a failure needs.
+
+    Returns:
+        list[str]: The listing record when requested, plus the summary record when one was requested.
+    """
+    record, items = probes.fetch(
+        label=label, probe=partial(_list_items, resource_cls, client=probes.client, namespace=namespace)
+    )
+    sections = [record] if include_listing or summarise is None or items is None else []
+    if items is not None and summarise is not None:
+        sections.append(probes.record(label=f"{label} summary", value=summarise(items), render=_render_lines))
+    return sections
+
+
+def _previous_container_log(*, pod: Pod, container: str, tail_lines: int) -> str:
+    """Read a container's previous log, or explain that the instance is gone.
+
+    A restarted container's previous instance can already be garbage-collected, and the API answers
+    400 "previous terminated container ... not found". That is expected, not a failed probe.
+
+    Args:
+        pod (Pod): Pod wrapper to read from.
+        container (str): Container name.
+        tail_lines (int): Lines kept.
+
+    Returns:
+        str: The previous log, or a note when no previous instance is retained.
+
+    Raises:
+        ApiException: For any other rejection of the log request.
+    """
+    try:
+        return pod.log(container=container, tail_lines=tail_lines, previous=True)
+    except ApiException as exc:
+        if exc.status == _HTTP_BAD_REQUEST and "previous terminated container" in str(exc):
+            return f"[no previous instance retained for container '{container}']"
+        raise
+
+
+# Any: the pod body is a dynamic Kubernetes object whose per-field types the CRD schema cannot
+# express, and only status.containerStatuses is read here.
+def _restarted_containers(*, pod: dict[str, Any]) -> set[str]:
+    """Return the containers that have a previous instance to read.
+
+    Asking for a previous log of a container that never restarted makes the API answer 400, which
+    would be recorded as a probe failure and make a healthy snapshot look broken.
+
+    Args:
+        pod (dict[str, Any]): Pod body, whose status carries one containerStatus per container.
+
+    Returns:
+        set[str]: Names of the containers whose restart count is above zero.
+    """
+    statuses = (pod.get("status") or {}).get("containerStatuses") or []
+    return {
+        status["name"]
+        for status in statuses
+        if isinstance(status, dict) and status.get("name") and (status.get("restartCount") or 0) > 0
+    }
+
+
+def _pod_log_sections(
+    *,
+    probes: _Probes,
+    label: str,
+    namespace: str,
+    tail_lines: int,
+    label_selector: str | None = None,
+    pod_filter: Callable[[dict[str, Any]], bool] | None = None,
+) -> list[str]:
+    """Collect the pods of a namespace and every container log of the matching ones.
+
+    Each container is read twice: its current log holds the errors produced at dump time even when
+    the container restarted, and its previous log is added when the container has one. A container
+    that never restarted makes the API reject the previous-log read, which is recorded as a note.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        label (str): Readable label of the pod listing.
+        namespace (str): Namespace holding the pods, or ``*`` for every namespace.
+        tail_lines (int): Lines kept per container log.
+        label_selector (str | None): Server-side label filter selecting the pods to read.
+        pod_filter (Callable[[dict[str, Any]], bool] | None): Keeps only the pods worth reading,
+            applied after the listing because the API cannot select on a pod's volume references.
+
+    Returns:
+        list[str]: The pod listing, its summary, and one record per container log.
+    """
+    record, pods = probes.fetch(
+        label=label,
+        probe=partial(_list_items, Pod, client=probes.client, namespace=namespace, label_selector=label_selector),
+    )
+    if pods is None:
+        return [record]
+    if pod_filter is not None:
+        pods = [pod for pod in pods if pod_filter(pod)]
+
+    # The summary already carries phase, readiness, restarts and node: the full pod bodies are the
+    # bulk of the artifact and add nothing the logs below do not show.
+    del record
+    sections = [probes.record(label=f"{label} summary", value=_pod_summary(pods=pods), render=_render_lines)]
+    for pod in pods:
+        pod_name = _resource_name(pod)
+        containers = [container.get("name", "") for container in (pod.get("spec") or {}).get("containers") or []]
+        pod_wrapper = Pod(
+            client=probes.client,
+            name=pod_name,
+            namespace=(pod.get("metadata") or {}).get("namespace") or namespace,
+        )
+        restarted_containers = _restarted_containers(pod=pod)
+        for container in containers:
+            sections.append(
+                probes.run(
+                    f"log {pod_name}/{container}",
+                    partial(pod_wrapper.log, container=container, tail_lines=tail_lines),
+                    render=str,
+                )
+            )
+            if container in restarted_containers:
+                sections.append(
+                    probes.run(
+                        f"log {pod_name}/{container} (previous)",
+                        partial(_previous_container_log, pod=pod_wrapper, container=container, tail_lines=tail_lines),
+                        render=str,
+                    )
+                )
+    return sections
+
+
+def _pending_pvc_sections(*, probes: _Probes, namespace: str) -> tuple[list[str], list[dict[str, Any]]]:
+    """Collect the namespace PVCs, their summary, and the full body of the non-Bound ones.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        namespace (str): Namespace holding the PVCs.
+
+    Returns:
+        tuple[list[str], list[dict[str, Any]]]: The rendered records, and the listed PVCs so the
+            caller can derive which storage drivers the stalled claims need.
+    """
+    label = f"PVCs in {namespace}"
+    record, claims = probes.fetch(
+        label=label, probe=partial(_list_items, PersistentVolumeClaim, client=probes.client, namespace=namespace)
+    )
+    if claims is None:
+        return [record], []
+
+    sections = [
+        probes.record(label=f"{label} summary", value=_persistent_volume_claim_summary(claims), render=_render_lines)
+    ]
+    pending = [claim for claim in claims if (claim.get("status") or {}).get("phase") != "Bound"]
+    if len(pending) > _MAX_PENDING_PVC_DUMPS:
+        sections.append(
+            f"{_PROBE_LABEL_PREFIX}{label} full bodies\n"
+            f"[only the first {_MAX_PENDING_PVC_DUMPS} of {len(pending)} non-Bound PVCs are written]"
+        )
+    sections.extend(
+        probes.run(
+            f"PVC {_resource_name(claim)}",
+            partial(
+                _named_instance,
+                PersistentVolumeClaim,
+                client=probes.client,
+                name=_resource_name(claim),
+                namespace=namespace,
+            ),
+        )
+        for claim in pending[:_MAX_PENDING_PVC_DUMPS]
+    )
+    return sections, claims
+
+
+def _dump_upgrade_scope(probes: _Probes) -> list[str]:
+    """Collect the MachineConfig, operator and image state of an upgrade failure.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+
+    Returns:
+        list[str]: One rendered record per probe.
+    """
+    sections = [
+        probes.run(
+            "ClusterVersion",
+            partial(_named_instance, ClusterVersion, client=probes.client, name=_CLUSTER_VERSION_NAME),
+        ),
+        *_listing_sections(
+            probes=probes,
+            label="ClusterOperators",
+            resource_cls=ClusterOperator,
+            summarise=_cluster_operator_summary,
+            include_listing=False,
+        ),
+        probes.run(
+            "ClusterOperator machine-config",
+            partial(_named_instance, ClusterOperator, client=probes.client, name=_MACHINE_CONFIG_OPERATOR),
+        ),
+        # The upgrade scope keeps the full MachineConfigPool bodies: the pool conditions are the
+        # primary evidence for an upgrade that never converged, and the summary only flattens them.
+        *_listing_sections(
+            probes=probes,
+            label="MachineConfigPools",
+            resource_cls=MachineConfigPool,
+            summarise=_machine_config_pool_summary,
+            include_listing=True,
+        ),
+        *_listing_sections(
+            probes=probes, label="Nodes", resource_cls=Node, summarise=_node_summary, include_listing=False
+        ),
+        *_pod_log_sections(
+            probes=probes,
+            label=f"Pods in {_MCO_NAMESPACE}",
+            namespace=_MCO_NAMESPACE,
+            label_selector=_MCO_POD_LABEL_SELECTOR,
+            tail_lines=_MCO_LOG_TAIL_LINES,
+        ),
+    ]
+    sections.extend(_listing_sections(probes=probes, label="IDMS", resource_cls=ImageDigestMirrorSet))
+    sections.extend(_listing_sections(probes=probes, label="ICSP", resource_cls=ImageContentSourcePolicy))
+    sections.append(probes.run("Image cluster", partial(_cluster_image, client=probes.client)))
+    sections.extend(_mtv_csv_sections(probes=probes))
+    return sections
+
+
+def _mtv_csv_sections(*, probes: _Probes) -> list[str]:
+    """Render the MTV ClusterServiceVersions installed in the configured MTV namespace.
+
+    The namespace comes from the run configuration, so it is resolved inside the probe: a missing
+    key outside pytest must cost one failed record, not the whole snapshot.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+
+    Returns:
+        list[str]: The CSV summary record, or a failure record when the namespace is unknown.
+    """
+
+    def _mtv_csvs() -> list[dict[str, Any]]:
+        """Read the MTV ClusterServiceVersions.
+
+        Returns:
+            list[dict[str, Any]]: CSV bodies installed in the configured MTV namespace.
+        """
+        return _list_items(
+            ClusterServiceVersion,
+            client=probes.client,
+            namespace=py_config[_MTV_NAMESPACE_CONFIG_KEY],
+        )
+
+    record, csvs = probes.fetch(label="MTV CSVs", probe=_mtv_csvs)
+    if csvs is None:
+        return [record]
+    return [probes.record(label="MTV CSVs summary", value=_cluster_service_version_summary(csvs), render=_render_lines)]
+
+
+def _dump_storage_scope(probes: _Probes, *, namespace: str) -> list[str]:
+    """Collect the state of the storage class under test around a stalled migration.
+
+    The class is the value the run was given (``--tc=storage_class``), not something inferred from
+    the cluster: the same class the pre-test PVC canary binds a claim on. That keeps the section
+    honest on any backend - a driver's pod names, sidecar names and even its existence are not
+    assumed anywhere.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        namespace (str): Migration target namespace.
+
+    Returns:
+        list[str]: One rendered record per probe.
+    """
+    pvc_sections, claims = _pending_pvc_sections(probes=probes, namespace=namespace)
+    sections = list(pvc_sections)
+    sections.extend(
+        _listing_sections(
+            probes=probes,
+            label=f"DataVolumes in {namespace}",
+            resource_cls=DataVolume,
+            namespace=namespace,
+            summarise=_data_volume_summary,
+            include_listing=False,
+        )
+    )
+    sections.append(
+        probes.run(
+            "Events",
+            partial(_namespace_events, client=probes.client, namespace=namespace),
+            render=_render_lines,
+        )
+    )
+    sections.extend(_storage_class_sections(probes=probes, claims=claims, namespace=namespace))
+    return sections
+
+
+def _storage_class_sections(*, probes: _Probes, claims: list[dict[str, Any]], namespace: str) -> list[str]:
+    """Render the storage class under test, its volumes, their attachments and the stuck pods.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        claims (list[dict[str, Any]]): PVC bodies of the migration target namespace.
+        namespace (str): Migration target namespace.
+
+    Returns:
+        list[str]: The class body, the persistent volumes and attachments behind the claims that
+            request it, and the logs of the pods using those claims. A failed class read costs the
+            volume probes only: the pod logs are still collected.
+    """
+    class_name = py_config[_STORAGE_CLASS_CONFIG_KEY]
+    record, storage_class = probes.fetch(
+        label=f"Storage class {class_name}",
+        probe=partial(_named_instance, StorageClass, client=probes.client, name=class_name),
+    )
+    class_claims = _claims_of_class(claims=claims, storage_class_name=class_name)
+    claim_names = {_resource_name(claim) for claim in class_claims}
+    sections = [record]
+    if storage_class is not None and claim_names:
+        # Only the volume probes need the class body; the pod evidence below does not, so a failed
+        # class read must not cost the logs of the pods that are already stuck on the claims. With
+        # no claim of this class in the namespace there is nothing stalled to explain, so the
+        # driver pods are not read either.
+        volume_names = {volume for claim in class_claims if (volume := (claim.get("spec") or {}).get("volumeName"))}
+        sections.append(
+            probes.run(
+                f"Persistent volumes of {class_name}",
+                partial(_class_persistent_volumes, client=probes.client, names=volume_names),
+                render=_render_lines,
+            )
+        )
+        attachment_record, attachments = probes.fetch(
+            label=f"Volume attachments of {class_name}",
+            probe=partial(_volume_attachments, client=probes.client, volume_names=volume_names),
+            render=_render_attachments,
+        )
+        sections.append(attachment_record)
+        sections.extend(
+            _driver_pod_sections(
+                probes=probes,
+                attachments=attachments or [],
+                provisioner=storage_class.get("provisioner"),
+            )
+        )
+    if not claim_names:
+        return sections
+    sections.extend(
+        _pod_log_sections(
+            probes=probes,
+            label=f"Pods using claims of {class_name}",
+            namespace=namespace,
+            tail_lines=_STORAGE_CLAIM_LOG_TAIL_LINES,
+            pod_filter=partial(_uses_claims, claim_names=claim_names),
+        )
+    )
+    return sections
+
+
+def _claims_of_class(*, claims: list[dict[str, Any]], storage_class_name: str) -> list[dict[str, Any]]:
+    """Return the claims that request the given storage class.
+
+    Args:
+        claims (list[dict[str, Any]]): PVC bodies.
+        storage_class_name (str): Storage class under test.
+
+    Returns:
+        list[dict[str, Any]]: The matching claims, empty when the namespace requests none.
+    """
+    return [claim for claim in claims if (claim.get("spec") or {}).get("storageClassName") == storage_class_name]
+
+
+def _uses_claims(pod: dict[str, Any], *, claim_names: set[str]) -> bool:
+    """Return whether a pod mounts any of the given claims.
+
+    Args:
+        pod (dict[str, Any]): Pod body.
+        claim_names (set[str]): Claims under test.
+
+    Returns:
+        bool: True when a volume of the pod references one of the claims.
+    """
+    volumes = (pod.get("spec") or {}).get("volumes") or []
+    return any((volume.get("persistentVolumeClaim") or {}).get("claimName") in claim_names for volume in volumes)
+
+
+def _render_attachments(attachments: list[dict[str, Any]]) -> str:
+    """Render one line per volume attachment, including the driver and both error fields.
+
+    Args:
+        attachments (list[dict[str, Any]]): Attachment summaries.
+
+    Returns:
+        str: The rendered lines.
+    """
+    return _render_lines([
+        f"{attachment['volume']}: driver={attachment['driver']} node={attachment['node']} "
+        f"attached={attachment['attached']} attachError={attachment['attachError']} "
+        f"detachError={attachment['detachError']}"
+        for attachment in attachments
+    ])
+
+
+def _driver_pod_sections(*, probes: _Probes, attachments: list[dict[str, Any]], provisioner: str | None) -> list[str]:
+    """Collect the logs of the pods belonging to the drivers that serve the claims under test.
+
+    Both names come from the cluster: the provisioner of the storage class under test, which is who
+    would bind a claim that is still Pending, and the attacher of each attachment, which is who did
+    bind a claim that is not. A pod belongs to a driver only by mentioning that name, so a driver
+    that stays anonymous in its own pods yields no section rather than another driver's logs.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+        attachments (list[dict[str, Any]]): Attachment summaries of the claims under test.
+        provisioner (str | None): Provisioner of the storage class under test, when known.
+
+    Returns:
+        list[str]: The pod listing, its summary and one record per container log.
+    """
+    drivers = {attachment["driver"] for attachment in attachments if attachment.get("driver")}
+    if provisioner and provisioner != _NO_PROVISIONER:
+        # A Pending claim has no volume and therefore no attachment: the class is the only object
+        # that already names the driver that should have bound it.
+        drivers.add(provisioner)
+    if not drivers:
+        return [
+            f"{_PROBE_LABEL_PREFIX}Storage driver pods\n"
+            "[no driver identified: the storage class names no provisioner and nothing is attached]"
+        ]
+    return _pod_log_sections(
+        probes=probes,
+        label=f"Storage driver pods ({', '.join(sorted(drivers))})",
+        namespace=_ALL_NAMESPACES,
+        tail_lines=_DRIVER_LOG_TAIL_LINES,
+        pod_filter=partial(_mentions_any, needles=drivers),
+    )
+
+
+def _mentions_any(pod: dict[str, Any], *, needles: set[str]) -> bool:
+    """Return whether a pod names any of the given strings in its labels or containers.
+
+    Args:
+        pod (dict[str, Any]): Pod body.
+        needles (set[str]): Strings to look for, usually storage driver names.
+
+    Returns:
+        bool: True when one of them appears in a label, container name, image, args or command.
+    """
+    body = json.dumps({
+        "labels": (pod.get("metadata") or {}).get("labels") or {},
+        "containers": (pod.get("spec") or {}).get("containers") or [],
+    })
+    return any(needle in body for needle in needles)
+
+
+def _volume_attachments(*, client: DynamicClient, volume_names: set[str]) -> list[dict[str, Any]]:
+    """Render the volume attachments of the given persistent volumes.
+
+    A driver's refusal to attach is reported in the attachment's own status, whatever the driver is
+    called, so this is the backend-agnostic replacement for reading a driver's pods.
+
+    Args:
+        client (DynamicClient): Run client.
+        volume_names (set[str]): Persistent volumes behind the claims under test.
+
+    Returns:
+        list[dict[str, Any]]: One summary per attachment, empty when nothing is attached yet.
+    """
+    if not volume_names:
+        return []
+    summaries: list[dict[str, Any]] = []
+    for attachment in _list_items(VolumeAttachment, client=client):
+        spec = attachment.get("spec") or {}
+        if (spec.get("source") or {}).get("persistentVolumeName") not in volume_names:
+            continue
+        status = attachment.get("status") or {}
+        summaries.append({
+            "volume": _resource_name(attachment),
+            "driver": spec.get("attacher"),
+            "node": spec.get("nodeName"),
+            "attached": status.get("attached"),
+            "attachError": status.get("attachError"),
+            "detachError": status.get("detachError"),
+        })
+    return summaries
+
+
+def _class_persistent_volumes(*, client: DynamicClient, names: set[str]) -> list[str]:
+    """Render the persistent volumes behind the claims under test.
+
+    Args:
+        client (DynamicClient): Run client.
+        names (set[str]): Persistent volume names.
+
+    Returns:
+        list[str]: One summary line per volume, empty when no claim is bound yet.
+    """
+    return _persistent_volume_summary([
+        _named_instance(PersistentVolume, client=client, name=name) for name in sorted(names)
+    ])
+
+
+def _with_deadline_record(*, sections: list[str], probes: _Probes | None) -> list[str]:
+    """Close a set of records with the truncation note of a snapshot cut short by its deadline.
+
+    Args:
+        sections (list[str]): Rendered records collected so far.
+        probes (_Probes | None): Probe runner whose budget bounded the collection, or None when the
+            records came from local data only.
+
+    Returns:
+        list[str]: The same records, plus one summary line when probes were skipped.
+    """
+    if probes is None:
+        return sections
+    for note in (probes.deadline_record(), probes.size_record()):
+        if note is not None:
+            sections.append(note)
+    return sections
+
+
+def _reason_slug(reason: str) -> str:
+    """Convert a failure reason to a file-name slug.
+
+    Args:
+        reason (str): Failure reason as written in the snapshot header.
+
+    Returns:
+        str: Lower-case, dash-separated, length-bounded slug.
+    """
+    slug = re.sub(r"[^a-z0-9]+", _REASON_SLUG_SEPARATOR, reason.lower()).strip(_REASON_SLUG_SEPARATOR)
+    return (slug or _UNSPECIFIED_REASON)[:_REASON_SLUG_MAX_LENGTH]
+
+
+def _worker_suffix() -> str:
+    """Return the pytest-xdist worker id as a file-name suffix.
+
+    Returns:
+        str: ``-<worker id>`` in a parallel run, an empty string otherwise.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    return f"-{worker}" if worker else ""
+
+
+def _snapshot_name(*, scope: str, reason: str, namespace: str | None, subject: str | None) -> str:
+    """Build a self-describing snapshot file name.
+
+    Analysis starts from the artifact tree, so the name carries what a reviewer needs to know which
+    test produced it without opening the file: time, scope, reason, and the plan and namespace the
+    failure belongs to.
+
+    Args:
+        scope (str): Snapshot scope (``upgrade`` or ``storage``).
+        reason (str): Failure reason.
+        namespace (str | None): Migration target namespace, when the scope has one.
+        subject (str | None): Plan name the snapshot belongs to, when the scope has one.
+
+    Returns:
+        str: File name of the snapshot.
+    """
+    parts = [utc_timestamp(), scope, _reason_slug(reason)]
+    if subject:
+        parts.append(_reason_slug(subject))
+    if namespace:
+        parts.append(_reason_slug(namespace))
+    return "-".join(parts) + _worker_suffix() + ".txt"
+
+
+def _write_snapshot(
+    *,
+    collector_path: Path,
+    scope: str,
+    reason: str,
+    sections: list[str],
+    namespace: str | None = None,
+    subject: str | None = None,
+) -> Path:
+    """Write one snapshot file.
+
+    Args:
+        collector_path (Path): Data-collector root directory.
+        scope (str): Snapshot scope, used in the file name and header.
+        reason (str): Failure reason, used in the file name and header.
+        sections (list[str]): Rendered probe records, written in order.
+        namespace (str | None): Migration target namespace, recorded when known.
+        subject (str | None): Plan name the snapshot belongs to, recorded when known.
+
+    Returns:
+        Path: Path of the written snapshot.
+    """
+    directory = collector_path / _SNAPSHOT_DIRECTORY
+    directory.mkdir(parents=True, exist_ok=True)
+    snapshot_path = directory / _snapshot_name(scope=scope, reason=reason, namespace=namespace, subject=subject)
+    collected = utc_timestamp()
+    header = (
+        f"# reason: {reason}\n# scope: {scope}\n"
+        f"# plan: {subject or 'n/a'}\n# namespace: {namespace or 'n/a'}\n"
+        f"# client: run DynamicClient through ocp_resources wrappers\n# collected: {collected}"
+    )
+    text = f"{header}\n\n{_SECTION_SEPARATOR.join(sections)}\n"
+    # A probed object can echo the cluster password; the artifact is not trusted to be safe raw.
+    cluster_password = resolve_cluster_credential("cluster_password")
+    if cluster_password:
+        text = redact_secret(text=text, secret=cluster_password)
+    snapshot_path.write_text(text, encoding=_OUTPUT_ENCODING)
+    return snapshot_path
+
+
+def _collect_and_write(
+    *,
+    collector_path: Path,
+    reason: str,
+    scope: str,
+    collect: Callable[[_Probes], list[str]],
+    client: DynamicClient,
+    namespace: str | None = None,
+    subject: str | None = None,
+) -> None:
+    """Write one snapshot for a scope and never raise.
+
+    Args:
+        collector_path (Path): Data-collector root directory.
+        reason (str): Failure reason, used in the file name and header.
+        scope (str): Snapshot scope, used in the file name and header.
+        collect (Callable[[_Probes], list[str]]): Probe collector of the scope.
+        client (DynamicClient): Run client every probe reads the cluster with.
+        namespace (str | None): Migration target namespace, recorded when known.
+        subject (str | None): Plan name the snapshot belongs to, recorded when known.
+    """
+    probes = _Probes(client=client)
+    try:
+        # A snapshot cut short by its deadline says so, so a short file is never mistaken for a
+        # healthy cluster that simply had nothing to report.
+        snapshot_path = _write_snapshot(
+            collector_path=collector_path,
+            scope=scope,
+            reason=reason,
+            sections=_with_deadline_record(sections=collect(probes), probes=probes),
+            namespace=namespace,
+            subject=subject,
+        )
+    except (AttributeError, KeyError, OSError, TypeError, ValueError) as exc:
+        LOGGER.warning(f"Cluster state snapshot for scope '{scope}' (reason '{reason}') failed: {exc}")
+        return
+
+    LOGGER.warning(f"Cluster state snapshot written to {snapshot_path}")
+
+
+def dump_cluster_state(
+    *,
+    reason: str,
+    scope: Literal["upgrade", "storage"],
+    namespace: str | None = None,
+    client: DynamicClient,
+    data_collector_path: Path | None = None,
+    subject: str | None = None,
+) -> None:
+    """Write a bounded cluster-state snapshot for a real failure.
+
+    Called immediately before a failure is raised, so the original exception stays the error the
+    caller sees: collection is best effort, every probe is bounded, and nothing escapes.
+
+    Args:
+        reason (str): Short cause, used as the file-name slug and the file header.
+        scope (Literal["upgrade", "storage"]): Which snapshot to collect.
+        namespace (str | None): Migration target namespace, required by the storage scope.
+        client (DynamicClient): Run client every probe reads the cluster with.
+        data_collector_path (Path | None): Artifact root; the configured root when None.
+
+    Raises:
+        ValueError: If the storage scope is requested without a namespace.
+    """
+    collect: Callable[[_Probes], list[str]]
+    if scope == "storage":
+        if namespace is None:
+            raise ValueError("dump_cluster_state with scope='storage' requires the migration target namespace")
+        collect = partial(_dump_storage_scope, namespace=namespace)
+    else:
+        collect = _dump_upgrade_scope
+
+    # Resolved before any probe, so skip mode costs no API request and no clock.
+    collector_path = data_collector_path or shared_data_collector_path()
+    if collector_path is None:
+        return
+
+    _collect_and_write(
+        collector_path=collector_path,
+        reason=reason,
+        scope=scope,
+        collect=collect,
+        client=client,
+        namespace=namespace,
+        subject=subject,
+    )
+
+
+def _session_start_cluster_sections(probes: _Probes) -> list[str]:
+    """Collect the pre-run cluster state used as the run baseline.
+
+    Args:
+        probes (_Probes): Probe runner of the current snapshot.
+
+    Returns:
+        list[str]: One rendered record per probe.
+    """
+    sections = [
+        probes.run(
+            "ClusterVersion",
+            partial(_named_instance, ClusterVersion, client=probes.client, name=_CLUSTER_VERSION_NAME),
+        ),
+        *_listing_sections(
+            probes=probes,
+            label="ClusterOperators",
+            resource_cls=ClusterOperator,
+            summarise=_cluster_operator_summary,
+            include_listing=False,
+        ),
+        *_listing_sections(
+            probes=probes,
+            label="MachineConfigPools",
+            resource_cls=MachineConfigPool,
+            summarise=_machine_config_pool_summary,
+            include_listing=False,
+        ),
+        *_listing_sections(
+            probes=probes, label="Nodes", resource_cls=Node, summarise=_node_summary, include_listing=False
+        ),
+    ]
+    sections.extend(_mtv_csv_sections(probes=probes))
+    sections.extend(
+        _listing_sections(
+            probes=probes,
+            label="CNV CSVs",
+            resource_cls=ClusterServiceVersion,
+            namespace=_CNV_NAMESPACE,
+            summarise=_cluster_service_version_summary,
+            include_listing=False,
+        )
+    )
+    return sections
+
+
+def _git_directory() -> Path:
+    """Return the git directory of the checkout this module is imported from.
+
+    Returns:
+        Path: The git directory; a worktree keeps it outside the working tree and names it in a
+            ``.git`` file.
+    """
+    git_path = Path(__file__).resolve().parents[1] / ".git"
+    if git_path.is_dir():
+        return git_path
+    # A worktree's .git is a file holding "gitdir: <path>".
+    return Path(git_path.read_text(encoding=_OUTPUT_ENCODING).split(":", 1)[1].strip())
+
+
+def _git_common_directory(git_dir: Path) -> Path:
+    """Return the directory holding the refs of a git directory.
+
+    Args:
+        git_dir (Path): Git directory of the checkout.
+
+    Returns:
+        Path: The shared git directory a worktree points at, or ``git_dir`` when there is none.
+    """
+    commondir = git_dir / "commondir"
+    if not commondir.exists():
+        return git_dir
+    return (git_dir / commondir.read_text(encoding=_OUTPUT_ENCODING).strip()).resolve()
+
+
+def _git_head() -> str:
+    """Read the checkout's revision from git's own files, without starting a subprocess.
+
+    Returns:
+        str: The current revision, or ``unknown`` when the checkout has no readable git metadata.
+    """
+    try:
+        git_dir = _git_directory()
+        head = (git_dir / "HEAD").read_text(encoding=_OUTPUT_ENCODING).strip()
+        if not head.startswith(_GIT_REF_PREFIX):
+            return head
+        # HEAD of a worktree holds only the ref name; the ref itself lives in the common directory
+        # and may be loose or packed (a pack-refs run removes the loose file this used to need).
+        ref = head.removeprefix(_GIT_REF_PREFIX)
+        for directory in (git_dir, _git_common_directory(git_dir=git_dir)):
+            ref_file = directory / ref
+            if ref_file.exists():
+                return ref_file.read_text(encoding=_OUTPUT_ENCODING).strip()
+            packed_sha = _packed_ref_sha(packed_refs=directory / _GIT_PACKED_REFS_NAME, ref=ref)
+            if packed_sha:
+                return packed_sha
+        LOGGER.warning(f"Could not resolve the git ref '{ref}', recording {_GIT_HEAD_FALLBACK}")
+    except (OSError, ValueError) as exc:
+        LOGGER.warning(f"Could not read the checkout revision, recording {_GIT_HEAD_FALLBACK}: {exc}")
+    return _GIT_HEAD_FALLBACK
+
+
+def _packed_ref_sha(*, packed_refs: Path, ref: str) -> str | None:
+    """Find a branch revision in a repository's packed refs file.
+
+    Args:
+        packed_refs (Path): Path to ``packed-refs`` in the git directory.
+        ref (str): Full ref name, e.g. ``refs/heads/main``.
+
+    Returns:
+        str | None: The packed revision, or None when the file or the ref is absent.
+    """
+    if not packed_refs.exists():
+        return None
+    for line in packed_refs.read_text(encoding=_OUTPUT_ENCODING).splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        sha, _, packed_name = line.partition(" ")
+        if packed_name.strip() == ref:
+            return sha.strip()
+    return None
+
+
+def _redact_invocation(pytest_args: Sequence[str]) -> str:
+    """Render the pytest invocation with every credential removed.
+
+    Args:
+        pytest_args (Sequence[str]): Arguments pytest was invoked with.
+
+    Returns:
+        str: The invocation with credential ``--tc`` values and URL userinfo replaced by ``***``.
+    """
+    redacted: list[str] = []
+    value_follows_flag = False
+    for arg in pytest_args:
+        redacted_arg = _redact_argument(arg=arg)
+        # pytest accepts ``--tc key:value`` as two argv entries, so the value is only recognized
+        # through the argument before it.
+        if value_follows_flag:
+            redacted_arg = _redact_tc_value(value=redacted_arg)
+        value_follows_flag = arg == _TC_ARGUMENT_FLAG
+        redacted.append(redacted_arg)
+
+    command_line = " ".join(redacted)
+    # The credential may come from CLUSTER_PASSWORD alone, so it can appear outside any --tc value;
+    # a missing password leaves the text as is instead of aborting the whole baseline.
+    return redact_secret(text=command_line, secret=resolve_cluster_credential("cluster_password") or "")
+
+
+def _redact_tc_value(value: str) -> str:
+    """Redact a credential ``--tc`` value of the ``key:value`` form.
+
+    Args:
+        value (str): ``--tc`` value, or the argument that follows a bare ``--tc``.
+
+    Returns:
+        str: The value with a credential-ish key's value replaced by ``***``.
+    """
+    key, separator, _ = value.partition(_TC_KEY_SEPARATOR)
+    if separator and _CREDENTIAL_KEY_PATTERN.search(key):
+        return f"{key}{_TC_KEY_SEPARATOR}{_REDACTED_VALUE}"
+    return value
+
+
+def _redact_argument(arg: str) -> str:
+    """Redact the secrets one invocation argument can carry.
+
+    Args:
+        arg (str): One pytest argument, as given on the command line.
+
+    Returns:
+        str: The argument with a credential ``--tc`` value and any URL userinfo redacted.
+    """
+    if arg.startswith(_TC_ARGUMENT_PREFIX):
+        arg = f"{_TC_ARGUMENT_PREFIX}{_redact_tc_value(value=arg[len(_TC_ARGUMENT_PREFIX) :])}"
+    return _URL_USERINFO_PATTERN.sub(rf"\g<scheme>{_REDACTED_VALUE}@", arg)
+
+
+def _session_start_identity_sections(
+    *, probes: _Probes | None, pytest_args: Sequence[str], skip_teardown: bool, skip_data_collector: bool
+) -> list[str]:
+    """Collect the run identity: checkout revision, pytest invocation and skip flags.
+
+    The identity is local data, so it is collected even when no client could be built - only the
+    cluster-dependent part (the authenticated user) is then omitted.
+
+    Args:
+        probes (_Probes | None): Probe runner of the current snapshot, or None without a client.
+        pytest_args (Sequence[str]): Arguments pytest was invoked with, including ``--tc`` overrides.
+        skip_teardown (bool): Whether ``--skip-teardown`` was set.
+        skip_data_collector (bool): Whether ``--skip-data-collector`` was set.
+
+    Returns:
+        list[str]: One rendered record per identity probe.
+    """
+    sections = [
+        f"{_PROBE_LABEL_PREFIX}git HEAD\n{_git_head()}",
+        f"{_PROBE_LABEL_PREFIX}pytest\n{_redact_invocation(pytest_args=pytest_args)}",
+    ]
+    if probes is not None:
+        sections.append(
+            probes.run("current user", partial(_named_instance, User, client=probes.client, name=_CURRENT_USER_NAME))
+        )
+    else:
+        sections.append(f"{_PROBE_LABEL_PREFIX}current user\n[not collected: no cluster client]")
+    sections.append(f"# skip_teardown: {skip_teardown}\n# skip_data_collector: {skip_data_collector}")
+    return sections
+
+
+def _write_once_atomic(path: Path, text: str) -> bool:
+    """Publish a complete file only when the destination does not exist yet.
+
+    Every xdist worker writes the same session-start files. The content is written to a
+    process-unique temporary sibling and then published - by hard link when the filesystem allows
+    it, otherwise by an exclusive create - so the file appears complete and the first writer wins
+    instead of a later worker overwriting the true start-of-run snapshot.
+
+    Args:
+        path (Path): Destination file.
+        text (str): Content to write.
+
+    Returns:
+        bool: True when this call created the file, False when a snapshot already existed.
+    """
+    temporary_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    temporary_path.write_text(text, encoding=_OUTPUT_ENCODING)
+    try:
+        os.link(temporary_path, path)
+    except FileExistsError:
+        return False
+    except OSError:
+        # Some artifact mounts reject hard links (EPERM/EXDEV/EOPNOTSUPP); an exclusive create is
+        # equally atomic and keeps the first-writer-wins behaviour instead of losing the baseline.
+        try:
+            with path.open("x", encoding=_OUTPUT_ENCODING) as handle:
+                handle.write(text)
+        except FileExistsError:
+            return False
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return True
+
+
+def _session_client() -> DynamicClient | None:
+    """Return a client for the baseline probes, or None when the run has none.
+
+    The baseline is a diagnostic: a run without usable credentials skips its cluster section
+    instead of failing the session over a missing snapshot.
+
+    Returns:
+        DynamicClient | None: Client built from the resolved credentials, or None when building it failed.
+    """
+    try:
+        client, failure = _call_within_budget(probe=get_cluster_client, budget=_CLIENT_BUILD_BUDGET_SECONDS)
+        if failure is not None:
+            LOGGER.warning(f"Session-start baseline has no cluster client: {failure}")
+            return None
+        return client
+    except (OSError, ValueError, TypeError, ApiException, DynamicApiError, ClientWithBasicAuthError) as exc:
+        # A rejected credential is a configuration problem elsewhere in the run: the baseline is a
+        # diagnostic, so it degrades to skipping its cluster section instead of raising into pytest.
+        LOGGER.warning(f"Session-start baseline has no cluster client, skipping its cluster state: {exc}")
+        return None
+
+
+def _redact_cluster_password(text: str) -> str:
+    """Redact the configured cluster password from artifact text.
+
+    Args:
+        text (str): Text about to be written into an artifact.
+
+    Returns:
+        str: The text with the password replaced, unchanged when no password is configured.
+    """
+    cluster_password = resolve_cluster_credential("cluster_password")
+    return redact_secret(text=text, secret=cluster_password) if cluster_password else text
+
+
+def _write_session_cluster_snapshot(*, run_client: DynamicClient, path: Path) -> bool:
+    """Collect and write the session-start cluster state.
+
+    Args:
+        run_client (DynamicClient | None): Client the probes read the cluster with, or None to write
+            the local identity only.
+        path (Path): Destination file.
+
+    Returns:
+        bool: True when this call created the file, False when a snapshot already existed.
+    """
+    probes = _Probes(client=run_client)
+    sections = _with_deadline_record(sections=_session_start_cluster_sections(probes=probes), probes=probes)
+    return _write_once_atomic(path=path, text=_redact_cluster_password(f"{_SECTION_SEPARATOR.join(sections)}\n"))
+
+
+def _write_session_identity(
+    *,
+    run_client: DynamicClient | None,
+    path: Path,
+    pytest_args: Sequence[str],
+    skip_teardown: bool,
+    skip_data_collector: bool,
+) -> bool:
+    """Collect and write the run identity of this session.
+
+    Args:
+        run_client (DynamicClient): Client the probes read the cluster with.
+        path (Path): Destination file.
+        pytest_args (Sequence[str]): Arguments pytest was invoked with, including ``--tc`` overrides.
+        skip_teardown (bool): Whether ``--skip-teardown`` was set.
+        skip_data_collector (bool): Whether ``--skip-data-collector`` was set.
+
+    Returns:
+        bool: True when this call created the file, False when a snapshot already existed.
+    """
+    probes = _Probes(client=run_client) if run_client is not None else None
+    sections = _session_start_identity_sections(
+        probes=probes,
+        pytest_args=pytest_args,
+        skip_teardown=skip_teardown,
+        skip_data_collector=skip_data_collector,
+    )
+    return _write_once_atomic(
+        path=path,
+        text=_redact_cluster_password(
+            f"{_SECTION_SEPARATOR.join(_with_deadline_record(sections=sections, probes=probes))}\n"
+        ),
+    )
+
+
+def write_session_baseline(
+    *,
+    pytest_args: Sequence[str],
+    skip_teardown: bool,
+    skip_data_collector: bool,
+    client: DynamicClient | None = None,
+) -> None:
+    """Write the session-start cluster state and run identity once per session, never raising.
+
+    Args:
+        pytest_args (Sequence[str]): Arguments pytest was invoked with, including ``--tc`` overrides.
+        skip_teardown (bool): Whether ``--skip-teardown`` was set.
+        skip_data_collector (bool): Whether ``--skip-data-collector`` was set.
+        client (DynamicClient | None): Run client; when None, one is built defensively from the
+            resolved credentials so a container run without a client still gets its baseline.
+    """
+    if skip_data_collector:
+        return
+
+    collector_path = shared_data_collector_path()
+    if collector_path is None:
+        return
+
+    directory = collector_path / _SESSION_START_DIRECTORY
+    cluster_path = directory / _SESSION_START_CLUSTER_NAME
+    identity_path = directory / _SESSION_START_RUN_IDENTITY_NAME
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        if cluster_path.exists() and identity_path.exists():
+            LOGGER.info(f"Session-start baseline already exists in {directory}, keeping the first snapshot")
+            return
+        run_client = client or _session_client()
+        cluster_created = False
+        if run_client is None:
+            LOGGER.warning("Session-start baseline has no cluster client, writing the run identity only")
+        else:
+            cluster_created = _write_session_cluster_snapshot(run_client=run_client, path=cluster_path)
+        identity_created = _write_session_identity(
+            run_client=run_client,
+            path=identity_path,
+            pytest_args=pytest_args,
+            skip_teardown=skip_teardown,
+            skip_data_collector=skip_data_collector,
+        )
+    except (OSError, ValueError, TypeError, ClientWithBasicAuthError) as exc:
+        # Best-effort evidence: a failing probe or a rejected credential skips the baseline instead of
+        # aborting session start.
+        LOGGER.warning(f"Session-start baseline could not be written to {directory}: {exc}")
+        return
+
+    if cluster_created and identity_created:
+        LOGGER.warning(f"Session-start baseline written to {directory}")
+        return
+    if identity_created and not cluster_created:
+        LOGGER.warning(f"Session-start run identity written to {directory}; cluster state skipped (no client)")
+        return
+    LOGGER.info(f"Session-start baseline already exists in {directory}, keeping the first snapshot")
