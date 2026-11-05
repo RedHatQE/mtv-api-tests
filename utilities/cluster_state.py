@@ -80,6 +80,8 @@ _STORAGE_CLASS_CONFIG_KEY = "storage_class"
 _STORAGE_CLAIM_LOG_TAIL_LINES = 1000
 # A driver's pods exist once per node and repeat the same lines, so a failure tail is enough.
 _DRIVER_LOG_TAIL_LINES = 300
+# A storage class with this provisioner is bound by hand, so no driver pod serves it.
+_NO_PROVISIONER = "kubernetes.io/no-provisioner"
 # The MCO pods carry a stable k8s-app label; their names encode the node and change between
 # releases, so the label - not the name - is what a snapshot may rely on.
 _MCO_POD_LABEL_SELECTOR = "k8s-app in (machine-config-operator,machine-config-controller,machine-config-daemon)"
@@ -1132,9 +1134,11 @@ def _storage_class_sections(*, probes: _Probes, claims: list[dict[str, Any]], na
     class_claims = _claims_of_class(claims=claims, storage_class_name=class_name)
     claim_names = {_resource_name(claim) for claim in class_claims}
     sections = [record]
-    if storage_class is not None:
+    if storage_class is not None and claim_names:
         # Only the volume probes need the class body; the pod evidence below does not, so a failed
-        # class read must not cost the logs of the pods that are already stuck on the claims.
+        # class read must not cost the logs of the pods that are already stuck on the claims. With
+        # no claim of this class in the namespace there is nothing stalled to explain, so the
+        # driver pods are not read either.
         volume_names = {volume for claim in class_claims if (volume := (claim.get("spec") or {}).get("volumeName"))}
         sections.append(
             probes.run(
@@ -1149,7 +1153,13 @@ def _storage_class_sections(*, probes: _Probes, claims: list[dict[str, Any]], na
             render=_render_attachments,
         )
         sections.append(attachment_record)
-        sections.extend(_driver_pod_sections(probes=probes, attachments=attachments or []))
+        sections.extend(
+            _driver_pod_sections(
+                probes=probes,
+                attachments=attachments or [],
+                provisioner=storage_class.get("provisioner"),
+            )
+        )
     if not claim_names:
         return sections
     sections.extend(
@@ -1208,26 +1218,31 @@ def _render_attachments(attachments: list[dict[str, Any]]) -> str:
     ])
 
 
-def _driver_pod_sections(*, probes: _Probes, attachments: list[dict[str, Any]]) -> list[str]:
+def _driver_pod_sections(*, probes: _Probes, attachments: list[dict[str, Any]], provisioner: str | None) -> list[str]:
     """Collect the logs of the pods belonging to the drivers that serve the claims under test.
 
-    The driver name is the one the cluster reports in ``VolumeAttachment.spec.attacher``, never a
-    literal, and a pod belongs to it only by mentioning that name. A driver that does not name
-    itself in its own pods (cinder, nfs and smb installs do not) yields no section rather than the
-    pods of a driver that has nothing to do with the stalled volume.
+    Both names come from the cluster: the provisioner of the storage class under test, which is who
+    would bind a claim that is still Pending, and the attacher of each attachment, which is who did
+    bind a claim that is not. A pod belongs to a driver only by mentioning that name, so a driver
+    that stays anonymous in its own pods yields no section rather than another driver's logs.
 
     Args:
         probes (_Probes): Probe runner of the current snapshot.
         attachments (list[dict[str, Any]]): Attachment summaries of the claims under test.
+        provisioner (str | None): Provisioner of the storage class under test, when known.
 
     Returns:
         list[str]: The pod listing, its summary and one record per container log.
     """
     drivers = {attachment["driver"] for attachment in attachments if attachment.get("driver")}
+    if provisioner and provisioner != _NO_PROVISIONER:
+        # A Pending claim has no volume and therefore no attachment: the class is the only object
+        # that already names the driver that should have bound it.
+        drivers.add(provisioner)
     if not drivers:
         return [
             f"{_PROBE_LABEL_PREFIX}Storage driver pods\n"
-            "[no driver identified: no volume of the storage class under test is attached]"
+            "[no driver identified: the storage class names no provisioner and nothing is attached]"
         ]
     return _pod_log_sections(
         probes=probes,
