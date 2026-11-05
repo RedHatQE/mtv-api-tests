@@ -16,9 +16,10 @@ from ocp_resources.plan import Plan
 from ocp_resources.resource import ResourceEditor
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
+from ocp_resources.virtual_machine_instance import VirtualMachineInstance
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutSampler
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -93,6 +94,35 @@ def _find_plan_condition(
     return None
 
 
+def _wait_for_plan_condition(plan: Plan, type_prefix: str, message_substring: str) -> dict[str, Any]:
+    """Wait until a Plan reports a condition matching the given type prefix and message substring.
+
+    Args:
+        plan (Plan): Plan whose conditions are polled.
+        type_prefix (str): Condition type prefix to match (e.g. ``SharedDisks``).
+        message_substring (str): Substring required in the condition message.
+
+    Returns:
+        dict[str, Any]: The matching condition.
+
+    Raises:
+        TimeoutExpiredError: If the condition does not appear within the timeout.
+    """
+    for sample in TimeoutSampler(
+        wait_timeout=_PLAN_CONDITION_TIMEOUT,
+        sleep=_PLAN_CONDITION_POLL_INTERVAL,
+        func=lambda: _find_plan_condition(
+            conditions=_get_plan_conditions(plan),
+            type_prefix=type_prefix,
+            message_substring=message_substring,
+        ),
+    ):
+        if sample:
+            LOGGER.info(f"Matched condition on Plan '{plan.name}': {sample['message']}")
+            return sample
+    raise TimeoutExpiredError(f"Condition '{type_prefix}*/*{message_substring}*' not found on Plan '{plan.name}'")
+
+
 def _plan_is_ready(conditions: list[dict[str, Any]]) -> bool:
     """Report whether the conditions carry a Ready=True condition.
 
@@ -156,8 +186,10 @@ class TestSharedDiskRemigrate:
            Verify both destination VMs share a single shared-disk PVC.
         5. Delete the destination owner VM with orphan propagation. If it
            hangs Terminating on the orphan finalizer, remove the finalizer
-           via a patch and wait for deletion. Verify the shared PVC still
-           exists, is Bound, and no longer has ownerReferences.
+           via a patch and wait for deletion. Delete the owner VM's
+           remaining VirtualMachineInstance (orphaned by the propagation
+           policy) and wait for it to disappear. Verify the shared PVC
+           still exists, is Bound, and no longer has ownerReferences.
         6. Create a second Plan for the owner VM only (shared disks
            enabled) and run its migration. Verify it reaches Succeeded,
            that the Plan surfaces a duplicate shared-disk warning whose
@@ -301,7 +333,7 @@ class TestSharedDiskRemigrate:
         prepared_plan: dict[str, Any],
         ocp_admin_client: "DynamicClient",
     ) -> None:
-        """Delete the destination owner VM with orphan propagation and verify the shared PVC survives."""
+        """Delete the destination owner VM (and its orphaned VMI) and verify the shared PVC survives."""
         vm_namespace = prepared_plan["_vm_target_namespace"]
         vm1_dest_name = resolve_destination_vm_name(prepared_plan["virtual_machines"][0])
         vm1_dest = VirtualMachine(
@@ -320,6 +352,23 @@ class TestSharedDiskRemigrate:
             assert vm1_dest.wait_deleted(timeout=_VM_DELETE_TIMEOUT), (
                 f"VM '{vm1_dest_name}' still Terminating after finalizer removal"
             )
+
+        # Orphan propagation strips the VMI's ownerRef instead of deleting it;
+        # remove the stale VMI so KubeVirt cannot adopt it for the replacement VM.
+        vm1_dest_vmi = VirtualMachineInstance(
+            client=ocp_admin_client,
+            name=vm1_dest_name,
+            namespace=vm_namespace,
+            ensure_exists=False,
+        )
+        if vm1_dest_vmi.exists:
+            LOGGER.info(f"Deleting orphaned VirtualMachineInstance '{vm1_dest_name}' in namespace '{vm_namespace}'")
+            vm1_dest_vmi.delete()
+            assert vm1_dest_vmi.wait_deleted(timeout=_VM_DELETE_TIMEOUT), (
+                f"VirtualMachineInstance '{vm1_dest_name}' still exists after {_VM_DELETE_TIMEOUT}s"
+            )
+        else:
+            LOGGER.info(f"No leftover VirtualMachineInstance '{vm1_dest_name}' found; continuing")
 
         shared_pvc = PersistentVolumeClaim(
             client=ocp_admin_client,
@@ -366,18 +415,11 @@ class TestSharedDiskRemigrate:
             plan=self.plan_recreate,
             target_namespace=target_namespace,
         )
-        for sample in TimeoutSampler(
-            wait_timeout=_PLAN_CONDITION_TIMEOUT,
-            sleep=_PLAN_CONDITION_POLL_INTERVAL,
-            func=lambda: _find_plan_condition(
-                conditions=_get_plan_conditions(self.plan_recreate),
-                type_prefix=_SHARED_WARN_DISKS_CONDITION_PREFIX,
-                message_substring=_DUPLICATE_WARNING_SUBSTRING,
-            ),
-        ):
-            if sample:
-                LOGGER.info(f"Duplicate shared-disk warning on Plan '{self.plan_recreate.name}': {sample['message']}")
-                break
+        _wait_for_plan_condition(
+            plan=self.plan_recreate,
+            type_prefix=_SHARED_WARN_DISKS_CONDITION_PREFIX,
+            message_substring=_DUPLICATE_WARNING_SUBSTRING,
+        )
 
         pvc_names = get_shared_disk_pvc_names(
             ocp_admin_client=ocp_admin_client,
@@ -412,18 +454,11 @@ class TestSharedDiskRemigrate:
             target_power_state=prepared_plan["target_power_state"],
             wait_for_ready=False,
         )
-        for sample in TimeoutSampler(
-            wait_timeout=_PLAN_CONDITION_TIMEOUT,
-            sleep=_PLAN_CONDITION_POLL_INTERVAL,
-            func=lambda: _find_plan_condition(
-                conditions=_get_plan_conditions(self.plan_consumer),
-                type_prefix=_SHARED_DISKS_CONDITION_PREFIX,
-                message_substring=_MULTIPLE_SHARED_PVCS_SUBSTRING,
-            ),
-        ):
-            if sample:
-                LOGGER.info(f"Shared-disks blocker on Plan '{self.plan_consumer.name}': {sample['message']}")
-                break
+        _wait_for_plan_condition(
+            plan=self.plan_consumer,
+            type_prefix=_SHARED_DISKS_CONDITION_PREFIX,
+            message_substring=_MULTIPLE_SHARED_PVCS_SUBSTRING,
+        )
 
         conditions = _get_plan_conditions(self.plan_consumer)
         assert not _plan_is_ready(conditions=conditions), (
