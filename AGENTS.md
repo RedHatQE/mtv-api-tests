@@ -17,7 +17,7 @@ because agents trust them over the actual code; changes need user approval.
 | Install dependencies | `uv sync` (never pip) |
 | Lint/format gate (MUST pass before commit, never `--no-verify`) | `pre-commit run --all-files` |
 | Build container | `podman build -f Dockerfile -t mtv-api-tests` |
-| Regenerate docs site locally (preview only — output is gitignored) | `uvx pi-docsite --docs-dir docs --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."` |
+| Regenerate docs site locally (preview only — output is gitignored) | `uvx pi-docsite==4.18.0 --docs-dir docs --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."` |
 
 ## Stack
 
@@ -55,7 +55,8 @@ output is **not** in the repository:
 - Only `docs/**/*.md` and `docs/nav.json` are tracked and hand-authored. Never run the generator in
   a PR and never commit its output (`docs/*.html`, `docs/assets/`, `search-index.json`, `llms*.txt`,
   `.nojekyll`): those paths are gitignored, `.github/workflows/docs.yml` builds and publishes the
-  site from the sources after merge, and `docs-guard.yml` fails a PR that adds or modifies output.
+  site from the sources after merge, and `docs-guard.yml` fails a PR that adds or modifies output
+  (it also builds the site on every PR, so a source change that does not build cannot merge).
 - New page: write `docs/<slug>.md` with exactly one H1 and add one line to `docs/nav.json`. Reorder
   via `nav.json`, never by renaming files. A `nav.json` slug with no `.md` is a build error.
 - Cross-page links target `.html`, not `.md` (pi-docsite does not rewrite link targets); links from

@@ -5,17 +5,19 @@ RHV, OpenStack, and OVA using Migration Toolkit for Virtualization (MTV).
 
 **[Full Documentation](https://redhatqe.github.io/mtv-api-tests/)** | [Copy-Offload Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)
 
-The documentation site in [`docs/`](docs) is generated with
-[pi-docsite](https://pypi.org/project/pi-docsite/): edit `docs/*.md`, keep the sidebar
-order in `docs/nav.json`, then rebuild the generated files with
+The documentation site is built from [`docs/*.md`](docs) and [`docs/nav.json`](docs/nav.json) by the
+`Docs` workflow and published at <https://redhatqe.github.io/mtv-api-tests/> after merge. The
+generated files are not tracked, so a pull request has nothing to rebuild and nothing to commit —
+`Docs Guard` fails any PR that adds or modifies output under `docs/`.
+
+To preview the site locally (the output is gitignored, so it cannot dirty the tree):
 
 ```bash
-uvx pi-docsite --docs-dir docs \
+uvx pi-docsite==4.18.0 --docs-dir docs \
   --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
 ```
 
-Never edit the generated `*.html`, `assets/`, `search-index.json`, `llms.txt` or
-`llms-full.txt` by hand. See [AGENTS.md](AGENTS.md#documentation-site-must).
+See [AGENTS.md](AGENTS.md#documentation-sync-must).
 
 ---
 

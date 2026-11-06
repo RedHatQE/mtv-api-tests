@@ -233,27 +233,22 @@ MD033:
     - strong
 ```
 
-## Rebuilding The Documentation Site
+## Building The Documentation Site
 
-`docs/` is a [pi-docsite](https://pypi.org/project/pi-docsite/) project. Per `AGENTS.md`, edit only the Markdown sources and never the generated output:
+`docs/` is a [pi-docsite](https://pypi.org/project/pi-docsite/) project. Per `AGENTS.md`, only the Markdown sources and `docs/nav.json` are tracked:
 
 | Path | Role |
 | --- | --- |
 | `docs/*.md` | Sources, the only files humans edit |
 | `docs/nav.json` | Sidebar layout, groups and page order |
-| `docs/*.html`, `docs/assets/`, `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` | Generated, never hand-edited |
+| `docs/*.html`, `docs/assets/`, `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` | Generated in CI and gitignored, never committed or hand-edited |
 
-Rebuild after any change to a `docs/*.md` file or to `docs/nav.json`:
-
-```bash
-uvx pi-docsite --docs-dir docs \
-  --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
-```
+The `Docs` workflow builds and publishes the site after merge. `Docs Guard` rejects a PR that adds generated output, and builds the site on every PR so a source change that does not build fails before merge.
 
 The generator enforces the invariants this site depends on: each page has exactly one H1, every page appears in `nav.json`, and a `nav.json` slug without a `.md` behind it is a
-build error. Output is byte-for-byte reproducible, so churn in untouched files means the generator changed rather than the build being stale.
+build error.
 
-> **Tip:** Because `markdownlint-cli2` excludes `docs/`, the generator is your structural check on documentation changes. Run it before committing.
+> **Tip:** Because `markdownlint-cli2` excludes `docs/`, the PR build is your structural check on documentation changes — you no longer run the generator yourself. To preview locally, run `uvx pi-docsite==4.18.0 --docs-dir docs --tagline "..."`; its output is gitignored.
 
 > **Note:** Search on the site only works when `docs/` is served over HTTP. Browsers block `fetch()` of `search-index.json` over `file://`.
 

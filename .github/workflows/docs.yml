@@ -32,11 +32,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - name: Build site from docs/*.md
-        # Always the newest release: docs should not wait on a bump commit, and this job holds no
-        # publish rights (they are on `deploy`), so the blast radius of a bad upstream upload is a
-        # failed build, not a compromised deployment.
+        # Pinned deliberately: with a floating generator an upstream release would rebuild and
+        # publish the live site from code nobody reviewed here, and the byte-for-byte
+        # reproducibility the docs rely on would not hold across days. Bump the pin in its own PR,
+        # where the regenerated output is visible in review.
         run: >-
-          uvx pi-docsite@latest --docs-dir docs
+          uvx pi-docsite==4.18.0 --docs-dir docs
           --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
       - uses: actions/upload-pages-artifact@v3
         with:
