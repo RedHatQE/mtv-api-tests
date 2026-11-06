@@ -296,7 +296,7 @@ values; partial, empty, or whitespace-only sets fail fast with a named error suc
 valid only for ambient authentication from a kubeconfig available to the test process. `mtv-api-tests run` reaches that
 path only when no OpenShift provider is selected from `.providers.json` — the CLI checks for an existing `oc` token only
 then and does not pass a standalone token to the client. See
-[runtime configuration](docs/runtime-configuration.html) for details.
+[runtime configuration](https://redhatqe.github.io/mtv-api-tests/runtime-configuration.html) for details.
 
 **VM naming**: the OpenShift version segment of generated source VM names is read from the target cluster
 automatically — do not pass `--tc=target_ocp_version`.
@@ -1325,7 +1325,7 @@ Invalid image metadata and other configuration/programming errors propagate inst
 remains queued and may raise again when retried at a later boundary or session finish.
 Inventory, configured teardown, temporary-directory removal, summary and enabled AI enrichment are attempted independently;
 cleanup errors propagate with earlier errors chained. See
-[diagnostic collection](docs/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
+[diagnostic collection](https://redhatqe.github.io/mtv-api-tests/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
 
 ```bash
 oc adm must-gather --image=quay.io/kubev2v/forklift-must-gather:latest --dest-dir=/tmp/mtv-logs
