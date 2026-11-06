@@ -749,7 +749,7 @@ uvx pi-docsite==4.18.0 --docs-dir docs \
   --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
 ```
 
-This is also why `.pr_agent.toml` still carries an `[ignore]` block for the generated artifacts: the files are real deliverables, but they are never a review or lint target, and they can no longer reach a diff at all.
+Because the generated files are no longer tracked and the guard rejects them in a pull request, `.pr_agent.toml` no longer needs an `[ignore]` list for them — the block is empty, and the Markdown sources stay in review scope.
 
 ## What External CI/CD Must Do
 
