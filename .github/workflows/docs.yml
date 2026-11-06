@@ -57,3 +57,24 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+      # The site is only "deployed" once it actually serves. The merge that first switches Pages to
+      # build_type=workflow removes the previously tracked files in the same push, so a deploy that
+      # publishes but serves errors has no homepage and nothing in the repository notices: this step
+      # is that notice, and it is the pass criterion for the migration instead of a manual curl.
+      - name: Verify the published site
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          for path in "" "quickstart-first-run.html" "pytest-options-and-markers.html"; do
+            url="${PAGE_URL}${path}"
+            code=""
+            # Pages can serve the previous deployment for a few seconds after the upload returns.
+            for attempt in 1 2 3 4 5 6; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$url" || true)
+              [ "$code" = "200" ] && break
+              sleep 5
+            done
+            echo "$code $url"
+            [ "$code" = "200" ]
+          done
