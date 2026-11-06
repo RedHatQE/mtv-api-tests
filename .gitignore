@@ -177,3 +177,14 @@ jira.cfg
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Generated docs site output — built and published by .github/workflows/docs.yml.
+# Sources are docs/**/*.md and docs/nav.json; never commit generated files here.
+docs/*.html
+docs/assets/
+docs/images/
+docs/sitemap.xml
+docs/.nojekyll
+docs/llms.txt
+docs/llms-full.txt
+docs/search-index.json

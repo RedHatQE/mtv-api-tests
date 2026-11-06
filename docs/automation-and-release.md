@@ -723,34 +723,33 @@ file is preserved if the call fails.
 > `ROOTCOZ_SERVER_URL`. When the rootcoz deployment requires authentication and neither a matching `.netrc` entry nor an authenticating proxy in front of
 > `ROOTCOZ_SERVER_URL` supplies it, the call fails and enrichment logs the exception while preserving the original JUnit file.
 
-## Documentation Site Rebuild
+## Documentation Site Build
 
-The `docs/` tree is a [pi-docsite](https://pypi.org/project/pi-docsite/) project. Only the Markdown sources and `docs/nav.json` are hand-edited;
-everything else in `docs/` is generated and committed.
+The `docs/` tree is a [pi-docsite](https://pypi.org/project/pi-docsite/) project. Only the Markdown sources and `docs/nav.json` are tracked and hand-edited; the rest of `docs/` is build output, produced by `.github/workflows/docs.yml` after merge and published to GitHub Pages.
 
 | Path | Role |
 | --- | --- |
 | `docs/*.md` | Sources — the only files humans edit |
 | `docs/nav.json` | Sidebar layout: groups and page order |
-| `docs/*.html`, `docs/assets/`, `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` | Generated — never hand-edit |
-
-Rebuild after any change to a `docs/*.md` file or to `docs/nav.json`:
-
-```bash
-uvx pi-docsite --docs-dir docs \
-  --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
-```
+| `docs/*.html`, `docs/assets/`, `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` | Generated in CI and gitignored — never committed, never hand-edited |
 
 The rules that matter for automation:
 
-- edit the Markdown, never the generated HTML; fix the source and rebuild
-- generated files are committed, so a source change and its rebuilt output belong in the same commit
+- edit the Markdown; the published site is rebuilt from the sources after merge
+- never run the generator in a pull request and never commit its output — `docs-guard.yml` rejects any generated path under `docs/`
+- `docs-guard.yml` also builds the site on every pull request, so a source change that does not build fails before merge instead of leaving production on the previous build
 - a new page needs a `docs/<slug>.md` with exactly one H1 and a matching `nav.json` entry; a slug with no `.md` behind it is a build error
-- output is byte-for-byte reproducible, so churn in untouched files means the generator changed, not a stale build
+- `docs.yml` pins the `pi-docsite` version, so the published output changes only when a source or that pin changes
 - search only works when `docs/` is served over HTTP, because `search-index.json` is fetched with `fetch()`
 
-This is also why `.pr_agent.toml` carries an `[ignore]` block for the generated artifacts and why three pre-commit hooks exclude `^docs/`. The
-generated files are real deliverables, but they are never a review or lint target.
+To preview locally, run the command the workflow runs — its output is ignored by git, so it cannot dirty a working tree:
+
+```bash
+uvx pi-docsite==4.18.0 --docs-dir docs \
+  --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
+```
+
+Because the generated files are no longer tracked and the guard rejects them in a pull request, `.pr_agent.toml` no longer needs an `[ignore]` list for them — the block is empty, and the Markdown sources stay in review scope.
 
 ## What External CI/CD Must Do
 

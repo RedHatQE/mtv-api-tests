@@ -1,0 +1,89 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Any docs change, not just .md: the migration that removes the committed output touches
+      # only generated paths, and it must still deploy.
+      - "docs/**"
+  # The first deploy after Pages is switched to build_type=workflow has no push to ride on.
+  workflow_dispatch:
+
+concurrency:
+  group: docs
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # workflow_dispatch accepts any ref, so without this guard `gh workflow run docs.yml --ref
+    # some-branch` would publish that branch's docs/ to the live Pages site. Deploying is main-only;
+    # a manual run is still how the first deploy after the Pages switch is triggered.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Building needs nothing but the sources: publish rights live on the deploy job alone, so
+    # whatever the build step runs can never reach Pages.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build site from docs/*.md
+        # Pinned deliberately: with a floating generator an upstream release would rebuild and
+        # publish the live site from code nobody reviewed here, and the byte-for-byte
+        # reproducibility the docs rely on would not hold across days. Bump the pin in its own PR,
+        # where the regenerated output is visible in review.
+        run: >-
+          uvx pi-docsite==4.18.0 --docs-dir docs
+          --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
+      # Gate BEFORE the artifact is published: a build that produced no homepage must never reach
+      # Pages, because the merge that switches to build_type=workflow deletes the previously tracked
+      # pages in the same push, so a half-empty deploy leaves the site with nothing to serve.
+      - name: Check the generated site is complete
+        run: |
+          set -euo pipefail
+          for page in index.html quickstart-first-run.html pytest-options-and-markers.html; do
+            test -f "docs/$page" || { echo "::error::docs/$page missing from the build"; exit 1; }
+          done
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # The only job that publishes.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      # deploy-pages has already published by the time this runs, so the step cannot roll a bad
+      # publish back — it turns "published but does not serve" into a red run instead of a silent
+      # 404 on the homepage. Recovery from a red run here is the manual build_type=legacy switch
+      # documented in #827; the completeness gate that prevents most of these lives in `build`.
+      - name: Verify the published site
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          for path in "" "quickstart-first-run.html" "pytest-options-and-markers.html"; do
+            url="${PAGE_URL}${path}"
+            code=""
+            # Pages can serve the previous deployment for a few seconds after the upload returns.
+            for attempt in 1 2 3 4 5 6; do
+              code=$(curl -s --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' "$url" || true)
+              [ "$code" = "200" ] && break
+              sleep 5
+            done
+            echo "$code $url"
+            [ "$code" = "200" ]
+          done
