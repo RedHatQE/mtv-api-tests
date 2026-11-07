@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import shlex
+from datetime import datetime, timezone
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import pytest
@@ -11,7 +12,6 @@ from kubernetes.dynamic.exceptions import DynamicApiError, ResourceNotFoundError
 from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.image_digest_mirror_set import ImageDigestMirrorSet
 from ocp_resources.exceptions import ClientWithBasicAuthError
-from ocp_resources.plan import Plan
 from ocp_resources.resource import Resource
 from ocp_resources.subscription import Subscription
 from pyhelper_utils.shell import run_command
@@ -211,10 +211,10 @@ def _resolve_must_gather_image(
 ) -> str:
     """Resolve the MTV must-gather image, using the channel-derived IDMS as an optional mirror.
 
-    The image is always the MTV one from the CSV's ``MUST_GATHER_IMAGE``: the plan-targeted
-    gather script is a feature of that image only, so no other must-gather image may ever be
-    substituted. When the channel-derived IDMS exists, its mirror URL replaces the registry
-    prefix and the CSV digest is kept (needed on devel clusters without direct
+    The image is always the MTV one from the CSV's ``MUST_GATHER_IMAGE``: the Forklift
+    collection scripts are a feature of that image only, so no other must-gather image
+    may ever be substituted. When the channel-derived IDMS exists, its mirror URL replaces
+    the registry prefix and the CSV digest is kept (needed on devel clusters without direct
     ``registry.redhat.io`` access). When the IDMS resource is absent (GA/brew clusters) or its
     API is unavailable (older OpenShift), the fully-qualified CSV image is returned verbatim —
     any cluster with direct registry access can pull it.
@@ -262,58 +262,58 @@ def _resolve_must_gather_image(
     return resolved_image
 
 
-def run_must_gather(data_collector_path: Path) -> bool:
-    """Run ``oc adm must-gather`` to collect the full MTV diagnostic bundle.
+def _utc_rfc3339_now() -> str:
+    """Return the current UTC time as an RFC 3339 timestamp for ``--since-time``.
 
-    Used where there is no plan to scope by: session teardown after leftovers, and an item whose
-    test class carries no ``plan_resource``. Resolves the must-gather image from the installed
-    MTV operator CSV, using the channel-derived IDMS as an optional mirror; when that IDMS is
-    absent or its API is unavailable, the CSV image is used verbatim. Known operational failures
-    return False for retry; programming and configuration errors propagate.
+    Returns:
+        str: The current UTC time, e.g. ``2026-11-07T09:15:00Z``.
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def record_session_start_time(session: pytest.Session) -> None:
+    """Record the session start timestamp scoping standalone and teardown gathers.
+
+    Args:
+        session (pytest.Session): Session to record the start time on.
+    """
+    setattr(session, "_must_gather_session_start_time", _utc_rfc3339_now())
+
+
+def session_start_time(session: pytest.Session) -> str:
+    """Return the session start timestamp recorded at session start.
+
+    Args:
+        session (pytest.Session): Session holding the start timestamp.
+
+    Returns:
+        str: The UTC RFC 3339 session start timestamp.
+    """
+    return session._must_gather_session_start_time
+
+
+def run_must_gather(data_collector_path: Path, since_time: str) -> bool:
+    """Run ``oc adm must-gather`` collecting all logs since ``since_time``.
+
+    Runs the full Forklift collection (``/usr/bin/gather``) with ``MUST_GATHER_SINCE_TIME``
+    bounding every pod-log query to the given RFC 3339 timestamp, so the bundle holds the
+    cluster's Forklift-relevant logs and CRs for the failing test's execution window — all pods
+    in the Forklift namespaces (current and previous logs), CDI and vm-import component logs,
+    current virt-launcher logs cluster-wide, and every plan's migration pods, none of it
+    grep-filtered the way the plan-targeted script was. Resolves the must-gather image from the
+    installed MTV operator CSV, using the channel-derived IDMS as an optional mirror; when that
+    IDMS is absent or its API is unavailable, the CSV image is used verbatim. Known operational
+    failures return False for retry; programming and configuration errors propagate.
 
     Args:
         data_collector_path (Path): Directory where must-gather output is written.
+        since_time (str): UTC RFC 3339 timestamp; logs older than it are not collected.
 
     Returns:
         bool: True when the gather command ran. False when it did not, so the caller can keep the
             failure pending instead of recording a gather that produced no diagnostics.
     """
-    LOGGER.info("Running full must-gather collection")
-    return _run_must_gather(data_collector_path=data_collector_path, target_args="")
-
-
-def run_plan_must_gather(data_collector_path: Path, plan: dict[str, str]) -> bool:
-    """Run the plan-targeted ``oc adm must-gather`` collection for one migration plan.
-
-    A different gather script from :func:`run_must_gather`: it runs ``/usr/bin/targeted`` with the
-    plan's name and namespace as env, so the artifact holds that plan's VMs, networks and events
-    instead of a full-cluster snapshot. Image resolution is shared with the full collection,
-    including the CSV-image fallback when the channel-derived IDMS is absent.
-
-    Args:
-        data_collector_path (Path): Directory where must-gather output is written.
-        plan (dict[str, str]): Dict with ``name`` and ``namespace`` keys identifying the plan.
-
-    Returns:
-        bool: True when the gather command ran. False when it did not, so the caller can keep the
-            failure pending instead of recording a gather that produced no diagnostics.
-    """
-    LOGGER.info(f"Running targeted must-gather for plan '{plan['name']}' in namespace '{plan['namespace']}'")
-    target_args = f"NS={plan['namespace']} PLAN={plan['name']} /usr/bin/targeted"
-    return _run_must_gather(data_collector_path=data_collector_path, target_args=target_args)
-
-
-def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
-    """Resolve the must-gather image and run ``oc adm must-gather`` with the given trailing arguments.
-
-    Args:
-        data_collector_path (Path): Directory where must-gather output is written.
-        target_args (str): Arguments appended after the image and dest-dir flags, naming the gather
-            script to run. Empty runs the full diagnostic collection.
-
-    Returns:
-        bool: True when the gather command ran. False when it did not.
-    """
+    LOGGER.info(f"Running full must-gather collection with logs since {since_time}")
     try:
         # Resource discovery: cluster client, MTV Subscription, and its installed CSV.
         # https://github.com/kubev2v/forklift-must-gather
@@ -336,10 +336,11 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
             mtv_csv=mtv_csv,
         )
 
-        # Command execution: run `oc adm must-gather` with the resolved image and arguments.
-        command = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
-        if target_args:
-            command = f"{command} -- {target_args}"
+        # Command execution: run `oc adm must-gather` with the resolved image and time window.
+        command = (
+            f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path} "
+            f"-- MUST_GATHER_SINCE_TIME={since_time} /usr/bin/gather"
+        )
         success, _, _ = run_command(shlex.split(command), verify_stderr=False)
         return success
     except NotImplementedError as ex:
@@ -374,24 +375,20 @@ def _run_must_gather(data_collector_path: Path, target_args: str) -> bool:
         return False
 
 
-def collect_must_gather_for_item(node: pytest.Item, artifact_name: str, plan_obj: Plan | None) -> bool:
+def collect_must_gather_for_item(node: pytest.Item, artifact_name: str, since_time: str) -> bool:
     """Collect a must-gather for a failure into a named directory under the data collector path.
 
     Args:
         node (pytest.Item): Test item supplying the data collector configuration.
         artifact_name (str): Worker-qualified class-plan identity, or standalone test node ID.
-        plan_obj (Plan | None): Bound Plan context, or None for full collection.
+        since_time (str): UTC RFC 3339 timestamp bounding the collected log window.
 
     Returns:
         bool: True when a must-gather was collected, False when collection itself failed.
     """
     # Percent encoding is reversible, unlike replacing punctuation with dashes.
     data_collector_path = Path(node.session.config.getoption("data_collector_path")) / quote(artifact_name, safe="")
-    if plan_obj is None:
-        gathered = run_must_gather(data_collector_path=data_collector_path)
-    else:
-        plan = {"name": cast("str", plan_obj.name), "namespace": cast("str", plan_obj.namespace)}
-        gathered = run_plan_must_gather(data_collector_path=data_collector_path, plan=plan)
+    gathered = run_must_gather(data_collector_path=data_collector_path, since_time=since_time)
 
     if not gathered:
         LOGGER.warning(f"No must-gather bundle for '{artifact_name}' in '{data_collector_path}'")
@@ -430,66 +427,48 @@ def class_plan_identity(item: pytest.Item | None) -> str | None:
     return f"{class_node.nodeid}::params={parameters}::worker={worker}"
 
 
-def initialize_class_plan_context(item: pytest.Item) -> None:
-    """Clear stale Plan state on entry, without resetting consecutive methods of the same plan.
+def record_class_plan_start_time(item: pytest.Item) -> None:
+    """Record when this class-plan instance started, bounding its failure gather window.
 
-    A re-entered class-plan instance (xdist load/loadgroup/worksteal scheduling can split one
-    class across non-contiguous batches) keeps the stored Plan context while a gather from its
-    earlier run is still owed, so the session-end retry uses that original context, and otherwise
-    drops the stored context so a second-run failure cannot gather against the first run's
-    deleted Plan. The owed gather itself is not retried here: this runs before the runtest
-    protocol yields, and an escaping configuration error would abort the worker as an
-    INTERNALERROR before fixtures finalize.
+    Runs from a ``tryfirst`` protocol wrapper before any setup hook, so the timestamp
+    always precedes the first possible failure in the class. One timestamp per
+    class-plan identity, first seen wins: xdist scheduling can split one class across
+    non-contiguous batches, and the original start keeps the whole execution window.
 
     Args:
-        item (pytest.Item): Item whose protocol is starting, before any setup hooks run.
-
-    Returns:
-        None: Updates session class-plan context state without returning a value.
+        item (pytest.Item): Item whose protocol is starting.
     """
     identity = class_plan_identity(item)
-    active_identity: str | None = getattr(item.session, "_must_gather_active_class_identity", None)
-    if identity != active_identity:
-        if identity is not None:
-            node_cls: type = getattr(item, "cls")
-            setattr(node_cls, "plan_resource", None)
-            if not class_must_gather_collected(item.session, identity):
-                pending: dict[str, pytest.Item] = getattr(item.session, "_must_gather_pending_classes", {})
-                if identity not in pending:
-                    # No gather is owed: the stored context is stale from the earlier run. While a
-                    # gather is owed, the original context stays so the session-end flush retries
-                    # with the Plan the failure was recorded against.
-                    contexts: dict[str, Plan | None] = getattr(item.session, "_must_gather_plan_contexts", {})
-                    contexts.pop(identity, None)
-                    setattr(item.session, "_must_gather_plan_contexts", contexts)
-        setattr(item.session, "_must_gather_active_class_identity", identity)
+    if identity is None:
+        return
+    start_times: dict[str, str] = getattr(item.session, "_must_gather_class_start_times", {})
+    start_times.setdefault(identity, _utc_rfc3339_now())
+    setattr(item.session, "_must_gather_class_start_times", start_times)
 
 
-def _bind_class_plan_context(session: pytest.Session, identity: str, item: pytest.Item) -> Plan | None:
-    """Retain the current Plan or explicit None for this identity's collection and retries.
+def class_plan_start_time(session: pytest.Session, identity: str) -> str:
+    """Return the recorded start timestamp for a class-plan identity.
 
     Args:
-        session (pytest.Session): Session holding worker-local contexts.
-        identity (str): Class-plan identity to bind if not already bound.
-        item (pytest.Item): Item whose class may still hold this identity's Plan.
+        session (pytest.Session): Session holding worker-local start times.
+        identity (str): Class-plan identity whose window start is needed.
 
     Returns:
-        Plan | None: First bound context, never a later class-plan's mutable attribute.
+        str: The UTC RFC 3339 timestamp recorded when the identity first started.
+
+    Raises:
+        KeyError: If the identity never started in this worker; a pending gather cannot
+            exist without it because the protocol wrapper records the time first.
     """
-    contexts: dict[str, Plan | None] = getattr(session, "_must_gather_plan_contexts", {})
-    if identity not in contexts:
-        active_identity: str | None = getattr(session, "_must_gather_active_class_identity", None)
-        node_cls: type | None = getattr(item, "cls", None)
-        contexts[identity] = getattr(node_cls, "plan_resource", None) if identity == active_identity else None
-        setattr(session, "_must_gather_plan_contexts", contexts)
-    return contexts[identity]
+    start_times: dict[str, str] = getattr(session, "_must_gather_class_start_times", {})
+    return start_times[identity]
 
 
 def mark_class_pending_must_gather(item: pytest.Item) -> None:
     """Store a failing item in session pending state for its class-plan instance.
 
     Args:
-        item (pytest.Item): Failing item retained for plan context and the artifact path.
+        item (pytest.Item): Failing item retained for the artifact path.
     """
     identity = class_plan_identity(item)
     if identity is None or class_must_gather_collected(item.session, identity):
@@ -533,7 +512,7 @@ def _collect_pending_class_must_gather(session: pytest.Session, identity: str, i
     Args:
         session (pytest.Session): Session holding pending and collected state.
         identity (str): Class-plan instance owing diagnostics.
-        item (pytest.Item): Item supplying configuration and context if not yet bound.
+        item (pytest.Item): Item supplying configuration and the artifact path.
 
     Returns:
         bool: True when this call collected diagnostics and removed the pending entry.
@@ -542,8 +521,8 @@ def _collect_pending_class_must_gather(session: pytest.Session, identity: str, i
     if identity not in pending or class_must_gather_collected(session, identity):
         return False
 
-    plan_obj = _bind_class_plan_context(session, identity, item)
-    if collect_must_gather_for_item(item, identity, plan_obj):
+    since_time = class_plan_start_time(session=session, identity=identity)
+    if collect_must_gather_for_item(node=item, artifact_name=identity, since_time=since_time):
         pending.pop(identity, None)
         mark_class_must_gather_collected(session, identity)
         return True
@@ -555,8 +534,9 @@ def collect_pending_class_must_gather_now(item: pytest.Item) -> None:
     """Collect a pending class-plan gather immediately instead of at the class-plan boundary.
 
     Used before a blocking post-mortem debugger session so diagnostics are gathered while the
-    class Plan is still alive. Success marks the identity collected and the boundary skips it;
-    a failed attempt stays pending for the boundary retry and the session-end flush.
+    migration pods still exist, before fixture cleanup deletes them. Success marks the identity
+    collected and the boundary skips it; a failed attempt stays pending for the boundary retry
+    and the session-end flush.
 
     Args:
         item (pytest.Item): Failing item whose class-plan identity may owe a gather.
@@ -589,8 +569,6 @@ def collect_class_must_gather(item: pytest.Item, nextitem: pytest.Item | None) -
     next_identity = class_plan_identity(nextitem)
     setattr(item, "_must_gather_next_class_identity", next_identity)
     if identity is not None and identity != next_identity:
-        # Bind even without a pending failure: boundary finalizers may report one later.
-        _bind_class_plan_context(item.session, identity, item)
         _collect_pending_class_must_gather(item.session, identity, item)
 
 
@@ -598,8 +576,8 @@ def collect_class_teardown_must_gather(node: pytest.Item) -> bool:
     """Queue a teardown failure, gathering now only if its class-plan boundary already passed.
 
     Exception interaction runs after fixture finalization. Earlier method teardown failures stay
-    pending until the boundary; a boundary-only failure uses the pre-finalizer Plan context
-    but can only collect post-finalizer cluster state.
+    pending until the boundary; a boundary-only failure collects with this instance's start-time
+    window but can only reach post-finalizer cluster state.
     A successful pre-finalizer gather suppresses this repeat.
 
     Args:
@@ -626,10 +604,8 @@ def flush_pending_class_must_gathers(session: pytest.Session) -> None:
 
     This fallback cannot guarantee pre-cleanup state after interrupted hooks or recover state
     from a crashed worker process. Normal early exits gather at the nextitem=None boundary.
-    An unbound identity can use the class attribute only while it is still active; otherwise
-    it binds None rather than targeting another plan's stale attribute. Every identity's retry
-    runs even when an earlier one fails; the first configuration error is re-raised after the
-    loop so one failure cannot skip the remaining diagnostics.
+    Every identity's retry runs even when an earlier one fails; the first configuration error
+    is re-raised after the loop so one failure cannot skip the remaining diagnostics.
 
     Args:
         session (pytest.Session): Session whose remaining pending map is consumed on success.

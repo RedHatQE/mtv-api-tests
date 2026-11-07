@@ -372,11 +372,12 @@ layer 1. Three cases are not failures of the analysis, and each must be stated e
 in the missing-information section rather than papered over:
 
 - **No must-gather for this run** — say `must-gather: not collected` and proceed with what exists.
-- **Plan-scoped bundle with no component logs** — per-Plan collection runs the targeted
-gather (`/usr/bin/targeted`, `utilities/must_gather.py:run_plan_must_gather`), which keeps
-that plan's VMs, networks and events rather than a full-cluster snapshot. A targeted bundle
-that simply does not contain controller logs is expected; say
-`targeted bundle — component logs not in scope` and proceed.
+- **Time-scoped bundle with no component logs** — per-failure collection runs the full gather
+(`/usr/bin/gather` with `MUST_GATHER_SINCE_TIME`, `utilities/must_gather.py:run_must_gather`),
+bounded to the failing test's execution window. Component logs from before that window are
+not in the bundle, and a partial or truncated bundle is also possible; report the absence
+without attributing a cause — say `component logs missing from the time-scoped bundle
+(collection window <start>)` and proceed.
 - **Full gather present** — search it for layer-1 evidence before concluding. If the component
   logs are there, cite them; if a truncated or partial bundle has no component log for the
   failing path, say which layers you searched and which were empty.
