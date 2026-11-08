@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import re
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.plan import Plan
@@ -51,6 +52,41 @@ _DUPLICATE_WARNING_SUBSTRING = "duplicated"
 _MULTIPLE_SHARED_PVCS_SUBSTRING = "Multiple shared disks PVCs"
 _SHARED_WARN_DISKS_CONDITION_PREFIX = "SharedWarnDisks"
 _SHARED_DISKS_CONDITION_PREFIX = "SharedDisks"
+
+# Matches forklift's backingFilePattern: strips the "-NNNNNN.vmdk" snapshot
+# suffix, e.g. "my-vm/disk-000015.vmdk" -> "my-vm/disk.vmdk" (see
+# baseVolume in forklift's pkg/controller/plan/adapter/vsphere/utils.go).
+_SNAPSHOT_SUFFIX_PATTERN = re.compile(r"-\d{6}\.vmdk")
+
+
+def _expected_shared_disk_source(vm: dict[str, Any], warm_migration: bool) -> str:
+    """Derive the expected disk-source annotation value for a VM's shared disk.
+
+    Forklift annotates the shared-disk PVC with
+    ``forklift.konveyor.io/disk-source`` set to ``baseVolume(disk.File, warm)``:
+    the disk's datastore path for cold migrations (e.g.
+    ``[datastore2] folder/disk.vmdk``), or the path with the snapshot
+    suffix trimmed for warm migrations.
+
+    Args:
+        vm (dict[str, Any]): VM entry from Forklift inventory (has a "disks" list).
+        warm_migration (bool): Whether the plan is a warm migration.
+
+    Returns:
+        str: The expected disk-source value.
+
+    Raises:
+        AssertionError: If the VM does not have exactly one shared disk.
+    """
+    shared_disks = [disk for disk in vm.get("disks", []) if disk.get("shared")]
+    assert len(shared_disks) == 1, (
+        f"Expected exactly one shared disk on VM '{vm['name']}' in Forklift inventory, "
+        f"found: {[disk.get('file') for disk in shared_disks]}"
+    )
+    disk_file = shared_disks[0]["file"]
+    if warm_migration:
+        return _SNAPSHOT_SUFFIX_PATTERN.sub(".vmdk", disk_file)
+    return disk_file
 
 
 def _get_plan_conditions(plan: Plan) -> list[dict[str, Any]]:
@@ -306,8 +342,15 @@ class TestSharedDiskRemigrate:
         fixture_store: dict[str, Any],
         ocp_admin_client: "DynamicClient",
         target_namespace: str,
+        source_provider_inventory: "ForkliftInventory",
     ) -> None:
-        """Execute the initial owner-only migration and verify a single shareable PVC exists."""
+        """Execute the initial owner-only migration and verify a single shareable PVC exists.
+
+        The shareable PVC's disk-source annotation is cross-checked against
+        the shared disk path derived independently from the source VM's
+        Forklift inventory entry, so a PVC created for the wrong disk cannot
+        pass.
+        """
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
@@ -330,11 +373,26 @@ class TestSharedDiskRemigrate:
             f"found: {[pvc.name for pvc in shareable_pvcs]}"
         )
         (self.__class__.shared_pvc_name,) = [pvc.name for pvc in shareable_pvcs]
-        self.__class__.shared_disk_source = get_shared_disk_source(
+        actual_disk_source = get_shared_disk_source(
             ocp_admin_client=ocp_admin_client,
             namespace=vm_namespace,
             pvc_name=self.shared_pvc_name,
         )
+
+        # Derive the expected disk source independently from the source
+        # VM's Forklift inventory entry, instead of trusting the PVC itself.
+        owner_clone_name = prepared_plan["virtual_machines"][0]["name"]
+        owner_clone = source_provider_inventory.get_vm(name=owner_clone_name)
+        expected_disk_source = _expected_shared_disk_source(
+            vm=owner_clone,
+            warm_migration=prepared_plan["warm_migration"],
+        )
+        assert actual_disk_source == expected_disk_source, (
+            f"Shareable PVC '{self.shared_pvc_name}' disk-source does not match the source "
+            f"VM's shared disk: expected '{expected_disk_source}', "
+            f"found '{actual_disk_source}'"
+        )
+        self.__class__.shared_disk_source = actual_disk_source
         pvc_names = get_shared_disk_pvc_names(
             ocp_admin_client=ocp_admin_client,
             namespace=vm_namespace,
