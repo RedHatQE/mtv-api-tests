@@ -470,7 +470,13 @@ class TestSharedDiskRemigrate:
         destination_provider: "OCPProvider",
         target_namespace: str,
     ) -> None:
-        """Re-migrate the owner VM and verify the duplicate shared-disk PVC warning."""
+        """Re-migrate the owner VM and verify the duplicate shared-disk PVC warning.
+
+        The duplicate warning is asserted pre-execution: forklift emits the
+        SharedWarnDisks condition at plan validation time (it is present once
+        the plan becomes Ready), and the condition does not survive execution
+        restaging, so it is polled before running the migration.
+        """
         vm_namespace = prepared_plan["_vm_target_namespace"]
         self.__class__.plan_recreate = create_plan_resource(
             ocp_admin_client=ocp_admin_client,
@@ -485,16 +491,16 @@ class TestSharedDiskRemigrate:
             migrate_shared_disks=prepared_plan["migrate_shared_disks"],
             target_power_state=prepared_plan["target_power_state"],
         )
+        _wait_for_plan_condition(
+            plan=self.plan_recreate,
+            type_prefix=_SHARED_WARN_DISKS_CONDITION_PREFIX,
+            message_substring=_DUPLICATE_WARNING_SUBSTRING,
+        )
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             plan=self.plan_recreate,
             target_namespace=target_namespace,
-        )
-        _wait_for_plan_condition(
-            plan=self.plan_recreate,
-            type_prefix=_SHARED_WARN_DISKS_CONDITION_PREFIX,
-            message_substring=_DUPLICATE_WARNING_SUBSTRING,
         )
 
         pvc_names = get_shared_disk_pvc_names(
