@@ -17,7 +17,7 @@ because agents trust them over the actual code; changes need user approval.
 | Install dependencies | `uv sync` (never pip) |
 | Lint/format gate (MUST pass before commit, never `--no-verify`) | `pre-commit run --all-files` |
 | Build container | `podman build -f Dockerfile -t mtv-api-tests` |
-| Regenerate docs site | `uvx pi-docsite --docs-dir docs --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."` |
+| Regenerate docs site locally (preview only — output is gitignored) | `uvx pi-docsite==4.18.0 --docs-dir docs --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."` |
 
 ## Stack
 
@@ -48,20 +48,19 @@ Code changes and new code MUST keep documentation in sync — drift is a bug:
 | Affects usage/requirements/installation/configuration | `README.md` |
 | Changes methodology or coding patterns | This file (AGENTS.md/CLAUDE.md), user approval first |
 | Any code change or new code | The relevant `docs/*.md` page(s) |
-| Any `docs/*.md` or `docs/nav.json` edit | Regenerate the site (command above) and commit generated output together with the source change |
 
-The `docs/` folder is a [pi-docsite](https://pypi.org/project/pi-docsite/) project:
+The `docs/` folder is a [pi-docsite](https://pypi.org/project/pi-docsite/) project whose generated
+output is **not** in the repository:
 
-- `docs/*.md` and `docs/nav.json` are the only files humans edit. `docs/*.html`, `docs/assets/`,
-  `docs/search-index.json`, `docs/llms.txt`, `docs/llms-full.txt` are generated — never hand-edit;
-  fix the Markdown and rebuild.
-- New page: write `docs/<slug>.md` with exactly one H1, add one line to `docs/nav.json`, rebuild.
-  Reorder via `nav.json`, never by renaming files. A `nav.json` slug with no `.md` is a build error.
-- Cross-page links target `.html`, not `.md` (pi-docsite does not rewrite link targets).
-- Rebuild only after all `docs/*.md` edits are finished; verify with two consecutive identical builds.
-- Generated files are committed. The generator is deliberately unpinned — an upstream release may
-  regenerate many pages with no source change: commit that alone as
-  `chore(docs): regenerate site after upstream generator release`, never mixed into a doc change.
+- Only `docs/**/*.md` and `docs/nav.json` are tracked and hand-authored. Never run the generator in
+  a PR and never commit its output (`docs/*.html`, `docs/assets/`, `search-index.json`, `llms*.txt`,
+  `.nojekyll`): those paths are gitignored, `.github/workflows/docs.yml` builds and publishes the
+  site from the sources after merge, and `docs-guard.yml` fails a PR that adds or modifies output
+  (it also builds the site on every PR, so a source change that does not build cannot merge).
+- New page: write `docs/<slug>.md` with exactly one H1 and add one line to `docs/nav.json`. Reorder
+  via `nav.json`, never by renaming files. A `nav.json` slug with no `.md` is a build error.
+- Cross-page links target `.html`, not `.md` (pi-docsite does not rewrite link targets); links from
+  outside `docs/` point at the published site, <https://redhatqe.github.io/mtv-api-tests/>.
 
 ## Code Standards
 

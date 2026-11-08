@@ -5,17 +5,19 @@ RHV, OpenStack, and OVA using Migration Toolkit for Virtualization (MTV).
 
 **[Full Documentation](https://redhatqe.github.io/mtv-api-tests/)** | [Copy-Offload Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)
 
-The documentation site in [`docs/`](docs) is generated with
-[pi-docsite](https://pypi.org/project/pi-docsite/): edit `docs/*.md`, keep the sidebar
-order in `docs/nav.json`, then rebuild the generated files with
+The documentation site is built from [`docs/*.md`](docs) and [`docs/nav.json`](docs/nav.json) by the
+`Docs` workflow and published at <https://redhatqe.github.io/mtv-api-tests/> after merge. The
+generated files are not tracked, so a pull request has nothing to rebuild and nothing to commit —
+`Docs Guard` fails any PR that adds or modifies output under `docs/`.
+
+To preview the site locally (the output is gitignored, so it cannot dirty the tree):
 
 ```bash
-uvx pi-docsite --docs-dir docs \
+uvx pi-docsite==4.18.0 --docs-dir docs \
   --tagline "Pytest-based integration suite for validating Migration Toolkit for Virtualization migrations into OpenShift Virtualization."
 ```
 
-Never edit the generated `*.html`, `assets/`, `search-index.json`, `llms.txt` or
-`llms-full.txt` by hand. See [AGENTS.md](AGENTS.md#documentation-site-must).
+See [AGENTS.md](AGENTS.md#documentation-sync-must).
 
 ---
 
@@ -296,7 +298,7 @@ values; partial, empty, or whitespace-only sets fail fast with a named error suc
 valid only for ambient authentication from a kubeconfig available to the test process. `mtv-api-tests run` reaches that
 path only when no OpenShift provider is selected from `.providers.json` — the CLI checks for an existing `oc` token only
 then and does not pass a standalone token to the client. See
-[runtime configuration](docs/runtime-configuration.html) for details.
+[runtime configuration](https://redhatqe.github.io/mtv-api-tests/runtime-configuration.html) for details.
 
 **VM naming**: the OpenShift version segment of generated source VM names is read from the target cluster
 automatically — do not pass `--tc=target_ocp_version`.
@@ -1325,7 +1327,7 @@ Invalid image metadata and other configuration/programming errors propagate inst
 remains queued and may raise again when retried at a later boundary or session finish.
 Inventory, configured teardown, temporary-directory removal, summary and enabled AI enrichment are attempted independently;
 cleanup errors propagate with earlier errors chained. See
-[diagnostic collection](docs/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
+[diagnostic collection](https://redhatqe.github.io/mtv-api-tests/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
 
 ```bash
 oc adm must-gather --image=quay.io/kubev2v/forklift-must-gather:latest --dest-dir=/tmp/mtv-logs
