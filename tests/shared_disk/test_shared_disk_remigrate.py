@@ -29,10 +29,8 @@ from utilities.mtv_migration import (
 )
 from utilities.naming import resolve_destination_vm_name
 from utilities.shared_disk import (
-    get_vm_pvc_claim_names,
     get_shared_disk_pvc_names,
     get_shared_disk_source,
-    verify_vms_share_single_pvc,
 )
 from utilities.utils import populate_vm_ids
 
@@ -165,6 +163,11 @@ class TestSharedDiskRemigrate:
         from becoming Ready by the multiple-shared-disks-PVCs validation
         (forklift PR #9182). There is no induced failure.
 
+        The initial migration migrates only the owner VM: the duplicate
+        warning and the consumer blocker do not depend on the consumer
+        having migrated, and the two-VMs-share-one-PVC baseline is already
+        covered by test_shared_disk_rhel_migration.
+
     Prerequisites:
         Register and connect a vSphere source provider and an OpenShift
         destination with MTV installed and shared-disk support, with
@@ -179,11 +182,13 @@ class TestSharedDiskRemigrate:
            in Forklift inventory.
         2. Create a StorageMap covering both VMs' disks and a NetworkMap
            for their networks. Confirm both are created.
-        3. Create a cold Plan covering both VMs with the shared-disk
-           setting enabled for the owner VM and disabled for the consumer
-           VM, and target power state on.
-        4. Run the migration and check it reaches Succeeded for both VMs.
-           Verify both destination VMs share a single shared-disk PVC.
+        3. Create a cold Plan covering only the owner VM with the
+           shared-disk setting enabled, and target power state on. (The
+           consumer VM is not migrated here; the two-VM sharing baseline
+           is covered by test_shared_disk_rhel_migration.)
+        4. Run the migration and check it reaches Succeeded for the owner
+           VM. Verify exactly one shareable PVC exists in the target
+           namespace and that it corresponds to the source shared disk.
         5. Delete the destination owner VM with orphan propagation. If it
            hangs Terminating on the orphan finalizer, remove the finalizer
            via a patch and wait for deletion. Delete the owner VM's
@@ -201,7 +206,7 @@ class TestSharedDiskRemigrate:
            and verify the Plan does not have a Ready=True condition.
 
     Expected result:
-        The initial migration succeeds with one shared PVC, the orphaned
+        The initial owner-only migration succeeds with one shared PVC, the orphaned
         owner deletion preserves the PVC, the owner remigration succeeds
         with a duplicate-PVC warning and a second PVC, and the consumer
         plan is blocked by the multiple-shared-disks-PVCs validation. On
@@ -287,7 +292,7 @@ class TestSharedDiskRemigrate:
             destination_provider=destination_provider,
             storage_map=self.storage_map,
             network_map=self.network_map,
-            virtual_machines_list=prepared_plan["virtual_machines"],
+            virtual_machines_list=[prepared_plan["virtual_machines"][0]],
             target_namespace=target_namespace,
             warm_migration=prepared_plan["warm_migration"],
             migrate_shared_disks=prepared_plan["migrate_shared_disks"],
@@ -295,14 +300,14 @@ class TestSharedDiskRemigrate:
         )
         assert self.plan_initial, "Plan creation failed"
 
-    def test_migrate_vms(
+    def test_migrate_owner(
         self,
         prepared_plan: dict[str, Any],
         fixture_store: dict[str, Any],
         ocp_admin_client: "DynamicClient",
         target_namespace: str,
     ) -> None:
-        """Execute the initial migration and verify both VMs share a single shared-disk PVC."""
+        """Execute the initial owner-only migration and verify a single shareable PVC exists."""
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
@@ -310,21 +315,34 @@ class TestSharedDiskRemigrate:
             target_namespace=target_namespace,
         )
         vm_namespace = prepared_plan["_vm_target_namespace"]
-        vm1_dest_name = resolve_destination_vm_name(prepared_plan["virtual_machines"][0])
-        vm2_dest_name = resolve_destination_vm_name(prepared_plan["virtual_machines"][1])
-        verify_vms_share_single_pvc(
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=vm_namespace,
-            vm1_dest_name=vm1_dest_name,
-            vm2_dest_name=vm2_dest_name,
+
+        # The disk source is not known yet, so list all shareable PVCs in
+        # the namespace first; exactly one must exist for this plan.
+        shareable_pvcs = list(
+            PersistentVolumeClaim.get(
+                client=ocp_admin_client,
+                namespace=vm_namespace,
+                label_selector="shareable=true",
+            )
         )
-        vm1_pvc_names = get_vm_pvc_claim_names(ocp_admin_client, vm_namespace, vm1_dest_name)
-        vm2_pvc_names = get_vm_pvc_claim_names(ocp_admin_client, vm_namespace, vm2_dest_name)
-        (self.__class__.shared_pvc_name,) = vm1_pvc_names & vm2_pvc_names
+        assert len(shareable_pvcs) == 1, (
+            f"Expected exactly one shareable PVC in namespace '{vm_namespace}', "
+            f"found: {[pvc.name for pvc in shareable_pvcs]}"
+        )
+        (self.__class__.shared_pvc_name,) = [pvc.name for pvc in shareable_pvcs]
         self.__class__.shared_disk_source = get_shared_disk_source(
             ocp_admin_client=ocp_admin_client,
             namespace=vm_namespace,
             pvc_name=self.shared_pvc_name,
+        )
+        pvc_names = get_shared_disk_pvc_names(
+            ocp_admin_client=ocp_admin_client,
+            namespace=vm_namespace,
+            disk_source=self.shared_disk_source,
+        )
+        assert pvc_names == [self.shared_pvc_name], (
+            f"Expected shared-disk PVC list for source '{self.shared_disk_source}' to be "
+            f"['{self.shared_pvc_name}'], found: {pvc_names}"
         )
         LOGGER.info(f"Shared PVC '{self.shared_pvc_name}' (disk source '{self.shared_disk_source}')")
 
