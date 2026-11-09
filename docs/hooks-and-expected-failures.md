@@ -32,7 +32,7 @@ uv run pytest -m aap -v --tc=source_provider:vsphere-8.0.3.00400
 
 Hook settings live in `tests/tests_config/config.py`. The repository’s end-to-end hook example looks like this:
 
-```743:756:tests/tests_config/config.py
+```910:922:tests/tests_config/config.py
     "test_post_hook_retain_failed_vm": {
         "virtual_machines": [
             {

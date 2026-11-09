@@ -123,10 +123,18 @@ For a first targeted migration, the smallest built-in cold plan is:
 ```python
 "test_sanity_cold_mtv_migration": {
     "virtual_machines": [
-        {"name": "mtv-tests-rhel8", "guest_agent": True, "add_nic": True, "add_nic_start_connected": False},
+        {
+            "name": "mtv-tests-rhel8",
+            "source_vm_power": "on",
+            "guest_agent": True,
+            "add_nic": True,
+            "add_nic_start_connected": False,
+        },
     ],
     "warm_migration": False,
+    "target_power_state": "on",
     "per_nic_network_map": True,
+    "pre_copy_source_disks": True,
 },
 ```
 
