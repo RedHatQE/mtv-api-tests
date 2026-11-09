@@ -21,6 +21,11 @@ SUPPORTED_VENDORS = (
 # MTV-696: per-ESXi-host populator throttling (ForkliftController controller_max_populator_inflight)
 POPULATOR_INFLIGHT_LIMIT = 2
 
+# MTV-6088 / MTV-777: combined VM + populator inflight throttling
+VM_INFLIGHT_LIMIT = 1
+# Intentionally distinct from POPULATOR_INFLIGHT_LIMIT (2) used by MTV-696 with a single VM.
+VM_POPULATOR_INFLIGHT_LIMIT = 2
+
 SOURCE_HOST_LABEL = "sourceHost"
 POPULATOR_THROTTLED_EVENT_REASON = "PopulatorThrottled"
 FORKLIFT_CONTROLLER_NAME = "forklift-controller"
