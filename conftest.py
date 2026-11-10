@@ -546,9 +546,7 @@ def pytest_collection_modifyitems(session, config, items):
     #        @pytest.mark.my_new_marker
     #        class TestMyFeature: ...
     # -------------------------------------------------------------------
-    # Resolve each item's plan config once: the skip loops and the later rename loop share
-    # the same resolution (parametrization fields or item.originalname).
-    resolved_plan_configs = [(item, resolve_item_plan_config(item)) for item in items]
+
     if not is_dry_run(config):
         providers_json_path = config.getoption("providers_json", default=None)
         providers = load_source_providers(providers_json_path=providers_json_path)
@@ -598,20 +596,6 @@ def pytest_collection_modifyitems(session, config, items):
                     if "ca_crt" in item.keywords:
                         item.add_marker(ca_cert_skip)
 
-            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
-            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
-            if not supports_add_nic(source_provider_type):
-                add_nic_skip = pytest.mark.skip(
-                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
-                )
-                for item, test_config in resolved_plan_configs:
-                    if test_config is None:
-                        continue
-                    # `virtual_machines` is a required plan-config field: direct access fails the
-                    # collection run with a clear KeyError instead of a later fixture error.
-                    if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
-                        item.add_marker(add_nic_skip)
-
             # Skip IPv6 tests unless the source provider supports the IPv6 migration scenario (the
             # provider layer owns that decision). The provider config is only known here for an
             # explicitly configured provider; in pool mode the member is selected after collection,
@@ -625,7 +609,7 @@ def pytest_collection_modifyitems(session, config, items):
     # In pool mode the provider is unresolved at collection time; the pool type labels the items.
     provider_label = py_config.get("source_provider") or py_config.get("source_provider_type")
 
-    for item, _ in resolved_plan_configs:
+    for item in items:
         item.name = f"{item.name}-{provider_label}-{py_config.get('storage_class')}"
 
 
@@ -1697,8 +1681,8 @@ def prepared_plan(
                 "does not implement relink_shared_disks"
             )
 
-        # The non-vSphere provider case is gated at collection time in
-        # pytest_collection_modifyitems (pytest.skip must not be used in fixtures).
+        # add_nic is only honored on vSphere (see the execution-site capability gate below);
+        # this validation checks the config contract on any provider that sets the flag.
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config:
             for vm in virtual_machines:
@@ -1929,7 +1913,9 @@ def prepared_plan(
                 # inventory is now stale (missing the new NIC). A forced refresh + NIC-count wait runs
                 # after the loop (see wait_for_added_nics_in_forklift_inventory) to guarantee NetworkMap
                 # creation sees the added NIC — otherwise Forklift drops it during VM creation.
-                if vm.get("add_nic"):
+                # vSphere-only: the reconfiguration goes through vSphere device APIs; on any other
+                # provider the flag is ignored and the VM's native NICs are used as-is.
+                if vm.get("add_nic") and supports_add_nic(source_provider.type):
                     connected: bool = vm["add_nic_start_connected"]
                     nic_count_before = sum(
                         1

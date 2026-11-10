@@ -114,10 +114,18 @@ tests_params: dict = {
     },
     "test_sanity_cold_mtv_migration": {
         "virtual_machines": [
-            {"name": "mtv-tests-rhel8", "guest_agent": True, "add_nic": True, "add_nic_start_connected": False},
+            {
+                "name": "mtv-tests-rhel8",
+                "source_vm_power": "on",
+                "guest_agent": True,
+                "add_nic": True,
+                "add_nic_start_connected": False,
+            },
         ],
         "warm_migration": False,
+        "target_power_state": "on",
         "per_nic_network_map": True,
+        "pre_copy_source_disks": True,
     },
     "test_cold_migration_skip_guest_conversion": {
         "virtual_machines": [
@@ -863,7 +871,7 @@ tests_params: dict = {
             },
         ],
         "warm_migration": False,
-        # "pre_copy_source_disks": True,
+        "pre_copy_source_disks": True,
         "target_power_state": "on",
         "preserve_static_ips": True,
         "enable_nested_virtualization": False,
