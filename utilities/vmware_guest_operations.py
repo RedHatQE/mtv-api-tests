@@ -825,7 +825,9 @@ def collect_linux_guest_static_ip_metadata(
     (https://github.com/vmware/open-vm-tools/issues/694), so origins are detected through Guest
     Operations. Windows guests (``win_os``) are skipped — their origins are reported natively.
     When ``preserve_static_ips`` is enabled, IP-origin detection is mandatory (a failure raises)
-    and guest NIC names are collected too. Updates ``vm_details`` in place.
+    and guest NIC names are collected too. When guest info is unavailable and
+    ``preserve_static_ips`` is False, it returns early without detection and logs a warning.
+    Updates ``vm_details`` in place.
 
     Both the cloning and ESXi skip-clone preparation paths call this so static-IP preservation
     validation sees identical source metadata regardless of how the VM was prepared.
@@ -845,12 +847,10 @@ def collect_linux_guest_static_ip_metadata(
     if vm_details.get("win_os"):
         return
 
-    # The caller treats run_command_in_vmware_guest's missing guestFamily ValueError as fatal, which
-    # killed a class-scoped fixture in a live run; absent guest info is a best-effort miss unless
-    # static-IP preservation is on.
-    if not preserve_static_ips and getattr(vm.guest, "guestFamily", None) is None:
+    # Absent guest info is a best-effort miss unless static-IP preservation is on.
+    if not preserve_static_ips and not getattr(vm.guest, "guestFamily", None):
         LOGGER.warning(
-            f"VM {vm.name}: VMware Tools guest info unavailable (guestFamily is None); "
+            f"VM {vm.name}: guest OS family not reported by VMware Tools (guestFamily is None); "
             "skipping IP-origin detection since preserve_static_ips is disabled"
         )
         return
