@@ -37,38 +37,35 @@ list at once, and the run still fails before any fixture executes. It never subs
 
 The basic cold-migration test configuration is intentionally small:
 
-```49:55:tests/tests_config/config.py
+```115:129:tests/tests_config/config.py
 "test_sanity_cold_mtv_migration": {
     "virtual_machines": [
-        {"name": "mtv-tests-rhel8", "guest_agent": True, "add_nic": True, "add_nic_start_connected": False},
+        {
+            "name": "mtv-tests-rhel8",
+            "source_vm_power": "on",
+            "guest_agent": True,
+            "add_nic": True,
+            "add_nic_start_connected": False,
+        },
     ],
     "warm_migration": False,
+    "target_power_state": "on",
     "per_nic_network_map": True,
+    "pre_copy_source_disks": True,
 },
 ```
 
-`add_nic` is a vSphere-only option. A test whose plan config sets it is skipped at **collection time** by the provider gating in `pytest_collection_modifyitems`, for any
-provider type other than vSphere. The capability itself is decided by `supports_add_nic()` in `libs/base_provider.py`, so the shared hook only applies the decision:
+`add_nic` is a vSphere-only option: the clone's hardware is reconfigured through vSphere device APIs, so on any other provider the flag is ignored and the test runs with the VM's native NICs (the Hyper-V `mtv-tests-rhel8`, for example, has two). The capability itself is decided by `supports_add_nic()` in `libs/base_provider.py`, and the execution site in `prepared_plan` applies the decision:
 
-```466:478:conftest.py
-            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
-            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
-            if not supports_add_nic(source_provider_type):
-                add_nic_skip = pytest.mark.skip(
-                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
-                )
-                for item, test_config in resolved_plan_configs:
-                    if test_config is None:
-                        continue
-                    # `virtual_machines` is a required plan-config field: direct access fails the
-                    # collection run with a clear KeyError instead of a later fixture error.
-                    if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
-                        item.add_marker(add_nic_skip)
+```1931:1933:conftest.py
+                # vSphere-only: the reconfiguration goes through vSphere device APIs; on any other
+                # provider the flag is ignored and the VM's native NICs are used as-is.
+                if vm.get("add_nic") and supports_add_nic(source_provider.type):
 ```
 
-On a vSphere provider the `prepared_plan` fixture still fails fast when `add_nic_start_connected` is missing or is not a `bool`:
+The `prepared_plan` fixture fails fast when `add_nic_start_connected` is missing or is not a `bool`, on any provider that sets the flag:
 
-```1360:1372:conftest.py
+```1701:1713:conftest.py
         has_add_nic_config = any(vm.get("add_nic") for vm in virtual_machines)
         if has_add_nic_config:
             for vm in virtual_machines:

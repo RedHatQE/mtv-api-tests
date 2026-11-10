@@ -106,24 +106,14 @@ A separate branch of the same hook enforces that:
                         item.add_marker(vsphere_only_skip)
 ```
 
-A third capability gate of the same hook covers `add_nic`, which is a plan config flag rather than a marker, so the hook
-resolves each item's parametrized plan config once and reuses it across the gates and the item rename loop below.
-Whether a provider supports `add_nic` is `supports_add_nic()` in `libs/base_provider.py`:
+`add_nic` is also provider-scoped, but as a plan config flag rather than a marker it is not handled by the collection
+hook: the flag is honored only when the provider supports it, decided by `supports_add_nic()` in `libs/base_provider.py`
+and applied at the execution site in `prepared_plan`:
 
-```466:478:conftest.py
-            # Skip tests whose plan config requests `add_nic` on a non-vSphere provider.
-            # `add_nic` is a plan config flag, not a marker, so resolve each item's config.
-            if not supports_add_nic(source_provider_type):
-                add_nic_skip = pytest.mark.skip(
-                    reason=f"add_nic is vSphere-only; skipping for provider '{source_provider_type}'"
-                )
-                for item, test_config in resolved_plan_configs:
-                    if test_config is None:
-                        continue
-                    # `virtual_machines` is a required plan-config field: direct access fails the
-                    # collection run with a clear KeyError instead of a later fixture error.
-                    if any(vm.get("add_nic") for vm in test_config["virtual_machines"]):
-                        item.add_marker(add_nic_skip)
+```1931:1933:conftest.py
+                # vSphere-only: the reconfiguration goes through vSphere device APIs; on any other
+                # provider the flag is ignored and the VM's native NICs are used as-is.
+                if vm.get("add_nic") and supports_add_nic(source_provider.type):
 ```
 
 ## Migration Modes

@@ -1,6 +1,7 @@
 import pytest
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
+from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
@@ -40,7 +41,7 @@ class TestSanityColdMtvMigration:
 
     Purpose/Regression:
         Basic end-to-end cold migration sanity: a running Linux VM moved with
-        a per-NIC network mapping must arrive powered as configured with
+        a per-NIC network mapping must arrive powered on with
         equivalent CPU, memory, storage, and network. There is no induced
         failure; the scenario guards the core migration path against
         regressions in any provider type.
@@ -50,29 +51,32 @@ class TestSanityColdMtvMigration:
         OpenShift, ESXi, or Hyper-V) and an OpenShift destination with MTV
         installed. Prepare destination storage and network accessible to the
         migrated VM, including a secondary NetworkAttachmentDefinition when
-        mapping per NIC. Use a disposable RHEL VM with a disk, at least one
-        additional NIC (e.g. one that is not start-connected), and guest-agent
-        access. Have permission to create maps, a Plan, and a target
+        mapping per NIC. Use a disposable RHEL VM with a disk, guest-agent
+        access, and multiple NICs: on vSphere the suite attaches an extra
+        disconnected NIC to the clone, on other providers the VM's own NICs
+        are used as-is. Have permission to create maps, a Plan, and a target
         namespace.
 
     Test plan:
-        1. Prepare the disposable VM and wait until it appears in Forklift
-           inventory.
+        1. Prepare the disposable VM, powered on so guest data is collected,
+           and wait until it appears in Forklift inventory.
         2. Create a StorageMap for the VM's disks and a NetworkMap that maps
            each VM NIC to its own destination network. Confirm both are
            created.
-        3. Create a cold Plan for the VM using both maps. Check the Plan's
-           Ready condition is True.
+        3. Create a cold Plan for the VM using both maps, with target power
+           state on. Check the Plan's Ready condition is True. (For a Hyper-V
+           source, the Plan additionally enables two-phase disk transfer with
+           pre-copy of source disks.)
         4. Run the migration and check it reaches Succeeded.
-        5. Validate the migrated VM: power state, guest-agent presence,
-           connectivity when powered on, and CPU, memory, network, and
-           storage equivalence with the source. After the checks, delete the
+        5. Validate the migrated VM: powered on, guest-agent presence, SSH
+           connectivity, and CPU, memory, network, and storage equivalence
+           with the source. After the checks, delete the
            migrated VM; the maps and Plan are removed with the run.
 
     Expected result:
-        The migration succeeds and the migrated VM matches the source in
-        CPU, memory, disks, and networks, with the configured power state and
-        working connectivity. On failure, inspect the migration CR status for
+        The migration succeeds and the migrated VM is powered on and matches
+        the source in CPU, memory, disks, and networks, with working
+        connectivity. On failure, inspect the migration CR status for
         the VM's failed step, the Plan conditions, and the migrated VM's spec
         and events in the target namespace.
     """
@@ -143,6 +147,10 @@ class TestSanityColdMtvMigration:
         """Create MTV Plan CR resource."""
         populate_vm_ids(prepared_plan, source_provider_inventory)
 
+        pre_copy_source_disks = source_provider.type == Provider.ProviderType.HYPERV and prepared_plan.get(
+            "pre_copy_source_disks", False
+        )
+
         self.__class__.plan_resource = create_plan_resource(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
@@ -153,6 +161,8 @@ class TestSanityColdMtvMigration:
             virtual_machines_list=prepared_plan["virtual_machines"],
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
+            target_power_state=prepared_plan["target_power_state"],
+            pre_copy_source_disks=pre_copy_source_disks,
         )
         assert self.plan_resource, "Plan creation failed"
 
