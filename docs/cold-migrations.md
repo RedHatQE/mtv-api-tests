@@ -506,6 +506,8 @@ Each of those fields drives a real plan feature or a real validation path:
 - `vm_target_namespace` separates the VM's destination namespace from the namespace that holds the MTV resources.
 - `multus_namespace` lets the test create its NADs outside the default migration namespace.
 - `guest_agent_timeout` overrides the default 120-second wait for VMware guest info during preparation, and is passed to the destination VM lookup in `check_vms()`.
+  If VMware Tools guest info is still unavailable after that wait and the plan does not preserve static IPs, `collect_linux_guest_static_ip_metadata()` skips IP-origin
+  detection with a warning instead of failing the class fixture; plans with `preserve_static_ips` still fail fast.
 
 > **Tip:** Use `test_sanity_cold_mtv_migration` when you want baseline cold-migration coverage. Use `test_cold_migration_comprehensive` when you want to validate plan behavior
 > such as target power state, PVC naming, labels, affinity, or custom VM namespaces.

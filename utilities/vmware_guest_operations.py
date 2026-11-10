@@ -845,6 +845,16 @@ def collect_linux_guest_static_ip_metadata(
     if vm_details.get("win_os"):
         return
 
+    # The caller treats run_command_in_vmware_guest's missing guestFamily ValueError as fatal, which
+    # killed a class-scoped fixture in a live run; absent guest info is a best-effort miss unless
+    # static-IP preservation is on.
+    if not preserve_static_ips and getattr(vm.guest, "guestFamily", None) is None:
+        LOGGER.warning(
+            f"VM {vm.name}: VMware Tools guest info unavailable (guestFamily is None); "
+            "skipping IP-origin detection since preserve_static_ips is disabled"
+        )
+        return
+
     try:
         detect_vmware_ip_origins_via_guest_ops(
             source_provider=source_provider,
