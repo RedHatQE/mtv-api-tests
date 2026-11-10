@@ -34,8 +34,11 @@ If the artifacts directory exists but genuinely holds no must-gather, return the
 there; say so and let the main analysis report insufficient evidence.
 
 A failure bundle is produced by the **full** gather (`/usr/bin/gather` with
-`MUST_GATHER_SINCE_TIME`), bounded to the failing test's execution window. Component logs
-from before that window are not in the bundle, and a partial or truncated bundle is also
+`MUST_GATHER_SINCE_TIME`). Collection starts when the failing class-plan instance started,
+or at session start for standalone tests and the session-teardown fallback — earlier setup
+and migration evidence is in the bundle. When the must-gather image supports
+`MUST_GATHER_SINCE_TIME`, logs from before that start are not collected; older images ignore
+the variable and may include earlier logs. A partial or truncated bundle is also
 possible. If component logs are absent, report the absence without attributing a cause —
 say `Must-gather: AVAILABLE (time-scoped) — component logs missing from the collection
 window <start>` — and give what is there.

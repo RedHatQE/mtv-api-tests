@@ -374,8 +374,10 @@ in the missing-information section rather than papered over:
 - **No must-gather for this run** — say `must-gather: not collected` and proceed with what exists.
 - **Time-scoped bundle with no component logs** — per-failure collection runs the full gather
 (`/usr/bin/gather` with `MUST_GATHER_SINCE_TIME`, `utilities/must_gather.py:run_must_gather`),
-bounded to the failing test's execution window. Component logs from before that window are
-not in the bundle, and a partial or truncated bundle is also possible; report the absence
+starting when the failing class-plan instance started (or at session start for standalone
+tests and the session-teardown fallback). When the image supports `MUST_GATHER_SINCE_TIME`,
+logs from before that start are not in the bundle; a partial or truncated bundle is also
+possible; report the absence
 without attributing a cause — say `component logs missing from the time-scoped bundle
 (collection window <start>)` and proceed.
 - **Full gather present** — search it for layer-1 evidence before concluding. If the component
@@ -425,8 +427,8 @@ If the data needed for the assessment is missing, state
    whose question matches this failure?
 3. Is `classification` exactly one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`?
 4. If `PRODUCT BUG`: did you reach layer-1 component evidence — or state one of the three
-   honest alternatives: logs were never collected, the component logs fall outside the
-   time-scoped collection window or are missing from a partial bundle, or
+   honest alternatives: logs were never collected, the component logs are missing from the
+   time-scoped bundle (outside the collection window, a partial bundle, or reason unknown), or
    the logs were collected and contain no error for this path (a silent defect, where assertion
    and object state carry the evidence)? Did you fill
    `product_bug_report.jira_search_keywords` with 3-5 keywords?
