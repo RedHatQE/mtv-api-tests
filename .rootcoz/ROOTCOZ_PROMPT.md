@@ -354,7 +354,7 @@ section exists for this run, no artifacts were attached — record that as a mis
 case rather than assuming a bundle exists.
 
 This suite collects artifacts on failure: `pytest-tests.log` (the run log, including
-fixture teardown), enriched JUnit XML, and a must-gather bundle collected per Plan
+fixture teardown), enriched JUnit XML, and a time-scoped must-gather bundle
 (`utilities/must_gather.py`). Test configuration lives in `.providers.json` — never quote
 credentials or secrets from it into the analysis.
 
@@ -388,7 +388,8 @@ with no component ERROR line anywhere. Assertion and object state are legitimate
 that case; say that no component logged an error rather than claiming the analysis is
 incomplete.
 
-Do not demand logs that were never collected, and do not treat a targeted bundle's silence
+Do not demand logs that were never collected or that fall outside the collection window,
+and do not treat a time-scoped bundle's silence
 as evidence that the component was healthy.
 
 ### Regression Detection (MANDATORY when the failure looks new)
@@ -424,7 +425,8 @@ If the data needed for the assessment is missing, state
    whose question matches this failure?
 3. Is `classification` exactly one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`?
 4. If `PRODUCT BUG`: did you reach layer-1 component evidence — or state one of the three
-   honest alternatives: logs were never collected, the bundle is targeted and excludes them, or
+   honest alternatives: logs were never collected, the component logs fall outside the
+   time-scoped collection window or are missing from a partial bundle, or
    the logs were collected and contain no error for this path (a silent defect, where assertion
    and object state carry the evidence)? Did you fill
    `product_bug_report.jira_search_keywords` with 3-5 keywords?

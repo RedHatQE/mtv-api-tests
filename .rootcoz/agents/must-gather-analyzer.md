@@ -33,10 +33,12 @@ If the artifacts directory exists but genuinely holds no must-gather, return the
 `NOT AVAILABLE` block and name what it does contain. Do not guess at logs that are not
 there; say so and let the main analysis report insufficient evidence.
 
-A per-Plan bundle is produced by the **targeted** gather (`/usr/bin/targeted`), which keeps
-that plan's VMs, networks and events rather than a full-cluster snapshot. If the bundle is
-targeted and has no controller component logs, that is expected — report
-`Must-gather: AVAILABLE (targeted) — component logs not in scope` and give what is there.
+A failure bundle is produced by the **full** gather (`/usr/bin/gather` with
+`MUST_GATHER_SINCE_TIME`), bounded to the failing test's execution window. Component logs
+from before that window are not in the bundle, and a partial or truncated bundle is also
+possible. If component logs are absent, report the absence without attributing a cause —
+say `Must-gather: AVAILABLE (time-scoped) — component logs missing from the collection
+window <start>` — and give what is there.
 
 ## What to read, in this order
 

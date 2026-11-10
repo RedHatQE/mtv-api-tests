@@ -446,7 +446,7 @@ def record_class_plan_start_time(item: pytest.Item) -> None:
     setattr(item.session, "_must_gather_class_start_times", start_times)
 
 
-def class_plan_start_time(session: pytest.Session, identity: str) -> str:
+def _class_plan_start_time(session: pytest.Session, identity: str) -> str:
     """Return the recorded start timestamp for a class-plan identity.
 
     Args:
@@ -521,7 +521,7 @@ def _collect_pending_class_must_gather(session: pytest.Session, identity: str, i
     if identity not in pending or class_must_gather_collected(session, identity):
         return False
 
-    since_time = class_plan_start_time(session=session, identity=identity)
+    since_time = _class_plan_start_time(session=session, identity=identity)
     if collect_must_gather_for_item(node=item, artifact_name=identity, since_time=since_time):
         pending.pop(identity, None)
         mark_class_must_gather_collected(session, identity)
