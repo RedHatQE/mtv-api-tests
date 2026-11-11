@@ -9,7 +9,7 @@ import urllib.request
 from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import uuid4
 
-from pyVmomi import vim
+from pyVmomi import vim, vmodl
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -50,6 +50,10 @@ _READ_ONLY_MOUNT_OPTIONS = {
 }
 # Forklift's vSphere rootDisk mapper derives the disk index from one letter after /dev/sd.
 _SUPPORTED_ROOT_DEVICE = re.compile(r"^/dev/sd[a-z][0-9]+$")
+# pyVmomi's vmodl stub omits the root RuntimeFault even though it exists at import time
+# (it is the parent of vmodl.fault.ManagedObjectNotFound and its siblings). Resolve it from
+# the module so the whole runtime-fault family is tolerated on the best-effort path.
+_VMODL_RUNTIME_FAULT: type[Exception] = getattr(vmodl, "RuntimeFault")
 
 
 class LinuxOSRoot(TypedDict):
@@ -875,7 +879,8 @@ def collect_linux_guest_static_ip_metadata(
     validation sees identical source metadata regardless of how the VM was prepared.
 
     Args:
-        source_provider (VMWareProvider): VMware provider instance.
+        source_provider (VMWareProvider): VMware provider instance. Must be the provider that owns
+            ``vm``; Guest Operations resolve the VM's MoID through its content.
         vm (vim.VirtualMachine): VMware VM object (powered on, VMware Tools running).
         source_provider_data (dict[str, Any]): Provider config containing guest credentials.
         vm_details (dict[str, Any]): VM details dict from vm_dict(), updated in place. The
@@ -913,7 +918,13 @@ def collect_linux_guest_static_ip_metadata(
         )
     except ValueError:
         raise
-    except (GuestCommandError, vim.fault.VimFault, TimeoutExpiredError, OSError) as e:
+    except (
+        GuestCommandError,
+        vim.fault.VimFault,
+        _VMODL_RUNTIME_FAULT,
+        TimeoutExpiredError,
+        OSError,
+    ) as e:
         if preserve_static_ips:
             raise ValueError(
                 f"Failed to detect IP origins via Guest Operations for VM {vm_details['name']}: {e}. "

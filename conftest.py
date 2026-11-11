@@ -1944,9 +1944,10 @@ def prepared_plan(
 
                 # Detect IP origins (and NIC names when preserving static IPs) for Linux guests,
                 # which VMware does not report natively (open-vm-tools limitation).
+                # clone_provider owns provider_vm_api, so its content resolves the VM's MoID.
                 if source_provider.type == Provider.ProviderType.VSPHERE:
                     collect_linux_guest_static_ip_metadata(
-                        source_provider=source_provider,
+                        source_provider=clone_provider,
                         vm=provider_vm_api,
                         source_provider_data=fixture_store["source_provider_data"],
                         vm_details=source_vm_details,
