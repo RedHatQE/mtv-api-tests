@@ -13,6 +13,7 @@ from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
+from ocp_resources.resource import NotFoundError
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine_instance import VirtualMachineInstance
 from pyhelper_utils.shell import run_command
@@ -815,13 +816,21 @@ def _plan_conversions_yaml(plan: Plan) -> str:
         plan (Plan): Plan whose Conversion CRs are read.
 
     Returns:
-        str: YAML of the plan-owned Conversion CRs, empty when there are none or the read failed.
+        str: YAML of the plan-owned Conversion CRs that were still readable, empty when there are
+            none or the read failed.
     """
     try:
         conversions = get_plan_conversion_crs(plan_resource=plan)
-        if not conversions:
+        instances: list[dict[str, Any]] = []
+        for conversion in conversions:
+            try:
+                instances.append(conversion.instance.to_dict())
+            except NotFoundError:
+                # MTV deletes the Conversion CR while the plan ends, so it can vanish mid-read.
+                LOGGER.info(f"Conversion CR '{conversion.name}' disappeared before it could be captured, skipping it")
+        if not instances:
             return ""
-        return yaml.safe_dump([conversion.instance.to_dict() for conversion in conversions], sort_keys=False)
+        return yaml.safe_dump(instances, sort_keys=False)
     except (
         ApiException,
         DynamicApiError,
