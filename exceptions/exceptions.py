@@ -105,10 +105,6 @@ class VmCloneError(Exception):
     pass
 
 
-class InsufficientDatastoreSpaceError(Exception):
-    """Raised when a datastore lacks the free space a VM clone requires."""
-
-
 class MigrationNotFoundError(Exception):
     """Raised when Migration CR cannot be found for a Plan."""
 

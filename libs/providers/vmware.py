@@ -17,7 +17,6 @@ from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import (
-    InsufficientDatastoreSpaceError,
     VmBadDatastoreError,
     VmCloneError,
     VmMissingVmxError,
@@ -131,29 +130,28 @@ def format_capacity_validation_log(datastore_name: str, required_gb: float, avai
 
 
 def _ensure_datastore_space(source_vm: vim.VirtualMachine, datastore: vim.Datastore) -> None:
-    """Fail early when the target datastore cannot hold the cloned disks.
+    """Warn when the target datastore cannot hold the cloned disks.
 
-    vCenter rejects such a clone inside the task with vim.fault.NoDiskSpace, which surfaces
-    only as an opaque task failure, so the space is checked before the clone task starts.
+    vCenter validates the space itself and fails the clone task fast with
+    vim.fault.NoDiskSpace (reporting requiredSpace), so this is advisory only: a shortfall is
+    logged and the clone proceeds, because free space often grows while a run is in progress.
 
     Args:
         source_vm: The VM or template being cloned; its disk capacities are the space the
             clone needs (the same value vCenter reports in NoDiskSpace.requiredSpace).
         datastore: The datastore the clone will be placed on.
 
-    Raises:
-        InsufficientDatastoreSpaceError: If the datastore's free space is smaller than the
-            total capacity of the source VM's disks.
-
     """
     devices = source_vm.config.hardware.device if source_vm.config and source_vm.config.hardware else []
     required_bytes = sum(device.capacityInBytes for device in devices if isinstance(device, vim.vm.device.VirtualDisk))
     available_bytes = datastore.summary.freeSpace or 0
     if required_bytes > available_bytes:
-        raise InsufficientDatastoreSpaceError(
-            f"Insufficient disk space on datastore '{datastore.name}': "
-            f"required {required_bytes / (1024**3):.2f} GiB, "
-            f"available {available_bytes / (1024**3):.2f} GiB."
+        LOGGER.warning(
+            "Datastore '%s' may not have enough free space for the clone: required %.2f GiB, "
+            "available %.2f GiB; proceeding, vCenter validates the requirement.",
+            datastore.name,
+            required_bytes / (1024**3),
+            available_bytes / (1024**3),
         )
 
 
@@ -1723,8 +1721,6 @@ class VMWareProvider(BaseProvider):
                       device has no deviceInfo in the source VM config.
             VmCloneError: If the datastore or resource pool cannot be determined, or if
                         cloning fails.
-            InsufficientDatastoreSpaceError: If the target datastore has less free space
-                        than the source VM's disks require.
 
         """
         # Check if we should preserve the original name format (for non-conforming name tests)
