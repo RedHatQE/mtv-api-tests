@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from subprocess import TimeoutExpired
 from time import monotonic
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
 from ocp_resources.plan import Plan
 from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
+from ocp_resources.resource import NotFoundError
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine_instance import VirtualMachineInstance
+from pyhelper_utils.shell import run_command
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
@@ -29,13 +33,16 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.cluster_state import ClusterStateProbeTimeout, dump_cluster_state, read_with_deadline
-from utilities.data_collector import data_collector_path
+from utilities.data_collector import data_collector_path, redact_secret, utc_timestamp
+from utilities.deep_inspection import get_plan_conversion_crs
 from utilities.naming import resolve_destination_vm_name
 from utilities.resources import create_and_store_resource
-from utilities.utils import gen_network_map_list
+from utilities.utils import gen_network_map_list, resolve_cluster_credential
 from utilities.worker_node_selection import has_unschedulable_condition
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from kubernetes.dynamic import DynamicClient, ResourceInstance
 
 # Forklift virt-v2v conversion pod label; shared by all conversion-pod observers and helpers.
@@ -76,6 +83,21 @@ _CREATE_AND_STORE_RESOURCE_KEYS: frozenset[str] = frozenset({
 # instead of burning the whole plan timeout.
 _UNSCHEDULABLE_CHECK_INTERVAL_SECONDS = 30
 _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED = 3
+
+# MTV deletes the failed objects (``deleteVmOnFailMigration``) before must-gather runs, so the
+# evidence of a failed plan is captured on the Failed poll, while it still exists.
+_FAILURE_EVIDENCE_DIR_PREFIX = "failed-plan"
+_FAILURE_EVIDENCE_POD_MARKERS = ("deep-inspect", "convertor", "importer", "populator", "virt-v2v")
+_FAILURE_EVIDENCE_LOG_TAIL_LINES = 200
+_FAILURE_EVIDENCE_COMMAND_TIMEOUT_SECONDS = 60
+# MTV deletes the Conversion CR before the Plan reports Failed, so the CR is also sampled while
+# the plan runs, and the whole capture is capped so a slow cluster cannot delay the failure.
+_FAILURE_EVIDENCE_SNAPSHOT_INTERVAL_SECONDS = 10
+_FAILURE_EVIDENCE_TOTAL_TIMEOUT_SECONDS = 120
+_FAILURE_EVIDENCE_NO_CONVERSIONS_MARKER = (
+    "# No Conversion CR for this plan was found at capture time or on any earlier poll:\n"
+    "# MTV deletes it on failure, so the failure reason is in the pod logs and events here.\n"
+)
 
 
 def get_migration_for_plan(plan: Plan) -> Migration:
@@ -787,6 +809,191 @@ def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]
         raise MigrationVmUnschedulableError(vm_name=vm_name, scheduler_message=scheduler_message)
 
 
+def _plan_conversions_yaml(plan: Plan) -> str:
+    """Read the Conversion CRs the Plan owns and render them as YAML.
+
+    Args:
+        plan (Plan): Plan whose Conversion CRs are read.
+
+    Returns:
+        str: YAML of the plan-owned Conversion CRs that were still readable, empty when there are
+            none or the read failed.
+    """
+    try:
+        conversions = get_plan_conversion_crs(plan_resource=plan)
+        instances: list[dict[str, Any]] = []
+        for conversion in conversions:
+            try:
+                instances.append(conversion.instance.to_dict())
+            except NotFoundError:
+                # MTV deletes the Conversion CR while the plan ends, so it can vanish mid-read.
+                LOGGER.info(f"Conversion CR '{conversion.name}' disappeared before it could be captured, skipping it")
+        if not instances:
+            return ""
+        return yaml.safe_dump(instances, sort_keys=False)
+    except (
+        ApiException,
+        DynamicApiError,
+        AttributeError,
+        MaxRetryError,
+        OSError,
+        ProtocolError,
+        TypeError,
+        ValueError,
+        yaml.YAMLError,
+    ) as err:
+        LOGGER.info(f"Could not read the Conversion CRs of plan '{plan.name}', skipping them: {err}")
+        return ""
+
+
+def _plan_pod_label_selector(plan: Plan) -> str:
+    """Return the label selector matching the plan's own conversion pods.
+
+    Args:
+        plan (Plan): Plan whose migration pods are selected.
+
+    Returns:
+        str: Selector scoped to the plan's Migration, or the shared conversion-pod label when the
+            Migration CR is already gone.
+    """
+    try:
+        migration_uid = get_migration_for_plan(plan=plan).instance.metadata.uid
+        return f"{CONVERSION_POD_LABEL_SELECTOR},migration={migration_uid}"
+    except (
+        MigrationNotFoundError,
+        ApiException,
+        DynamicApiError,
+        AttributeError,
+        MaxRetryError,
+        OSError,
+        ProtocolError,
+        TypeError,
+        ValueError,
+    ) as err:
+        LOGGER.info(f"Could not resolve the Migration of plan '{plan.name}', selecting every conversion pod: {err}")
+        return CONVERSION_POD_LABEL_SELECTOR
+
+
+def _run_evidence_command(*, command: list[str], deadline: float) -> str | None:
+    """Run one evidence command, losing only its own artifact when it fails.
+
+    Args:
+        command (list[str]): The ``oc`` command to run.
+        deadline (float): ``monotonic()`` value after which no further command is started.
+
+    Returns:
+        str | None: The command output, or None when the budget is spent or the command failed.
+    """
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        LOGGER.warning(f"Skipping the failure evidence command '{' '.join(command)}': the capture budget is spent")
+        return None
+    try:
+        # check=False: a nonzero exit is a lost artifact, not an exception that could replace the
+        # MigrationPlanExecError the caller raises.
+        success, output, error = run_command(
+            command,
+            check=False,
+            verify_stderr=False,
+            timeout=min(_FAILURE_EVIDENCE_COMMAND_TIMEOUT_SECONDS, remaining),
+        )
+    except (TimeoutExpired, OSError) as err:
+        LOGGER.warning(f"Failure evidence command '{' '.join(command)}' failed: {err}")
+        return None
+    if not success:
+        LOGGER.warning(f"Failure evidence command '{' '.join(command)}' failed: {error}")
+        return None
+    return output
+
+
+def _write_failure_evidence(*, path: Path, text: str, cluster_password: str | None) -> None:
+    """Write one evidence artifact with the cluster password redacted.
+
+    Args:
+        path (Path): Destination file.
+        text (str): Command output or Conversion dump about to be written.
+        cluster_password (str | None): Configured cluster password, redacted when it is set.
+    """
+    if cluster_password:
+        text = redact_secret(text=text, secret=cluster_password)
+    try:
+        path.write_text(text, encoding="utf-8")
+    except OSError as err:
+        LOGGER.warning(f"Failed to write the failure evidence file '{path}': {err}")
+
+
+def _capture_failed_plan_evidence(plan: Plan, *, conversions_snapshot: str = "") -> None:
+    """Capture the Conversion CRs, pipeline pod logs and namespace events of a failed plan.
+
+    MTV deletes the failed objects on failure, so the forklift ``Conversion`` CR and its
+    pipeline pods are read here, on the poll that reports the plan as Failed; a Conversion dump
+    kept from an earlier poll is written when the CR is already gone. Capture is best effort: it
+    never raises, because a lost artifact must not replace the MigrationPlanExecError the caller
+    raises.
+
+    Args:
+        plan (Plan): Plan whose migration status was seen as Failed.
+        conversions_snapshot (str): Non-empty Conversion dump taken while the plan was running,
+            used when the CR no longer exists.
+    """
+    # Resolved before the namespace so --skip-data-collector costs no API request or oc call.
+    collector_path = data_collector_path()
+    if collector_path is None:
+        return
+    namespace = _plan_target_namespace(plan=plan)
+    if namespace is None:
+        return
+
+    directory = collector_path / f"{_FAILURE_EVIDENCE_DIR_PREFIX}-{plan.name}-{utc_timestamp()}"
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as err:
+        LOGGER.warning(f"Failed to create the failure evidence directory '{directory}': {err}")
+        return
+
+    deadline = monotonic() + _FAILURE_EVIDENCE_TOTAL_TIMEOUT_SECONDS
+    cluster_password = resolve_cluster_credential("cluster_password")
+    pod_selector = _plan_pod_label_selector(plan=plan)
+
+    _write_failure_evidence(
+        path=directory / "conversions.yaml",
+        text=_plan_conversions_yaml(plan=plan) or conversions_snapshot or _FAILURE_EVIDENCE_NO_CONVERSIONS_MARKER,
+        cluster_password=cluster_password,
+    )
+
+    pods_yaml = _run_evidence_command(
+        command=["oc", "get", "pods", "-n", namespace, "-l", pod_selector, "-o", "yaml"],
+        deadline=deadline,
+    )
+    if pods_yaml is not None:
+        _write_failure_evidence(path=directory / "pods.yaml", text=pods_yaml, cluster_password=cluster_password)
+
+    # Namespace-wide events are kept: the reason a pod never started is often only there.
+    events_yaml = _run_evidence_command(
+        command=["oc", "get", "events", "-n", namespace, "-o", "yaml"], deadline=deadline
+    )
+    if events_yaml is not None:
+        _write_failure_evidence(path=directory / "events.yaml", text=events_yaml, cluster_password=cluster_password)
+
+    pod_names = _run_evidence_command(
+        command=["oc", "get", "pods", "-n", namespace, "-l", pod_selector, "-o", "name"],
+        deadline=deadline,
+    )
+    for pod_name in (pod_names or "").split():
+        if not any(marker in pod_name for marker in _FAILURE_EVIDENCE_POD_MARKERS):
+            continue
+        logs = _run_evidence_command(
+            command=["oc", "logs", "-n", namespace, pod_name, f"--tail={_FAILURE_EVIDENCE_LOG_TAIL_LINES}"],
+            deadline=deadline,
+        )
+        if logs is not None:
+            _write_failure_evidence(
+                path=directory / f"{pod_name.replace('/', '-')}.log",
+                text=logs,
+                cluster_password=cluster_password,
+            )
+
+
 def wait_for_migration_complate(
     plan: Plan,
     *,
@@ -805,7 +1012,9 @@ def wait_for_migration_complate(
         ValueError: If the Plan reports a malformed migration status.
     """
     next_unschedulable_check = monotonic()
+    next_evidence_snapshot = monotonic()
     unschedulable_hits: dict[str, int] = {}
+    conversions_snapshot = ""
 
     try:
         last_status: str = ""
@@ -827,7 +1036,14 @@ def wait_for_migration_complate(
                 return
 
             elif sample == Plan.Status.FAILED:
+                _capture_failed_plan_evidence(plan=plan, conversions_snapshot=conversions_snapshot)
                 raise MigrationPlanExecError()
+
+            # Sampled while the plan runs: MTV deletes the Conversion CR before the Plan reports
+            # Failed, so the last non-empty dump is the only reason the bundle can still carry.
+            if data_collector_path() is not None and monotonic() >= next_evidence_snapshot:
+                next_evidence_snapshot = monotonic() + _FAILURE_EVIDENCE_SNAPSHOT_INTERVAL_SECONDS
+                conversions_snapshot = _plan_conversions_yaml(plan=plan) or conversions_snapshot
 
             # Probed only on non-terminal polls, so a plan that reports its own failure on the
             # poll where a VM is confirmed unschedulable still surfaces the plan status.
