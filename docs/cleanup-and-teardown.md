@@ -93,7 +93,10 @@ else:
     except Exception:
         LOGGER.exception("Resources remain after session teardown")
         if not session.config.getoption("skip_data_collector"):
-            run_must_gather(data_collector_path=_data_collector_path)
+            run_must_gather(
+                data_collector_path=_data_collector_path,
+                since_time=session_start_time(session=session),
+            )
         raise
 ```
 
@@ -151,7 +154,7 @@ leftover-sweep loops. The code comments why the store can be empty: under parall
 > **Note:** `session_teardown()` cancels migrations first and archives plans before the generic sweep, because a Plan must be `Archived` before it can be deleted. Both loops are
 keyed off the tracked inventory, so a resource you never registered is never cleaned here.
 
-If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` to capture diagnostics in the same collector path.
+If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` — the full collection scoped to session start — to capture diagnostics in the same collector path.
 
 > **Warning:** `pytest_sessionfinish()` logs teardown failures, attempts a full `must-gather` when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. Independent `finally` blocks still attempt temporary-directory removal, the extra summary and enabled AI enrichment before the error propagates. Check session errors as well as individual test results.
 

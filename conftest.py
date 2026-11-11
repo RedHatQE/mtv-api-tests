@@ -74,9 +74,11 @@ from utilities.must_gather import (
     collect_must_gather_for_item,
     collect_pending_class_must_gather_now,
     flush_pending_class_must_gathers,
-    initialize_class_plan_context,
     mark_class_pending_must_gather,
+    record_class_plan_start_time,
+    record_session_start_time,
     run_must_gather,
+    session_start_time,
 )
 from utilities.naming import (
     generate_name_with_uuid,
@@ -270,6 +272,8 @@ def selected_source_provider(request: pytest.FixtureRequest, ocp_admin_client: D
 def pytest_sessionstart(session):
     required_config = ("storage_class", "source_provider")
 
+    record_session_start_time(session=session)
+
     if not is_dry_run(session.config):
         BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION START')}")
 
@@ -347,13 +351,13 @@ def pytest_fixture_setup(fixturedef, request):
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
-    """Initialize class-plan state before setup, including hooks that can skip or fail.
+    """Record the class-plan start time before setup, including hooks that can skip or fail.
 
     Args:
         item (pytest.Item): Item whose setup/call/teardown protocol is starting.
     """
     if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
-        initialize_class_plan_context(item)
+        record_class_plan_start_time(item)
     yield
 
 
@@ -471,7 +475,10 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
                         except Exception:
                             LOGGER.exception("Resources remain after session teardown")
                             if not session.config.getoption("skip_data_collector"):
-                                run_must_gather(data_collector_path=_data_collector_path)
+                                run_must_gather(
+                                    data_collector_path=_data_collector_path,
+                                    since_time=session_start_time(session=session),
+                                )
                             raise
                 finally:
                     shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
@@ -645,12 +652,14 @@ def pytest_collection_finish(session: pytest.Session) -> None:
 def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseException]) -> None:
     """Collect or defer a must-gather for a failing test item.
 
-    Standalone tests gather immediately, once per worker-qualified identity. Their setup/call
-    collector errors propagate to the caller, which stashes them on the item for teardown.
-    Class setup/call failures are marked pending for the class-plan boundary; when the remote
-    debugger is enabled the owed gather runs immediately against the still-alive class Plan so
-    diagnostics precede the blocking post-mortem session. Class teardown failures gather through
-    the boundary-aware teardown path.
+    Standalone tests gather immediately, once per worker-qualified identity, with a log
+    window starting at session start. Their setup/call collector errors propagate to the
+    caller, which stashes them on the item for teardown. Class setup/call failures are
+    marked pending for the class-plan boundary, gathered with a log window starting when
+    the class-plan instance started; when the remote debugger is enabled the owed gather
+    runs immediately, before fixture cleanup deletes the migration pods, so diagnostics
+    precede the blocking post-mortem session. Class teardown failures gather through the
+    boundary-aware teardown path.
 
     Args:
         node (pytest.Item): The test item reporting the exception.
@@ -668,7 +677,11 @@ def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseExc
         if call.when == "teardown" and collector_error is not None:
             del node.stash[_STANDALONE_MUST_GATHER_ERROR]
             return
-        if identity not in collected and collect_must_gather_for_item(node, identity, plan_obj=None):
+        if identity not in collected and collect_must_gather_for_item(
+            node=node,
+            artifact_name=identity,
+            since_time=session_start_time(session=node.session),
+        ):
             collected.add(identity)
             setattr(node.session, "_must_gather_collected_tests", collected)
         return
@@ -687,9 +700,10 @@ def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseExc
     mark_class_pending_must_gather(node)
     if remote_debugger_enabled():
         # The post-mortem debugger blocks the process until a client detaches, so the owed gather
-        # runs now, against the still-alive class Plan, instead of waiting for the class-plan
-        # boundary. Success marks the identity collected and the boundary skips it; a failed
-        # attempt stays pending for the boundary retry and the session-end flush.
+        # runs now, while the migration pods still exist, instead of waiting for the class-plan
+        # boundary and fixture cleanup. Success marks the identity collected and the boundary
+        # skips it; a failed attempt stays pending for the boundary retry and the session-end
+        # flush.
         collect_pending_class_must_gather_now(node)
 
 
@@ -697,8 +711,9 @@ def pytest_exception_interact(node, call, report):
     """Defer or collect a must-gather for a failing test, then open the remote post-mortem debugger.
 
     Setup/call failures record the failing item by class-plan identity. The tryfirst teardown hook
-    binds Plan context at the nextitem boundary before default fixture finalization for all retries.
-    With no plan, it binds None and takes a full gather. Standalone tests gather immediately, once on success.
+    collects at the nextitem boundary before default fixture finalization for all retries, with
+    the log window starting when the class-plan instance started. Standalone tests gather
+    immediately with a session-start log window, once on success.
     Collection-phase failures from collectors carry no test context and are left to pytest's own
     reporting; the hook returns without gathering so a collection error stays a collection error.
     Unexpected standalone setup/call collector errors are retained on the item until fixture finalization.
