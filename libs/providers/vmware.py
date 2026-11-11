@@ -16,7 +16,12 @@ from pyVmomi import vim, vmodl
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
+from exceptions.exceptions import (
+    VmBadDatastoreError,
+    VmCloneError,
+    VmMissingVmxError,
+    VmNotFoundError,
+)
 from libs.base_provider import BaseProvider
 from utilities.copyoffload_datastore import (
     ERR_EMPTY_DISK_DATASTORE_ID,
@@ -122,6 +127,50 @@ def format_capacity_validation_log(datastore_name: str, required_gb: float, avai
         f"Validating datastore capacity for thick disks. "
         f"Required: {required_gb:.2f} GB, Available on '{datastore_name}': {available_gb:.2f} GB"
     )
+
+
+def _ensure_datastore_space(
+    source_vm: vim.VirtualMachine,
+    datastore: vim.Datastore,
+    extra_bytes: int = 0,
+    thin: bool = False,
+) -> None:
+    """Warn when the target datastore cannot hold the cloned disks.
+
+    vCenter validates the space itself and fails the clone task fast with
+    vim.fault.NoDiskSpace (reporting requiredSpace), so this is advisory only: a shortfall is
+    logged and the clone proceeds, because free space often grows while a run is in progress.
+
+    Args:
+        source_vm: The VM or template being cloned; its disk capacities are the space the
+            clone needs (the same value vCenter reports in NoDiskSpace.requiredSpace). RDM disks
+            are excluded: their LUN lives on the storage array, not on the datastore.
+        datastore: The datastore the clone will be placed on.
+        extra_bytes: Capacity of thick disks added to the clone on the same datastore.
+        thin: Whether the clone requests thin (sparse) provisioning. Only the source disks are
+            then sparse and therefore skipped; thick disks added to the clone still count.
+
+    """
+    # shortcut: a thin clone allocates only written blocks up front, so comparing source disk
+    # capacity to free space over-states the requirement; skip the source disks only, thick added
+    # disks still need their full capacity.
+    source_bytes = 0
+    if not thin:
+        devices = source_vm.config.hardware.device if source_vm.config and source_vm.config.hardware else []
+        source_bytes = sum(
+            device.capacityInBytes
+            for device in devices
+            if isinstance(device, vim.vm.device.VirtualDisk)
+            and not isinstance(device.backing, vim.vm.device.VirtualDisk.RawDiskMappingVer1BackingInfo)
+        )
+    required_bytes = source_bytes + extra_bytes
+    available_bytes = datastore.summary.freeSpace or 0
+    if required_bytes > available_bytes:
+        LOGGER.warning(
+            f"Datastore '{datastore.name}' may not have enough free space for the clone: "
+            f"required {required_bytes / (1024**3):.2f} GiB, available {available_bytes / (1024**3):.2f} GiB; "
+            f"proceeding, vCenter validates the requirement."
+        )
 
 
 class VMWareProvider(BaseProvider):
@@ -1962,6 +2011,18 @@ class VMWareProvider(BaseProvider):
             powerOn=power_on,
             template=False,
             config=config_spec,
+        )
+
+        _ensure_datastore_space(
+            source_vm=source_vm,
+            datastore=target_datastore,
+            # Same source of truth as _get_add_disk_device_specs: only thick disks need full capacity.
+            extra_bytes=sum(
+                disk["size_gb"] * 1024**3
+                for disk in regular_disks
+                if disk.get("provision_type", "thin").lower() != "thin"
+            ),
+            thin=(disk_type or "").lower() == "thin",
         )
 
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
