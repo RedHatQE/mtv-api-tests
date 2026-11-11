@@ -2328,7 +2328,7 @@ class VMWareProvider(BaseProvider):
         )
         LOGGER.info(f"Reattached orphaned VMDK to '{vm_name}': {vmdk_path}")
 
-    def reattach_orphaned_vmdks(self, session_store: dict[str, Any]) -> None:
+    def reattach_orphaned_vmdks(self, session_store: dict[str, Any]) -> list[dict[str, Any]]:
         """Reattach the recorded orphaned VMDKs of this session to their consumer clones.
 
         Runs before the clones are deleted, so their deletion removes the VMDKs too; a VMDK left
@@ -2338,6 +2338,10 @@ class VMWareProvider(BaseProvider):
 
         Args:
             session_store (dict[str, Any]): Session store holding the recorded reattachments.
+
+        Returns:
+            list[dict[str, Any]]: Records that could not be reattached and stay in the store for a
+                retry; their VMDKs need manual cleanup once the clone is deleted.
         """
         teardown_store = session_store["teardown"]
         # `Any` is deliberate: a record is written by relink_shared_disks as a plain dict of
@@ -2371,6 +2375,7 @@ class VMWareProvider(BaseProvider):
             teardown_store["orphaned_vmdks_to_reattach"] = failed
         else:
             teardown_store.pop("orphaned_vmdks_to_reattach", None)
+        return failed
 
     def delete_vm(self, vm_name: str) -> None:
         """Delete a VM, reporting an absent one as a domain error.

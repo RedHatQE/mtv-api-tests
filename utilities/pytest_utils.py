@@ -383,7 +383,11 @@ def teardown_resources(
                 password=cleanup_provider_data["password"],
             ) as vmware_provider:
                 # Before deleting the clones: the reattachment finds the consumer clone by name.
-                vmware_provider.reattach_orphaned_vmdks(session_store=session_store)
+                unrecovered_vmdks = vmware_provider.reattach_orphaned_vmdks(session_store=session_store)
+                if unrecovered_vmdks:
+                    # The clones are deleted below, so these VMDKs can no longer be reattached:
+                    # report them as leftovers instead of claiming a clean teardown.
+                    leftovers.setdefault("orphaned_vmdks_to_reattach", []).extend(unrecovered_vmdks)
                 for _vm in vmware_cloned_vms:
                     _cloned_vm_name = _vm["name"]
                     try:

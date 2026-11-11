@@ -13,7 +13,6 @@ import signal
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from queue import Empty
 from types import FrameType
 
 import pytest
@@ -101,21 +100,21 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
         )
         return
     LOGGER.warning(f"Session interrupted by signal {signum}, running session teardown")
-    _stop_xdist_workers()
-    # Restored before the interrupt: a second signal aborts the running teardown instead of
-    # queueing another interrupted shutdown. Set after the restore, which clears the record.
+    # Restored and recorded before the wait below: a second signal then reaches the handler this one
+    # replaced and aborts at once, instead of starting another wait. Recorded after the restore,
+    # which clears the record.
     restore_interrupt_handlers()
     _interrupting_signum = signum
+    _stop_xdist_workers()
     raise KeyboardInterrupt(f"Interrupted by signal {signum}")
 
 
 def _stop_xdist_workers() -> None:
-    """Ask the xdist workers of a controlling session to stop and wait for their own teardown.
+    """Ask the xdist workers of a controlling session to stop and wait for them to finish.
 
     Each worker then runs its own tracked teardown, which holds its own clone records, instead of
-    dying with the controller. The controller keeps handling worker completion events until they
-    are all finished, bounded by :data:`_XDIST_WORKER_TEARDOWN_TIMEOUT`, because its own session
-    finish terminates any worker still running after a short exit timeout.
+    dying with the controller, whose own session finish kills a worker still running after a short
+    exit timeout.
     """
     if _config is None:
         return
@@ -128,26 +127,27 @@ def _stop_xdist_workers() -> None:
 
 
 def _wait_for_xdist_workers(dsession: DSession) -> None:
-    """Handle worker completion events until the stopping workers have all finished.
+    """Wait for the stopping workers to end, reading only their execnet channel state.
 
-    ``DSession.loop_once`` is not reused: it blocks until an event arrives, which cannot be bounded
-    when a worker hangs.
+    xdist's scheduler is deliberately not driven from here: handling worker completion events from
+    a signal handler can process a worker's ``workerfinished`` before its run is marked complete and
+    can reschedule tests on a worker that replaced an interrupted one. A channel closes once its
+    worker has finished its own teardown, which is all this wait needs. The wait is bounded by
+    :data:`_XDIST_WORKER_TEARDOWN_TIMEOUT` so a stuck worker cannot hang the interrupted run.
 
     Args:
         dsession (DSession): Controlling session whose workers are stopping.
     """
+    pending = [node for node in dsession.sched.nodes if not node.channel.isclosed()]
     deadline = time.monotonic() + _XDIST_WORKER_TEARDOWN_TIMEOUT
     LOGGER.info(f"Waiting up to {_XDIST_WORKER_TEARDOWN_TIMEOUT:.0f}s for xdist workers to finish their teardown")
-    while not dsession.session_finished:
+    while pending:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             LOGGER.warning(
                 f"Timed out after {_XDIST_WORKER_TEARDOWN_TIMEOUT:.0f}s waiting for xdist workers to finish teardown"
             )
             return
-        try:
-            callname, kwargs = dsession.queue.get(timeout=min(remaining, 1.0))
-        except Empty:
-            continue
-        getattr(dsession, f"worker_{callname}")(**kwargs)
+        time.sleep(min(remaining, 1.0))
+        pending = [node for node in pending if not node.channel.isclosed()]
     LOGGER.info("xdist workers finished their teardown")
