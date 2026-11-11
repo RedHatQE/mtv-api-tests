@@ -143,20 +143,27 @@ def _ensure_datastore_space(
 
     Args:
         source_vm: The VM or template being cloned; its disk capacities are the space the
-            clone needs (the same value vCenter reports in NoDiskSpace.requiredSpace).
+            clone needs (the same value vCenter reports in NoDiskSpace.requiredSpace). RDM disks
+            are excluded: their LUN lives on the storage array, not on the datastore.
         datastore: The datastore the clone will be placed on.
         extra_bytes: Capacity of thick disks added to the clone on the same datastore.
-        thin: Whether the clone requests thin (sparse) provisioning; thin clones are not checked.
+        thin: Whether the clone requests thin (sparse) provisioning. Only the source disks are
+            then sparse and therefore skipped; thick disks added to the clone still count.
 
     """
-    # shortcut: a thin clone allocates only written blocks up front, so comparing disk capacity to
-    # free space over-states the requirement; skip instead of guessing the initial allocation.
-    if thin:
-        return
-    devices = source_vm.config.hardware.device if source_vm.config and source_vm.config.hardware else []
-    required_bytes = (
-        sum(device.capacityInBytes for device in devices if isinstance(device, vim.vm.device.VirtualDisk)) + extra_bytes
-    )
+    # shortcut: a thin clone allocates only written blocks up front, so comparing source disk
+    # capacity to free space over-states the requirement; skip the source disks only, thick added
+    # disks still need their full capacity.
+    source_bytes = 0
+    if not thin:
+        devices = source_vm.config.hardware.device if source_vm.config and source_vm.config.hardware else []
+        source_bytes = sum(
+            device.capacityInBytes
+            for device in devices
+            if isinstance(device, vim.vm.device.VirtualDisk)
+            and not isinstance(device.backing, vim.vm.device.VirtualDisk.RawDiskMappingVer1BackingInfo)
+        )
+    required_bytes = source_bytes + extra_bytes
     available_bytes = datastore.summary.freeSpace or 0
     if required_bytes > available_bytes:
         LOGGER.warning(
