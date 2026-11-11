@@ -23,9 +23,7 @@ from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
-from pyVmomi import vim
 from simple_logger.logger import get_logger
-from timeout_sampler import TimeoutExpiredError
 
 from exceptions.exceptions import SessionTeardownError, VmNotFoundError
 from libs.providers.hyperv import HyperVProvider
@@ -137,38 +135,6 @@ def collect_created_resources(session_store: dict[str, Any], data_collector_path
 
         except Exception as ex:
             LOGGER.error(f"Failed to store resources.json due to: {ex}")
-
-
-def reattach_orphaned_vmdks(session_store: dict[str, Any], reattach_provider: VMWareProvider) -> None:
-    """Reattach shared-disk VMDKs that clones still own before those clones are deleted.
-
-    Relinking a shared disk points the consumer clone's disk at the owner's VMDK and leaves the
-    consumer's own VMDK orphaned. Reattaching it while the clone still exists lets the clone
-    deletion remove the VMDK; once the clone is gone the VMDK stays on the datastore for manual
-    cleanup. Teardown calls this before deleting clones, so an interrupted run does not orphan
-    disks, and the prepared-plan finalizer calls it for a clean run. The records are popped, so
-    whichever path runs first reattaches them and the other one finds nothing to do.
-
-    Args:
-        session_store (dict[str, Any]): Session store holding the recorded reattachments.
-        reattach_provider (VMWareProvider): Connected provider that owns the consumer clones.
-    """
-    # `Any` is deliberate: a record is written by the provider clone code as a plain dict of
-    # vm_name/vmdk_path strings and bus/unit numbers, a shape no shared annotation covers.
-    vmdks_to_reattach: list[dict[str, Any]] = session_store["teardown"].pop("orphaned_vmdks_to_reattach", [])
-    for vmdk_info in vmdks_to_reattach:
-        try:
-            reattach_provider.reattach_orphaned_vmdk(
-                vm_name=vmdk_info["vm_name"],
-                vmdk_path=vmdk_info["vmdk_path"],
-                bus_number=vmdk_info["bus_number"],
-                unit_number=vmdk_info["unit_number"],
-            )
-        except (vim.fault.VimFault, ValueError, ConnectionError, OSError, TimeoutExpiredError):
-            LOGGER.warning(
-                f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
-                "VMDK may need manual cleanup"
-            )
 
 
 def session_teardown(session_store: dict[str, Any]) -> None:
@@ -417,7 +383,7 @@ def teardown_resources(
                 password=cleanup_provider_data["password"],
             ) as vmware_provider:
                 # Before deleting the clones: the reattachment finds the consumer clone by name.
-                reattach_orphaned_vmdks(session_store=session_store, reattach_provider=vmware_provider)
+                vmware_provider.reattach_orphaned_vmdks(session_store=session_store)
                 for _vm in vmware_cloned_vms:
                     _cloned_vm_name = _vm["name"]
                     try:

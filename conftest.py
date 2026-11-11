@@ -100,7 +100,6 @@ from utilities.pytest_utils import (
     enrich_junit_xml,
     is_dry_run,
     prepare_base_path,
-    reattach_orphaned_vmdks,
     resolve_item_plan_config,
     session_teardown,
     setup_ai_analysis,
@@ -110,6 +109,7 @@ from utilities.signal_teardown import (
     install_interrupt_handlers,
     interrupting_signum,
     restore_interrupt_handlers,
+    session_cleanup,
 )
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.storage_canary import verify_destination_storage_provisioning
@@ -469,34 +469,39 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     # --- Pre-yield cleanup: must finish before the xdist worker reports completion ---
     cleanup_error: Exception | None = None
     inner_error: Exception | None = None
-    try:
-        # Each independent action runs even if an earlier one raises; errors stay chained.
+    # A signal arriving here is recorded instead of raised: raising would abandon the cleanup below
+    # and leave the clones and other lab resources behind.
+    with session_cleanup():
         try:
-            if not session.config.getoption("skip_data_collector"):
-                flush_pending_class_must_gathers(session)
-        finally:
+            # Each independent action runs even if an earlier one raises; errors stay chained.
             try:
                 if not session.config.getoption("skip_data_collector"):
-                    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
+                    flush_pending_class_must_gathers(session)
             finally:
                 try:
-                    if session.config.getoption("skip_teardown"):
-                        LOGGER.warning("User requested to skip teardown of resources")
-                    else:
-                        try:
-                            session_teardown(session_store=_session_store)
-                        except Exception:
-                            LOGGER.exception("Resources remain after session teardown")
-                            if not session.config.getoption("skip_data_collector"):
-                                run_must_gather(
-                                    data_collector_path=_data_collector_path,
-                                    since_time=session_start_time(session=session),
-                                )
-                            raise
+                    if not session.config.getoption("skip_data_collector"):
+                        collect_created_resources(
+                            session_store=_session_store, data_collector_path=_data_collector_path
+                        )
                 finally:
-                    shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
-    except Exception as exp:
-        cleanup_error = exp
+                    try:
+                        if session.config.getoption("skip_teardown"):
+                            LOGGER.warning("User requested to skip teardown of resources")
+                        else:
+                            try:
+                                session_teardown(session_store=_session_store)
+                            except Exception:
+                                LOGGER.exception("Resources remain after session teardown")
+                                if not session.config.getoption("skip_data_collector"):
+                                    run_must_gather(
+                                        data_collector_path=_data_collector_path,
+                                        since_time=session_start_time(session=session),
+                                    )
+                                raise
+                    finally:
+                        shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
+        except Exception as exp:
+            cleanup_error = exp
 
     # --- Inner session hooks: retain a raised exception so reporting still runs ---
     session_outcome: object = None
@@ -548,13 +553,17 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     The handler interrupts pytest instead of ending the process, so teardown and reporting still
     run; the signal is put back here, once they are done, so the caller sees the interruption it
     sent rather than a plain pytest exit. SIGINT's default handler raises in-process instead of
-    ending the process, which leaves pytest's own interrupted exit status.
+    ending the process, which leaves pytest's own interrupted exit status. Restoring the handlers
+    also clears the record, so a session started later in this process re-raises nothing.
 
     Args:
         config (pytest.Config): Config of the session that is finishing.
     """
+    # Read before restoring: the restore clears the record so a later session in this process does
+    # not re-raise this one's signal.
+    signum = interrupting_signum()
     restore_interrupt_handlers()
-    if (signum := interrupting_signum()) is None:
+    if signum is None:
         return
     # Flush first: redirected stdout is block-buffered, so the interrupted run's summary would be
     # lost with the process.
@@ -2050,10 +2059,10 @@ def prepared_plan(
     # leaving the consumer's original VMDK orphaned. Reattaching it here means
     # teardown's delete_vm will automatically remove it — no separate VMDK cleanup needed.
     # Teardown reattaches them too, for a run that is interrupted before this finalizer runs.
-    reattach_orphaned_vmdks(
-        session_store=fixture_store,
-        reattach_provider=vcenter_clone_provider or source_provider,
-    )
+    # Records exist only for vSphere shared disks, which the config above refuses on other providers.
+    reattach_provider = vcenter_clone_provider or source_provider
+    if isinstance(reattach_provider, VMWareProvider):
+        reattach_provider.reattach_orphaned_vmdks(session_store=fixture_store)
 
     # Note: VMs are cleaned up by cleanup_migrated_vms at class scope.
     # Session-level registration is intentionally omitted to prevent double cleanup.
