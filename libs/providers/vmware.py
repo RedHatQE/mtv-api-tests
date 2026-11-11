@@ -129,7 +129,12 @@ def format_capacity_validation_log(datastore_name: str, required_gb: float, avai
     )
 
 
-def _ensure_datastore_space(source_vm: vim.VirtualMachine, datastore: vim.Datastore) -> None:
+def _ensure_datastore_space(
+    source_vm: vim.VirtualMachine,
+    datastore: vim.Datastore,
+    extra_bytes: int = 0,
+    thin: bool = False,
+) -> None:
     """Warn when the target datastore cannot hold the cloned disks.
 
     vCenter validates the space itself and fails the clone task fast with
@@ -140,18 +145,24 @@ def _ensure_datastore_space(source_vm: vim.VirtualMachine, datastore: vim.Datast
         source_vm: The VM or template being cloned; its disk capacities are the space the
             clone needs (the same value vCenter reports in NoDiskSpace.requiredSpace).
         datastore: The datastore the clone will be placed on.
+        extra_bytes: Capacity of thick disks added to the clone on the same datastore.
+        thin: Whether the clone requests thin (sparse) provisioning; thin clones are not checked.
 
     """
+    # shortcut: a thin clone allocates only written blocks up front, so comparing disk capacity to
+    # free space over-states the requirement; skip instead of guessing the initial allocation.
+    if thin:
+        return
     devices = source_vm.config.hardware.device if source_vm.config and source_vm.config.hardware else []
-    required_bytes = sum(device.capacityInBytes for device in devices if isinstance(device, vim.vm.device.VirtualDisk))
+    required_bytes = (
+        sum(device.capacityInBytes for device in devices if isinstance(device, vim.vm.device.VirtualDisk)) + extra_bytes
+    )
     available_bytes = datastore.summary.freeSpace or 0
     if required_bytes > available_bytes:
         LOGGER.warning(
-            "Datastore '%s' may not have enough free space for the clone: required %.2f GiB, "
-            "available %.2f GiB; proceeding, vCenter validates the requirement.",
-            datastore.name,
-            required_bytes / (1024**3),
-            available_bytes / (1024**3),
+            f"Datastore '{datastore.name}' may not have enough free space for the clone: "
+            f"required {required_bytes / (1024**3):.2f} GiB, available {available_bytes / (1024**3):.2f} GiB; "
+            f"proceeding, vCenter validates the requirement."
         )
 
 
@@ -1995,7 +2006,17 @@ class VMWareProvider(BaseProvider):
             config=config_spec,
         )
 
-        _ensure_datastore_space(source_vm=source_vm, datastore=target_datastore)
+        _ensure_datastore_space(
+            source_vm=source_vm,
+            datastore=target_datastore,
+            # Same source of truth as _get_add_disk_device_specs: only thick disks need full capacity.
+            extra_bytes=sum(
+                disk["size_gb"] * 1024**3
+                for disk in regular_disks
+                if disk.get("provision_type", "thin").lower() != "thin"
+            ),
+            thin=(disk_type or "").lower() == "thin",
+        )
 
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
         LOGGER.info("Clone task started for %s. Waiting for completion...", clone_vm_name)
