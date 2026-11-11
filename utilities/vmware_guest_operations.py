@@ -50,6 +50,10 @@ _READ_ONLY_MOUNT_OPTIONS = {
 }
 # Forklift's vSphere rootDisk mapper derives the disk index from one letter after /dev/sd.
 _SUPPORTED_ROOT_DEVICE = re.compile(r"^/dev/sd[a-z][0-9]+$")
+# pyVmomi's vmodl stub omits the root RuntimeFault even though it exists at import time
+# (it is the parent of vmodl.fault.ManagedObjectNotFound and its siblings). Resolve it from
+# the module so the whole runtime-fault family is tolerated on the best-effort path.
+_VMODL_RUNTIME_FAULT: type[Exception] = getattr(vmodl, "RuntimeFault")
 
 
 class LinuxOSRoot(TypedDict):
@@ -917,7 +921,7 @@ def collect_linux_guest_static_ip_metadata(
     except (
         GuestCommandError,
         vim.fault.VimFault,
-        vmodl.fault.ManagedObjectNotFound,
+        _VMODL_RUNTIME_FAULT,
         TimeoutExpiredError,
         OSError,
     ) as e:
