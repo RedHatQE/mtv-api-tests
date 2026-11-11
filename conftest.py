@@ -449,6 +449,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     sessionfinish output (JUnit enrichment, terminal summary) runs after the yield, even when an
     inner session-finish hook raises. An inner-hook, cleanup, or post-yield failure is re-raised
     after that processing, chained from the earliest earlier error so all of them stay visible.
+    An interrupt during the cleanup is recorded instead of raised, so the cleanup finishes; the
+    session's interrupted exit status is applied after it, keeping an interrupted run from
+    reporting success.
 
     Args:
         session (pytest.Session): Worker-local session holding pending diagnostics and resources.
@@ -502,6 +505,10 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
                         shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
         except Exception as exp:
             cleanup_error = exp
+        # Recorded, not raised, while the cleanup runs: pytest would otherwise exit with the status
+        # the tests earned, so a Ctrl-C during cleanup after passing tests would report success.
+        if interrupting_signum() is not None:
+            session.exitstatus = pytest.ExitCode.INTERRUPTED
 
     # --- Inner session hooks: retain a raised exception so reporting still runs ---
     session_outcome: object = None
