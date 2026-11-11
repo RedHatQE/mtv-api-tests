@@ -102,7 +102,8 @@ The module most test authors reuse first. It owns `StorageMap`, `NetworkMap`, `P
 scheduler message. The probe matches the destination names the plan reports plus each spec VM's resolved destination name (`targetName`, or the
 sanitised source name), keeps a consecutive count per VM, and runs only on non-terminal polls — a plan that reports `Failed` still raises
 `MigrationPlanExecError` carrying its status. On the poll that reports `Failed`, `wait_for_migration_complate()` first captures the failure
-evidence (see [Failure Evidence Dumps](troubleshooting-and-diagnostics.html#failure-evidence-dumps)): MTV deletes the failed objects before must-gather runs. The suite never frees
+evidence (see [Failure Evidence Dumps](troubleshooting-and-diagnostics.html#failure-evidence-dumps)): MTV deletes the failed objects before must-gather runs, so the
+plan's `Conversion` CRs are also re-read every 10 seconds while the plan waits and the last non-empty dump is written when the CR is already gone. The suite never frees
 destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
 is preferable to running to `plan_wait_timeout` (1 hour) for a VM that can never start.
 
