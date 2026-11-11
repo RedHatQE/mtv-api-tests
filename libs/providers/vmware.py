@@ -2325,7 +2325,12 @@ class VMWareProvider(BaseProvider):
         LOGGER.info(f"Reattached orphaned VMDK to '{vm_name}': {vmdk_path}")
 
     def delete_vm(self, vm_name: str) -> None:
-        vm = self.get_obj(vimtype=[vim.VirtualMachine], name=vm_name)
+        try:
+            vm = self.get_obj(vimtype=[vim.VirtualMachine], name=vm_name)
+        except ValueError as err:
+            # get_obj reports a missing name as a plain ValueError; the domain error is what tells a
+            # teardown pass that an already-deleted clone is not a leftover.
+            raise VmNotFoundError(f"VM '{vm_name}' not found on {self.host}") from err
         self.stop_vm(vm=vm)
         task = vm.Destroy_Task()
         self.wait_task(task=task, action_name=f"Deleting VM {vm_name}")

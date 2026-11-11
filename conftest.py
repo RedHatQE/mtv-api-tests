@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import bdb
+import contextlib
 import json
 import logging
 import os
 import pickle
 import shutil
-import signal
+import sys
 import tempfile
 import uuid
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from copy import deepcopy
 from functools import partial
 from pathlib import Path
 from shutil import rmtree
-from types import FrameType
 from typing import TYPE_CHECKING, Any
 
 import filelock
@@ -100,11 +100,17 @@ from utilities.pytest_utils import (
     enrich_junit_xml,
     is_dry_run,
     prepare_base_path,
+    reattach_orphaned_vmdks,
     resolve_item_plan_config,
     session_teardown,
     setup_ai_analysis,
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
+from utilities.signal_teardown import (
+    install_interrupt_handlers,
+    interrupting_signum,
+    restore_interrupt_handlers,
+)
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.storage_canary import verify_destination_storage_provisioning
 from utilities.utils import (
@@ -309,6 +315,11 @@ def pytest_sessionstart(session):
     # it before spawning the workers. Only the controller may wipe the root and write the baseline:
     # a worker wipe would remove the session-start baseline and every earlier worker's artifacts.
     is_xdist_worker = getattr(session.config, "workerinput", None) is not None
+
+    # Installed before any session fixture runs, so a signal during the first of them (provider
+    # selection, storage canary) still runs the tracked teardown instead of the default handler.
+    if not is_dry_run(session.config) and not session.config.getoption("skip_teardown"):
+        install_interrupt_handlers(config=session.config)
 
     _data_collector_path: Path | None = None
     if not session.config.getoption("skip_data_collector"):
@@ -529,6 +540,28 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     if cleanup_error is not None:
         raise cleanup_error
     return session_outcome
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Restore the interrupt handlers and finish an interrupted run with the signal it received.
+
+    The handler interrupts pytest instead of ending the process, so teardown and reporting still
+    run; the signal is put back here, once they are done, so the caller sees the interruption it
+    sent rather than a plain pytest exit. SIGINT's default handler raises in-process instead of
+    ending the process, which leaves pytest's own interrupted exit status.
+
+    Args:
+        config (pytest.Config): Config of the session that is finishing.
+    """
+    restore_interrupt_handlers()
+    if (signum := interrupting_signum()) is None:
+        return
+    # Flush first: redirected stdout is block-buffered, so the interrupted run's summary would be
+    # lost with the process.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with contextlib.suppress(KeyboardInterrupt):
+        os.kill(os.getpid(), signum)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -812,47 +845,8 @@ def pytest_harvest_xdist_cleanup():
 # Pytest end
 
 
-def _install_signal_teardown(session_store: dict[str, Any]) -> dict[int, Any]:
-    """Install SIGINT/SIGTERM handlers that run the session teardown before exiting.
-
-    Issue #842: teardown only ran on the clean session-finish path, so an interrupted run left its
-    clones and other resources behind on the lab. The handler reuses the same teardown routine,
-    restores the replaced handlers and re-sends the signal, so the original interruption still
-    happens. A teardown failure cannot mask it: the finally block always re-sends the signal and the
-    failure stays chained to the resulting KeyboardInterrupt. A second signal aborts a running
-    teardown instead of starting a second one.
-
-    Args:
-        session_store (dict[str, Any]): Session fixture store holding the resources created so far.
-
-    Returns:
-        dict[int, Any]: The handler each installed signal replaced, keyed by signal number.
-    """
-    previous_handlers: dict[int, Any] = {}
-    teardown_done = False
-
-    def _handle_signal(signum: int, _frame: FrameType | None) -> None:
-        nonlocal teardown_done
-        try:
-            if not teardown_done:
-                teardown_done = True
-                LOGGER.warning(f"Session interrupted by signal {signum}, running session teardown")
-                session_teardown(session_store=session_store)
-        finally:
-            for _signum, _previous_handler in previous_handlers.items():
-                signal.signal(_signum, _previous_handler)
-            os.kill(os.getpid(), signum)
-
-    for _signum in (signal.SIGINT, signal.SIGTERM):
-        previous_handlers[_signum] = signal.signal(_signum, _handle_signal)
-
-    return previous_handlers
-
-
 @pytest.fixture(scope="session", autouse=True)
 def autouse_fixtures(
-    request,
-    fixture_store,
     selected_source_provider,
     source_provider_data,
     nfs_storage_profile,
@@ -866,18 +860,7 @@ def autouse_fixtures(
     # fail fast if the provider is not found in the providers list from config.
     # storage_canary (which creates target_namespace) runs before any class-scoped
     # fixture so broken destination storage fails the session before migrations run.
-    # An interrupted session tears down through the installed handlers, which are
-    # only installed when teardown itself is enabled.
-    previous_signal_handlers = (
-        {}
-        if is_dry_run(request.config) or request.config.getoption("skip_teardown")
-        else _install_signal_teardown(session_store=fixture_store)
-    )
-    try:
-        yield
-    finally:
-        for _signum, _previous_handler in previous_signal_handlers.items():
-            signal.signal(_signum, _previous_handler)
+    yield
 
 
 @pytest.fixture(scope="session")
@@ -2066,22 +2049,11 @@ def prepared_plan(
     # During relink, consumer clones' shared disks are redirected to the owner's VMDK,
     # leaving the consumer's original VMDK orphaned. Reattaching it here means
     # teardown's delete_vm will automatically remove it — no separate VMDK cleanup needed.
-    vmdks_to_reattach: list[dict[str, Any]] = fixture_store["teardown"].pop("orphaned_vmdks_to_reattach", [])
-    if vmdks_to_reattach:
-        reattach_provider = vcenter_clone_provider or source_provider
-        for vmdk_info in vmdks_to_reattach:
-            try:
-                reattach_provider.reattach_orphaned_vmdk(
-                    vm_name=vmdk_info["vm_name"],
-                    vmdk_path=vmdk_info["vmdk_path"],
-                    bus_number=vmdk_info["bus_number"],
-                    unit_number=vmdk_info["unit_number"],
-                )
-            except Exception:
-                LOGGER.warning(
-                    f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
-                    "VMDK may need manual cleanup"
-                )
+    # Teardown reattaches them too, for a run that is interrupted before this finalizer runs.
+    reattach_orphaned_vmdks(
+        session_store=fixture_store,
+        reattach_provider=vcenter_clone_provider or source_provider,
+    )
 
     # Note: VMs are cleaned up by cleanup_migrated_vms at class scope.
     # Session-level registration is intentionally omitted to prevent double cleanup.
