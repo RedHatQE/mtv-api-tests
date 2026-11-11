@@ -224,6 +224,9 @@ The most important files are:
   replaced with `***`. Both `--tc=key:value` and the split `--tc key:value` forms are covered.
 - `.data-collector/cluster-state/<timestamp>-<scope>-<reason>[-<worker>].txt`: bounded cluster snapshots written just before a real failure is raised (see
   [Failure Evidence Dumps](#failure-evidence-dumps)).
+- `.data-collector/failed-plan-<plan name>-<timestamp>/`: the failed plan's `Conversion` CRs, pods and events (`conversions.yaml`, `pods.yaml`,
+  `events.yaml`) plus `oc logs --tail=200` of every deep-inspect / convertor / importer / populator / virt-v2v pod, captured on the poll that reports the plan as
+  Failed — see [Failure Evidence Dumps](#failure-evidence-dumps).
 - `.data-collector/upgrade-script-<timestamp>/upgrade-script-stdout.log` and `-stderr.log`: the upgrade script's own output with `CLUSTER_PASSWORD` redacted. The child always writes
   into a temporary directory that is deleted before the upgrade returns, so the raw bytes never reach the artifact tree — and never the inherited streams either, because the
   script receives the cluster password and pytest runs with `-s`. Without `--data-collector-path` the redacted logs live under the default `.data-collector/`;
@@ -275,8 +278,19 @@ Every artifact is written with the resolved `CLUSTER_PASSWORD` redacted, and the
 The target namespace is read defensively (attribute, transport and parse failures all degrade to no snapshot) and the dump is skipped when the read fails or
 `--skip-data-collector` is set, so collecting evidence can never replace the `MigrationPlanExecError` / `MigrationVmUnschedulableError` the caller is supposed to see.
 
-Deliberately **not** dumped: the generic `MigrationPlanExecError`. Expected-failure tests (`tests/plan_lifecycle/`, `TestPostHookRetainFailedVm`, resume-conversion) raise it on
-purpose, so paying for a snapshot there would only slow the suite down. Every failure path is a no-op under `--skip-data-collector`.
+Deliberately **not** dumped: the storage snapshot for the generic `MigrationPlanExecError`. Expected-failure tests (`tests/plan_lifecycle/`, `TestPostHookRetainFailedVm`, resume-conversion) raise it on
+purpose, so paying for a full storage snapshot there would only slow the suite down. Every failure path is a no-op under `--skip-data-collector`.
+
+### Failed-Plan Evidence
+
+MTV deletes the failed objects (`deleteVmOnFailMigration: true`) before must-gather runs, so the cause of a plan failure is gone by the time the bundle is written.
+`utilities/mtv_migration.py::_capture_failed_plan_evidence()` therefore reads the evidence on the poll that reports the plan as `Failed`, before `MigrationPlanExecError`
+is raised: the target namespace's forklift `Conversion` CRs (a deep-inspection failure lives in that CR), its pods and events as YAML, and `oc logs --tail=200` of every
+pipeline pod (`deep-inspect`, `convertor`, `importer`, `populator`, `virt-v2v`). Everything lands in one `failed-plan-<plan name>-<UTC timestamp>/` directory under the
+collector path, so a delete-on-failure plan stays explainable.
+
+This runs through the `oc` binary and is best effort: each command has a 60-second timeout, and a capture that fails — the namespace or an object is already gone — logs one
+warning and never replaces the `MigrationPlanExecError` the caller sees. It costs nothing under `--skip-data-collector`.
 
 ## Must-Gather Support
 

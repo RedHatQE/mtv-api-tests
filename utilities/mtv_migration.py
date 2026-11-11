@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from subprocess import CalledProcessError, TimeoutExpired
 from time import monotonic
 from typing import TYPE_CHECKING, Any
 
@@ -13,6 +14,7 @@ from ocp_resources.pod import Pod
 from ocp_resources.provider import Provider
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine_instance import VirtualMachineInstance
+from pyhelper_utils.shell import run_command
 from pytest_testconfig import py_config
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
@@ -29,7 +31,7 @@ from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
 from utilities.cluster_state import ClusterStateProbeTimeout, dump_cluster_state, read_with_deadline
-from utilities.data_collector import data_collector_path
+from utilities.data_collector import data_collector_path, utc_timestamp
 from utilities.naming import resolve_destination_vm_name
 from utilities.resources import create_and_store_resource
 from utilities.utils import gen_network_map_list
@@ -76,6 +78,14 @@ _CREATE_AND_STORE_RESOURCE_KEYS: frozenset[str] = frozenset({
 # instead of burning the whole plan timeout.
 _UNSCHEDULABLE_CHECK_INTERVAL_SECONDS = 30
 _UNSCHEDULABLE_CONFIRMATIONS_REQUIRED = 3
+
+# MTV deletes the failed objects (``deleteVmOnFailMigration``) before must-gather runs, so the
+# evidence of a failed plan is captured on the Failed poll, while it still exists.
+_FAILURE_EVIDENCE_DIR_PREFIX = "failed-plan"
+_FAILURE_EVIDENCE_KINDS = ("conversions", "pods", "events")
+_FAILURE_EVIDENCE_POD_MARKERS = ("deep-inspect", "convertor", "importer", "populator", "virt-v2v")
+_FAILURE_EVIDENCE_LOG_TAIL_LINES = 200
+_FAILURE_EVIDENCE_COMMAND_TIMEOUT_SECONDS = 60
 
 
 def get_migration_for_plan(plan: Plan) -> Migration:
@@ -787,6 +797,54 @@ def _confirm_unschedulable_destination_vm(plan: Plan, hits_by_vm: dict[str, int]
         raise MigrationVmUnschedulableError(vm_name=vm_name, scheduler_message=scheduler_message)
 
 
+def _capture_failed_plan_evidence(plan: Plan) -> None:
+    """Capture the Conversion CRs, pipeline pod logs and namespace events of a failed plan.
+
+    MTV deletes the failed objects on failure, so the forklift ``Conversion`` CR and its
+    pipeline pods are read here, on the poll that reports the plan as Failed. Capture is best
+    effort: it never raises, because a lost artifact must not replace the MigrationPlanExecError
+    the caller raises.
+
+    Args:
+        plan (Plan): Plan whose migration status was seen as Failed.
+    """
+    # Resolved before the namespace so --skip-data-collector costs no API request or oc call.
+    collector_path = data_collector_path()
+    if collector_path is None:
+        return
+    namespace = _plan_target_namespace(plan=plan)
+    if namespace is None:
+        return
+
+    directory = collector_path / f"{_FAILURE_EVIDENCE_DIR_PREFIX}-{plan.name}-{utc_timestamp()}"
+    try:
+        _, pod_names, _ = run_command(
+            ["oc", "get", "pods", "-n", namespace, "-o", "name"],
+            verify_stderr=False,
+            timeout=_FAILURE_EVIDENCE_COMMAND_TIMEOUT_SECONDS,
+        )
+        commands: dict[str, list[str]] = {
+            f"{kind}.yaml": ["oc", "get", kind, "-n", namespace, "-o", "yaml"] for kind in _FAILURE_EVIDENCE_KINDS
+        }
+        for pod_name in pod_names.split():
+            if any(marker in pod_name for marker in _FAILURE_EVIDENCE_POD_MARKERS):
+                commands[f"{pod_name.replace('/', '-')}.log"] = [
+                    "oc",
+                    "logs",
+                    "-n",
+                    namespace,
+                    pod_name,
+                    f"--tail={_FAILURE_EVIDENCE_LOG_TAIL_LINES}",
+                ]
+
+        directory.mkdir(parents=True, exist_ok=True)
+        for file_name, command in commands.items():
+            _, output, _ = run_command(command, verify_stderr=False, timeout=_FAILURE_EVIDENCE_COMMAND_TIMEOUT_SECONDS)
+            (directory / file_name).write_text(output, encoding="utf-8")
+    except (CalledProcessError, TimeoutExpired, OSError) as err:
+        LOGGER.warning(f"Failed to capture the failure evidence of plan '{plan.name}' in '{directory}': {err}")
+
+
 def wait_for_migration_complate(
     plan: Plan,
     *,
@@ -827,6 +885,7 @@ def wait_for_migration_complate(
                 return
 
             elif sample == Plan.Status.FAILED:
+                _capture_failed_plan_evidence(plan=plan)
                 raise MigrationPlanExecError()
 
             # Probed only on non-terminal polls, so a plan that reports its own failure on the
