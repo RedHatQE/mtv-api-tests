@@ -6,13 +6,15 @@ import logging
 import os
 import pickle
 import shutil
+import signal
 import tempfile
 import uuid
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from copy import deepcopy
 from functools import partial
 from pathlib import Path
 from shutil import rmtree
+from types import FrameType
 from typing import TYPE_CHECKING, Any
 
 import filelock
@@ -810,8 +812,47 @@ def pytest_harvest_xdist_cleanup():
 # Pytest end
 
 
+def _install_signal_teardown(session_store: dict[str, Any]) -> dict[int, Any]:
+    """Install SIGINT/SIGTERM handlers that run the session teardown before exiting.
+
+    Issue #842: teardown only ran on the clean session-finish path, so an interrupted run left its
+    clones and other resources behind on the lab. The handler reuses the same teardown routine,
+    restores the replaced handlers and re-sends the signal, so the original interruption still
+    happens. A teardown failure cannot mask it: the finally block always re-sends the signal and the
+    failure stays chained to the resulting KeyboardInterrupt. A second signal aborts a running
+    teardown instead of starting a second one.
+
+    Args:
+        session_store (dict[str, Any]): Session fixture store holding the resources created so far.
+
+    Returns:
+        dict[int, Any]: The handler each installed signal replaced, keyed by signal number.
+    """
+    previous_handlers: dict[int, Any] = {}
+    teardown_done = False
+
+    def _handle_signal(signum: int, _frame: FrameType | None) -> None:
+        nonlocal teardown_done
+        try:
+            if not teardown_done:
+                teardown_done = True
+                LOGGER.warning(f"Session interrupted by signal {signum}, running session teardown")
+                session_teardown(session_store=session_store)
+        finally:
+            for _signum, _previous_handler in previous_handlers.items():
+                signal.signal(_signum, _previous_handler)
+            os.kill(os.getpid(), signum)
+
+    for _signum in (signal.SIGINT, signal.SIGTERM):
+        previous_handlers[_signum] = signal.signal(_signum, _handle_signal)
+
+    return previous_handlers
+
+
 @pytest.fixture(scope="session", autouse=True)
 def autouse_fixtures(
+    request,
+    fixture_store,
     selected_source_provider,
     source_provider_data,
     nfs_storage_profile,
@@ -825,7 +866,18 @@ def autouse_fixtures(
     # fail fast if the provider is not found in the providers list from config.
     # storage_canary (which creates target_namespace) runs before any class-scoped
     # fixture so broken destination storage fails the session before migrations run.
-    yield
+    # An interrupted session tears down through the installed handlers, which are
+    # only installed when teardown itself is enabled.
+    previous_signal_handlers = (
+        {}
+        if is_dry_run(request.config) or request.config.getoption("skip_teardown")
+        else _install_signal_teardown(session_store=fixture_store)
+    )
+    try:
+        yield
+    finally:
+        for _signum, _previous_handler in previous_signal_handlers.items():
+            signal.signal(_signum, _previous_handler)
 
 
 @pytest.fixture(scope="session")
