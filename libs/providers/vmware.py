@@ -37,6 +37,10 @@ if TYPE_CHECKING:
 
 LOGGER = get_logger(__name__)
 
+# get_obj's message for a name it could not find. Teardown matches it to tell an already-deleted
+# clone from an inventory-access failure, so it lives here instead of being repeated.
+_MISSING_OBJECT_MESSAGE = "with name '{name}' not found."
+
 # Disk-controller types mapped to the extraConfig key prefix vSphere uses for a disk's per-disk
 # CBT flag (e.g. scsi0:0.ctkEnabled, nvme0:0.ctkEnabled). Covers every bus type a disk can hang off
 # so CBT verification is not restricted to SCSI-attached disks.
@@ -991,7 +995,7 @@ class VMWareProvider(BaseProvider):
                     LOGGER.debug(f"Skipping stale managed object reference while searching for '{name}'")
                     continue
 
-            raise ValueError(f"Object of type {vimtype} with name '{name}' not found.")
+            raise ValueError(f"Object of type {vimtype} {_MISSING_OBJECT_MESSAGE.format(name=name)}")
 
         finally:
             container.Destroy()
@@ -2385,8 +2389,73 @@ class VMWareProvider(BaseProvider):
         )
         LOGGER.info(f"Reattached orphaned VMDK to '{vm_name}': {vmdk_path}")
 
+    def reattach_orphaned_vmdks(self, session_store: dict[str, Any]) -> list[dict[str, Any]]:
+        """Reattach the recorded orphaned VMDKs of this session to their consumer clones.
+
+        Runs before the clones are deleted, so their deletion removes the VMDKs too; a VMDK left
+        behind after the clone is gone needs manual cleanup. A record is dropped only once its
+        reattachment succeeded, so a failed one survives for the next call in the same session.
+        Each failure is logged and the remaining records are still attempted.
+
+        Args:
+            session_store (dict[str, Any]): Session store holding the recorded reattachments.
+
+        Returns:
+            list[dict[str, Any]]: Records that could not be reattached and stay in the store for a
+                retry; their VMDKs need manual cleanup once the clone is deleted.
+        """
+        teardown_store = session_store["teardown"]
+        # `Any` is deliberate: a record is written by relink_shared_disks as a plain dict of
+        # vm_name/vmdk_path strings and bus/unit numbers, a shape no shared annotation covers.
+        pending: list[dict[str, Any]] = teardown_store.get("orphaned_vmdks_to_reattach", [])
+        failed: list[dict[str, Any]] = []
+        for vmdk_info in pending:
+            try:
+                self.reattach_orphaned_vmdk(
+                    vm_name=vmdk_info["vm_name"],
+                    vmdk_path=vmdk_info["vmdk_path"],
+                    bus_number=vmdk_info["bus_number"],
+                    unit_number=vmdk_info["unit_number"],
+                )
+            except VmCloneError:
+                # Error level with the traceback: the provider raises it for a missing disk or a
+                # failed reconfig, which is what tells a teardown pass the VMDK needs manual cleanup.
+                LOGGER.exception(
+                    f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
+                    "VMDK may need manual cleanup"
+                )
+                failed.append(vmdk_info)
+            except (vim.fault.VimFault, ValueError, ConnectionError, OSError, TimeoutExpiredError):
+                LOGGER.warning(
+                    f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
+                    "VMDK may need manual cleanup"
+                )
+                failed.append(vmdk_info)
+
+        if failed:
+            teardown_store["orphaned_vmdks_to_reattach"] = failed
+        else:
+            teardown_store.pop("orphaned_vmdks_to_reattach", None)
+        return failed
+
     def delete_vm(self, vm_name: str) -> None:
-        vm = self.get_obj(vimtype=[vim.VirtualMachine], name=vm_name)
+        """Delete a VM, reporting an absent one as a domain error.
+
+        Args:
+            vm_name (str): Name of the VM to delete.
+
+        Raises:
+            VmNotFoundError: The VM does not exist, e.g. an earlier teardown deleted it.
+            ValueError: The inventory could not be queried, so the VM's state is unknown.
+        """
+        try:
+            vm = self.get_obj(vimtype=[vim.VirtualMachine], name=vm_name)
+        except ValueError as err:
+            # Only the missing-object message means the clone is gone; any other ValueError (e.g. no
+            # view manager) means the lookup failed, and teardown must report the clone as a leftover.
+            if _MISSING_OBJECT_MESSAGE.format(name=vm_name) not in str(err):
+                raise
+            raise VmNotFoundError(f"VM '{vm_name}' not found on {self.host}") from err
         self.stop_vm(vm=vm)
         task = vm.Destroy_Task()
         self.wait_task(task=task, action_name=f"Deleting VM {vm_name}")

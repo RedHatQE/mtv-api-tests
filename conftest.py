@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import bdb
+import contextlib
 import json
 import logging
 import os
 import pickle
 import shutil
+import sys
 import tempfile
 import uuid
 from collections.abc import Generator
@@ -103,6 +105,12 @@ from utilities.pytest_utils import (
     setup_ai_analysis,
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
+from utilities.signal_teardown import (
+    install_interrupt_handlers,
+    interrupting_signum,
+    restore_interrupt_handlers,
+    session_cleanup,
+)
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.storage_canary import verify_destination_storage_provisioning
 from utilities.utils import (
@@ -308,6 +316,11 @@ def pytest_sessionstart(session):
     # a worker wipe would remove the session-start baseline and every earlier worker's artifacts.
     is_xdist_worker = getattr(session.config, "workerinput", None) is not None
 
+    # Installed before any session fixture runs, so a signal during the first of them (provider
+    # selection, storage canary) still runs the tracked teardown instead of the default handler.
+    if not is_dry_run(session.config) and not session.config.getoption("skip_teardown"):
+        install_interrupt_handlers(config=session.config)
+
     _data_collector_path: Path | None = None
     if not session.config.getoption("skip_data_collector"):
         _data_collector_path = Path(session.config.getoption("data_collector_path"))
@@ -436,6 +449,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     sessionfinish output (JUnit enrichment, terminal summary) runs after the yield, even when an
     inner session-finish hook raises. An inner-hook, cleanup, or post-yield failure is re-raised
     after that processing, chained from the earliest earlier error so all of them stay visible.
+    An interrupt during the cleanup is recorded instead of raised, so the cleanup finishes; the
+    session's interrupted exit status is applied after it, keeping an interrupted run from
+    reporting success.
 
     Args:
         session (pytest.Session): Worker-local session holding pending diagnostics and resources.
@@ -456,34 +472,43 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     # --- Pre-yield cleanup: must finish before the xdist worker reports completion ---
     cleanup_error: Exception | None = None
     inner_error: Exception | None = None
-    try:
-        # Each independent action runs even if an earlier one raises; errors stay chained.
+    # A signal arriving here is recorded instead of raised: raising would abandon the cleanup below
+    # and leave the clones and other lab resources behind.
+    with session_cleanup():
         try:
-            if not session.config.getoption("skip_data_collector"):
-                flush_pending_class_must_gathers(session)
-        finally:
+            # Each independent action runs even if an earlier one raises; errors stay chained.
             try:
                 if not session.config.getoption("skip_data_collector"):
-                    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
+                    flush_pending_class_must_gathers(session)
             finally:
                 try:
-                    if session.config.getoption("skip_teardown"):
-                        LOGGER.warning("User requested to skip teardown of resources")
-                    else:
-                        try:
-                            session_teardown(session_store=_session_store)
-                        except Exception:
-                            LOGGER.exception("Resources remain after session teardown")
-                            if not session.config.getoption("skip_data_collector"):
-                                run_must_gather(
-                                    data_collector_path=_data_collector_path,
-                                    since_time=session_start_time(session=session),
-                                )
-                            raise
+                    if not session.config.getoption("skip_data_collector"):
+                        collect_created_resources(
+                            session_store=_session_store, data_collector_path=_data_collector_path
+                        )
                 finally:
-                    shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
-    except Exception as exp:
-        cleanup_error = exp
+                    try:
+                        if session.config.getoption("skip_teardown"):
+                            LOGGER.warning("User requested to skip teardown of resources")
+                        else:
+                            try:
+                                session_teardown(session_store=_session_store)
+                            except Exception:
+                                LOGGER.exception("Resources remain after session teardown")
+                                if not session.config.getoption("skip_data_collector"):
+                                    run_must_gather(
+                                        data_collector_path=_data_collector_path,
+                                        since_time=session_start_time(session=session),
+                                    )
+                                raise
+                    finally:
+                        shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
+        except Exception as exp:
+            cleanup_error = exp
+        # Recorded, not raised, while the cleanup runs: pytest would otherwise exit with the status
+        # the tests earned, so a Ctrl-C during cleanup after passing tests would report success.
+        if interrupting_signum() is not None:
+            session.exitstatus = pytest.ExitCode.INTERRUPTED
 
     # --- Inner session hooks: retain a raised exception so reporting still runs ---
     session_outcome: object = None
@@ -527,6 +552,32 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     if cleanup_error is not None:
         raise cleanup_error
     return session_outcome
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Restore the interrupt handlers and finish an interrupted run with the signal it received.
+
+    The handler interrupts pytest instead of ending the process, so teardown and reporting still
+    run; the signal is put back here, once they are done, so the caller sees the interruption it
+    sent rather than a plain pytest exit. SIGINT's default handler raises in-process instead of
+    ending the process, which leaves pytest's own interrupted exit status. Restoring the handlers
+    also clears the record, so a session started later in this process re-raises nothing.
+
+    Args:
+        config (pytest.Config): Config of the session that is finishing.
+    """
+    # Read before restoring: the restore clears the record so a later session in this process does
+    # not re-raise this one's signal.
+    signum = interrupting_signum()
+    restore_interrupt_handlers()
+    if signum is None:
+        return
+    # Flush first: redirected stdout is block-buffered, so the interrupted run's summary would be
+    # lost with the process.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with contextlib.suppress(KeyboardInterrupt):
+        os.kill(os.getpid(), signum)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -2015,22 +2066,11 @@ def prepared_plan(
     # During relink, consumer clones' shared disks are redirected to the owner's VMDK,
     # leaving the consumer's original VMDK orphaned. Reattaching it here means
     # teardown's delete_vm will automatically remove it — no separate VMDK cleanup needed.
-    vmdks_to_reattach: list[dict[str, Any]] = fixture_store["teardown"].pop("orphaned_vmdks_to_reattach", [])
-    if vmdks_to_reattach:
-        reattach_provider = vcenter_clone_provider or source_provider
-        for vmdk_info in vmdks_to_reattach:
-            try:
-                reattach_provider.reattach_orphaned_vmdk(
-                    vm_name=vmdk_info["vm_name"],
-                    vmdk_path=vmdk_info["vmdk_path"],
-                    bus_number=vmdk_info["bus_number"],
-                    unit_number=vmdk_info["unit_number"],
-                )
-            except Exception:
-                LOGGER.warning(
-                    f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
-                    "VMDK may need manual cleanup"
-                )
+    # Teardown reattaches them too, for a run that is interrupted before this finalizer runs.
+    # Records exist only for vSphere shared disks, which the config above refuses on other providers.
+    reattach_provider = vcenter_clone_provider or source_provider
+    if isinstance(reattach_provider, VMWareProvider):
+        reattach_provider.reattach_orphaned_vmdks(session_store=fixture_store)
 
     # Note: VMs are cleaned up by cleanup_migrated_vms at class scope.
     # Session-level registration is intentionally omitted to prevent double cleanup.
