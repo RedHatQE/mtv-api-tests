@@ -2554,6 +2554,9 @@ class VMWareProvider(BaseProvider):
                     and vm.guest.net
                     and len(vm.guest.net) > 0
                     and vm.guest.toolsStatus in ["toolsOk", "toolsOld"]  # Accept toolsOld too
+                    # guestFamily is tools-populated and lags toolsStatus/net on fresh
+                    # clones; guest operations depend on it to identify the guest OS.
+                    and vm.guest.guestFamily
                 ),
             ):
                 if sample:
