@@ -16,9 +16,17 @@ from libs.providers.rhv import OvirtProvider
 LOGGER = get_logger(__name__)
 
 _INVENTORY_REFRESH_READY_TIMEOUT = 180
-# Timeout for inventory MACs to converge with the live provider (see _wait_for_inventory_mac_convergence).
-_MAC_CONVERGENCE_TIMEOUT = 60
+# Timeout for inventory MACs to converge with the live provider (see
+# _wait_for_inventory_mac_convergence). The provider inventory refreshes asynchronously and a
+# burst of clones (shared-disk plans clone their source VMs back to back) can take longer than
+# a minute to reappear with the regenerated MACs; 60s blocked the whole class at setup.
+_MAC_CONVERGENCE_TIMEOUT = 180
 _MAC_CONVERGENCE_SLEEP = 5
+# `_refresh` is an opaque trigger the provider controller reconciles on: writing the same value
+# again is a no-op. It is second-granular, so refreshes requested within one second (back-to-back
+# clone MAC checks) must still produce a new value, otherwise the second request silently does
+# nothing and its caller polls an inventory that was never refreshed.
+_last_refresh_timestamp = 0
 
 
 def wait_for_inventory_guest_networks(
@@ -138,11 +146,30 @@ def _source_vm_requires_gateway(source_vm_data: dict[str, Any]) -> bool:
     return False
 
 
+def _next_refresh_timestamp(provider: Provider) -> str:
+    """Return an ``_refresh`` value strictly greater than the provider's current one.
+
+    Args:
+        provider (Provider): Forklift Provider resource about to be patched.
+
+    Returns:
+        str: The next refresh trigger value.
+    """
+    global _last_refresh_timestamp
+    current = str((provider.instance.to_dict().get("spec", {}).get("settings") or {}).get("_refresh", ""))
+    candidate = max(int(time.time()), _last_refresh_timestamp + 1)
+    if current.isdigit() and int(current) >= candidate:
+        candidate = int(current) + 1
+    _last_refresh_timestamp = candidate
+    return str(candidate)
+
+
 def force_inventory_refresh(provider: Provider) -> None:
     """Force Forklift provider inventory refresh by patching spec.settings._refresh.
 
-    Waits for Ready (not Validated) because _refresh triggers reconciliation; Ready
-    is sufficient for inventory repopulation to start.
+    The written value is always different from the provider's current one, so consecutive calls
+    in the same second still trigger a reconcile. Waits for Ready (not Validated) because
+    _refresh triggers reconciliation; Ready is sufficient for inventory repopulation to start.
 
     Args:
         provider (Provider): Forklift Provider resource to refresh.
@@ -150,7 +177,7 @@ def force_inventory_refresh(provider: Provider) -> None:
     Raises:
         TimeoutExpiredError: If the provider does not become Ready within the timeout.
     """
-    refresh_timestamp = str(int(time.time()))
+    refresh_timestamp = _next_refresh_timestamp(provider=provider)
     LOGGER.info(f"Forcing inventory refresh for provider '{provider.name}' with _refresh={refresh_timestamp}")
     patch = {"spec": {"settings": {"_refresh": refresh_timestamp}}}
     ResourceEditor(patches={provider: patch}).update()
@@ -304,8 +331,9 @@ def _wait_for_inventory_mac_convergence(
         vm_name (str): Name of the cloned VM to check.
 
     Raises:
-        ValueError: If no MACs are found in the live provider data, or if inventory and live
-            MACs do not converge within the timeout.
+        ValueError: If no MACs are found in the live provider data, if the provider has no OCP
+            resource to refresh, or if inventory and live MACs do not converge within the
+            timeout.
     """
     live_macs = {
         mac.lower()
@@ -330,8 +358,17 @@ def _wait_for_inventory_mac_convergence(
             vm = source_provider_inventory.get_vm(name=vm_name)
         except ValueError:
             return False
-        last_inventory_macs = {mac.lower() for nic in vm.get("nics", []) if (mac := nic.get("mac"))}
+        # Inventory can report a present-but-null nics list while reconciling a refresh.
+        last_inventory_macs = {mac.lower() for nic in vm.get("nics") or [] if (mac := nic.get("mac"))}
         return last_inventory_macs == live_macs
+
+    # The provider inventory refreshes on its own cadence (minutes for vSphere), so polling
+    # alone cannot converge for a freshly cloned VM with regenerated MACs: trigger a refresh
+    # instead of waiting out an interval that outlasts the timeout.
+    if not _check_mac_convergence():
+        if source_provider.ocp_resource is None:
+            raise ValueError("source_provider.ocp_resource is not set")
+        force_inventory_refresh(source_provider.ocp_resource)
 
     try:
         for converged in TimeoutSampler(

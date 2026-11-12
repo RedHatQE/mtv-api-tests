@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 from kubernetes.dynamic.exceptions import ConflictError
@@ -8,7 +8,7 @@ from ocp_resources.plan import Plan
 from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
 
-from utilities.naming import generate_name_with_uuid, truncate_resource_name
+from utilities.naming import K8S_NAME_MAX_LENGTH, generate_name_with_uuid, truncate_resource_name
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -21,6 +21,7 @@ def create_and_store_resource(
     fixture_store: dict[str, Any],
     resource: type[Resource],
     test_name: str | None = None,
+    on_conflict: Literal["reuse", "fail"] = "reuse",
     **kwargs: Any,
 ) -> Any:
     kwargs["client"] = client
@@ -40,6 +41,11 @@ def create_and_store_resource(
         _resource_name = _resource_dict.get("metadata", {}).get("name")
 
     if not _resource_name:
+        if "base_resource_name" not in fixture_store:
+            raise ValueError(
+                "fixture_store carries no 'base_resource_name': the base_resource_name fixture "
+                "did not run before this resource creation (check fixture ordering)."
+            )
         _resource_name = generate_name_with_uuid(name=fixture_store["base_resource_name"])
 
         if resource.kind in (Migration.kind, Plan.kind):
@@ -51,21 +57,45 @@ def create_and_store_resource(
 
     _resource = resource(**kwargs)
 
+    # Record before creating: a create that succeeds and then fails its existence wait must still
+    # be reachable by teardown, or the object is orphaned to namespace cleanup.
+    store_resource_for_teardown(fixture_store=fixture_store, resource=_resource, test_name=test_name)
+
     try:
         _resource.deploy(wait=True)
-    except ConflictError:
+    except ConflictError as conflict_error:
+        if on_conflict == "fail":
+            # The caller owns this name: adopting foreign state would mean deleting it later.
+            raise ValueError(
+                f"{_resource.kind} {_resource_name} already exists; refusing to adopt a resource "
+                "this run did not create."
+            ) from conflict_error
         LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
         _resource.wait()
 
-    LOGGER.info(f"Storing {_resource.kind} {_resource.name} in fixture store")
-    _resource_dict = {"name": _resource.name, "namespace": _resource.namespace, "module": _resource.__module__}
-
-    if test_name:
-        _resource_dict["test_name"] = test_name
-
-    fixture_store["teardown"].setdefault(_resource.kind, []).append(_resource_dict)
-
     return _resource
+
+
+def store_resource_for_teardown(
+    fixture_store: dict[str, Any],
+    resource: Resource,
+    test_name: str | None = None,
+) -> None:
+    """Record a resource in the fixture store so session teardown deletes it.
+
+    Args:
+        fixture_store (dict[str, Any]): Fixture store that tracks teardown.
+        resource (Resource): The resource to track.
+        test_name (str | None): Optional test name recorded with the entry.
+
+    Returns:
+        Resource: The same resource, so callers can return it directly.
+    """
+    LOGGER.info(f"Storing {resource.kind} {resource.name} in fixture store")
+    resource_dict = {"name": resource.name, "namespace": resource.namespace, "module": resource.__module__}
+    if test_name:
+        resource_dict["test_name"] = test_name
+    fixture_store["teardown"].setdefault(resource.kind, []).append(resource_dict)
 
 
 def unregister_teardown_resource(
