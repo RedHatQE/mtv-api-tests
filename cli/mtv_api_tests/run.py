@@ -172,7 +172,12 @@ def _get_cluster_config(ocp_provider: dict[str, Any] | None) -> tuple[list[str],
 
 
 def _run_local(
-    provider_key: str, storage_class: str, category: str, test_filter: str, ocp_provider: dict[str, Any] | None
+    provider_key: str,
+    storage_class: str,
+    category: str,
+    test_filter: str,
+    ocp_provider: dict[str, Any] | None,
+    toehold: bool,
 ) -> None:
     """Execute tests locally via uv run pytest.
 
@@ -182,6 +187,7 @@ def _run_local(
         category: Pytest marker name (e.g. 'copyoffload', 'tier0').
         test_filter: Optional pytest -k filter.
         ocp_provider: OpenShift provider config dict, or None.
+        toehold: Whether to run migrations through the copy appliance transfer path.
 
     Raises:
         typer.Exit: With the pytest process return code.
@@ -201,6 +207,8 @@ def _run_local(
         cmd.extend(["-m", category])
     if test_filter:
         cmd.extend(["-k", test_filter])
+    if toehold:
+        cmd.append("--toehold")
 
     console.print(f"\n[bold]Running:[/bold] {shlex.join(cmd)}\n")
 
@@ -273,6 +281,7 @@ def run_command(
     storage_class: str,
     test_filter: str,
     job_yaml: str,
+    toehold: bool,
 ) -> None:
     """Run tests locally or as an OpenShift Job.
 
@@ -284,6 +293,8 @@ def run_command(
         storage_class: OpenShift storage class name (empty for interactive/auto from OCP provider).
         test_filter: Pytest -k filter expression.
         job_yaml: Path to Job YAML file.
+        toehold: Whether to run migrations through the copy appliance transfer path
+            (supported vSphere versions only; local mode only).
 
     Raises:
         typer.Exit: On test completion, missing configuration, or error.
@@ -291,6 +302,13 @@ def run_command(
     load_dotenv()
 
     if mode == "job":
+        if toehold:
+            console.print(
+                "[red]Error: --toehold is not supported with --mode job: the Job manifest's pytest "
+                "command is fixed at 'generate' time and cannot carry the flag. Run locally with "
+                "--mode local --toehold, or edit the manifest's pytest command by hand.[/red]"
+            )
+            raise typer.Exit(code=1)
         job_yaml_path = Path(job_yaml)
         if not job_yaml_path.exists():
             console.print(f"[red]Error: {job_yaml_path} not found. Run 'mtv-api-tests generate' first.[/red]")
@@ -345,4 +363,4 @@ def run_command(
         else:
             storage_class = Prompt.ask("  Enter storage class name")
 
-    _run_local(resolved_source, storage_class, resolved_category, test_filter, ocp_provider)
+    _run_local(resolved_source, storage_class, resolved_category, test_filter, ocp_provider, toehold)

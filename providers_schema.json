@@ -105,7 +105,10 @@
         },
         "esxi_clone_method": {
           "type": "string",
-          "enum": ["vib", "ssh"],
+          "enum": [
+            "vib",
+            "ssh"
+          ],
           "description": "Method used to clone VMs on ESXi hosts: 'vib' uses a VIB package, 'ssh' uses direct SSH commands."
         },
         "esxi_host": {
@@ -162,20 +165,30 @@
         {
           "if": {
             "properties": {
-              "storage_vendor_product": { "const": "ontap" }
+              "storage_vendor_product": {
+                "const": "ontap"
+              }
             },
-            "required": ["storage_vendor_product"]
+            "required": [
+              "storage_vendor_product"
+            ]
           },
           "then": {
-            "required": ["ontap_svm"]
+            "required": [
+              "ontap_svm"
+            ]
           }
         },
         {
           "if": {
             "properties": {
-              "storage_vendor_product": { "const": "vantara" }
+              "storage_vendor_product": {
+                "const": "vantara"
+              }
             },
-            "required": ["storage_vendor_product"]
+            "required": [
+              "storage_vendor_product"
+            ]
           },
           "then": {
             "required": [
@@ -188,45 +201,71 @@
         {
           "if": {
             "properties": {
-              "storage_vendor_product": { "const": "pureFlashArray" }
+              "storage_vendor_product": {
+                "const": "pureFlashArray"
+              }
             },
-            "required": ["storage_vendor_product"]
+            "required": [
+              "storage_vendor_product"
+            ]
           },
           "then": {
-            "required": ["pure_cluster_prefix"]
+            "required": [
+              "pure_cluster_prefix"
+            ]
           }
         },
         {
           "if": {
             "properties": {
-              "storage_vendor_product": { "const": "powerflex" }
+              "storage_vendor_product": {
+                "const": "powerflex"
+              }
             },
-            "required": ["storage_vendor_product"]
+            "required": [
+              "storage_vendor_product"
+            ]
           },
           "then": {
-            "required": ["powerflex_system_id"]
+            "required": [
+              "powerflex_system_id"
+            ]
           }
         },
         {
           "if": {
             "properties": {
-              "storage_vendor_product": { "const": "powermax" }
+              "storage_vendor_product": {
+                "const": "powermax"
+              }
             },
-            "required": ["storage_vendor_product"]
+            "required": [
+              "storage_vendor_product"
+            ]
           },
           "then": {
-            "required": ["powermax_symmetrix_id"]
+            "required": [
+              "powermax_symmetrix_id"
+            ]
           }
         },
         {
           "if": {
             "properties": {
-              "esxi_clone_method": { "const": "ssh" }
+              "esxi_clone_method": {
+                "const": "ssh"
+              }
             },
-            "required": ["esxi_clone_method"]
+            "required": [
+              "esxi_clone_method"
+            ]
           },
           "then": {
-            "required": ["esxi_host", "esxi_user", "esxi_password"]
+            "required": [
+              "esxi_host",
+              "esxi_user",
+              "esxi_password"
+            ]
           }
         }
       ]
@@ -238,10 +277,19 @@
         {
           "description": "vSphere provider: supports vCenter and direct ESXi connections with optional VDDK, copy-offload, and LUKS support.",
           "allOf": [
-            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "$ref": "#/$defs/guestCredentials"
+            },
             {
               "type": "object",
-              "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+              "required": [
+                "type",
+                "version",
+                "fqdn",
+                "api_url",
+                "username",
+                "password"
+              ],
               "properties": {
                 "type": {
                   "type": "string",
@@ -270,7 +318,10 @@
                 },
                 "endpoint_type": {
                   "type": "string",
-                  "enum": ["vcenter", "esxi"],
+                  "enum": [
+                    "vcenter",
+                    "esxi"
+                  ],
                   "description": "vSphere endpoint type: 'vcenter' for vCenter Server, 'esxi' for direct ESXi host connection."
                 },
                 "vddk_init_image": {
@@ -295,10 +346,19 @@
         {
           "description": "oVirt/RHV provider: Red Hat Virtualization with guest credential support.",
           "allOf": [
-            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "$ref": "#/$defs/guestCredentials"
+            },
             {
               "type": "object",
-              "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+              "required": [
+                "type",
+                "version",
+                "fqdn",
+                "api_url",
+                "username",
+                "password"
+              ],
               "properties": {
                 "type": {
                   "type": "string",
@@ -332,7 +392,9 @@
         {
           "description": "OpenStack provider: requires Keystone domain, region, and project configuration.",
           "allOf": [
-            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "$ref": "#/$defs/guestCredentials"
+            },
             {
               "type": "object",
               "required": [
@@ -401,7 +463,15 @@
         {
           "description": "OpenShift provider: migration target cluster with storage class and optional SSL configuration.",
           "type": "object",
-          "required": ["type", "version", "host", "api_url", "username", "password", "storage_class"],
+          "required": [
+            "type",
+            "version",
+            "host",
+            "api_url",
+            "username",
+            "password",
+            "storage_class"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -446,10 +516,19 @@
         {
           "description": "OVA provider: file-based VM import with optional guest credentials.",
           "allOf": [
-            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "$ref": "#/$defs/guestCredentials"
+            },
             {
               "type": "object",
-              "required": ["type", "version", "fqdn", "api_url", "username", "password"],
+              "required": [
+                "type",
+                "version",
+                "fqdn",
+                "api_url",
+                "username",
+                "password"
+              ],
               "properties": {
                 "type": {
                   "type": "string",
@@ -483,10 +562,20 @@
         {
           "description": "Hyper-V provider: Microsoft Hyper-V with WinRM/PSRP and SMB support.",
           "allOf": [
-            { "$ref": "#/$defs/guestCredentials" },
+            {
+              "$ref": "#/$defs/guestCredentials"
+            },
             {
               "type": "object",
-              "required": ["type", "version", "fqdn", "api_url", "username", "password", "smb_url"],
+              "required": [
+                "type",
+                "version",
+                "fqdn",
+                "api_url",
+                "username",
+                "password",
+                "smb_url"
+              ],
               "properties": {
                 "type": {
                   "type": "string",
@@ -527,7 +616,10 @@
                 },
                 "management_type": {
                   "type": "string",
-                  "enum": ["cluster", "standalone"],
+                  "enum": [
+                    "cluster",
+                    "standalone"
+                  ],
                   "description": "Hyper-V management type: 'cluster' for Failover Cluster, 'standalone' for a single host. Maps to spec.settings.managementType on the MTV Provider CR. If omitted, the field is not set and MTV uses standalone."
                 }
               }

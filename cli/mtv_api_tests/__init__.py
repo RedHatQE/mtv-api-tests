@@ -61,6 +61,7 @@ def run(
     storage_class: str = typer.Option("", help="OpenShift storage class name"),  # noqa: M511
     test_filter: str = typer.Option("", "-k", help="Pytest -k filter (e.g. MTV-559, thin)"),  # noqa: M511
     job_yaml: str = typer.Option(str(JOB_YAML_PATH), help="Path to Job YAML (for --mode job)"),  # noqa: M511
+    toehold: bool = typer.Option(False, "--toehold", help="Run through the copy appliance transfer path"),  # noqa: M511
 ) -> None:
     """Run tests locally or as an OpenShift Job.
 
@@ -72,6 +73,7 @@ def run(
         storage_class: OpenShift storage class name (empty for interactive).
         test_filter: Pytest -k filter expression.
         job_yaml: Path to Job YAML file (for --mode job).
+        toehold: Whether to run through the copy appliance transfer path.
 
     Raises:
         typer.Exit: On test completion or error.
@@ -84,6 +86,7 @@ def run(
         storage_class=storage_class,
         test_filter=test_filter,
         job_yaml=job_yaml,
+        toehold=toehold,
     )
 
 
