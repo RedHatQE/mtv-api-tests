@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import pytest
-from kubernetes.dynamic.exceptions import DynamicApiError, ResourceNotFoundError
+from kubernetes.dynamic.exceptions import ApiException, DynamicApiError, ResourceNotFoundError
 from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.image_digest_mirror_set import ImageDigestMirrorSet
 from ocp_resources.exceptions import ClientWithBasicAuthError
@@ -304,9 +304,14 @@ def _bundle_has_diagnostics(data_collector_path: Path) -> bool:
         data_collector_path (Path): Directory the gather wrote to.
 
     Returns:
-        bool: True when any file exists under a bundle's ``namespaces/`` tree.
+        bool: True when any file exists under a bundle's ``namespaces/`` tree, excluding the
+            client's fallback ``inspect.local.*`` collections.
     """
-    return any(path.is_file() for path in data_collector_path.glob("*/namespaces/**/*"))
+    return any(
+        path.is_file()
+        for path in data_collector_path.glob("*/namespaces/**/*")
+        if not path.relative_to(data_collector_path).parts[0].startswith("inspect.local.")
+    )
 
 
 def _gather_with_node_retry(
@@ -419,6 +424,7 @@ def run_must_gather(data_collector_path: Path, since_time: str) -> bool:
         LOGGER.exception(f"Must-gather resource API is unavailable, no bundle in '{data_collector_path}'. {ex}")
         return False
     except (
+        ApiException,
         CalledProcessError,
         TimeoutExpired,
         OSError,
