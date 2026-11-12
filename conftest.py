@@ -128,7 +128,10 @@ from utilities.utils import (
     restore_skip_clone_power_states,
 )
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
-from utilities.vmware_guest_operations import collect_linux_guest_static_ip_metadata
+from utilities.vmware_guest_operations import (
+    collect_linux_guest_static_ip_metadata,
+    wait_guest_info_or_fail,
+)
 from utilities.worker_node_selection import (
     get_ready_schedulable_worker_nodes,
     get_session_unique_label_key,
@@ -1835,8 +1838,11 @@ def prepared_plan(
                     if source_vm_power == "on":
                         source_provider.start_vm(provider_vm_api)
                         if source_provider.type == Provider.ProviderType.VSPHERE:
-                            source_provider.wait_for_vmware_guest_info(
-                                provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                            wait_guest_info_or_fail(
+                                source_provider=source_provider,
+                                provider_vm_api=provider_vm_api,
+                                vm_name=vm["name"],
+                                timeout=class_plan_config.get("guest_agent_timeout", 120),
                             )
                         elif source_provider.type == Provider.ProviderType.HYPERV:
                             source_provider.wait_for_guest_network_config(
@@ -1943,8 +1949,11 @@ def prepared_plan(
                 if source_vm_power == "on":
                     source_provider.start_vm(provider_vm_api)
                     if source_provider.type == Provider.ProviderType.VSPHERE:
-                        source_provider.wait_for_vmware_guest_info(
-                            provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                        wait_guest_info_or_fail(
+                            source_provider=source_provider,
+                            provider_vm_api=provider_vm_api,
+                            vm_name=vm["name"],
+                            timeout=class_plan_config.get("guest_agent_timeout", 120),
                         )
                     elif source_provider.type == Provider.ProviderType.HYPERV:
                         source_provider.wait_for_guest_network_config(
@@ -1992,6 +2001,18 @@ def prepared_plan(
                     if mac is not None:
                         vm["disconnected_nic_mac" if not connected else "connected_nic_mac"] = mac
                         added_nic_expected_counts[vm["name"]] = nic_count_before + 1
+                        # The NIC reconfiguration clears vCenter's guest info (guestFamily and
+                        # net reset until tools re-report, ~15s); the guest-operations detection
+                        # below reads guestFamily, so wait for it to repopulate. A powered-off
+                        # clone has no guest info to wait for — the wait requires a powered-on
+                        # VM and would otherwise always time out.
+                        if source_provider.is_vm_powered_on(provider_vm_api):
+                            wait_guest_info_or_fail(
+                                source_provider=source_provider,
+                                provider_vm_api=provider_vm_api,
+                                vm_name=vm["name"],
+                                timeout=class_plan_config.get("guest_agent_timeout", 120),
+                            )
 
                 # Detect IP origins (and NIC names when preserving static IPs) for Linux guests,
                 # which VMware does not report natively (open-vm-tools limitation).
