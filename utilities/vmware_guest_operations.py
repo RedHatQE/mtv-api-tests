@@ -1019,3 +1019,30 @@ def create_data_integrity_marker(
         raise GuestCommandError(
             f"Marker verification failed on source VM {vm.name}: expected {marker_content!r}, got {readback.strip()!r}"
         )
+
+
+def wait_guest_info_or_fail(
+    source_provider: VMWareProvider,
+    provider_vm_api: Any,
+    vm_name: str,
+    timeout: int,
+) -> None:
+    """Wait for VMware guest info to repopulate and fail fast when it does not.
+
+    The wait returns False on timeout; ignoring it would let guest-OS-dependent operations
+    (guest-operations detection, NIC-name checks) run against stale guest info.
+
+    Args:
+        source_provider (VMWareProvider): vSphere source provider instance.
+        provider_vm_api (Any): VMware VM API object.
+        vm_name (str): VM name for the error message.
+        timeout (int): Maximum time to wait in seconds.
+
+    Raises:
+        ValueError: If guest info does not become available within the timeout.
+    """
+    if not source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=timeout):
+        raise ValueError(
+            f"Guest info for VM '{vm_name}' did not become available within {timeout}s; "
+            "cannot proceed with guest-OS-dependent operations"
+        )
