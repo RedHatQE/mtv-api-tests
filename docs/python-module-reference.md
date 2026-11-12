@@ -267,7 +267,10 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 
 `run_must_gather(data_collector_path, since_time)` runs the full diagnostic collection (`/usr/bin/gather`) with
 `MUST_GATHER_SINCE_TIME` bounding the collected logs to the given UTC RFC 3339 timestamp, and reports whether it
-succeeded. Missing resources and the wrapper's specific resource API discovery failure return `False`; missing or invalid image metadata and other configuration/programming errors propagate.
+succeeded. Acceptance is based on the diagnostics in the destination rather than the exit code — the OpenShift client's
+disk-usage guard aborts gathers on nearly-full nodes while still exiting 0, so its limit is raised to 90 via
+`--volume-percentage` and, while the destination holds none, attempts are retried pinned to Ready schedulable
+worker nodes. Missing resources and the wrapper's specific resource API discovery failure return `False`; missing or invalid image metadata and other configuration/programming errors propagate.
 Standalone setup/call collector errors stay in the failing item's typed stash until the teardown wrapper yields to fixture finalizers.
 The pending-gather flush, resource inventory writing and configured cleanup run before the inner session-finish hooks yield,
 so xdist worker shutdown cannot interrupt them; the summary and enabled AI enrichment run after those hooks, and errors are

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import pytest
-from kubernetes.dynamic.exceptions import DynamicApiError, ResourceNotFoundError
+from kubernetes.dynamic.exceptions import ApiException, DynamicApiError, ResourceNotFoundError
 from ocp_resources.cluster_service_version import ClusterServiceVersion
 from ocp_resources.image_digest_mirror_set import ImageDigestMirrorSet
 from ocp_resources.exceptions import ClientWithBasicAuthError
@@ -28,12 +28,17 @@ from urllib3.exceptions import TimeoutError as HTTPTimeoutError
 from exceptions.exceptions import MustGatherImageError
 from utilities.constants import MTV_OPERATOR_NAME
 from utilities.utils import get_cluster_client
+from utilities.worker_node_selection import get_ready_schedulable_worker_nodes
 
 if TYPE_CHECKING:
     from _pytest.python import CallSpec2
     from kubernetes.dynamic import DynamicClient
 
 LOGGER = get_logger(__name__)
+
+# The client aborts must-gather when the node filesystem backing the gather pod's emptyDir
+# passes this percentage; time-scoped bundles are a few MB, so the 70 default is too low.
+_MUST_GATHER_VOLUME_PERCENTAGE = 90
 
 
 def _get_idms_name(channel: str) -> str:
@@ -292,6 +297,68 @@ def session_start_time(session: pytest.Session) -> str:
     return session._must_gather_session_start_time
 
 
+def _bundle_has_diagnostics(data_collector_path: Path) -> bool:
+    """Report whether a must-gather destination holds any collected diagnostics.
+
+    Args:
+        data_collector_path (Path): Directory the gather wrote to.
+
+    Returns:
+        bool: True when any file exists under a bundle's ``namespaces/`` tree, excluding the
+            client's fallback ``inspect.local.*`` collections.
+    """
+    return any(
+        path.is_file()
+        for path in data_collector_path.glob("*/namespaces/**/*")
+        if not path.relative_to(data_collector_path).parts[0].startswith("inspect.local.")
+    )
+
+
+def _gather_with_node_retry(
+    data_collector_path: Path,
+    must_gather_image: str,
+    since_time: str,
+    ocp_admin_client: DynamicClient,
+) -> bool:
+    """Run the full gather, retrying pinned to worker nodes while the destination stays empty.
+
+    The disk-usage guard kills gathers on nodes above the raised ``--volume-percentage`` while
+    exiting 0, and a partially failed gather can exit 1 with a usable bundle, so acceptance is
+    based on the diagnostics in the destination — which accumulates across attempts — rather
+    than the exit code. While it holds none, retry pinned to each Ready schedulable worker;
+    clusters without workers keep only the default scheduling.
+
+    Args:
+        data_collector_path (Path): Directory the gather writes to.
+        must_gather_image (str): Resolved must-gather container image.
+        since_time (str): UTC RFC 3339 timestamp bounding collected logs.
+        ocp_admin_client (DynamicClient): OpenShift client for listing worker nodes.
+
+    Returns:
+        bool: True when the destination holds diagnostics after an attempt. False when it still
+            holds none, so the caller can keep the failure pending instead of recording an
+            empty gather.
+    """
+    command_args = (
+        f"--volume-percentage={_MUST_GATHER_VOLUME_PERCENTAGE} "
+        f"--image={must_gather_image} --dest-dir={data_collector_path} "
+        f"-- MUST_GATHER_SINCE_TIME={since_time} /usr/bin/gather"
+    )
+    run_command(shlex.split(f"oc adm must-gather {command_args}"), verify_stderr=False, check=False)
+    if _bundle_has_diagnostics(data_collector_path):
+        return True
+
+    worker_nodes = [node.name for node in get_ready_schedulable_worker_nodes(ocp_client=ocp_admin_client)]
+    for node_name in worker_nodes:
+        LOGGER.warning(f"Must-gather attempt left no diagnostics; retrying pinned to worker node '{node_name}'")
+        run_command(
+            shlex.split(f"oc adm must-gather --node-name={node_name} {command_args}"), verify_stderr=False, check=False
+        )
+        if _bundle_has_diagnostics(data_collector_path):
+            return True
+    return False
+
+
 def run_must_gather(data_collector_path: Path, since_time: str) -> bool:
     """Run ``oc adm must-gather`` collecting all logs since ``since_time``.
 
@@ -302,16 +369,19 @@ def run_must_gather(data_collector_path: Path, since_time: str) -> bool:
     current virt-launcher logs cluster-wide, and every plan's migration pods, none of it
     grep-filtered the way the plan-targeted script was. Resolves the must-gather image from the
     installed MTV operator CSV, using the channel-derived IDMS as an optional mirror; when that
-    IDMS is absent or its API is unavailable, the CSV image is used verbatim. Known operational
-    failures return False for retry; programming and configuration errors propagate.
+    IDMS is absent or its API is unavailable, the CSV image is used verbatim. The client's
+    disk-usage guard is raised to 90% (time-scoped bundles are a few MB), attempts are validated
+    by the diagnostics they produced, and empty outcomes are retried pinned to worker nodes.
+    Known operational failures return False for retry; programming and configuration errors
+    propagate.
 
     Args:
         data_collector_path (Path): Directory where must-gather output is written.
         since_time (str): UTC RFC 3339 timestamp; logs older than it are not collected.
 
     Returns:
-        bool: True when the gather command ran. False when it did not, so the caller can keep the
-            failure pending instead of recording a gather that produced no diagnostics.
+        bool: True when an attempt ran and its bundle holds diagnostics. False when none did,
+            so the caller can keep the failure pending instead of recording an empty gather.
     """
     LOGGER.info(f"Running full must-gather collection with logs since {since_time}")
     try:
@@ -336,13 +406,14 @@ def run_must_gather(data_collector_path: Path, since_time: str) -> bool:
             mtv_csv=mtv_csv,
         )
 
-        # Command execution: run `oc adm must-gather` with the resolved image and time window.
-        command = (
-            f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path} "
-            f"-- MUST_GATHER_SINCE_TIME={since_time} /usr/bin/gather"
+        # Command execution: the guard still exits 0 after killing a gather, so attempts are
+        # validated by their diagnostics and retried pinned to worker nodes.
+        return _gather_with_node_retry(
+            data_collector_path=data_collector_path,
+            must_gather_image=must_gather_image,
+            since_time=since_time,
+            ocp_admin_client=ocp_admin_client,
         )
-        success, _, _ = run_command(shlex.split(command), verify_stderr=False)
-        return success
     except NotImplementedError as ex:
         # API unavailability: the wrapper has no dedicated missing-API exception, so match its
         # discovery origin and message before treating it as a gather that cannot run. Only the
@@ -353,6 +424,7 @@ def run_must_gather(data_collector_path: Path, since_time: str) -> bool:
         LOGGER.exception(f"Must-gather resource API is unavailable, no bundle in '{data_collector_path}'. {ex}")
         return False
     except (
+        ApiException,
         CalledProcessError,
         TimeoutExpired,
         OSError,
