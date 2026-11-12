@@ -304,6 +304,7 @@ class TestCopyoffloadThinMigration:
         )
 
 
+@pytest.mark.vddk_baseline
 class CopyoffloadSnapshotBase:
     """Base class for copy-offload snapshot migration tests with data integrity validation."""
 
@@ -3354,6 +3355,7 @@ class TestCopyoffloadMultiDiskDifferentDatastorePathMigration:
     "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
+@pytest.mark.vddk_baseline
 class TestCopyoffloadMixedDatastoreMigration:
     """Copy-offload a VM with disks on one XCOPY-capable and one non-XCOPY datastore and verify per-disk transfer method.
 
@@ -3604,6 +3606,7 @@ class TestCopyoffloadMixedDatastoreMigration:
     "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
+@pytest.mark.vddk_baseline
 class TestCopyoffloadFallbackLargeMigration:
     """Copy-offload a large-disk VM on a non-XCOPY datastore and verify it completes via fallback transfer.
 
@@ -6927,6 +6930,7 @@ class TestSimultaneousCopyoffloadMigrations:
 
 @pytest.mark.vsphere
 @pytest.mark.copyoffload
+@pytest.mark.vddk_baseline
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",

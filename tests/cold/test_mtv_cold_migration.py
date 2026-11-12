@@ -55,7 +55,11 @@ class TestSanityColdMtvMigration:
         access, and multiple NICs: on vSphere the suite attaches an extra
         disconnected NIC to the clone, on other providers the VM's own NICs
         are used as-is. Have permission to create maps, a Plan, and a target
-        namespace.
+        namespace. When the run is started with --toehold with a supported vSphere
+        provider, the pre-setup switches the disk
+        transfer to a copy appliance MTV deploys in vSphere (feature flag,
+        controller template config, provider settings, CopyApplianceTemplate,
+        optional controller and CDI image overrides).
 
     Test plan:
         1. Prepare the disposable VM, powered on so guest data is collected,
