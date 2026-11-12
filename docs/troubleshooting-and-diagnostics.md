@@ -309,18 +309,18 @@ for standalone tests and the session-teardown fallback.
 
 ```python
 # utilities/must_gather.py
-        must_gather_image = _resolve_must_gather_image(
-            ocp_admin_client=ocp_admin_client,
-            mtv_subs=mtv_subs,
-            mtv_csv=mtv_csv,
-        )
-
-        command = (
-            f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path} "
+        command_args = (
+            f"--volume-percentage={_MUST_GATHER_VOLUME_PERCENTAGE} "
+            f"--image={must_gather_image} --dest-dir={data_collector_path} "
             f"-- MUST_GATHER_SINCE_TIME={since_time} /usr/bin/gather"
         )
-        success, _, _ = run_command(shlex.split(command), verify_stderr=False)
-        return success
+        run_command(shlex.split(f"oc adm must-gather {command_args}"), verify_stderr=False)
+        if _bundle_has_diagnostics(data_collector_path):
+            return True
+
+        worker_nodes = [node.name for node in get_ready_schedulable_worker_nodes(ocp_client=ocp_admin_client)]
+        for node_name in worker_nodes:
+            # retry with `--node-name={node_name}` prepended, same validation per attempt
 ```
 
 What this means in practice:
@@ -338,6 +338,16 @@ What this means in practice:
 - `MUST_GATHER_SINCE_TIME` requires a forklift-must-gather image built after May 2026
   (upstream commit `cf89e50`). Older images ignore the variable and collect all available logs —
   a benign degradation that only costs bundle size.
+- The OpenShift client's disk-usage guard aborts must-gather when the node filesystem backing
+  the gather pod's emptyDir passes a usage percentage — 70 by default, which kills gathers on
+  nearly-full nodes while the client still exits 0, even though a time-scoped bundle is only a
+  few MB. The suite raises the limit to 90 via `--volume-percentage`. A partially failed gather
+  can also exit 1 with a usable bundle, so acceptance is based on the diagnostics in the
+  destination — which accumulates across attempts — rather than the exit code. While the
+  destination holds none (the client schedules the first attempt on a random master), the
+  gather is retried pinned with `--node-name` to each Ready schedulable worker in turn, so a
+  node above even the raised limit cannot starve the collection; clusters without workers keep
+  only the default scheduling.
 - `pytest_exception_interact` records a failing class item. A `tryfirst` `pytest_runtest_protocol`
   wrapper records the class-plan instance's start time before any setup hook runs, first seen
   winning across xdist batch re-entry. The pre-finalizer boundary collects any pending
@@ -348,7 +358,7 @@ What this means in practice:
 - Deferral lets later methods contribute to the failed state before a single gather captures it. Collection precedes boundary cleanup, but resources explicitly deleted by earlier tests or fixtures may already be gone.
 - A standalone test attempts a gather into its worker-qualified node directory on each failing phase until one succeeds. A failed attempt is not queued for session-finish retry; an unexpected setup/call collector error stays in that item's typed stash until its teardown wrapper yields to pytest fixture finalizers, then propagates with the original traceback. Reporting that deferred error does not retry collection or mark success. A collector error first raised after teardown propagates immediately because finalizers have already run.
 - State lives on each worker's session object. Worker-qualified artifact names prevent workers from sharing a destination. At most one successful gather is recorded per class-plan instance per worker, including if scheduling later returns to that instance.
-- The gather entry point reports success. Missing collector resources and known command, filesystem, authentication, API and transport failures return `False`. Those operational failures stay pending for session-finish retry only for class-plan gathers; failed standalone attempts are not queued. Missing or invalid CSV deployments/containers/environment values, IDMS mirror entries/sources, channels or image digest separators raise `MustGatherImageError` and propagate instead of returning `False`. The class-plan pending entry remains queued after that error, so a later boundary or session-finish retry may attempt the gather again and propagate the metadata error again. The wrapper has no dedicated missing-API exception; only its `_get_api_version` discovery error for the Subscription and CSV kinds is treated as operational — IDMS API-unavailability falls back to the CSV image inside image resolution. Malformed metadata structures and other programming or configuration errors also propagate with the class-plan entry left pending.
+- The gather entry point reports success only when the destination holds diagnostics after an attempt. Missing collector resources and known command, filesystem, authentication, API and transport failures return `False`. Those operational failures stay pending for session-finish retry only for class-plan gathers; failed standalone attempts are not queued. Missing or invalid CSV deployments/containers/environment values, IDMS mirror entries/sources, channels or image digest separators raise `MustGatherImageError` and propagate instead of returning `False`. The class-plan pending entry remains queued after that error, so a later boundary or session-finish retry may attempt the gather again and propagate the metadata error again. The wrapper has no dedicated missing-API exception; only its `_get_api_version` discovery error for the Subscription and CSV kinds is treated as operational — IDMS API-unavailability falls back to the CSV image inside image resolution. Malformed metadata structures and other programming or configuration errors also propagate with the class-plan entry left pending.
 - A teardown failure on an earlier method is queued until the class-plan boundary when possible, so it does not prematurely mark the instance collected. A failure reported after boundary finalization gathers immediately only if no successful gather exists; it uses this instance's start-time window but necessarily sees post-finalizer cluster state. A successful pre-finalizer gather suppresses the repeat.
 - The modern `wrapper=True` teardown hook yields in `finally` before propagating collector errors. Fixture finalizer exceptions propagate naturally without an old-style pluggy teardown warning, with any collector error chained. A class-plan boundary collector error is stashed on the boundary item, raised once as that item's teardown error, and consumed by the exception-interaction hook instead of being retried there — a second raise inside that hook would abort the worker with an INTERNALERROR. The pending entry stays queued for the session-end flush, so a later boundary or session-finish retry may surface the error again. The session-finish wrapper runs the pending-gather flush, resource inventory writing, configured teardown and temporary-directory removal before it yields to pytest session hooks — the xdist worker reports completion from its own session-finish wrapper, and cleanup placed after that yield could be interrupted by worker shutdown mid-deletion — then runs the extra summary and enabled AI enrichment, which need other plugins' session-finish output. A cleanup error raised before the yield is stashed and re-raised after it, so later session-hook or cleanup failures take precedence with earlier errors chained, not silently discarded.
 - This guarantees independent cleanup attempts after collector, inventory or teardown errors, not successful cleanup. The existing inventory helper logs write failures. Session teardown failures are logged, trigger the configured full gather scoped to session start, and re-raise; if that gather raises too, its error propagates with the teardown error chained. Process crashes and forced termination remain outside this guarantee.
