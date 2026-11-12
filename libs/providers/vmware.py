@@ -16,7 +16,12 @@ from pyVmomi import vim, vmodl
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from exceptions.exceptions import VmBadDatastoreError, VmCloneError, VmMissingVmxError, VmNotFoundError
+from exceptions.exceptions import (
+    VmBadDatastoreError,
+    VmCloneError,
+    VmMissingVmxError,
+    VmNotFoundError,
+)
 from libs.base_provider import BaseProvider
 from utilities.copyoffload_datastore import (
     ERR_EMPTY_DISK_DATASTORE_ID,
@@ -31,6 +36,10 @@ if TYPE_CHECKING:
     from libs.forklift_inventory import ForkliftInventory
 
 LOGGER = get_logger(__name__)
+
+# get_obj's message for a name it could not find. Teardown matches it to tell an already-deleted
+# clone from an inventory-access failure, so it lives here instead of being repeated.
+_MISSING_OBJECT_MESSAGE = "with name '{name}' not found."
 
 # Disk-controller types mapped to the extraConfig key prefix vSphere uses for a disk's per-disk
 # CBT flag (e.g. scsi0:0.ctkEnabled, nvme0:0.ctkEnabled). Covers every bus type a disk can hang off
@@ -122,6 +131,50 @@ def format_capacity_validation_log(datastore_name: str, required_gb: float, avai
         f"Validating datastore capacity for thick disks. "
         f"Required: {required_gb:.2f} GB, Available on '{datastore_name}': {available_gb:.2f} GB"
     )
+
+
+def _ensure_datastore_space(
+    source_vm: vim.VirtualMachine,
+    datastore: vim.Datastore,
+    extra_bytes: int = 0,
+    thin: bool = False,
+) -> None:
+    """Warn when the target datastore cannot hold the cloned disks.
+
+    vCenter validates the space itself and fails the clone task fast with
+    vim.fault.NoDiskSpace (reporting requiredSpace), so this is advisory only: a shortfall is
+    logged and the clone proceeds, because free space often grows while a run is in progress.
+
+    Args:
+        source_vm: The VM or template being cloned; its disk capacities are the space the
+            clone needs (the same value vCenter reports in NoDiskSpace.requiredSpace). RDM disks
+            are excluded: their LUN lives on the storage array, not on the datastore.
+        datastore: The datastore the clone will be placed on.
+        extra_bytes: Capacity of thick disks added to the clone on the same datastore.
+        thin: Whether the clone requests thin (sparse) provisioning. Only the source disks are
+            then sparse and therefore skipped; thick disks added to the clone still count.
+
+    """
+    # shortcut: a thin clone allocates only written blocks up front, so comparing source disk
+    # capacity to free space over-states the requirement; skip the source disks only, thick added
+    # disks still need their full capacity.
+    source_bytes = 0
+    if not thin:
+        devices = source_vm.config.hardware.device if source_vm.config and source_vm.config.hardware else []
+        source_bytes = sum(
+            device.capacityInBytes
+            for device in devices
+            if isinstance(device, vim.vm.device.VirtualDisk)
+            and not isinstance(device.backing, vim.vm.device.VirtualDisk.RawDiskMappingVer1BackingInfo)
+        )
+    required_bytes = source_bytes + extra_bytes
+    available_bytes = datastore.summary.freeSpace or 0
+    if required_bytes > available_bytes:
+        LOGGER.warning(
+            f"Datastore '{datastore.name}' may not have enough free space for the clone: "
+            f"required {required_bytes / (1024**3):.2f} GiB, available {available_bytes / (1024**3):.2f} GiB; "
+            f"proceeding, vCenter validates the requirement."
+        )
 
 
 class VMWareProvider(BaseProvider):
@@ -942,7 +995,7 @@ class VMWareProvider(BaseProvider):
                     LOGGER.debug(f"Skipping stale managed object reference while searching for '{name}'")
                     continue
 
-            raise ValueError(f"Object of type {vimtype} with name '{name}' not found.")
+            raise ValueError(f"Object of type {vimtype} {_MISSING_OBJECT_MESSAGE.format(name=name)}")
 
         finally:
             container.Destroy()
@@ -1964,6 +2017,18 @@ class VMWareProvider(BaseProvider):
             config=config_spec,
         )
 
+        _ensure_datastore_space(
+            source_vm=source_vm,
+            datastore=target_datastore,
+            # Same source of truth as _get_add_disk_device_specs: only thick disks need full capacity.
+            extra_bytes=sum(
+                disk["size_gb"] * 1024**3
+                for disk in regular_disks
+                if disk.get("provision_type", "thin").lower() != "thin"
+            ),
+            thin=(disk_type or "").lower() == "thin",
+        )
+
         task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
         LOGGER.info("Clone task started for %s. Waiting for completion...", clone_vm_name)
 
@@ -2324,8 +2389,73 @@ class VMWareProvider(BaseProvider):
         )
         LOGGER.info(f"Reattached orphaned VMDK to '{vm_name}': {vmdk_path}")
 
+    def reattach_orphaned_vmdks(self, session_store: dict[str, Any]) -> list[dict[str, Any]]:
+        """Reattach the recorded orphaned VMDKs of this session to their consumer clones.
+
+        Runs before the clones are deleted, so their deletion removes the VMDKs too; a VMDK left
+        behind after the clone is gone needs manual cleanup. A record is dropped only once its
+        reattachment succeeded, so a failed one survives for the next call in the same session.
+        Each failure is logged and the remaining records are still attempted.
+
+        Args:
+            session_store (dict[str, Any]): Session store holding the recorded reattachments.
+
+        Returns:
+            list[dict[str, Any]]: Records that could not be reattached and stay in the store for a
+                retry; their VMDKs need manual cleanup once the clone is deleted.
+        """
+        teardown_store = session_store["teardown"]
+        # `Any` is deliberate: a record is written by relink_shared_disks as a plain dict of
+        # vm_name/vmdk_path strings and bus/unit numbers, a shape no shared annotation covers.
+        pending: list[dict[str, Any]] = teardown_store.get("orphaned_vmdks_to_reattach", [])
+        failed: list[dict[str, Any]] = []
+        for vmdk_info in pending:
+            try:
+                self.reattach_orphaned_vmdk(
+                    vm_name=vmdk_info["vm_name"],
+                    vmdk_path=vmdk_info["vmdk_path"],
+                    bus_number=vmdk_info["bus_number"],
+                    unit_number=vmdk_info["unit_number"],
+                )
+            except VmCloneError:
+                # Error level with the traceback: the provider raises it for a missing disk or a
+                # failed reconfig, which is what tells a teardown pass the VMDK needs manual cleanup.
+                LOGGER.exception(
+                    f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
+                    "VMDK may need manual cleanup"
+                )
+                failed.append(vmdk_info)
+            except (vim.fault.VimFault, ValueError, ConnectionError, OSError, TimeoutExpiredError):
+                LOGGER.warning(
+                    f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
+                    "VMDK may need manual cleanup"
+                )
+                failed.append(vmdk_info)
+
+        if failed:
+            teardown_store["orphaned_vmdks_to_reattach"] = failed
+        else:
+            teardown_store.pop("orphaned_vmdks_to_reattach", None)
+        return failed
+
     def delete_vm(self, vm_name: str) -> None:
-        vm = self.get_obj(vimtype=[vim.VirtualMachine], name=vm_name)
+        """Delete a VM, reporting an absent one as a domain error.
+
+        Args:
+            vm_name (str): Name of the VM to delete.
+
+        Raises:
+            VmNotFoundError: The VM does not exist, e.g. an earlier teardown deleted it.
+            ValueError: The inventory could not be queried, so the VM's state is unknown.
+        """
+        try:
+            vm = self.get_obj(vimtype=[vim.VirtualMachine], name=vm_name)
+        except ValueError as err:
+            # Only the missing-object message means the clone is gone; any other ValueError (e.g. no
+            # view manager) means the lookup failed, and teardown must report the clone as a leftover.
+            if _MISSING_OBJECT_MESSAGE.format(name=vm_name) not in str(err):
+                raise
+            raise VmNotFoundError(f"VM '{vm_name}' not found on {self.host}") from err
         self.stop_vm(vm=vm)
         task = vm.Destroy_Task()
         self.wait_task(task=task, action_name=f"Deleting VM {vm_name}")

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import bdb
+import contextlib
 import json
 import logging
 import os
 import pickle
 import shutil
+import sys
 import tempfile
 import uuid
 from collections.abc import Generator
@@ -74,9 +76,11 @@ from utilities.must_gather import (
     collect_must_gather_for_item,
     collect_pending_class_must_gather_now,
     flush_pending_class_must_gathers,
-    initialize_class_plan_context,
     mark_class_pending_must_gather,
+    record_class_plan_start_time,
+    record_session_start_time,
     run_must_gather,
+    session_start_time,
 )
 from utilities.naming import (
     generate_name_with_uuid,
@@ -101,6 +105,12 @@ from utilities.pytest_utils import (
     setup_ai_analysis,
 )
 from utilities.resources import create_and_store_resource, get_or_create_namespace
+from utilities.signal_teardown import (
+    install_interrupt_handlers,
+    interrupting_signum,
+    restore_interrupt_handlers,
+    session_cleanup,
+)
 from utilities.ssh_utils import SSHConnectionManager
 from utilities.storage_canary import verify_destination_storage_provisioning
 from utilities.utils import (
@@ -270,6 +280,8 @@ def selected_source_provider(request: pytest.FixtureRequest, ocp_admin_client: D
 def pytest_sessionstart(session):
     required_config = ("storage_class", "source_provider")
 
+    record_session_start_time(session=session)
+
     if not is_dry_run(session.config):
         BASIC_LOGGER.info(f"{separator(symbol_='-', val='SESSION START')}")
 
@@ -303,6 +315,11 @@ def pytest_sessionstart(session):
     # it before spawning the workers. Only the controller may wipe the root and write the baseline:
     # a worker wipe would remove the session-start baseline and every earlier worker's artifacts.
     is_xdist_worker = getattr(session.config, "workerinput", None) is not None
+
+    # Installed before any session fixture runs, so a signal during the first of them (provider
+    # selection, storage canary) still runs the tracked teardown instead of the default handler.
+    if not is_dry_run(session.config) and not session.config.getoption("skip_teardown"):
+        install_interrupt_handlers(config=session.config)
 
     _data_collector_path: Path | None = None
     if not session.config.getoption("skip_data_collector"):
@@ -347,13 +364,13 @@ def pytest_fixture_setup(fixturedef, request):
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
-    """Initialize class-plan state before setup, including hooks that can skip or fail.
+    """Record the class-plan start time before setup, including hooks that can skip or fail.
 
     Args:
         item (pytest.Item): Item whose setup/call/teardown protocol is starting.
     """
     if not is_dry_run(item.config) and not item.config.getoption("skip_data_collector"):
-        initialize_class_plan_context(item)
+        record_class_plan_start_time(item)
     yield
 
 
@@ -432,6 +449,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     sessionfinish output (JUnit enrichment, terminal summary) runs after the yield, even when an
     inner session-finish hook raises. An inner-hook, cleanup, or post-yield failure is re-raised
     after that processing, chained from the earliest earlier error so all of them stay visible.
+    An interrupt during the cleanup is recorded instead of raised, so the cleanup finishes; the
+    session's interrupted exit status is applied after it, keeping an interrupted run from
+    reporting success.
 
     Args:
         session (pytest.Session): Worker-local session holding pending diagnostics and resources.
@@ -452,31 +472,43 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     # --- Pre-yield cleanup: must finish before the xdist worker reports completion ---
     cleanup_error: Exception | None = None
     inner_error: Exception | None = None
-    try:
-        # Each independent action runs even if an earlier one raises; errors stay chained.
+    # A signal arriving here is recorded instead of raised: raising would abandon the cleanup below
+    # and leave the clones and other lab resources behind.
+    with session_cleanup():
         try:
-            if not session.config.getoption("skip_data_collector"):
-                flush_pending_class_must_gathers(session)
-        finally:
+            # Each independent action runs even if an earlier one raises; errors stay chained.
             try:
                 if not session.config.getoption("skip_data_collector"):
-                    collect_created_resources(session_store=_session_store, data_collector_path=_data_collector_path)
+                    flush_pending_class_must_gathers(session)
             finally:
                 try:
-                    if session.config.getoption("skip_teardown"):
-                        LOGGER.warning("User requested to skip teardown of resources")
-                    else:
-                        try:
-                            session_teardown(session_store=_session_store)
-                        except Exception:
-                            LOGGER.exception("Resources remain after session teardown")
-                            if not session.config.getoption("skip_data_collector"):
-                                run_must_gather(data_collector_path=_data_collector_path)
-                            raise
+                    if not session.config.getoption("skip_data_collector"):
+                        collect_created_resources(
+                            session_store=_session_store, data_collector_path=_data_collector_path
+                        )
                 finally:
-                    shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
-    except Exception as exp:
-        cleanup_error = exp
+                    try:
+                        if session.config.getoption("skip_teardown"):
+                            LOGGER.warning("User requested to skip teardown of resources")
+                        else:
+                            try:
+                                session_teardown(session_store=_session_store)
+                            except Exception:
+                                LOGGER.exception("Resources remain after session teardown")
+                                if not session.config.getoption("skip_data_collector"):
+                                    run_must_gather(
+                                        data_collector_path=_data_collector_path,
+                                        since_time=session_start_time(session=session),
+                                    )
+                                raise
+                    finally:
+                        shutil.rmtree(path=session.config.option.basetemp, ignore_errors=True)
+        except Exception as exp:
+            cleanup_error = exp
+        # Recorded, not raised, while the cleanup runs: pytest would otherwise exit with the status
+        # the tests earned, so a Ctrl-C during cleanup after passing tests would report success.
+        if interrupting_signum() is not None:
+            session.exitstatus = pytest.ExitCode.INTERRUPTED
 
     # --- Inner session hooks: retain a raised exception so reporting still runs ---
     session_outcome: object = None
@@ -520,6 +552,32 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[
     if cleanup_error is not None:
         raise cleanup_error
     return session_outcome
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Restore the interrupt handlers and finish an interrupted run with the signal it received.
+
+    The handler interrupts pytest instead of ending the process, so teardown and reporting still
+    run; the signal is put back here, once they are done, so the caller sees the interruption it
+    sent rather than a plain pytest exit. SIGINT's default handler raises in-process instead of
+    ending the process, which leaves pytest's own interrupted exit status. Restoring the handlers
+    also clears the record, so a session started later in this process re-raises nothing.
+
+    Args:
+        config (pytest.Config): Config of the session that is finishing.
+    """
+    # Read before restoring: the restore clears the record so a later session in this process does
+    # not re-raise this one's signal.
+    signum = interrupting_signum()
+    restore_interrupt_handlers()
+    if signum is None:
+        return
+    # Flush first: redirected stdout is block-buffered, so the interrupted run's summary would be
+    # lost with the process.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with contextlib.suppress(KeyboardInterrupt):
+        os.kill(os.getpid(), signum)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -645,12 +703,14 @@ def pytest_collection_finish(session: pytest.Session) -> None:
 def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseException]) -> None:
     """Collect or defer a must-gather for a failing test item.
 
-    Standalone tests gather immediately, once per worker-qualified identity. Their setup/call
-    collector errors propagate to the caller, which stashes them on the item for teardown.
-    Class setup/call failures are marked pending for the class-plan boundary; when the remote
-    debugger is enabled the owed gather runs immediately against the still-alive class Plan so
-    diagnostics precede the blocking post-mortem session. Class teardown failures gather through
-    the boundary-aware teardown path.
+    Standalone tests gather immediately, once per worker-qualified identity, with a log
+    window starting at session start. Their setup/call collector errors propagate to the
+    caller, which stashes them on the item for teardown. Class setup/call failures are
+    marked pending for the class-plan boundary, gathered with a log window starting when
+    the class-plan instance started; when the remote debugger is enabled the owed gather
+    runs immediately, before fixture cleanup deletes the migration pods, so diagnostics
+    precede the blocking post-mortem session. Class teardown failures gather through the
+    boundary-aware teardown path.
 
     Args:
         node (pytest.Item): The test item reporting the exception.
@@ -668,7 +728,11 @@ def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseExc
         if call.when == "teardown" and collector_error is not None:
             del node.stash[_STANDALONE_MUST_GATHER_ERROR]
             return
-        if identity not in collected and collect_must_gather_for_item(node, identity, plan_obj=None):
+        if identity not in collected and collect_must_gather_for_item(
+            node=node,
+            artifact_name=identity,
+            since_time=session_start_time(session=node.session),
+        ):
             collected.add(identity)
             setattr(node.session, "_must_gather_collected_tests", collected)
         return
@@ -687,9 +751,10 @@ def _handle_failure_must_gather(node: pytest.Item, call: pytest.CallInfo[BaseExc
     mark_class_pending_must_gather(node)
     if remote_debugger_enabled():
         # The post-mortem debugger blocks the process until a client detaches, so the owed gather
-        # runs now, against the still-alive class Plan, instead of waiting for the class-plan
-        # boundary. Success marks the identity collected and the boundary skips it; a failed
-        # attempt stays pending for the boundary retry and the session-end flush.
+        # runs now, while the migration pods still exist, instead of waiting for the class-plan
+        # boundary and fixture cleanup. Success marks the identity collected and the boundary
+        # skips it; a failed attempt stays pending for the boundary retry and the session-end
+        # flush.
         collect_pending_class_must_gather_now(node)
 
 
@@ -697,8 +762,9 @@ def pytest_exception_interact(node, call, report):
     """Defer or collect a must-gather for a failing test, then open the remote post-mortem debugger.
 
     Setup/call failures record the failing item by class-plan identity. The tryfirst teardown hook
-    binds Plan context at the nextitem boundary before default fixture finalization for all retries.
-    With no plan, it binds None and takes a full gather. Standalone tests gather immediately, once on success.
+    collects at the nextitem boundary before default fixture finalization for all retries, with
+    the log window starting when the class-plan instance started. Standalone tests gather
+    immediately with a session-start log window, once on success.
     Collection-phase failures from collectors carry no test context and are left to pytest's own
     reporting; the hook returns without gathering so a collection error stays a collection error.
     Unexpected standalone setup/call collector errors are retained on the item until fixture finalization.
@@ -1929,9 +1995,10 @@ def prepared_plan(
 
                 # Detect IP origins (and NIC names when preserving static IPs) for Linux guests,
                 # which VMware does not report natively (open-vm-tools limitation).
+                # clone_provider owns provider_vm_api, so its content resolves the VM's MoID.
                 if source_provider.type == Provider.ProviderType.VSPHERE:
                     collect_linux_guest_static_ip_metadata(
-                        source_provider=source_provider,
+                        source_provider=clone_provider,
                         vm=provider_vm_api,
                         source_provider_data=fixture_store["source_provider_data"],
                         vm_details=source_vm_details,
@@ -1999,22 +2066,11 @@ def prepared_plan(
     # During relink, consumer clones' shared disks are redirected to the owner's VMDK,
     # leaving the consumer's original VMDK orphaned. Reattaching it here means
     # teardown's delete_vm will automatically remove it — no separate VMDK cleanup needed.
-    vmdks_to_reattach: list[dict[str, Any]] = fixture_store["teardown"].pop("orphaned_vmdks_to_reattach", [])
-    if vmdks_to_reattach:
-        reattach_provider = vcenter_clone_provider or source_provider
-        for vmdk_info in vmdks_to_reattach:
-            try:
-                reattach_provider.reattach_orphaned_vmdk(
-                    vm_name=vmdk_info["vm_name"],
-                    vmdk_path=vmdk_info["vmdk_path"],
-                    bus_number=vmdk_info["bus_number"],
-                    unit_number=vmdk_info["unit_number"],
-                )
-            except Exception:
-                LOGGER.warning(
-                    f"Failed to reattach VMDK '{vmdk_info['vmdk_path']}' to '{vmdk_info['vm_name']}', "
-                    "VMDK may need manual cleanup"
-                )
+    # Teardown reattaches them too, for a run that is interrupted before this finalizer runs.
+    # Records exist only for vSphere shared disks, which the config above refuses on other providers.
+    reattach_provider = vcenter_clone_provider or source_provider
+    if isinstance(reattach_provider, VMWareProvider):
+        reattach_provider.reattach_orphaned_vmdks(session_store=fixture_store)
 
     # Note: VMs are cleaned up by cleanup_migrated_vms at class scope.
     # Session-level registration is intentionally omitted to prevent double cleanup.

@@ -450,6 +450,8 @@ The major modules are:
 - `utilities/esxi.py` contains ESXi SSH credential handling for SSH-based ESXi cloning.
 - `utilities/upgrade.py` runs the MTV operator upgrade script for the upgrade suite.
 - `utilities/must_gather.py` collects diagnostics with `oc adm must-gather`.
+- `utilities/signal_teardown.py` turns `SIGINT`/`SIGTERM` into pytest's interrupted shutdown, so the tracked session teardown
+  still runs.
 - `utilities/pytest_utils.py` handles dry-run detection, resource collection, session teardown, and optional AI analysis wiring.
 - `utilities/naming.py` generates short unique resource names and sanitizes VM names for Kubernetes.
 - `utilities/logger.py` configures queue-based logging so parallel workers can write to a single stream cleanly.

@@ -546,7 +546,10 @@ else:
     except Exception as exp:
         LOGGER.error(f"the following resources was left after tests are finished: {exp}")
         if not session.config.getoption("skip_data_collector"):
-            run_must_gather(data_collector_path=_data_collector_path)
+            run_must_gather(
+                data_collector_path=_data_collector_path,
+                since_time=session_start_time(session=session),
+            )
 ```
 
 > **Warning:** `--skip-teardown` is a debugging tool, not a normal operating mode. If you use it, expect to clean up VMs, Plans, Providers, namespaces, and any source-side cloned

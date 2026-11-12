@@ -1313,8 +1313,12 @@ oc describe plan <plan-name> -n openshift-mtv
 
 Automatic failure collection attempts at most one successful must-gather per class-plan instance per worker,
 using a percent-encoded class node ID, class parameter indices and worker ID under `.data-collector/`.
-It binds the current Plan or explicit None at the class-plan boundary before default fixture finalization,
-including early exits, and retains that context for retries. Standalone tests gather immediately.
+Each gather runs the full Forklift collection with `MUST_GATHER_SINCE_TIME` set to when the class-plan
+instance started, so the bundle holds the Forklift-relevant logs for the test's execution window (all
+pods in the Forklift namespaces with current and previous logs, CDI and vm-import component logs,
+current virt-launcher logs cluster-wide, and every plan's migration pods and CRs — none of it
+grep-filtered) instead of a plan-filtered subset. Standalone tests gather immediately, scoped to
+session start.
 Known operational class-plan collection failures remain pending for the session-finish retry; artifacts are not guaranteed if it fails.
 Standalone tests gather immediately on the first failing phase; an operational failure is retried only when another
 phase of the same test also fails. Collector exceptions during setup or call are stashed on the item, cleared at teardown
@@ -1330,7 +1334,8 @@ cleanup errors propagate with earlier errors chained. See
 [diagnostic collection](https://redhatqe.github.io/mtv-api-tests/troubleshooting-and-diagnostics.html) for timing and teardown limitations.
 
 ```bash
-oc adm must-gather --image=quay.io/kubev2v/forklift-must-gather:latest --dest-dir=/tmp/mtv-logs
+# What the suite runs automatically on failure (full gather bounded to the test's window):
+oc adm must-gather --image=quay.io/kubev2v/forklift-must-gather:latest --dest-dir=/tmp/mtv-logs -- MUST_GATHER_SINCE_TIME=2026-11-07T09:15:00Z /usr/bin/gather
 ```
 
 ### Manual Resource Cleanup

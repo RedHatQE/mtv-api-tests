@@ -126,6 +126,7 @@ tests_params: dict = {
         "target_power_state": "on",
         "per_nic_network_map": True,
         "pre_copy_source_disks": True,
+        "guest_agent_timeout": 600,
     },
     "test_cold_migration_skip_guest_conversion": {
         "virtual_machines": [
