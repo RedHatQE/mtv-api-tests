@@ -302,6 +302,7 @@ def create_plan_resource(
     rdm_as_lun: bool | None = None,
     pre_copy_source_disks: bool = False,
     convertor_node_selector: dict[str, str] | None = None,
+    wait_for_ready: bool = True,
     # Any: Plan option values are heterogeneous/provider-defined and intentionally untyped to pass arbitrary kubevirt Plan spec fields through.
     additional_plan_options: dict[str, Any] | None = None,
     scsi_reservation: bool | None = None,
@@ -350,6 +351,9 @@ def create_plan_resource(
             qemu-img, then in-place virt-v2v). Only applies to Hyper-V migrations. Defaults to False.
         convertor_node_selector (dict[str, str] | None): Optional selector for virt-v2v conversion and vSphere
             warm-migration CDI importer pods. Defaults to None.
+        wait_for_ready (bool): Whether to wait for the Plan's Ready condition. Plans expected to
+            carry blocking validation conditions (e.g. shared-disk blockers) must pass False.
+            Defaults to True.
         additional_plan_options (dict[str, Any] | None): Additional Plan constructor options not already handled by
             this helper. Defaults to None. Keys consumed by create_and_store_resource ("name", "kind_dict", "yaml_file",
             "test_name") are not allowed.
@@ -363,7 +367,7 @@ def create_plan_resource(
     Raises:
         ValueError: If either provider resource is not set or additional_plan_options conflicts with options already
             set by this helper or with keys consumed by create_and_store_resource (e.g. "name").
-        TimeoutExpiredError: If Plan fails to reach Ready status within timeout.
+        TimeoutExpiredError: If Plan fails to reach Ready status within timeout and wait_for_ready is True.
     """
     if not source_provider.ocp_resource:
         raise ValueError("source_provider.ocp_resource is not set")
@@ -463,6 +467,9 @@ def create_plan_resource(
         plan_kwargs.update(additional_plan_options)
 
     plan = create_and_store_resource(**plan_kwargs)
+
+    if not wait_for_ready:
+        return plan
 
     try:
         plan.wait_for_condition(condition=Plan.Condition.READY, status=Plan.Condition.Status.TRUE, timeout=360)

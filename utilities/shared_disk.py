@@ -12,6 +12,7 @@ import shlex
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.virtual_machine import VirtualMachine
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
 from pyVmomi import vim
@@ -36,6 +37,9 @@ _VMI_VOLUME_STATUS_TIMEOUT = 300
 _VMI_VOLUME_STATUS_POLL_INTERVAL = 5
 
 _SHARED_LABEL_PREFIX = "SHARED"
+
+_ANN_DISK_SOURCE = "forklift.konveyor.io/disk-source"
+_SHAREABLE_PVC_LABEL_SELECTOR = "shareable=true"
 
 _WIN_LABEL_PS_TEMPLATE = """\
 $ErrorActionPreference = 'Stop'
@@ -183,7 +187,7 @@ def _get_pvc_device_targets(
     return pvc_devices
 
 
-def _get_vm_pvc_claim_names(
+def get_vm_pvc_claim_names(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
     vm_name: str,
@@ -228,8 +232,8 @@ def verify_vms_share_single_pvc(
     Raises:
         ValueError: If the VMs do not reference exactly one common PVC.
     """
-    vm1_pvc_names = _get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm1_dest_name)
-    vm2_pvc_names = _get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm2_dest_name)
+    vm1_pvc_names = get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm1_dest_name)
+    vm2_pvc_names = get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm2_dest_name)
     shared_pvcs = vm1_pvc_names & vm2_pvc_names
 
     if len(shared_pvcs) != 1:
@@ -286,6 +290,69 @@ def _get_shared_disk_devices(
     vm2_device = vm2_pvc_devices[shared_pvc]
     LOGGER.info(f"Shared PVC '{shared_pvc}': '{vm1_dest_name}' -> {vm1_device}, '{vm2_dest_name}' -> {vm2_device}")
     return {vm1_dest_name: vm1_device, vm2_dest_name: vm2_device}
+
+
+def get_shared_disk_source(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    pvc_name: str,
+) -> str:
+    """Return the forklift disk-source annotation value of a shared disk PVC.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where the PVC lives.
+        pvc_name (str): Name of the shared disk PVC.
+
+    Returns:
+        str: The ``forklift.konveyor.io/disk-source`` annotation value (source disk path).
+
+    Raises:
+        ValueError: If the PVC does not exist or lacks the disk-source annotation.
+    """
+    shared_pvc = PersistentVolumeClaim(
+        client=ocp_admin_client,
+        name=pvc_name,
+        namespace=namespace,
+        ensure_exists=True,
+    )
+    annotations = shared_pvc.instance.metadata.annotations or {}
+    disk_source = annotations.get(_ANN_DISK_SOURCE)
+    if not disk_source:
+        raise ValueError(f"PVC '{pvc_name}' in '{namespace}' has no '{_ANN_DISK_SOURCE}' annotation")
+    return disk_source
+
+
+def get_shared_disk_pvc_names(
+    ocp_admin_client: DynamicClient,
+    namespace: str,
+    disk_source: str,
+) -> list[str]:
+    """List shareable PVCs in the namespace whose disk-source annotation matches.
+
+    Mirrors forklift's duplicate shared-disk detection: shareable PVCs carry the
+    ``shareable=true`` label and the source disk path in the disk-source annotation.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace to list PVCs in.
+        disk_source (str): Source disk path to match (from get_shared_disk_source).
+
+    Returns:
+        list[str]: Names of matching shareable PVCs (may include duplicates of the
+            same shared disk, e.g. after a remigration).
+    """
+    pvc_names: list[str] = []
+    for pvc in PersistentVolumeClaim.get(
+        client=ocp_admin_client,
+        namespace=namespace,
+        label_selector=_SHAREABLE_PVC_LABEL_SELECTOR,
+    ):
+        annotations = getattr(pvc.instance.metadata, "annotations", None) or {}
+        if annotations.get(_ANN_DISK_SOURCE) == disk_source:
+            pvc_names.append(pvc.name)
+    LOGGER.debug(f"Shareable PVCs for disk source '{disk_source}' in '{namespace}': {pvc_names}")
+    return pvc_names
 
 
 @dataclass
