@@ -59,6 +59,9 @@ DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
 CLUSTER_CREDENTIAL_KEYS: tuple[str, ...] = ("cluster_host", "cluster_username", "cluster_password")
 # Valid values of the NetworkMap CRD networkIPMode enum (forklift MTV-5674)
 VALID_NETWORK_IP_MODES: tuple[str, ...] = ("preserve", "dhcp", "none")
+# OLM CSV phase of the operator version that is actually installed; during an upgrade the
+# obsolete CSV leaves this phase (Replacing/Replaced) before it is deleted.
+_CSV_PHASE_SUCCEEDED = "Succeeded"
 
 
 def normalize_source_network(source_vm_nic: dict[str, Any]) -> str | None:
@@ -1359,17 +1362,22 @@ def get_mtv_version(client: DynamicClient) -> str:
         str: MTV version string (e.g., "2.10.0")
 
     Raises:
-        ValueError: If MTV operator CSV not found
+        ValueError: If no installed MTV operator CSV is found; among coexisting
+            CSVs during an upgrade, only the OLM-installed (Succeeded) one counts.
     """
     from ocp_resources.cluster_service_version import ClusterServiceVersion  # noqa: PLC0415
 
     mtv_namespace = py_config["mtv_namespace"]
 
-    for csv in ClusterServiceVersion.get(client=client, namespace=mtv_namespace):
-        if csv.name.startswith(MTV_OPERATOR_NAME):
-            return csv.instance.spec.version
-
-    raise ValueError(f"MTV operator ClusterServiceVersion not found in namespace '{mtv_namespace}'")
+    installed_csvs = [
+        csv
+        for csv in ClusterServiceVersion.get(client=client, namespace=mtv_namespace)
+        if csv.name.startswith(MTV_OPERATOR_NAME) and (csv.instance.status or {}).get("phase") == _CSV_PHASE_SUCCEEDED
+    ]
+    if not installed_csvs:
+        raise ValueError(f"Installed MTV operator ClusterServiceVersion not found in namespace '{mtv_namespace}'")
+    # Multiple Succeeded CSVs are transient; report the highest version among them.
+    return max(installed_csvs, key=lambda csv: Version(csv.instance.spec.version)).instance.spec.version
 
 
 def has_mtv_minimum_version(min_version: str, client: DynamicClient) -> bool:
