@@ -9,7 +9,7 @@ import urllib.request
 from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import uuid4
 
-from pyVmomi import vim
+from pyVmomi import vim, vmodl
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -50,6 +50,10 @@ _READ_ONLY_MOUNT_OPTIONS = {
 }
 # Forklift's vSphere rootDisk mapper derives the disk index from one letter after /dev/sd.
 _SUPPORTED_ROOT_DEVICE = re.compile(r"^/dev/sd[a-z][0-9]+$")
+# pyVmomi's vmodl stub omits the root RuntimeFault even though it exists at import time
+# (it is the parent of vmodl.fault.ManagedObjectNotFound and its siblings). Resolve it from
+# the module so the whole runtime-fault family is tolerated on the best-effort path.
+_VMODL_RUNTIME_FAULT: type[Exception] = getattr(vmodl, "RuntimeFault")
 
 
 class LinuxOSRoot(TypedDict):
@@ -656,6 +660,62 @@ def _apply_ip_origins_to_vm_details(
                 )
 
 
+def _linux_guest_credentials(source_provider_data: dict[str, Any]) -> tuple[str, str]:
+    """Return the Linux guest credentials from provider config.
+
+    Args:
+        source_provider_data (dict[str, Any]): Provider config containing guest credentials.
+
+    Returns:
+        tuple[str, str]: The guest_vm_linux_user and guest_vm_linux_password values.
+
+    Raises:
+        ValueError: If guest_vm_linux_user or guest_vm_linux_password is missing.
+    """
+    try:
+        return source_provider_data["guest_vm_linux_user"], source_provider_data["guest_vm_linux_password"]
+    except KeyError as e:
+        raise ValueError(
+            f"Linux VM credentials not found in provider config: {e}. "
+            "Required: guest_vm_linux_user, guest_vm_linux_password"
+        ) from e
+
+
+def _has_unknown_ip_origins(vm_details: dict[str, Any]) -> bool:
+    """Return whether any IP in vm_details still has an undetected origin.
+
+    Args:
+        vm_details (dict[str, Any]): VM details dict with network_interfaces data.
+
+    Returns:
+        bool: True if at least one IP has is_static_ip unset, False otherwise.
+    """
+    return any(
+        ip.get("is_static_ip") is None
+        for nic in vm_details.get("network_interfaces", [])
+        for ip in nic.get("ip_addresses", [])
+    )
+
+
+def _require_vcenter_host(source_provider: VMWareProvider, vm: vim.VirtualMachine) -> str:
+    """Return the provider's vCenter host, raising when it is not configured.
+
+    Args:
+        source_provider (VMWareProvider): VMware provider instance.
+        vm (vim.VirtualMachine): VMware VM object used in the error message.
+
+    Returns:
+        str: The provider's vCenter host.
+
+    Raises:
+        ValueError: If the provider has no vCenter host.
+    """
+    vcenter_host = source_provider.host
+    if vcenter_host is None:
+        raise ValueError(f"vCenter host not available for provider used by VM {vm.name}")
+    return vcenter_host
+
+
 def detect_vmware_ip_origins_via_guest_ops(
     source_provider: VMWareProvider,
     vm: vim.VirtualMachine,
@@ -684,23 +744,11 @@ def detect_vmware_ip_origins_via_guest_ops(
         vim.fault.GuestOperationsFault: If guest operations fail (auth, temp file, process)
         urllib.error.URLError: If file transfer from guest fails
     """
-    try:
-        guest_username = source_provider_data["guest_vm_linux_user"]
-        guest_password = source_provider_data["guest_vm_linux_password"]
-    except KeyError as e:
-        raise ValueError(
-            f"Linux VM credentials not found in provider config: {e}. "
-            "Required: guest_vm_linux_user, guest_vm_linux_password"
-        ) from e
+    guest_username, guest_password = _linux_guest_credentials(source_provider_data)
 
     LOGGER.info(f"Detecting IP origins via Guest Operations for VM {vm.name}")
 
-    has_unknown_origins = any(
-        ip.get("is_static_ip") is None
-        for nic in vm_details.get("network_interfaces", [])
-        for ip in nic.get("ip_addresses", [])
-    )
-    if not has_unknown_origins:
+    if not _has_unknown_ip_origins(vm_details):
         LOGGER.info(f"All IP origins already known for VM {vm.name}, skipping Guest Operations detection")
         return
 
@@ -720,9 +768,7 @@ def detect_vmware_ip_origins_via_guest_ops(
         "done; done"
     )
 
-    vcenter_host = source_provider.host
-    if vcenter_host is None:
-        raise ValueError(f"vCenter host not available for provider used by VM {vm.name}")
+    vcenter_host = _require_vcenter_host(source_provider=source_provider, vm=vm)
 
     try:
         output = run_command_in_vmware_guest(
@@ -825,24 +871,42 @@ def collect_linux_guest_static_ip_metadata(
     (https://github.com/vmware/open-vm-tools/issues/694), so origins are detected through Guest
     Operations. Windows guests (``win_os``) are skipped — their origins are reported natively.
     When ``preserve_static_ips`` is enabled, IP-origin detection is mandatory (a failure raises)
-    and guest NIC names are collected too. Updates ``vm_details`` in place.
+    and guest NIC names are collected too. When guest info is unavailable and
+    ``preserve_static_ips`` is False, it returns early without detection and logs a warning.
+    Updates ``vm_details`` in place.
 
     Both the cloning and ESXi skip-clone preparation paths call this so static-IP preservation
     validation sees identical source metadata regardless of how the VM was prepared.
 
     Args:
-        source_provider (VMWareProvider): VMware provider instance.
+        source_provider (VMWareProvider): VMware provider instance. Must be the provider that owns
+            ``vm``; Guest Operations resolve the VM's MoID through its content.
         vm (vim.VirtualMachine): VMware VM object (powered on, VMware Tools running).
         source_provider_data (dict[str, Any]): Provider config containing guest credentials.
-        vm_details (dict[str, Any]): VM details dict from vm_dict(), updated in place.
+        vm_details (dict[str, Any]): VM details dict from vm_dict(), updated in place. The
+            early-return path sets ``guest_info_unavailable`` on it.
         preserve_static_ips (bool): Whether the plan preserves static IPs; makes IP-origin
             detection mandatory and triggers NIC-name collection.
 
     Raises:
-        ValueError: If IP-origin detection fails while preserve_static_ips is enabled, or guest
-            credentials are missing.
+        ValueError: If IP-origin detection fails while preserve_static_ips is enabled, guest
+            credentials are missing, or the vCenter host is needed but unavailable.
     """
     if vm_details.get("win_os"):
+        return
+
+    # Missing credentials are fatal even when detection is skipped below.
+    _linux_guest_credentials(source_provider_data)
+
+    # Absent guest info is a best-effort miss unless static-IP preservation is on.
+    if not preserve_static_ips and not getattr(vm.guest, "guestFamily", None):
+        if _has_unknown_ip_origins(vm_details):
+            _require_vcenter_host(source_provider=source_provider, vm=vm)
+        vm_details["guest_info_unavailable"] = True
+        LOGGER.warning(
+            f"VM {vm.name}: guest OS family not reported by VMware Tools (guestFamily is None); "
+            "skipping IP-origin detection since preserve_static_ips is disabled"
+        )
         return
 
     try:
@@ -854,7 +918,13 @@ def collect_linux_guest_static_ip_metadata(
         )
     except ValueError:
         raise
-    except (GuestCommandError, vim.fault.VimFault, TimeoutExpiredError, OSError) as e:
+    except (
+        GuestCommandError,
+        vim.fault.VimFault,
+        _VMODL_RUNTIME_FAULT,
+        TimeoutExpiredError,
+        OSError,
+    ) as e:
         if preserve_static_ips:
             raise ValueError(
                 f"Failed to detect IP origins via Guest Operations for VM {vm_details['name']}: {e}. "

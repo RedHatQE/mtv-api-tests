@@ -29,8 +29,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
       - name: Build site from docs/*.md
         # Pinned deliberately: with a floating generator an upstream release would rebuild and
         # publish the live site from code nobody reviewed here, and the byte-for-byte
@@ -48,7 +48,7 @@ jobs:
           for page in index.html quickstart-first-run.html pytest-options-and-markers.html; do
             test -f "docs/$page" || { echo "::error::docs/$page missing from the build"; exit 1; }
           done
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs
 
@@ -65,7 +65,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
       # deploy-pages has already published by the time this runs, so the step cannot roll a bad
       # publish back — it turns "published but does not serve" into a red run instead of a silent
       # 404 on the homepage. Recovery from a red run here is the manual build_type=legacy switch

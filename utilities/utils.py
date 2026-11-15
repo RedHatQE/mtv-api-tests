@@ -127,10 +127,19 @@ def resolve_network_map_overrides(
             if network not in used_networks
         ]
         if not candidates:
+            unavailable_vms = [
+                vm_name for vm_name, vm_data in source_vms_data.items() if vm_data.get("guest_info_unavailable")
+            ]
+            hint = ""
+            if unavailable_vms:
+                hint = (
+                    f" VMware Tools did not report guest info for {', '.join(unavailable_vms)}, so IP origins "
+                    "(and therefore the dhcp/static requirement) could not be determined."
+                )
             raise ValueError(
                 f"No unused source network with guest IP configuration "
                 f"'{override['source_ip_config']}' for a network_map_overrides entry; "
-                f"available: {networks_by_ip_config}"
+                f"available: {networks_by_ip_config}{hint}"
             )
         used_networks.add(candidates[0])
         resolved_overrides.append({**override, "source_network": candidates[0]})

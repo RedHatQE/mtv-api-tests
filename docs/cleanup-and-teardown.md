@@ -93,7 +93,10 @@ else:
     except Exception:
         LOGGER.exception("Resources remain after session teardown")
         if not session.config.getoption("skip_data_collector"):
-            run_must_gather(data_collector_path=_data_collector_path)
+            run_must_gather(
+                data_collector_path=_data_collector_path,
+                since_time=session_start_time(session=session),
+            )
         raise
 ```
 
@@ -151,9 +154,23 @@ leftover-sweep loops. The code comments why the store can be empty: under parall
 > **Note:** `session_teardown()` cancels migrations first and archives plans before the generic sweep, because a Plan must be `Archived` before it can be deleted. Both loops are
 keyed off the tracked inventory, so a resource you never registered is never cleaned here.
 
-If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` to capture diagnostics in the same collector path.
+If the data collector is enabled and teardown hits a problem, the session then runs MTV `must-gather` — the full collection scoped to session start — to capture diagnostics in the same collector path.
 
 > **Warning:** `pytest_sessionfinish()` logs teardown failures, attempts a full `must-gather` when collection is enabled, and re-raises. If that gather also raises, its error propagates with the teardown failure chained. Independent `finally` blocks still attempt temporary-directory removal, the extra summary and enabled AI enrichment before the error propagates. Check session errors as well as individual test results.
+
+## Interrupted Runs
+
+A run that is stopped with `SIGINT` or `SIGTERM` used to skip teardown entirely and leave its clones on the lab. `pytest_sessionstart()` now installs `SIGINT`/`SIGTERM` handlers from
+`utilities/signal_teardown.py`, before any session fixture runs, so a signal during provider selection or the storage canary is covered too. Dry runs and `--skip-teardown` keep their
+behaviour and install nothing.
+
+The handler records the signal and interrupts pytest instead of ending the process: the run unwinds through the normal session-finish path, so the tracked teardown, its leftover check, the
+must-gather and the failure logging above all still happen. `pytest_unconfigure()` then restores the replaced handlers and puts the signal back, so the caller still sees the interruption it
+sent rather than a plain pytest exit; `SIGINT` keeps pytest's interrupted status. A second signal reaches the restored handler and aborts the running teardown.
+
+Under xdist the handler also asks the workers to stop, and each worker runs the teardown of its own worker-local store from its own session-finish path. That stop is checked between tests,
+and xdist gives a shutting-down worker a limited window to finish, so a worker inside a long test or a worker teardown longer than that window still needs the workers themselves to be
+signalled — which each worker's handler now covers from session start.
 
 ## Debugging With `--skip-teardown`
 

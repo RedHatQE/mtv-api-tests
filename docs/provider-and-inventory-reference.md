@@ -38,8 +38,8 @@ wait_for_cloned_vms_in_forklift_inventory(
 
 Two extra waits sit next to that call:
 
-- When any VM uses `add_nic`, `wait_for_added_nics_in_forklift_inventory()` forces a provider refresh and blocks until inventory shows the new NIC count (`conftest.py:1534`,
-  `utilities/provider_inventory.py:44`).
+- When any VM uses `add_nic` on a vSphere source, `wait_for_added_nics_in_forklift_inventory()` forces a provider refresh and blocks until inventory shows the new NIC count
+  (`conftest.py:1534`, `utilities/provider_inventory.py:44`). On other providers `add_nic` is ignored and the VM's native NICs are used.
 - On vSphere, `wait_for_cloned_vms_in_forklift_inventory()` additionally waits for inventory MAC addresses to converge with live vCenter MACs, because vSphere clones regenerate
   MACs (`utilities/provider_inventory.py:176`).
 
@@ -377,8 +377,8 @@ What that means in plain language:
 
 > **Warning:** Network mapping is order-based. The first source network returned by inventory becomes the pod network, so inventory ordering matters for multi-NIC VMs.
 
-> **Tip:** If a source VM has `N` networks, the suite creates `N - 1` NADs, because the first network is reserved for the destination pod network. VMs configured with `add_nic` add
-> one more NAD each (`conftest.py:1027`).
+> **Tip:** If a source VM has `N` networks, the suite creates `N - 1` NADs, because the first network is reserved for the destination pod network. VMs configured with `add_nic` (vSphere
+> sources only) add one more NAD each (`conftest.py:1027`).
 
 ## How Source Storage Mappings Are Resolved
 

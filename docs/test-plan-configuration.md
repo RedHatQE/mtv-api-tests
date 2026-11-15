@@ -134,7 +134,7 @@ Validation is strict for the rows marked with an asterisk:
 
 - `add_nic: True` without `add_nic_start_connected` raises a `ValueError`.
 - A non-`bool` `add_nic_start_connected` raises a `ValueError`.
-- `add_nic` on a non-vSphere provider skips the test.
+- `add_nic` on a non-vSphere provider is ignored; the VM's native NICs are used.
 - `win_os` with a non-`bool` value raises a `TypeError` in the Hyper-V provider.
 
 ### Disk types
@@ -363,7 +363,7 @@ The verification step runs `[command, mount_point]` over SSH and asserts that `e
 
 The repository also supports hook-driven tests. A simple failure-path example looks like this:
 
-```743:756:tests/tests_config/config.py
+```910:922:tests/tests_config/config.py
     "test_post_hook_retain_failed_vm": {
         "virtual_machines": [
             {

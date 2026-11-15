@@ -101,7 +101,10 @@ The module most test authors reuse first. It owns `StorageMap`, `NetworkMap`, `P
 `Unschedulable` on the same VM for 3 consecutive checks, the wait raises `MigrationVmUnschedulableError` naming the VM and the raw
 scheduler message. The probe matches the destination names the plan reports plus each spec VM's resolved destination name (`targetName`, or the
 sanitised source name), keeps a consecutive count per VM, and runs only on non-terminal polls — a plan that reports `Failed` still raises
-`MigrationPlanExecError` carrying its status. The suite never frees destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
+`MigrationPlanExecError` carrying its status. On the poll that reports `Failed`, `wait_for_migration_complate()` first captures the failure
+evidence (see [Failure Evidence Dumps](troubleshooting-and-diagnostics.html#failure-evidence-dumps)): MTV deletes the failed objects before must-gather runs, so the
+plan's `Conversion` CRs are also re-read every 10 seconds while the plan waits and the last non-empty dump is written when the CR is already gone. The suite never frees
+destination node capacity, so a scheduler rejection is terminal: aborting after ~60-90 seconds
 is preferable to running to `plan_wait_timeout` (1 hour) for a VM that can never start.
 
 ### `utilities/migration_utils.py`
@@ -262,8 +265,12 @@ Inventory-side waits that keep plan data consistent with Forklift's view: `force
 
 ### `utilities/must_gather.py`
 
-`run_must_gather()` runs the full diagnostic collection and `run_plan_must_gather()` the plan-targeted one; both report whether they succeeded and
-share image resolution. Missing resources and the wrapper's specific resource API discovery failure return `False`; missing or invalid image metadata and other configuration/programming errors propagate.
+`run_must_gather(data_collector_path, since_time)` runs the full diagnostic collection (`/usr/bin/gather`) with
+`MUST_GATHER_SINCE_TIME` bounding the collected logs to the given UTC RFC 3339 timestamp, and reports whether it
+succeeded. Acceptance is based on the diagnostics in the destination rather than the exit code — the OpenShift client's
+disk-usage guard aborts gathers on nearly-full nodes while still exiting 0, so its limit is raised to 90 via
+`--volume-percentage` and, while the destination holds none, attempts are retried pinned to Ready schedulable
+worker nodes. Missing resources and the wrapper's specific resource API discovery failure return `False`; missing or invalid image metadata and other configuration/programming errors propagate.
 Standalone setup/call collector errors stay in the failing item's typed stash until the teardown wrapper yields to fixture finalizers.
 The pending-gather flush, resource inventory writing and configured cleanup run before the inner session-finish hooks yield,
 so xdist worker shutdown cannot interrupt them; the summary and enabled AI enrichment run after those hooks, and errors are
@@ -273,11 +280,12 @@ Independent `finally` blocks also attempt temporary-directory removal, the summa
 `mark_class_pending_must_gather()` / `class_must_gather_collected()` / `mark_class_must_gather_collected()` documented state API attempt at most one successful gather per failing
 class-plan instance per worker. Operational failures stay pending for retry; artifacts are not guaranteed if retries fail. `class_plan_identity()` uses the Class collector node ID, class-scoped callspec indices and worker ID, shared across ordinary
 methods but distinct across plan parameter sets. `collect_class_must_gather(item, nextitem)` runs before default fixture finalization at class-plan boundaries,
-including early exits with `nextitem=None`, and binds the current Plan or explicit None for collection and all retries, even if no failure is pending yet.
-`initialize_class_plan_context()` runs from a `tryfirst` protocol wrapper before setup, clearing stale Plan attributes on identity transitions but not across
-consecutive methods of the same plan. `collect_must_gather_for_item()` takes this explicit Plan context instead of rereading mutable class state.
-Earlier method teardown failures stay pending until a boundary; session finish retries exceptional remaining cases on surviving workers, without guaranteeing
-pre-cleanup state or crash recovery. Unbound fallback contexts read the class attribute only for the active identity; others bind None for a full gather.
+including early exits with `nextitem=None`.
+`record_class_plan_start_time()` runs from a `tryfirst` protocol wrapper before setup, recording one start timestamp per class-plan identity,
+first seen winning across xdist batch re-entry; `record_session_start_time()` / `session_start_time()` do the same for the session, scoping standalone and teardown gathers.
+`collect_must_gather_for_item()` takes this explicit start timestamp instead of rereading mutable class state.
+Earlier method teardown failures stay pending until a boundary; session finish retries exceptional remaining cases on surviving workers using each identity's recorded start time, without guaranteeing
+pre-cleanup state or crash recovery.
 
 ### `utilities/aap.py`
 

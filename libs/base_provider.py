@@ -27,8 +27,9 @@ def supports_add_nic(provider_type: str) -> bool:
     """Report whether a source provider type can add a NIC through the migration plan.
 
     ``add_nic`` relies on vSphere-specific disk and network controller behaviour, so no other provider
-    can honour it. The decision lives here, in the provider layer, so the collection hook only applies
-    the resulting decision and a provider gaining support changes no general test scaffolding.
+    can honour it. The decision lives here, in the provider layer, so the execution site in
+    ``prepared_plan`` only applies the resulting decision and a provider gaining support changes no
+    general test scaffolding.
 
     Args:
         provider_type (str): The ``type`` of the source provider as configured in the providers JSON.

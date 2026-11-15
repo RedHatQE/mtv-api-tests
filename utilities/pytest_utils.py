@@ -25,7 +25,7 @@ from ocp_resources.virtual_machine import VirtualMachine
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
-from exceptions.exceptions import SessionTeardownError
+from exceptions.exceptions import SessionTeardownError, VmNotFoundError
 from libs.providers.hyperv import HyperVProvider
 from libs.providers.openstack import OpenStackProvider
 from libs.providers.rhv import OvirtProvider
@@ -382,10 +382,20 @@ def teardown_resources(
                 username=cleanup_provider_data["username"],
                 password=cleanup_provider_data["password"],
             ) as vmware_provider:
+                # Before deleting the clones: the reattachment finds the consumer clone by name.
+                unrecovered_vmdks = vmware_provider.reattach_orphaned_vmdks(session_store=session_store)
+                if unrecovered_vmdks:
+                    # The clones are deleted below, so these VMDKs can no longer be reattached:
+                    # report them as leftovers instead of claiming a clean teardown.
+                    leftovers.setdefault("orphaned_vmdks_to_reattach", []).extend(unrecovered_vmdks)
                 for _vm in vmware_cloned_vms:
                     _cloned_vm_name = _vm["name"]
                     try:
                         vmware_provider.delete_vm(vm_name=_cloned_vm_name)
+                    except VmNotFoundError:
+                        # Already deleted, e.g. by an earlier interrupted teardown pass: an absent
+                        # clone is not a leftover.
+                        LOGGER.info(f"Cloned vm {_cloned_vm_name} is already deleted")
                     except Exception as exc:
                         LOGGER.error(f"Failed to delete cloned vm {_cloned_vm_name}: {exc}")
                         leftovers.setdefault(vmware_provider.type, []).append({

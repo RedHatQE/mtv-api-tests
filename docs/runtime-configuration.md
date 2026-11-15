@@ -188,10 +188,18 @@ A minimal real entry from `tests/tests_config/config.py`:
 ```python
 "test_sanity_cold_mtv_migration": {
     "virtual_machines": [
-        {"name": "mtv-tests-rhel8", "guest_agent": True, "add_nic": True, "add_nic_start_connected": False},
+        {
+            "name": "mtv-tests-rhel8",
+            "source_vm_power": "on",
+            "guest_agent": True,
+            "add_nic": True,
+            "add_nic_start_connected": False,
+        },
     ],
     "warm_migration": False,
+    "target_power_state": "on",
     "per_nic_network_map": True,
+    "pre_copy_source_disks": True,
 },
 ```
 
@@ -240,7 +248,7 @@ A missing path raises `FileNotFoundError`, and an empty or non-mapping file fail
 By default, the suite collects runtime artifacts for failed runs.
 
 - The base directory defaults to `.data-collector`.
-- Class setup/call failures queue `oc adm must-gather` until the pre-finalizer class-plan boundary, attempting at most one successful gather per class-plan instance per worker. Operational class-plan failures remain pending for session-finish retry; artifacts are not guaranteed if retry fails. Standalone tests attempt collection per failing phase until one succeeds, but failed attempts are not queued for session-finish retry. Subdirectories use percent-encoded node identities, class parameter indices where applicable, and worker IDs.
+- Class setup/call failures queue `oc adm must-gather` until the pre-finalizer class-plan boundary, attempting at most one successful gather per class-plan instance per worker. Each gather runs the full Forklift collection with `MUST_GATHER_SINCE_TIME` set to when the class-plan instance started, so the bundle holds the Forklift-relevant logs for the test's execution window. Operational class-plan failures remain pending for session-finish retry; artifacts are not guaranteed if retry fails. Standalone tests attempt collection per failing phase until one succeeds, scoped to session start, but failed attempts are not queued for session-finish retry. Subdirectories use percent-encoded node identities, class parameter indices where applicable, and worker IDs.
 - At session finish, it writes a `resources.json` file with tracked resources.
 - If session teardown fails, it attempts an additional must-gather into the base collector directory.
 

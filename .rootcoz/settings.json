@@ -1,16 +1,12 @@
 {
-  "ai_provider": "EnMaaS",
-  "ai_model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "ai_provider": "openai",
+  "ai_model": "gpt-6.1-sol",
   "ai_call_timeout": 90,
   "max_concurrent_ai_calls": 3,
   "peer_ai_configs": [
     {
-      "ai_provider": "EnMaaS",
-      "ai_model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
-    },
-    {
-      "ai_provider": "EnMaaS",
-      "ai_model": "rits/zai-org/glm-5-3"
+      "ai_provider": "openai",
+      "ai_model": "gpt-6.1-sol"
     }
   ],
   "peer_analysis_max_rounds": 2,

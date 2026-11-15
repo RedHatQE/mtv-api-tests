@@ -354,7 +354,7 @@ section exists for this run, no artifacts were attached — record that as a mis
 case rather than assuming a bundle exists.
 
 This suite collects artifacts on failure: `pytest-tests.log` (the run log, including
-fixture teardown), enriched JUnit XML, and a must-gather bundle collected per Plan
+fixture teardown), enriched JUnit XML, and a time-scoped must-gather bundle
 (`utilities/must_gather.py`). Test configuration lives in `.providers.json` — never quote
 credentials or secrets from it into the analysis.
 
@@ -372,11 +372,14 @@ layer 1. Three cases are not failures of the analysis, and each must be stated e
 in the missing-information section rather than papered over:
 
 - **No must-gather for this run** — say `must-gather: not collected` and proceed with what exists.
-- **Plan-scoped bundle with no component logs** — per-Plan collection runs the targeted
-gather (`/usr/bin/targeted`, `utilities/must_gather.py:run_plan_must_gather`), which keeps
-that plan's VMs, networks and events rather than a full-cluster snapshot. A targeted bundle
-that simply does not contain controller logs is expected; say
-`targeted bundle — component logs not in scope` and proceed.
+- **Time-scoped bundle with no component logs** — per-failure collection runs the full gather
+(`/usr/bin/gather` with `MUST_GATHER_SINCE_TIME`, `utilities/must_gather.py:run_must_gather`),
+starting when the failing class-plan instance started (or at session start for standalone
+tests and the session-teardown fallback). When the image supports `MUST_GATHER_SINCE_TIME`,
+logs from before that start are not in the bundle; a partial or truncated bundle is also
+possible; report the absence
+without attributing a cause — say `component logs missing from the time-scoped bundle
+(collection window <start>)` and proceed.
 - **Full gather present** — search it for layer-1 evidence before concluding. If the component
   logs are there, cite them; if a truncated or partial bundle has no component log for the
   failing path, say which layers you searched and which were empty.
@@ -387,7 +390,8 @@ with no component ERROR line anywhere. Assertion and object state are legitimate
 that case; say that no component logged an error rather than claiming the analysis is
 incomplete.
 
-Do not demand logs that were never collected, and do not treat a targeted bundle's silence
+Do not demand logs that were never collected or that fall outside the collection window,
+and do not treat a time-scoped bundle's silence
 as evidence that the component was healthy.
 
 ### Regression Detection (MANDATORY when the failure looks new)
@@ -423,7 +427,8 @@ If the data needed for the assessment is missing, state
    whose question matches this failure?
 3. Is `classification` exactly one of `CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`?
 4. If `PRODUCT BUG`: did you reach layer-1 component evidence — or state one of the three
-   honest alternatives: logs were never collected, the bundle is targeted and excludes them, or
+   honest alternatives: logs were never collected, the component logs are missing from the
+   time-scoped bundle (outside the collection window, a partial bundle, or reason unknown), or
    the logs were collected and contain no error for this path (a silent defect, where assertion
    and object state carry the evidence)? Did you fill
    `product_bug_report.jira_search_keywords` with 3-5 keywords?
