@@ -177,6 +177,53 @@ def _plan_is_ready(conditions: list[dict[str, Any]]) -> bool:
     )
 
 
+# Any: prepared_plan fixture is a heterogeneous pytest config dict.
+def _create_owner_plan(
+    ocp_admin_client: "DynamicClient",
+    fixture_store: dict[str, Any],
+    source_provider: "BaseProvider",
+    destination_provider: "OCPProvider",
+    storage_map: StorageMap,
+    network_map: NetworkMap,
+    prepared_plan: dict[str, Any],
+    target_namespace: str,
+) -> Plan:
+    """Create a Plan CR covering only the owner VM with the shared-disk setting enabled.
+
+    Used for both the initial owner-only migration and the owner
+    remigration, which build the identical owner-only plan (same storage
+    and network maps, warm-migration, shared-disk, and power-state
+    settings from ``prepared_plan``).
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        fixture_store (dict[str, Any]): Pytest fixture store for teardown registration.
+        source_provider (BaseProvider): Source provider of the migration.
+        destination_provider (OCPProvider): Destination OpenShift provider.
+        storage_map (StorageMap): StorageMap covering the VMs' disks.
+        network_map (NetworkMap): NetworkMap covering the VMs' networks.
+        prepared_plan (dict[str, Any]): Plan config; the first entry of
+            ``virtual_machines`` is used as the owner VM.
+        target_namespace (str): Namespace to create the Plan in.
+
+    Returns:
+        Plan: The created owner-only Plan resource.
+    """
+    return create_plan_resource(
+        ocp_admin_client=ocp_admin_client,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        storage_map=storage_map,
+        network_map=network_map,
+        virtual_machines_list=[prepared_plan["virtual_machines"][0]],
+        target_namespace=target_namespace,
+        warm_migration=prepared_plan["warm_migration"],
+        migrate_shared_disks=prepared_plan["migrate_shared_disks"],
+        target_power_state=prepared_plan["target_power_state"],
+    )
+
+
 @pytest.mark.vsphere
 @pytest.mark.shared_disk
 @pytest.mark.incremental
@@ -326,18 +373,15 @@ class TestSharedDiskRemigrate:
         """Create the initial MTV Plan CR with VM-level migrateSharedDisks overrides."""
         populate_vm_ids(prepared_plan, source_provider_inventory)
 
-        self.__class__.plan_initial = create_plan_resource(
+        self.__class__.plan_initial = _create_owner_plan(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             source_provider=source_provider,
             destination_provider=destination_provider,
             storage_map=self.storage_map,
             network_map=self.network_map,
-            virtual_machines_list=[prepared_plan["virtual_machines"][0]],
+            prepared_plan=prepared_plan,
             target_namespace=target_namespace,
-            warm_migration=prepared_plan["warm_migration"],
-            migrate_shared_disks=prepared_plan["migrate_shared_disks"],
-            target_power_state=prepared_plan["target_power_state"],
         )
         assert self.plan_initial, "Plan creation failed"
 
@@ -483,18 +527,15 @@ class TestSharedDiskRemigrate:
         restaging, so it is polled before running the migration.
         """
         vm_namespace = prepared_plan["_vm_target_namespace"]
-        self.__class__.plan_recreate = create_plan_resource(
+        self.__class__.plan_recreate = _create_owner_plan(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
             source_provider=source_provider,
             destination_provider=destination_provider,
             storage_map=self.storage_map,
             network_map=self.network_map,
-            virtual_machines_list=[prepared_plan["virtual_machines"][0]],
+            prepared_plan=prepared_plan,
             target_namespace=target_namespace,
-            warm_migration=prepared_plan["warm_migration"],
-            migrate_shared_disks=prepared_plan["migrate_shared_disks"],
-            target_power_state=prepared_plan["target_power_state"],
         )
         _wait_for_plan_condition(
             plan=self.plan_recreate,

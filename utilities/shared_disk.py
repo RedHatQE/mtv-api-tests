@@ -12,7 +12,6 @@ import shlex
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from kubernetes.dynamic.exceptions import ResourceNotFoundError
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.virtual_machine import VirtualMachine
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
