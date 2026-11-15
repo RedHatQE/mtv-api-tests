@@ -187,7 +187,7 @@ def _get_pvc_device_targets(
     return pvc_devices
 
 
-def get_vm_pvc_claim_names(
+def _get_vm_pvc_claim_names(
     ocp_admin_client: DynamicClient,
     target_namespace: str,
     vm_name: str,
@@ -232,8 +232,8 @@ def verify_vms_share_single_pvc(
     Raises:
         ValueError: If the VMs do not reference exactly one common PVC.
     """
-    vm1_pvc_names = get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm1_dest_name)
-    vm2_pvc_names = get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm2_dest_name)
+    vm1_pvc_names = _get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm1_dest_name)
+    vm2_pvc_names = _get_vm_pvc_claim_names(ocp_admin_client, target_namespace, vm2_dest_name)
     shared_pvcs = vm1_pvc_names & vm2_pvc_names
 
     if len(shared_pvcs) != 1:
