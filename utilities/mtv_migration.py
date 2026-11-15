@@ -280,10 +280,10 @@ def create_plan_resource(
     rdm_as_lun: bool | None = None,
     pre_copy_source_disks: bool = False,
     convertor_node_selector: dict[str, str] | None = None,
-    wait_for_ready: bool = True,
     # Any: Plan option values are heterogeneous/provider-defined and intentionally untyped to pass arbitrary kubevirt Plan spec fields through.
     additional_plan_options: dict[str, Any] | None = None,
     scsi_reservation: bool | None = None,
+    wait_for_ready: bool = True,
 ) -> Plan:
     """Create MTV Plan CR resource.
 

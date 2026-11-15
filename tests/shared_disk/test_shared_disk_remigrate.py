@@ -59,6 +59,7 @@ _SHARED_DISKS_CONDITION_PREFIX = "SharedDisks"
 _SNAPSHOT_SUFFIX_PATTERN = re.compile(r"-\d{6}\.vmdk")
 
 
+# Any: Forklift inventory VM entries are heterogeneous, provider-defined dicts.
 def _expected_shared_disk_source(vm: dict[str, Any], warm_migration: bool) -> str:
     """Derive the expected disk-source annotation value for a VM's shared disk.
 
@@ -89,6 +90,7 @@ def _expected_shared_disk_source(vm: dict[str, Any], warm_migration: bool) -> st
     return disk_file
 
 
+# Any: Plan status conditions are provider-defined dicts.
 def _get_plan_conditions(plan: Plan) -> list[dict[str, Any]]:
     """Return the Plan's status conditions as plain dicts.
 
@@ -104,6 +106,7 @@ def _get_plan_conditions(plan: Plan) -> list[dict[str, Any]]:
     return [dict(cond) for cond in (status.conditions or [])]
 
 
+# Any: Plan status conditions are provider-defined dicts.
 def _find_plan_condition(
     conditions: list[dict[str, Any]],
     type_prefix: str,
@@ -128,6 +131,7 @@ def _find_plan_condition(
     return None
 
 
+# Any: Plan status conditions are provider-defined dicts.
 def _wait_for_plan_condition(plan: Plan, type_prefix: str, message_substring: str) -> dict[str, Any]:
     """Wait until a Plan reports a condition matching the given type prefix and message substring.
 
@@ -157,6 +161,7 @@ def _wait_for_plan_condition(plan: Plan, type_prefix: str, message_substring: st
     raise TimeoutExpiredError(f"Condition '{type_prefix}*/*{message_substring}*' not found on Plan '{plan.name}'")
 
 
+# Any: Plan status conditions are provider-defined dicts.
 def _plan_is_ready(conditions: list[dict[str, Any]]) -> bool:
     """Report whether the conditions carry a Ready=True condition.
 
@@ -262,8 +267,8 @@ class TestSharedDiskRemigrate:
 
     def test_create_storagemap(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: dynamic pytest teardown store
         ocp_admin_client: "DynamicClient",
         source_provider: "BaseProvider",
         destination_provider: "OCPProvider",
@@ -285,8 +290,8 @@ class TestSharedDiskRemigrate:
 
     def test_create_networkmap(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: dynamic pytest teardown store
         ocp_admin_client: "DynamicClient",
         source_provider: "BaseProvider",
         destination_provider: "OCPProvider",
@@ -310,8 +315,8 @@ class TestSharedDiskRemigrate:
 
     def test_create_plan(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: dynamic pytest teardown store
         ocp_admin_client: "DynamicClient",
         source_provider: "BaseProvider",
         destination_provider: "OCPProvider",
@@ -338,8 +343,8 @@ class TestSharedDiskRemigrate:
 
     def test_migrate_owner(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: dynamic pytest teardown store
         ocp_admin_client: "DynamicClient",
         target_namespace: str,
         source_provider_inventory: "ForkliftInventory",
@@ -406,7 +411,7 @@ class TestSharedDiskRemigrate:
 
     def test_delete_owner_vm_orphan(
         self,
-        prepared_plan: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
         ocp_admin_client: "DynamicClient",
     ) -> None:
         """Delete the destination owner VM (and its orphaned VMI) and verify the shared PVC survives."""
@@ -463,8 +468,8 @@ class TestSharedDiskRemigrate:
 
     def test_remigrate_owner(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: dynamic pytest teardown store
         ocp_admin_client: "DynamicClient",
         source_provider: "BaseProvider",
         destination_provider: "OCPProvider",
@@ -514,8 +519,8 @@ class TestSharedDiskRemigrate:
 
     def test_consumer_blocked(
         self,
-        prepared_plan: dict[str, Any],
-        fixture_store: dict[str, Any],
+        prepared_plan: dict[str, Any],  # Any: dynamic pytest plan config
+        fixture_store: dict[str, Any],  # Any: dynamic pytest teardown store
         ocp_admin_client: "DynamicClient",
         source_provider: "BaseProvider",
         destination_provider: "OCPProvider",

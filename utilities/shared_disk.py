@@ -12,6 +12,7 @@ import shlex
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from kubernetes.dynamic.exceptions import ResourceNotFoundError
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.virtual_machine import VirtualMachine
 from paramiko.ssh_exception import AuthenticationException, ChannelException, NoValidConnectionsError, SSHException
@@ -308,7 +309,8 @@ def get_shared_disk_source(
         str: The ``forklift.konveyor.io/disk-source`` annotation value (source disk path).
 
     Raises:
-        ValueError: If the PVC does not exist or lacks the disk-source annotation.
+        ResourceNotFoundError: If the PVC does not exist.
+        ValueError: If the PVC exists but lacks the disk-source annotation.
     """
     shared_pvc = PersistentVolumeClaim(
         client=ocp_admin_client,
