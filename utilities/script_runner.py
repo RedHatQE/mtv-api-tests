@@ -26,9 +26,7 @@ LOGGER = get_logger(name=__name__)
 
 _PROCESS_GROUP_TERM_TIMEOUT_SECONDS = 15
 _PROCESS_GROUP_KILL_TIMEOUT_SECONDS = 15
-_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS = (
-    _PROCESS_GROUP_TERM_TIMEOUT_SECONDS + _PROCESS_GROUP_KILL_TIMEOUT_SECONDS
-)
+_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS = _PROCESS_GROUP_TERM_TIMEOUT_SECONDS + _PROCESS_GROUP_KILL_TIMEOUT_SECONDS
 
 
 def read_log(log_file: IO[bytes], password: str) -> str:
@@ -81,9 +79,7 @@ def stop_process(proc: subprocess.Popen[bytes]) -> None:
     try:
         proc.wait(timeout=_PROCESS_GROUP_KILL_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired as exc:
-        raise ScriptRunError(
-            f"Script process group {proc.pid} did not exit after SIGTERM and SIGKILL"
-        ) from exc
+        raise ScriptRunError(f"Script process group {proc.pid} did not exit after SIGTERM and SIGKILL") from exc
 
 
 def run_script(

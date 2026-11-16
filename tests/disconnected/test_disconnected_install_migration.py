@@ -8,6 +8,7 @@ migrations work on the resulting installation.
 
 from __future__ import annotations
 
+import subprocess
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -86,8 +87,6 @@ class TestDisconnectedColdMigration:
         private_catalog_name: str,
     ) -> None:
         """Mirror MTV GA content to the private registry (skip if already done)."""
-        import subprocess
-
         # Check if the catalog already exists — if so, skip the mirror step
         result = subprocess.run(
             ["oc", "get", "catalogsource", private_catalog_name, "-n", "openshift-marketplace"],

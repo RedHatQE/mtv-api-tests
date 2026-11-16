@@ -23,14 +23,12 @@ _DISCONNECTED_TIMEOUT_SECONDS = 3600
 def _build_base_env() -> dict[str, str]:
     """Build the common environment for disconnected deployment scripts."""
     env = os.environ.copy()
-    env.update(
-        {
-            "CLUSTER_USERNAME": py_config["cluster_username"],
-            "CLUSTER_PASSWORD": py_config["cluster_password"],
-            "CLUSTER_API_URL": py_config["cluster_host"],
-            "DEBUG": "true",
-        }
-    )
+    env.update({
+        "CLUSTER_USERNAME": py_config["cluster_username"],
+        "CLUSTER_PASSWORD": py_config["cluster_password"],
+        "CLUSTER_API_URL": py_config["cluster_host"],
+        "DEBUG": "true",
+    })
     return env
 
 
@@ -51,15 +49,13 @@ def run_disconnected_mirror(
     """
     channel_version = ".".join(mtv_version.split(".")[:2])
     env = _build_base_env()
-    env.update(
-        {
-            "MTV_VERSION": mtv_version,
-            "MTV_CHANNEL_VERSION": channel_version,
-            "PRIVATE_REGISTRY": private_registry,
-            "MODE": "full",
-            **kwargs,
-        }
-    )
+    env.update({
+        "MTV_VERSION": mtv_version,
+        "MTV_CHANNEL_VERSION": channel_version,
+        "PRIVATE_REGISTRY": private_registry,
+        "MODE": "full",
+        **kwargs,
+    })
 
     run_script(
         script_path=script_path,
@@ -83,13 +79,11 @@ def run_disconnected_install(
         catalog_name (str): The CatalogSource name from the mirror step.
     """
     env = _build_base_env()
-    env.update(
-        {
-            "MTV_VERSION": mtv_version,
-            "MTV_SOURCE": "PRIVATE_REGISTRY",
-            "PRIVATE_CATALOG_NAME": catalog_name,
-        }
-    )
+    env.update({
+        "MTV_VERSION": mtv_version,
+        "MTV_SOURCE": "PRIVATE_REGISTRY",
+        "PRIVATE_CATALOG_NAME": catalog_name,
+    })
 
     run_script(
         script_path=script_path,
