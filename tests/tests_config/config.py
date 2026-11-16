@@ -1068,6 +1068,12 @@ tests_params: dict = {
         ],
         "warm_migration": False,
     },
+    "test_disconnected_cold_migration": {
+        "virtual_machines": [
+            {"name": "mtv-tests-rhel8", "guest_agent": True},
+        ],
+        "warm_migration": False,
+    },
     "test_warm_migration_xfs": {
         "virtual_machines": [
             {
