@@ -15,11 +15,17 @@ from typing import TYPE_CHECKING
 import pytest
 from git import Repo
 from ocp_resources.network_map import NetworkMap
+from ocp_resources.plan import Plan
 from ocp_resources.storage_map import StorageMap
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
-from utilities.mtv_migration import get_network_migration_map, get_storage_migration_map
+from utilities.mtv_migration import (
+    create_plan_resource,
+    get_network_migration_map,
+    get_storage_migration_map,
+)
+from utilities.utils import populate_vm_ids
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -28,6 +34,7 @@ if TYPE_CHECKING:
 
     from libs.base_provider import BaseProvider
     from libs.forklift_inventory import ForkliftInventory
+    from libs.providers.openshift import OCPProvider
 
 LOGGER = get_logger(name=__name__)
 
@@ -39,13 +46,11 @@ def disconnected_repo_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     Reads disconnected_repo_url and disconnected_repo_ref from test config
     (passed via --tc= from Jenkins or the command line).
     """
-    repo_url: str = py_config.get("disconnected_repo_url", "")
-    repo_ref: str = py_config.get("disconnected_repo_ref", "")
+    repo_url: str = py_config["disconnected_repo_url"]
+    repo_ref: str = py_config["disconnected_repo_ref"]
 
-    if not repo_url:
-        raise ValueError("disconnected_repo_url must be provided via --tc=disconnected_repo_url:<url>")
-    if not repo_ref:
-        raise ValueError("disconnected_repo_ref must be provided via --tc=disconnected_repo_ref:<ref>")
+    if not repo_url or not repo_ref:
+        raise ValueError("disconnected_repo_url and disconnected_repo_ref must be non-empty")
 
     clone_dir = tmp_path_factory.mktemp("mtv-autodeploy-disconnected")
 
@@ -90,7 +95,8 @@ def private_catalog_name() -> str:
     OCP version (the mirror script auto-detects the same version), or
     auto-detect from existing catalogs as fallback.
     """
-    catalog_name: str = py_config.get("private_catalog_name", "")
+    # Optional key: when absent, auto-detect or compute the catalog name below.
+    catalog_name: str = py_config["private_catalog_name"] if "private_catalog_name" in py_config else ""
 
     if not catalog_name:
         result = subprocess.run(
@@ -126,9 +132,9 @@ def private_catalog_name() -> str:
                 major, minor = match.groups()
                 catalog_name = f"cs-mtv-disconnected-redhat-redhat-operator-index-v{major}-{minor}"
                 LOGGER.info(f"Computed expected private catalog name: {catalog_name}")
-        except (OSError, subprocess.SubprocessError):
-            # oc unavailable or timed out — fall through to the explicit error below
-            pass
+        except (OSError, subprocess.SubprocessError) as exc:
+            # oc unavailable or timed out — log and fall through to the explicit error below
+            LOGGER.warning(f"Failed to detect OCP version via 'oc version': {exc}")
 
     if not catalog_name:
         raise ValueError(
@@ -189,4 +195,34 @@ def network_map_resource(
         target_namespace=target_namespace,
         multus_network_name=multus_network_name,
         vms=vms,
+    )
+
+
+@pytest.fixture(scope="class")
+def plan_resource(
+    prepared_plan: dict,
+    fixture_store: dict,
+    ocp_admin_client: DynamicClient,
+    source_provider: BaseProvider,
+    destination_provider: OCPProvider,
+    source_provider_inventory: ForkliftInventory,
+    target_namespace: str,
+    storage_map_resource: StorageMap,
+    network_map_resource: NetworkMap,
+) -> Plan:
+    """Create MTV Plan CR resource for disconnected migration tests.
+
+    Modeled on tests/upgrade/conftest.py::pre_upgrade_plan_resource.
+    """
+    populate_vm_ids(prepared_plan, source_provider_inventory)
+    return create_plan_resource(
+        ocp_admin_client=ocp_admin_client,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        storage_map=storage_map_resource,
+        network_map=network_map_resource,
+        virtual_machines_list=prepared_plan["virtual_machines"],
+        target_namespace=target_namespace,
+        warm_migration=prepared_plan.get("warm_migration", False),
     )

@@ -14,6 +14,7 @@ from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
 from utilities.script_runner import run_script
+from utilities.utils import require_cluster_credential
 
 LOGGER = get_logger(name=__name__)
 
@@ -21,12 +22,16 @@ _DISCONNECTED_TIMEOUT_SECONDS = 3600
 
 
 def _build_base_env() -> dict[str, str]:
-    """Build the common environment for disconnected deployment scripts."""
+    """Build the common environment for disconnected deployment scripts.
+
+    Credentials are resolved via require_cluster_credential(): pytest config
+    first, then the ``CLUSTER_*`` environment variables.
+    """
     env = os.environ.copy()
     env.update({
-        "CLUSTER_USERNAME": py_config["cluster_username"],
-        "CLUSTER_PASSWORD": py_config["cluster_password"],
-        "CLUSTER_API_URL": py_config["cluster_host"],
+        "CLUSTER_USERNAME": require_cluster_credential("cluster_username"),
+        "CLUSTER_PASSWORD": require_cluster_credential("cluster_password"),
+        "CLUSTER_API_URL": require_cluster_credential("cluster_host"),
         "DEBUG": "true",
     })
     return env

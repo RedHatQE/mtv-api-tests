@@ -110,7 +110,8 @@ class TestUpgradeColdMigration:
             script_path=upgrade_script_path,
             mtv_version=py_config["mtv_upgrade_to_version"],
             mtv_source=py_config["mtv_upgrade_to_source"],
-            image_index=py_config.get("mtv_upgrade_image_index", ""),
+            # Optional key: empty string means "no image index override" for the upgrade script.
+            image_index=py_config["mtv_upgrade_image_index"] if "mtv_upgrade_image_index" in py_config else "",
             timeout=upgrade_timeout,
             client=ocp_admin_client,
         )

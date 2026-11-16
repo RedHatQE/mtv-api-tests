@@ -139,21 +139,22 @@ class TestDisconnectedColdMigration:
 
     def test_migrate_vms(
         self,
-        fixture_store: dict[str, Any],
+        fixture_store: dict[str, Any],  # Any: dynamic resource-tracking store shared across fixtures
         ocp_admin_client: DynamicClient,
         target_namespace: str,
-        prepared_plan: dict[str, Any],
+        plan_resource: Plan,
     ) -> None:
         """Execute cold migration on the disconnected-installed MTV."""
         execute_migration(
             ocp_admin_client=ocp_admin_client,
             fixture_store=fixture_store,
-            plan=prepared_plan["plan_resource"],
+            plan=plan_resource,
             target_namespace=target_namespace,
         )
 
     def test_check_vms(
         self,
+        # Any: prepared_plan / source_provider_data are dynamic fixture payload dictionaries
         prepared_plan: dict[str, Any],
         source_provider: BaseProvider,
         destination_provider: BaseProvider,

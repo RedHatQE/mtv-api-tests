@@ -29,7 +29,7 @@ _PROCESS_GROUP_KILL_TIMEOUT_SECONDS = 15
 _PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS = _PROCESS_GROUP_TERM_TIMEOUT_SECONDS + _PROCESS_GROUP_KILL_TIMEOUT_SECONDS
 
 
-def read_log(log_file: IO[bytes], password: str) -> str:
+def _read_log(log_file: IO[bytes], password: str) -> str:
     """Read script output from an open temp log and redact the cluster password.
 
     Args:
@@ -60,7 +60,7 @@ def _kill_process_group(pgid: int, sig: int) -> None:
         return
 
 
-def stop_process(proc: subprocess.Popen[bytes]) -> None:
+def _stop_process(proc: subprocess.Popen[bytes]) -> None:
     """Stop the script process group with bounded SIGTERM then SIGKILL waits.
 
     Args:
@@ -130,12 +130,12 @@ def run_script(
             returncode = None
         finally:
             try:
-                stop_process(proc)
+                _stop_process(proc)
             except ScriptRunError as exc:
                 cleanup_exc = exc
 
-        stdout = read_log(stdout_file, password)
-        stderr = read_log(stderr_file, password)
+        stdout = _read_log(stdout_file, password)
+        stderr = _read_log(stderr_file, password)
         cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
         if timeout_exc is not None:
             raise ScriptRunError(
