@@ -10,7 +10,7 @@ import re
 import shutil
 import stat
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from git import Repo
@@ -146,8 +146,8 @@ def private_catalog_name() -> str:
 
 @pytest.fixture(scope="class")
 def storage_map_resource(
-    prepared_plan: dict,
-    fixture_store: dict,
+    prepared_plan: dict[str, Any],
+    fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
@@ -172,8 +172,8 @@ def storage_map_resource(
 
 @pytest.fixture(scope="class")
 def network_map_resource(
-    prepared_plan: dict,
-    fixture_store: dict,
+    prepared_plan: dict[str, Any],
+    fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
     destination_provider: BaseProvider,
@@ -200,8 +200,8 @@ def network_map_resource(
 
 @pytest.fixture(scope="class")
 def plan_resource(
-    prepared_plan: dict,
-    fixture_store: dict,
+    prepared_plan: dict[str, Any],
+    fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
     source_provider: BaseProvider,
     destination_provider: OCPProvider,
