@@ -20,7 +20,7 @@ from typing import IO
 
 from simple_logger.logger import get_logger
 
-from exceptions.exceptions import MtvUpgradeError
+from exceptions.exceptions import ScriptRunError
 
 LOGGER = get_logger(name=__name__)
 
@@ -69,7 +69,7 @@ def stop_process(proc: subprocess.Popen[bytes]) -> None:
         proc (subprocess.Popen[bytes]): The script process (session leader).
 
     Raises:
-        MtvUpgradeError: If the process is still running after SIGKILL.
+        ScriptRunError: If the process is still running after SIGKILL.
     """
     _kill_process_group(proc.pid, signal.SIGTERM)
     try:
@@ -81,7 +81,7 @@ def stop_process(proc: subprocess.Popen[bytes]) -> None:
     try:
         proc.wait(timeout=_PROCESS_GROUP_KILL_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired as exc:
-        raise MtvUpgradeError(
+        raise ScriptRunError(
             f"Script process group {proc.pid} did not exit after SIGTERM and SIGKILL"
         ) from exc
 
@@ -109,7 +109,7 @@ def run_script(
         timeout_seconds (int): Maximum time to wait for the script to complete.
 
     Raises:
-        MtvUpgradeError: If the script exits with a non-zero status or times out.
+        ScriptRunError: If the script exits with a non-zero status or times out.
     """
     LOGGER.info(f"Running {description}: {script_path}")
 
@@ -126,7 +126,7 @@ def run_script(
             stderr=stderr_file,
         )
         timeout_exc: subprocess.TimeoutExpired | None = None
-        cleanup_exc: MtvUpgradeError | None = None
+        cleanup_exc: ScriptRunError | None = None
         try:
             returncode = proc.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired as exc:
@@ -135,20 +135,20 @@ def run_script(
         finally:
             try:
                 stop_process(proc)
-            except MtvUpgradeError as exc:
+            except ScriptRunError as exc:
                 cleanup_exc = exc
 
         stdout = read_log(stdout_file, password)
         stderr = read_log(stderr_file, password)
         cleanup_note = f"\ncleanup: {cleanup_exc}" if cleanup_exc is not None else ""
         if timeout_exc is not None:
-            raise MtvUpgradeError(
+            raise ScriptRunError(
                 f"{description} timed out after {timeout_exc.timeout} seconds "
                 f"(plus up to {_PROCESS_GROUP_CLEANUP_TIMEOUT_SECONDS} seconds process-group cleanup)\n"
                 f"stdout: {stdout}\nstderr: {stderr}{cleanup_note}"
             ) from timeout_exc
         if returncode is None or returncode != 0:
-            raise MtvUpgradeError(
+            raise ScriptRunError(
                 f"{description} failed with exit code {returncode}\nstdout: {stdout}\nstderr: {stderr}{cleanup_note}"
             ) from cleanup_exc
         if cleanup_exc is not None:

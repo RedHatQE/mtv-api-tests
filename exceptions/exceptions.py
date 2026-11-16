@@ -154,6 +154,10 @@ class MtvUpgradeError(Exception):
     """Raised when MTV operator upgrade fails."""
 
 
+class ScriptRunError(Exception):
+    """Raised when a deployment script (mirror, install, upgrade) fails or times out."""
+
+
 class SSHConnectionSetupError(Exception):
     """Raised when SSH connection setup fails (e.g., missing virtctl, port-forward failure)."""
 
