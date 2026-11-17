@@ -26,11 +26,12 @@ from utilities.mtv_migration import (
 )
 from utilities.utils import populate_vm_ids
 
+from kubernetes.dynamic.exceptions import ApiException
+
 if TYPE_CHECKING:
     from pathlib import Path
 
     from kubernetes.dynamic import DynamicClient
-    from kubernetes.dynamic.exceptions import ApiException
 
     from libs.base_provider import BaseProvider
     from libs.forklift_inventory import ForkliftInventory
@@ -54,7 +55,9 @@ def disconnected_repo_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
     clone_dir = tmp_path_factory.mktemp("mtv-autodeploy-disconnected")
 
-    LOGGER.info(f"Cloning {repo_url} (ref={repo_ref}) into {clone_dir}")
+    # Log the URL without any embedded userinfo: private-repository URLs may carry a token.
+    logged_url = re.sub(r"://[^@/]+@", "://", repo_url)
+    LOGGER.info(f"Cloning {logged_url} (ref={repo_ref}) into {clone_dir}")
     if repo_url.startswith("file://"):
         # Local path — just copy (fast, preserves uncommitted changes)
         local_path = repo_url.replace("file://", "")
@@ -65,26 +68,37 @@ def disconnected_repo_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return clone_dir
 
 
-@pytest.fixture(scope="session")
-def disconnected_mirror_script(disconnected_repo_dir: Path) -> str:
-    """Return the executable path to the mirror script."""
-    script_path = disconnected_repo_dir / "disconnected" / "mirror-to-private-registry.sh"
+def _executable_script_path(repo_dir: Path, *relative_parts: str) -> str:
+    """Return the executable path of a script inside the cloned repo.
+
+    Args:
+        repo_dir (Path): Cloned repository directory.
+        *relative_parts (str): Path parts of the script relative to the repo root.
+
+    Returns:
+        str: Absolute path to the script with the owner-execute bit set.
+
+    Raises:
+        ValueError: If the script does not exist in the clone.
+    """
+    script_path = repo_dir.joinpath(*relative_parts)
     if not script_path.is_file():
-        raise ValueError(f"Mirror script not found at '{script_path}'")
+        raise ValueError(f"Script not found at '{script_path}'")
     current_mode = script_path.stat().st_mode
     script_path.chmod(current_mode | stat.S_IXUSR)
     return str(script_path)
+
+
+@pytest.fixture(scope="session")
+def disconnected_mirror_script(disconnected_repo_dir: Path) -> str:
+    """Return the executable path to the mirror script."""
+    return _executable_script_path(disconnected_repo_dir, "disconnected", "mirror-to-private-registry.sh")
 
 
 @pytest.fixture(scope="session")
 def disconnected_install_script(disconnected_repo_dir: Path) -> str:
     """Return the executable path to mtv-install.sh."""
-    script_path = disconnected_repo_dir / "mtv-install.sh"
-    if not script_path.is_file():
-        raise ValueError(f"Install script not found at '{script_path}'")
-    current_mode = script_path.stat().st_mode
-    script_path.chmod(current_mode | stat.S_IXUSR)
-    return str(script_path)
+    return _executable_script_path(disconnected_repo_dir, "mtv-install.sh")
 
 
 @pytest.fixture(scope="session")

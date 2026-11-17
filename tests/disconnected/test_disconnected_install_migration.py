@@ -4,6 +4,22 @@ Disconnected (offline) MTV deployment and migration tests.
 This module implements tests that validate MTV can be deployed from a
 mirrored private registry (disconnected/offline environment) and that
 migrations work on the resulting installation.
+
+Setup (all via ``--tc=``):
+    - ``disconnected_repo_url`` / ``disconnected_repo_ref``: mtv-autodeploy
+      clone source (the repo containing ``disconnected/mirror-to-private-registry.sh``
+      and ``mtv-install.sh``; must carry the ``PRIVATE_REGISTRY`` install source).
+    - ``mtv_disconnected_version``: MTV GA version to mirror and install.
+    - ``private_registry``: destination registry for the mirrored images.
+    - ``private_catalog_name`` (optional): mirrored CatalogSource name; when
+      omitted it is auto-detected from the cluster or computed from the
+      cluster's OCP version.
+    - Standard cluster credentials (``cluster_host``, ``cluster_username``,
+      ``cluster_password``) and a source provider, as for the other suites.
+
+The suite requires a pre-installed MTV operator (the session-autouse
+``forklift_pods_state`` fixture), matching the upgrade suite's design; the
+tests then clean the cluster and reinstall MTV from the mirrored catalog.
 """
 
 from __future__ import annotations
@@ -23,9 +39,10 @@ from utilities.mtv_migration import execute_migration
 from utilities.post_migration import check_vms
 from utilities.utils import get_mtv_version
 
+from kubernetes.dynamic.exceptions import NotFoundError
+
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
-    from kubernetes.dynamic.exceptions import ResourceNotFoundError
 
     from libs.base_provider import BaseProvider
     from libs.forklift_inventory import ForkliftInventory
@@ -96,7 +113,7 @@ class TestDisconnectedColdMigration:
             catalog_source_api.get(name=private_catalog_name, namespace="openshift-marketplace")
             LOGGER.info(f"CatalogSource '{private_catalog_name}' already exists — skipping mirror step")
             return
-        except ResourceNotFoundError:
+        except NotFoundError:
             # NotFound means the catalog is absent — the mirror step must run
             pass
 
