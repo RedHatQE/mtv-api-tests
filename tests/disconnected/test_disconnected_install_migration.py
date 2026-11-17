@@ -8,7 +8,6 @@ migrations work on the resulting installation.
 
 from __future__ import annotations
 
-import subprocess
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -26,6 +25,7 @@ from utilities.utils import get_mtv_version
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from kubernetes.dynamic.exceptions import ResourceNotFoundError
 
     from libs.base_provider import BaseProvider
     from libs.forklift_inventory import ForkliftInventory
@@ -85,18 +85,20 @@ class TestDisconnectedColdMigration:
         self,
         disconnected_mirror_script: str,
         private_catalog_name: str,
+        ocp_admin_client: DynamicClient,
     ) -> None:
         """Mirror MTV GA content to the private registry (skip if already done)."""
         # Check if the catalog already exists — if so, skip the mirror step
-        result = subprocess.run(
-            ["oc", "get", "catalogsource", private_catalog_name, "-n", "openshift-marketplace"],
-            capture_output=True,
-            text=True,
-            timeout=30,
+        catalog_source_api = ocp_admin_client.resources.get(
+            api_version="operators.coreos.com/v1alpha1", kind="CatalogSource"
         )
-        if result.returncode == 0:
+        try:
+            catalog_source_api.get(name=private_catalog_name, namespace="openshift-marketplace")
             LOGGER.info(f"CatalogSource '{private_catalog_name}' already exists — skipping mirror step")
             return
+        except ResourceNotFoundError:
+            # NotFound means the catalog is absent — the mirror step must run
+            pass
 
         run_disconnected_mirror(
             script_path=disconnected_mirror_script,

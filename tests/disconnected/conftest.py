@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import shutil
 import stat
-import subprocess
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from kubernetes.dynamic import DynamicClient
+    from kubernetes.dynamic.exceptions import ApiException
 
     from libs.base_provider import BaseProvider
     from libs.forklift_inventory import ForkliftInventory
@@ -88,64 +88,46 @@ def disconnected_install_script(disconnected_repo_dir: Path) -> str:
 
 
 @pytest.fixture(scope="session")
-def private_catalog_name() -> str:
+def private_catalog_name(ocp_admin_client: DynamicClient, target_ocp_version: str) -> str:
     """Return the CatalogSource name for the mirrored catalog.
 
-    If not provided via --tc=, compute the expected name from the cluster's
-    OCP version (the mirror script auto-detects the same version), or
-    auto-detect from existing catalogs as fallback.
+    If not provided via --tc=, auto-detect from the cluster's existing
+    catalogs, or compute the expected name from the cluster's OCP version
+    (the mirror script auto-detects the same version). Uses the authenticated
+    cluster client, so no local ``oc`` login is required.
     """
     # Optional key: when absent, auto-detect or compute the catalog name below.
     catalog_name: str = py_config["private_catalog_name"] if "private_catalog_name" in py_config else ""
 
     if not catalog_name:
-        result = subprocess.run(
-            [
-                "oc",
-                "get",
-                "catalogsource",
-                "-n",
-                "openshift-marketplace",
-                "--no-headers",
-                "-o",
-                "custom-columns=NAME:.metadata.name",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
+        catalog_source_api = ocp_admin_client.resources.get(
+            api_version="operators.coreos.com/v1alpha1", kind="CatalogSource"
         )
-        if result.returncode == 0:
-            for line in result.stdout.strip().split("\n"):
-                if "cs-mtv-disconnected" in line:
-                    catalog_name = line.strip()
+        try:
+            catalogs = catalog_source_api.get(namespace="openshift-marketplace")
+            for item in catalogs.items:
+                if "cs-mtv-disconnected" in item.metadata.name:
+                    catalog_name = item.metadata.name
                     LOGGER.info(f"Auto-detected private catalog: {catalog_name}")
                     break
+        except ApiException as exc:
+            # Any API error falls through to the computed name below
+            LOGGER.warning(f"Failed to list CatalogSources: {exc}")
 
     if not catalog_name:
         # Compute the expected name from the cluster's OCP version
         # (the mirror script auto-detects the same version and creates
-        # a catalog named cs-mtv-disconnected-redhat-redhat-operator-index-v<X-Y>)
-        try:
-            ocp_result = subprocess.run(["oc", "version"], capture_output=True, text=True, timeout=30)
-            match = re.search(r"Server Version: (\d+)\.(\d+)", ocp_result.stdout)
-            if match:
-                major, minor = match.groups()
-                catalog_name = f"cs-mtv-disconnected-redhat-redhat-operator-index-v{major}-{minor}"
-                LOGGER.info(f"Computed expected private catalog name: {catalog_name}")
-        except (OSError, subprocess.SubprocessError) as exc:
-            # oc unavailable or timed out — log and fall through to the explicit error below
-            LOGGER.warning(f"Failed to detect OCP version via 'oc version': {exc}")
+        # a catalog named cs-mtv-disconnected-redhat-redhat-operator-index-v<X-Y>).
+        index_version = target_ocp_version.replace(".", "-")
+        catalog_name = f"cs-mtv-disconnected-redhat-redhat-operator-index-v{index_version}"
+        LOGGER.info(f"Computed expected private catalog name: {catalog_name}")
 
-    if not catalog_name:
-        raise ValueError(
-            "private_catalog_name must be provided via --tc=private_catalog_name:<name> "
-            "or the mirror script must have been run first"
-        )
     return catalog_name
 
 
 @pytest.fixture(scope="class")
 def storage_map_resource(
+    # Any: dynamic fixture payload / resource-tracking dictionaries
     prepared_plan: dict[str, Any],
     fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
@@ -172,6 +154,7 @@ def storage_map_resource(
 
 @pytest.fixture(scope="class")
 def network_map_resource(
+    # Any: dynamic fixture payload / resource-tracking dictionaries
     prepared_plan: dict[str, Any],
     fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
@@ -200,6 +183,7 @@ def network_map_resource(
 
 @pytest.fixture(scope="class")
 def plan_resource(
+    # Any: dynamic fixture payload / resource-tracking dictionaries
     prepared_plan: dict[str, Any],
     fixture_store: dict[str, Any],
     ocp_admin_client: DynamicClient,
