@@ -76,7 +76,7 @@ def run_disconnected_install(
     mtv_version: str,
     catalog_name: str,
 ) -> None:
-    """Run mtv-install.sh with MTV_SOURCE=PRIVATE_REGISTRY.
+    """Run mtv-install.sh with MTV_SOURCE=DISCONNECTED.
 
     Args:
         script_path (str): Full path to mtv-install.sh.
@@ -86,7 +86,7 @@ def run_disconnected_install(
     env = _build_base_env()
     env.update({
         "MTV_VERSION": mtv_version,
-        "MTV_SOURCE": "PRIVATE_REGISTRY",
+        "MTV_SOURCE": "DISCONNECTED",
         "PRIVATE_CATALOG_NAME": catalog_name,
     })
 

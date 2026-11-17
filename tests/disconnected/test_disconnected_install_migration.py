@@ -8,7 +8,7 @@ migrations work on the resulting installation.
 Setup (all via ``--tc=``):
     - ``disconnected_repo_url`` / ``disconnected_repo_ref``: mtv-autodeploy
       clone source (the repo containing ``disconnected/mirror-to-private-registry.sh``
-      and ``mtv-install.sh``; must carry the ``PRIVATE_REGISTRY`` install source).
+      and ``mtv-install.sh``; must carry the ``DISCONNECTED`` install source).
     - ``mtv_disconnected_version``: MTV GA version to mirror and install.
     - ``private_registry``: destination registry for the mirrored images.
     - ``private_catalog_name`` (optional): mirrored CatalogSource name; when
@@ -87,7 +87,7 @@ class TestDisconnectedColdMigration:
         1. Mirror MTV GA content to the private registry (if not already
            mirrored — skips if catalog exists).
         2. Install MTV from the mirrored catalog using
-           MTV_SOURCE=PRIVATE_REGISTRY.
+           MTV_SOURCE=DISCONNECTED.
         3. Verify the installed version matches and pods are running.
         4. Create migration resources (StorageMap, NetworkMap, Plan) and
            execute a cold migration.
@@ -129,7 +129,7 @@ class TestDisconnectedColdMigration:
         disconnected_install_script: str,
         private_catalog_name: str,
     ) -> None:
-        """Install MTV from the mirrored catalog using PRIVATE_REGISTRY source."""
+        """Install MTV from the mirrored catalog using the DISCONNECTED source."""
         run_disconnected_install(
             script_path=disconnected_install_script,
             mtv_version=py_config["mtv_disconnected_version"],
