@@ -9,13 +9,14 @@ from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from subprocess import STDOUT, check_output
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
 
 import ovirtsdk4
 import pytest
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
+from ocp_resources.cluster_service_version import ClusterServiceVersion  # noqa: I001
 from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -59,6 +60,10 @@ DEFAULT_PROVIDERS_JSON_PATH = ".providers.json"
 CLUSTER_CREDENTIAL_KEYS: tuple[str, ...] = ("cluster_host", "cluster_username", "cluster_password")
 # Valid values of the NetworkMap CRD networkIPMode enum (forklift MTV-5674)
 VALID_NETWORK_IP_MODES: tuple[str, ...] = ("preserve", "dhcp", "none")
+# OLM CSV phase of the operator version that is actually installed; during an upgrade the
+# obsolete CSV leaves this phase (Replacing/Replaced) before it is deleted.
+_CSV_PHASE_SUCCEEDED = "Succeeded"
+_CSV_PHASE_SUPERSEDING = ("Replacing", "Deleting")
 
 
 def normalize_source_network(source_vm_nic: dict[str, Any]) -> str | None:
@@ -1349,6 +1354,14 @@ def extract_vm_from_plan(
     return plan
 
 
+def _get_csv_replaces(csv: ClusterServiceVersion) -> Optional[str]:
+    """Return the CSV name replaced by the given CSV, if any."""
+    spec = csv.instance.spec or {}
+    if isinstance(spec, dict):
+        return spec.get("replaces")
+    return getattr(spec, "replaces", None)
+
+
 def get_mtv_version(client: DynamicClient) -> str:
     """Get MTV operator version from ClusterServiceVersion.
 
@@ -1359,17 +1372,34 @@ def get_mtv_version(client: DynamicClient) -> str:
         str: MTV version string (e.g., "2.10.0")
 
     Raises:
-        ValueError: If MTV operator CSV not found
+        ValueError: If no installed MTV operator CSV is found; among coexisting
+            CSVs during an upgrade, only the active (non-superseded) one counts.
     """
-    from ocp_resources.cluster_service_version import ClusterServiceVersion  # noqa: PLC0415
-
     mtv_namespace = py_config["mtv_namespace"]
 
-    for csv in ClusterServiceVersion.get(client=client, namespace=mtv_namespace):
-        if csv.name.startswith(MTV_OPERATOR_NAME):
-            return csv.instance.spec.version
+    all_mtv_csvs = [
+        csv
+        for csv in ClusterServiceVersion.get(client=client, namespace=mtv_namespace)
+        if csv.name.startswith(MTV_OPERATOR_NAME)
+    ]
+    if not all_mtv_csvs:
+        raise ValueError(f"Installed MTV operator ClusterServiceVersion not found in namespace '{mtv_namespace}'")
 
-    raise ValueError(f"MTV operator ClusterServiceVersion not found in namespace '{mtv_namespace}'")
+    # CSVs being superseded during an upgrade: phased out by OLM or replaced by a newer CSV.
+    replaced_names = {replace for csv in all_mtv_csvs for replace in [_get_csv_replaces(csv)] if replace}
+    active_csvs = [
+        csv
+        for csv in all_mtv_csvs
+        if (csv.instance.status or {}).get("phase") not in _CSV_PHASE_SUPERSEDING
+        and csv.instance.metadata.name not in replaced_names
+    ]
+
+    # Prefer Succeeded CSVs among the active ones; fall back to any active CSV
+    # (its phase may be briefly Pending/Failed during operator rescheduling).
+    succeeded_csvs = [csv for csv in active_csvs if (csv.instance.status or {}).get("phase") == _CSV_PHASE_SUCCEEDED]
+    candidates = succeeded_csvs or active_csvs
+    # Multiple candidates are transient; report the highest version among them.
+    return max(candidates, key=lambda csv: Version(csv.instance.spec.version)).instance.spec.version
 
 
 def has_mtv_minimum_version(min_version: str, client: DynamicClient) -> bool:
