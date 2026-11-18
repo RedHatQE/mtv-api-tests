@@ -16,6 +16,7 @@ import ovirtsdk4
 import pytest
 from kubernetes.dynamic import DynamicClient
 from kubernetes.dynamic.exceptions import ApiException, DynamicApiError
+from ocp_resources.cluster_service_version import ClusterServiceVersion  # noqa: I001
 from ocp_resources.cluster_version import ClusterVersion
 from ocp_resources.data_source import DataSource
 from ocp_resources.network_attachment_definition import NetworkAttachmentDefinition
@@ -1353,7 +1354,7 @@ def extract_vm_from_plan(
     return plan
 
 
-def _get_csv_replaces(csv) -> Optional[str]:
+def _get_csv_replaces(csv: ClusterServiceVersion) -> Optional[str]:
     """Return the CSV name replaced by the given CSV, if any."""
     spec = csv.instance.spec or {}
     if isinstance(spec, dict):
@@ -1374,8 +1375,6 @@ def get_mtv_version(client: DynamicClient) -> str:
         ValueError: If no installed MTV operator CSV is found; among coexisting
             CSVs during an upgrade, only the active (non-superseded) one counts.
     """
-    from ocp_resources.cluster_service_version import ClusterServiceVersion  # noqa: PLC0415
-
     mtv_namespace = py_config["mtv_namespace"]
 
     all_mtv_csvs = [
