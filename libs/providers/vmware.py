@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import ipaddress
-import re
 
 from typing import TYPE_CHECKING, Any, Literal, Self
 
@@ -2582,9 +2582,6 @@ _DATAVOLUME_ALIGN_BLOCK_BYTES = 1024 * 1024
 
 _DISK_SERIAL_MAX = 20  # libvirt disk serial limit; forklift writes the source disk UUID prefix
 
-# Forklift derives fallback disk serials as sha256(vmID:diskKey) hex, truncated to 20 characters
-_FALLBACK_SERIAL_RE = re.compile(r"[0-9a-f]{20}")
-
 _CDI_FILESYSTEM_OVERHEAD = 0.055  # CDI default filesystem overhead fraction for Filesystem-mode volumes
 _PVC_REQUEST_ROUNDING_SLACK_KB = 1024 * 1024  # 1 GiB slack for provisioner rounding of PVC requests to whole GiB
 
@@ -2754,9 +2751,9 @@ def verify_disk_serials(
     The fallback branch (source disk without an inventory serial, e.g. legacy
     FlatVer1 or physical-mode RDM v2 backings) cannot be triggered in the test
     environment — those backing types cannot be created with current VMware
-    tooling — but the assertions above still verify it correctly if it ever
-    occurs. The sha256 formula itself is covered by forklift unit tests
-    (pkg/controller/plan/adapter/base/disk_serial_test.go).
+    tooling — but the fallback serial is still verified exactly when it occurs:
+    it must equal sha256 of the inventory VM id and the disk's key, truncated
+    to 20 hex characters.
 
     Args:
         vm (dict[str, Any]): VM configuration dict from prepared_plan["virtual_machines"],
@@ -2772,9 +2769,9 @@ def verify_disk_serials(
     Raises:
         AssertionError: If a destination disk has an empty serial, a serial longer
             than 20 characters, a duplicate serial, a serial that matches no source
-            disk serial prefix, a fallback serial that is not 20 lowercase hex
-            characters, a fallback-serial count mismatch, a kept disk's serial
-            missing from the destination, or an excluded disk's serial present.
+            disk serial prefix, a fallback serial that differs from the expected
+            sha256(vmID:diskKey) value, a kept disk's serial missing from the
+            destination, or an excluded disk's serial present.
         ValueError: If the inventory disk list for the VM is missing or malformed,
             or kept and/or excluded source disks share a 20-character serial
             prefix (disk identity cannot be established).
@@ -2829,20 +2826,30 @@ def verify_disk_serials(
 
     destination_serial_set = set(destination_disk_serials)
     all_source_prefixes = set(kept_serial_prefixes) | set(excluded_serial_prefixes)
-
-    # 4. Fallback: destination serials matching no source prefix are fallback-serial disks;
-    # forklift derives them as exactly 20 lowercase hex characters (sha256 of vmID:diskKey)
     fallback_serials = destination_serial_set - all_source_prefixes
-    expected_fallback_count = sum(1 for disk in kept_disks if not disk.get("serial"))
-    for serial in fallback_serials:
-        assert _FALLBACK_SERIAL_RE.fullmatch(serial), (
-            f"VM '{vm_name}': destination disk serial '{serial}' matches no source disk serial prefix "
-            "and is not a valid fallback serial — forklift derives fallback serials as exactly 20 "
-            "lowercase hex characters (MTV-6854)"
-        )
-    assert len(fallback_serials) == expected_fallback_count, (
-        f"VM '{vm_name}': {len(fallback_serials)} destination fallback serial(s) but "
-        f"{expected_fallback_count} kept source disk(s) without a serial — count mismatch"
+
+    # 4. Fallback: kept disks without a source serial must carry the exact deterministic
+    # serial forklift derives — sha256 of "<inventory vm id>:<disk key>", truncated to 20 hex
+    # characters (pkg/controller/plan/adapter/base/disk_serial.go in forklift). Computing the
+    # expectation from the inventory VM ID and each disk's key verifies the formula itself, not
+    # just the serial's shape, and distinguishes kept from excluded serial-less disks (distinct keys).
+    vm_id = inventory_vm.get("id")
+    if not isinstance(vm_id, str) or not vm_id:
+        raise ValueError(f"Forklift inventory reported no valid id for VM '{vm_name}': {vm_id!r}")
+    expected_fallback_serials = set()
+    for disk in kept_disks:
+        if disk.get("serial"):
+            continue
+        disk_key = disk.get("key")
+        if not isinstance(disk_key, int) or isinstance(disk_key, bool):
+            raise ValueError(
+                f"Malformed disk entry in Forklift inventory for VM '{vm_name}': 'key' must be an int, got {disk_key!r}"
+            )
+        expected_fallback_serials.add(hashlib.sha256(f"{vm_id}:{disk_key}".encode()).hexdigest()[:_DISK_SERIAL_MAX])
+    assert fallback_serials == expected_fallback_serials, (
+        f"VM '{vm_name}': destination fallback serials {sorted(fallback_serials)} do not match the "
+        f"expected sha256-derived serials {sorted(expected_fallback_serials)} of the kept source "
+        "disk(s) without a serial (MTV-6854)"
     )
 
     # 2. Provenance: no excluded disk's serial may appear on the destination

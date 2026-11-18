@@ -12,7 +12,7 @@ import go_template
 import humanfriendly
 import jc
 import pytest
-from kubernetes.dynamic.exceptions import NotFoundError
+from kubernetes.dynamic.exceptions import ApiException, NotFoundError
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.network_map import NetworkMap
@@ -2886,13 +2886,17 @@ def check_vms(
             # Disk-serial contract (MTV-6854): every migrated disk carries a serial derived
             # from the source disk UUID. Requires the Forklift inventory for source serials.
             if source_provider_inventory:
+                # ApiException/TimeoutExpiredError: the inventory lookup performs cluster API
+                # requests; an outage is reported like any other check failure instead of
+                # aborting check_vms before accumulated results are reported (repo rules ban
+                # a bare 'except Exception').
                 try:
                     verify_disk_serials(
                         vm=vm,
                         destination_vm=destination_vm,
                         source_provider_inventory=source_provider_inventory,
                     )
-                except (AssertionError, ValueError) as exp:
+                except (AssertionError, ValueError, TimeoutExpiredError, ApiException) as exp:
                     res[vm_name].append(f"verify_disk_serials - {str(exp)}")
             else:
                 LOGGER.info(f"Skipping disk-serial check for VM '{vm_name}' — no source provider inventory")
