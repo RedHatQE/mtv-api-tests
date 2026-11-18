@@ -32,7 +32,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.rhv import OvirtProvider
-from libs.providers.vmware import verify_kept_disks_attached
+from libs.providers.vmware import verify_disk_serials, verify_kept_disks_attached
 from utilities.deep_inspection import verify_captured_di_results
 from utilities.naming import resolve_destination_vm_name
 from utilities.ssh_utils import SSHConnectionManager, VMSSHConnection, run_cmd_in_vm
@@ -2882,6 +2882,20 @@ def check_vms(
                 )
             except Exception as exp:
                 res[vm_name].append(f"check_serial_preservation - {str(exp)}")
+
+            # Disk-serial contract (MTV-6854): every migrated disk carries a serial derived
+            # from the source disk UUID. Requires the Forklift inventory for source serials.
+            if source_provider_inventory:
+                try:
+                    verify_disk_serials(
+                        vm=vm,
+                        destination_vm=destination_vm,
+                        source_provider_inventory=source_provider_inventory,
+                    )
+                except (AssertionError, ValueError) as exp:
+                    res[vm_name].append(f"verify_disk_serials - {str(exp)}")
+            else:
+                LOGGER.info(f"Skipping disk-serial check for VM '{vm_name}' — no source provider inventory")
 
             try:
                 check_boot_configuration(source_vm=source_vm, destination_vm=destination_vm)

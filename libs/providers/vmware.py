@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import ipaddress
+import re
 
 from typing import TYPE_CHECKING, Any, Literal, Self
 
@@ -2581,6 +2582,9 @@ _DATAVOLUME_ALIGN_BLOCK_BYTES = 1024 * 1024
 
 _DISK_SERIAL_MAX = 20  # libvirt disk serial limit; forklift writes the source disk UUID prefix
 
+# Forklift derives fallback disk serials as sha256(vmID:diskKey) hex, truncated to 20 characters
+_FALLBACK_SERIAL_RE = re.compile(r"[0-9a-f]{20}")
+
 _CDI_FILESYSTEM_OVERHEAD = 0.055  # CDI default filesystem overhead fraction for Filesystem-mode volumes
 _PVC_REQUEST_ROUNDING_SLACK_KB = 1024 * 1024  # 1 GiB slack for provisioner rounding of PVC requests to whole GiB
 
@@ -2717,4 +2721,147 @@ def verify_kept_disks_attached(
                 f"Filesystem) has capacity {actual_capacity_kb} KB, expected between {expected_capacity_kb} "
                 f"KB and {int(max_capacity_kb)} KB (CDI filesystem overhead bounds)"
             )
+    return len(kept_disks)
+
+
+def verify_disk_serials(
+    vm: dict[str, Any],
+    destination_vm: dict[str, Any],
+    source_provider_inventory: ForkliftInventory,
+) -> int:
+    """Verify the disk-serial contract on a migrated VM (vSphere source implementation).
+
+    MTV-6854: forklift assigns every migrated disk a serial — the source disk's
+    vSphere UUID prefix (truncated to 20 characters, the libvirt serial limit)
+    when the source disk reports one, or a deterministic 20-character lowercase
+    hex serial (sha256 of vmID:diskKey) otherwise. Per disk, this check verifies:
+
+    1. Contract — every destination disk carries a non-empty serial of at most
+       20 characters, unique within the VM.
+    2. Provenance — every destination serial matches the 20-character prefix of
+       some source disk's inventory serial; a serial belonging to an excluded
+       disk must NOT appear (a migrated excluded disk).
+    3. Completeness — every non-excluded (kept) source disk's serial prefix
+       appears on some destination disk (a dropped kept disk).
+    4. Fallback — destination serials matching no source prefix (disks whose
+       source had no serial) must be exactly 20 lowercase hex characters, and
+       their count must equal the number of serial-less kept source disks.
+
+    Per-disk capacity verification remains the responsibility of check_storage;
+    exact kept/excluded serial-set equality with per-disk capacities for
+    exclusion plans is verified by verify_kept_disks_attached.
+
+    The fallback branch (source disk without an inventory serial, e.g. legacy
+    FlatVer1 or physical-mode RDM v2 backings) cannot be triggered in the test
+    environment — those backing types cannot be created with current VMware
+    tooling — but the assertions above still verify it correctly if it ever
+    occurs. The sha256 formula itself is covered by forklift unit tests
+    (pkg/controller/plan/adapter/base/disk_serial_test.go).
+
+    Args:
+        vm (dict[str, Any]): VM configuration dict from prepared_plan["virtual_machines"],
+            optionally containing the "exclude_disks" bus address list.
+        destination_vm (dict[str, Any]): Destination VM dict whose "disks" entries
+            carry a "serial" field (empty when the VMI disk spec has none).
+        source_provider_inventory (ForkliftInventory): Source provider inventory
+            providing each source disk's "serial" (the vSphere backing UUID).
+
+    Returns:
+        int: Number of non-excluded (kept) source disks.
+
+    Raises:
+        AssertionError: If a destination disk has an empty serial, a serial longer
+            than 20 characters, a duplicate serial, a serial that matches no source
+            disk serial prefix, a fallback serial that is not 20 lowercase hex
+            characters, a fallback-serial count mismatch, a kept disk's serial
+            missing from the destination, or an excluded disk's serial present.
+        ValueError: If the inventory disk list for the VM is missing or malformed,
+            or kept and/or excluded source disks share a 20-character serial
+            prefix (disk identity cannot be established).
+    """
+    vm_name = vm["name"]
+    excluded_addresses = set(vm.get("exclude_disks", []))
+
+    inventory_vm = source_provider_inventory.get_vm(name=vm_name)
+    inventory_disks = inventory_vm.get("disks")
+    if not isinstance(inventory_disks, list) or not inventory_disks:
+        raise ValueError(f"Forklift inventory reported no valid disk list for VM '{vm_name}'")
+    for disk in inventory_disks:
+        if not isinstance(disk, dict):
+            raise ValueError(f"Malformed disk entry in Forklift inventory for VM '{vm_name}': {disk}")
+        serial = disk.get("serial")
+        if serial is not None and not isinstance(serial, str):
+            raise ValueError(
+                f"Malformed disk entry in Forklift inventory for VM '{vm_name}': "
+                f"'serial' must be a string, got {serial!r}"
+            )
+
+    # Kept/excluded partitioning — excluded disks are neither copied nor attached
+    kept_disks = [disk for disk in inventory_disks if disk.get("busAddress") not in excluded_addresses]
+    excluded_disks = [disk for disk in inventory_disks if disk.get("busAddress") in excluded_addresses]
+
+    # Ambiguity guard: set comparisons cannot tell disks apart when serial prefixes collide
+    kept_serial_prefixes = [disk["serial"][:_DISK_SERIAL_MAX] for disk in kept_disks if disk.get("serial")]
+    excluded_serial_prefixes = [disk["serial"][:_DISK_SERIAL_MAX] for disk in excluded_disks if disk.get("serial")]
+    if len(set(kept_serial_prefixes)) != len(kept_serial_prefixes) or set(kept_serial_prefixes) & set(
+        excluded_serial_prefixes
+    ):
+        raise ValueError(
+            f"VM '{vm_name}': kept and/or excluded disks share a 20-character serial prefix — "
+            f"disk identity cannot be established (kept: {kept_serial_prefixes}, excluded: {excluded_serial_prefixes})"
+        )
+
+    # 1. Contract: every destination disk carries a non-empty, unique serial of at most 20 characters
+    destination_disk_serials = [disk["serial"] for disk in destination_vm["disks"]]
+    for serial in destination_disk_serials:
+        assert isinstance(serial, str) and serial, (
+            f"VM '{vm_name}': destination disk has no serial — forklift must assign one to every "
+            f"migrated disk, whether or not the source disk reported one (MTV-6854); got: {serial!r}"
+        )
+        assert len(serial) <= _DISK_SERIAL_MAX, (
+            f"VM '{vm_name}': destination disk serial '{serial}' exceeds the libvirt limit of "
+            f"{_DISK_SERIAL_MAX} characters ({len(serial)} given)"
+        )
+    assert len(set(destination_disk_serials)) == len(destination_disk_serials), (
+        f"VM '{vm_name}': destination disks share serials — disk identity cannot be established: "
+        f"{destination_disk_serials}"
+    )
+
+    destination_serial_set = set(destination_disk_serials)
+    all_source_prefixes = set(kept_serial_prefixes) | set(excluded_serial_prefixes)
+
+    # 4. Fallback: destination serials matching no source prefix are fallback-serial disks;
+    # forklift derives them as exactly 20 lowercase hex characters (sha256 of vmID:diskKey)
+    fallback_serials = destination_serial_set - all_source_prefixes
+    expected_fallback_count = sum(1 for disk in kept_disks if not disk.get("serial"))
+    for serial in fallback_serials:
+        assert _FALLBACK_SERIAL_RE.fullmatch(serial), (
+            f"VM '{vm_name}': destination disk serial '{serial}' matches no source disk serial prefix "
+            "and is not a valid fallback serial — forklift derives fallback serials as exactly 20 "
+            "lowercase hex characters (MTV-6854)"
+        )
+    assert len(fallback_serials) == expected_fallback_count, (
+        f"VM '{vm_name}': {len(fallback_serials)} destination fallback serial(s) but "
+        f"{expected_fallback_count} kept source disk(s) without a serial — count mismatch"
+    )
+
+    # 2. Provenance: no excluded disk's serial may appear on the destination
+    migrated_excluded = destination_serial_set & set(excluded_serial_prefixes)
+    assert not migrated_excluded, (
+        f"VM '{vm_name}': destination carries serial(s) {migrated_excluded} belonging to excluded "
+        f"disk(s) (excluded bus addresses: {sorted(excluded_addresses)})"
+    )
+
+    # 3. Completeness: every kept disk's serial prefix must appear on the destination
+    missing_kept = set(kept_serial_prefixes) - destination_serial_set
+    assert not missing_kept, (
+        f"VM '{vm_name}': kept source disk serial prefix(es) {missing_kept} missing from the "
+        f"destination — a kept disk was dropped or lost its serial (MTV-6854)"
+    )
+
+    LOGGER.info(
+        f"VM '{vm_name}': verified disk-serial contract for {len(destination_disk_serials)} destination "
+        f"disk(s) — {len(kept_serial_prefixes)} UUID-provenance, {len(fallback_serials)} fallback, "
+        f"{len(excluded_serial_prefixes)} excluded"
+    )
     return len(kept_disks)
