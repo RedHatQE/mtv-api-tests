@@ -2722,8 +2722,8 @@ def verify_kept_disks_attached(
 
 
 def verify_disk_serials(
-    vm: dict[str, Any],
-    destination_vm: dict[str, Any],
+    vm: dict[str, Any],  # untyped prepared-plan/testconfig JSON; accessed fields documented below
+    destination_vm: dict[str, Any],  # untyped destination provider payload; "disks" entries carry "serial"
     source_provider_inventory: ForkliftInventory,
 ) -> int:
     """Verify the disk-serial contract on a migrated VM (vSphere source implementation).
