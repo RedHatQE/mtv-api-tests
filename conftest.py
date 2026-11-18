@@ -70,6 +70,14 @@ from utilities.debug import remote_debugger_enabled, remote_post_mortem
 from utilities.hooks import create_hook_if_configured
 from utilities.logger import separator, setup_logging
 from utilities.mtv_migration import get_vm_suffix, resolve_pvc_name_template
+from utilities.toehold import (
+    TOEHOLD_CONFIG_BY_PROVIDER,
+    ToeholdClusterState,
+    apply_toehold_setup,
+    get_toehold_config,
+    restore_toehold_setup,
+    toehold_usage_error,
+)
 from utilities.must_gather import (
     collect_class_must_gather,
     collect_class_teardown_must_gather,
@@ -128,7 +136,10 @@ from utilities.utils import (
     restore_skip_clone_power_states,
 )
 from utilities.virtctl import add_to_path, download_virtctl_from_cluster
-from utilities.vmware_guest_operations import collect_linux_guest_static_ip_metadata
+from utilities.vmware_guest_operations import (
+    collect_linux_guest_static_ip_metadata,
+    wait_guest_info_or_fail,
+)
 from utilities.worker_node_selection import (
     get_ready_schedulable_worker_nodes,
     get_session_unique_label_key,
@@ -146,6 +157,13 @@ _CLASS_MUST_GATHER_ERROR = pytest.StashKey[Exception]()
 # Pytest start
 
 
+# Fixtures that build their own source Provider resource (certificate-field and
+# insecure-connection variants). The toehold appliance setup patches only the session provider,
+# so a test using one of these would migrate over the VDDK path while its Plan readiness check
+# reported appliance-path coverage.
+_TOEHOLD_OWN_PROVIDER_FIXTURES = frozenset({"ca_crt_source_provider", "insecure_source_provider"})
+
+
 def pytest_addoption(parser):
     data_collector_group = parser.getgroup(name="DataCollector")
     teardown_group = parser.getgroup(name="Teardown")
@@ -158,6 +176,17 @@ def pytest_addoption(parser):
         "--providers-json",
         help="Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json",
         default=None,
+    )
+
+    toehold_group = parser.getgroup(name="Toehold")
+    toehold_group.addoption(
+        "--toehold",
+        action="store_true",
+        help=(
+            "Run migrations through the copy appliance transfer path. Uses the hardcoded "
+            f"appliance configuration; supported source providers: "
+            f"{', '.join(TOEHOLD_CONFIG_BY_PROVIDER)}"
+        ),
     )
 
     mtv_upgrade_group = parser.getgroup(name="MTV Upgrade")
@@ -614,6 +643,68 @@ def pytest_collection_modifyitems(session, config, items):
         # type key drives the gating instead.
         source_provider_data = providers.get(py_config.get("source_provider", ""), {})
         source_provider_type = source_provider_data.get("type") or py_config.get("source_provider_type")
+
+        # Attach the toehold pre-setup to every test when --toehold is passed; without the flag
+        # they run the regular VDDK transfer path. The appliance configuration is hardcoded per
+        # source provider, so the flag only attaches for a provider with an entry in the map —
+        # anything else exits with a usage error instead of silently running the
+        # regular path.
+        # Pool mode leaves the provider unresolved at collection time, so no setup is attached
+        # there — toehold runs require an explicit --tc=source_provider.
+        # A usefixtures marker added here would be ignored: pytest computes an item's fixture
+        # closure at item creation, before this hook runs. Appending to fixturenames is the way
+        # to attach a fixture at collection time.
+        if config.getoption("toehold"):
+            if not source_provider_data:
+                pytest.exit(
+                    "--toehold requires an explicit --tc=source_provider: the appliance setup is "
+                    "attached at collection time, before pool selection runs.",
+                    returncode=pytest.ExitCode.USAGE_ERROR,
+                )
+            if usage_error := toehold_usage_error(
+                provider_name=py_config["source_provider"],
+                provider_type=source_provider_type,
+                provider_data=source_provider_data,
+            ):
+                pytest.exit(
+                    usage_error,
+                    returncode=pytest.ExitCode.USAGE_ERROR,
+                )
+
+        if config.getoption("toehold"):
+            # Attached outside the dry-run guard so --setup-plan --toehold reports the
+            # appliance fixture in its plan; a real run validates the provider above.
+            # Appended, not inserted first: pytest orders same-scope fixtures by
+            # fixturenames position, and the toehold chain (source_provider) must not
+            # overtake the base_resource_name fixture, whose fixture_store key the
+            # provider creation reads. Scope ordering already guarantees this
+            # session-scoped setup runs before any class-scoped plan preparation.
+            for item in items:
+                if _TOEHOLD_OWN_PROVIDER_FIXTURES.intersection(item.fixturenames):
+                    item.add_marker(
+                        pytest.mark.skip(
+                            reason=(
+                                "--toehold configures only the session source provider; this test "
+                                "creates its own Provider, so keep it out of toehold runs"
+                            )
+                        )
+                    )
+                    continue
+                if item.get_closest_marker("vddk_baseline"):
+                    # The appliance setup clears the provider's vddkInitImage, so a test that
+                    # compares a real VDDK transfer against another path would silently compare
+                    # against the appliance instead. Keep it out of toehold runs rather than
+                    # reporting a comparison the run cannot make.
+                    item.add_marker(
+                        pytest.mark.skip(
+                            reason=(
+                                "--toehold clears the source provider's vddkInitImage; this test "
+                                "needs a genuine VDDK baseline, run it without --toehold"
+                            )
+                        )
+                    )
+                    continue
+                item.fixturenames.append("toehold_appliance")
 
         if source_provider_type:
             # Skip warm migration tests for providers that do not support warm migration.
@@ -1259,6 +1350,91 @@ def source_provider(
     _source_provider.disconnect()
 
 
+@pytest.fixture(scope="session")
+def toehold_config(selected_source_provider: str, source_provider: BaseProvider) -> dict[str, Any]:
+    """Resolve the hardcoded toehold appliance configuration for the source provider.
+
+    Attached to all collected tests at collection time when --toehold is passed; the appliance
+    configuration (placement and dev images) is hardcoded per provider in utilities/toehold.py.
+
+    Args:
+        selected_source_provider (str): Selected source provider key from the test config.
+        source_provider (BaseProvider): Source provider instance.
+
+    Returns:
+        dict[str, Any]: The toehold configuration for the provider.
+
+    Raises:
+        ValueError: If the provider type is not vSphere or the provider has no appliance
+            configuration.
+    """
+    return get_toehold_config(
+        provider_name=selected_source_provider,
+        provider_type=source_provider.type,
+    )
+
+
+@pytest.fixture(scope="session")
+def toehold_appliance(
+    ocp_admin_client: DynamicClient,
+    source_provider: BaseProvider,
+    toehold_config: dict[str, Any],
+    fixture_store: dict[str, Any],
+    target_namespace: str,
+    mtv_namespace: str,
+) -> Generator[None, None, None]:
+    """Prepare the cluster for toehold migrations and restore everything on session end.
+
+    Patches the provider with the copy appliance placement settings, enables the copy
+    appliance feature on the ForkliftController (left enabled after the run — it is inert
+    without a provider CopyApplianceTemplate), applies the template config and the optional
+    controller image override (all through the ForkliftController CR — the operator owns the
+    controller deployment), overrides the CDI images when configured, and creates the
+    provider's CopyApplianceTemplate. The image and provider patches are restored on session
+    teardown; the feature gate is not. The setup is cluster-wide: no other migration tests
+    should run against the same cluster while it is active.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        source_provider (BaseProvider): Source provider instance.
+        toehold_config (dict[str, Any]): Validated toehold configuration.
+        fixture_store (dict[str, Any]): Session fixture store for resource tracking.
+        target_namespace (str): Namespace for the migration resources.
+        mtv_namespace (str): Namespace where the ForkliftController is installed.
+
+    Yields:
+        None
+
+    Raises:
+        ValueError: If the source provider has no OCP resource.
+    """
+    ocp_provider = source_provider.ocp_resource
+    if ocp_provider is None:
+        raise ValueError("Source provider has no OCP Provider resource")
+
+    # The try must start before the first cluster change: a failure while applying (validation,
+    # resource creation, template build, appliance readiness) has to restore whatever was applied.
+    state = ToeholdClusterState()
+    try:
+        apply_toehold_setup(
+            ocp_admin_client=ocp_admin_client,
+            ocp_provider=ocp_provider,
+            toehold_config=toehold_config,
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            mtv_namespace=mtv_namespace,
+            state=state,
+        )
+        yield
+    finally:
+        restore_toehold_setup(
+            ocp_admin_client=ocp_admin_client,
+            mtv_namespace=mtv_namespace,
+            state=state,
+            provider=ocp_provider,
+        )
+
+
 @pytest.fixture(scope="class")
 def vcenter_clone_provider(
     source_provider_data: dict[str, Any],
@@ -1835,8 +2011,11 @@ def prepared_plan(
                     if source_vm_power == "on":
                         source_provider.start_vm(provider_vm_api)
                         if source_provider.type == Provider.ProviderType.VSPHERE:
-                            source_provider.wait_for_vmware_guest_info(
-                                provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                            wait_guest_info_or_fail(
+                                source_provider=source_provider,
+                                provider_vm_api=provider_vm_api,
+                                vm_name=vm["name"],
+                                timeout=class_plan_config.get("guest_agent_timeout", 120),
                             )
                         elif source_provider.type == Provider.ProviderType.HYPERV:
                             source_provider.wait_for_guest_network_config(
@@ -1943,8 +2122,11 @@ def prepared_plan(
                 if source_vm_power == "on":
                     source_provider.start_vm(provider_vm_api)
                     if source_provider.type == Provider.ProviderType.VSPHERE:
-                        source_provider.wait_for_vmware_guest_info(
-                            provider_vm_api, timeout=class_plan_config.get("guest_agent_timeout", 120)
+                        wait_guest_info_or_fail(
+                            source_provider=source_provider,
+                            provider_vm_api=provider_vm_api,
+                            vm_name=vm["name"],
+                            timeout=class_plan_config.get("guest_agent_timeout", 120),
                         )
                     elif source_provider.type == Provider.ProviderType.HYPERV:
                         source_provider.wait_for_guest_network_config(
@@ -1992,6 +2174,18 @@ def prepared_plan(
                     if mac is not None:
                         vm["disconnected_nic_mac" if not connected else "connected_nic_mac"] = mac
                         added_nic_expected_counts[vm["name"]] = nic_count_before + 1
+                        # The NIC reconfiguration clears vCenter's guest info (guestFamily and
+                        # net reset until tools re-report, ~15s); the guest-operations detection
+                        # below reads guestFamily, so wait for it to repopulate. A powered-off
+                        # clone has no guest info to wait for — the wait requires a powered-on
+                        # VM and would otherwise always time out.
+                        if source_provider.is_vm_powered_on(provider_vm_api):
+                            wait_guest_info_or_fail(
+                                source_provider=source_provider,
+                                provider_vm_api=provider_vm_api,
+                                vm_name=vm["name"],
+                                timeout=class_plan_config.get("guest_agent_timeout", 120),
+                            )
 
                 # Detect IP origins (and NIC names when preserving static IPs) for Linux guests,
                 # which VMware does not report natively (open-vm-tools limitation).

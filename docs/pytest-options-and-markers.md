@@ -61,7 +61,7 @@ markers =
 junit_logging = all
 ```
 
-That is 21 registered markers. Because `--strict-markers` is on, any `@pytest.mark.<name>` that is not listed above is a collection-time error, not a warning.
+That is 23 registered markers. Because `--strict-markers` is on, any `@pytest.mark.<name>` that is not listed above is a collection-time error, not a warning.
 
 What that means in day-to-day use:
 
@@ -104,7 +104,7 @@ for item in items:
 
 ## Marker reference
 
-`pytest.ini` registers 21 markers. The descriptions below are taken verbatim from that file.
+`pytest.ini` registers 23 markers. The descriptions below are taken verbatim from that file.
 
 | Marker | Registered description | Kind |
 | --- | --- | --- |
@@ -115,6 +115,7 @@ for item in items:
 | `copyoffload` | Copy-offload (XCOPY) tests | Scenario |
 | `copyoffload_sanity` | Copy-offload sanity tests - core scenarios for quick validation | Scenario |
 | `copyoffload_snapshots` | Copy-offload snapshot tests (vSphere only) | Scenario |
+| `vddk_baseline` | The test needs a genuine standard (VDDK/direct) transfer as its baseline — a VDDK-vs-XCOPY comparison or a non-XCOPY fallback check; a `--toehold` run skips it at collection time, since toehold clears the provider's `vddkInitImage` and the transfer would silently run on the appliance | Scenario |
 | `shared_disk` | Shared disk migration tests (vSphere only) | Scenario |
 | `incremental` | Marks tests as incremental (xfail on previous failure) | Lifecycle |
 | `min_mtv_version` | Mark test to require minimum MTV version (e.g., `@pytest.mark.min_mtv_version("2.6.0")`) | Lifecycle |
@@ -160,6 +161,25 @@ Scenario markers:
   `copyoffload/test_copyoffload_migration.py` only
 - `shared_disk`:
   `shared_disk/test_shared_disk_rhel_migration.py`, `shared_disk/test_shared_disk_windows_migration.py`
+
+There is no toehold marker: the toehold transfer path is a command-line toggle (`--toehold`, see
+[Suite-specific pytest options](#suite-specific-pytest-options)), not a per-test selection. The appliance configuration is
+hardcoded per source provider in `utilities/toehold.py`; when the flag is passed with a provider that has an entry in the map, the
+session-scoped `toehold_appliance` fixture (feature flag, provider settings, CopyApplianceTemplate, controller and CDI
+image overrides) is attached to every collected test at collection time — the same tests run unchanged, only the disk
+transfer path differs.
+
+The fixture also clears the session provider's `vddkInitImage` setting: the product prefers VDDK over the copy appliance
+when a VDDK image is configured, so leaving it set builds and validates the appliance and then transfers every disk over
+VDDK anyway. Immediately after patching, the setup asserts the product will choose the appliance (no provider
+`vddkInitImage`, no global `VDDK_IMAGE` on the controller deployment) and fails fast otherwise, so a silent fallback
+cannot pass as a toehold run. Provider settings are restored on teardown; providers outside a `--toehold` run keep their
+VDDK image untouched.
+
+Tests whose premise a toehold run cannot satisfy are skipped at collection time instead of
+reporting appliance-path coverage they do not have: `vddk_baseline` tests (which need a real
+VDDK transfer) and tests that build their own source `Provider` (the `ca.crt` and
+insecure-connection variants), since the setup patches only the session provider.
 
 Lifecycle markers:
 
@@ -457,7 +477,7 @@ And it protects worker-shared setup where needed. For example, the `virtctl_bina
 
 ## Suite-specific pytest options
 
-`conftest.py` registers seven custom options across six groups. All of them are real flags you can pass on any run.
+`conftest.py` registers eight custom options across seven groups. All of them are real flags you can pass on any run.
 
 ```python
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -477,6 +497,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--providers-json",
         help="Path to providers JSON configuration file. Falls back to PROVIDERS_JSON_PATH env var, then .providers.json",
         default=None,
+    )
+
+    toehold_group = parser.getgroup(name="Toehold")
+    toehold_group.addoption(
+        "--toehold",
+        action="store_true",
+        help=(
+            "Run migrations through the copy appliance transfer path. Uses the hardcoded "
+            f"appliance configuration; supported source providers: "
+            f"{', '.join(TOEHOLD_CONFIG_BY_PROVIDER)}"
+        ),
     )
 
     mtv_upgrade_group = parser.getgroup(name="MTV Upgrade")
@@ -513,6 +544,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 | `--data-collector-path PATH` | `DataCollector` | Output directory; default `.data-collector`. Wiped at session start, written at session finish |
 | `--skip-teardown` | `Teardown` | Preserves resources after the run instead of deleting them |
 | `--openshift-python-wrapper-log-debug` | `Openshift Python Wrapper` | Sets `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG` during session startup |
+| `--toehold` | `Toehold` | Runs every collected test through the copy appliance transfer path (vSphere dev-preview, VIRTSTRAT-757). The appliance setup clears the session provider's `vddkInitImage` (VDDK takes priority over the appliance in the product) and fails fast if a provider or controller-level VDDK image would still force the VDDK path. The appliance configuration is hardcoded per source provider (`utilities/toehold.py`); passing the flag with any other provider exits with a usage error instead of silently running the regular path. Not usable with pool-based provider selection (the provider is chosen after collection) — such runs fail fast at collection |
 | `--mtv-upgrade-timeout SECONDS` | `MTV Upgrade` | Outer wait budget for the upgrade script. Falls back to `MTV_UPGRADE_TIMEOUT_SECONDS`, then 5400 seconds. It only guards against a wedged process: the script owns its own internal waits, so this budget must stay above them |
 
 The real-run guard for required config lives in `pytest_sessionstart` too:

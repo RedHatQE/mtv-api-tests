@@ -442,6 +442,32 @@ providing broad coverage of copy-offload functionality in a single run.
 podman run ... uv run pytest -m copyoffload_sanity -v --tc=source_provider:vsphere-8.0.1 ...
 ```
 
+### Toehold (Copy Appliance) Runs
+
+Toehold is an alternative disk transfer path (MTV 5.0, `feature_copy_appliance`): instead of
+pulling disks directly from vSphere via VDDK, MTV deploys a copy appliance VM inside vSphere
+and streams the disks through it over NBD. The path is a run-level toggle, not a marker:
+
+```bash
+# Regular transfer path (unchanged)
+podman run ... uv run pytest -m tier0 -v --tc=source_provider:vsphere-7.0.3 ...
+
+# Copy appliance transfer path — same provider, one flag
+podman run ... uv run pytest -m tier0 --toehold -v --tc=source_provider:vsphere-7.0.3 ...
+```
+
+Requirements:
+
+- A vSphere source provider with an entry in the hardcoded `TOEHOLD_CONFIG_BY_PROVIDER` map
+  in `utilities/toehold.py` (the map carries the appliance placement settings, template base
+  disk image, and dev CDI image overrides per provider). No `.providers.json` changes are
+  needed — the same provider entry serves both transfer paths. Passing `--toehold` with any
+  other provider exits with a usage error instead of silently running the regular path.
+- The `mtv-api-tests run` CLI forwards the flag too: `uv run mtv-api-tests run --mode local
+  --toehold --source-provider vsphere-7.0.3`.
+- The CDI/controller image overrides are cluster-wide: do not run other migration tests
+  against the same cluster while a toehold run is active.
+
 **Examples** - Change `-m tier0` to run different tests:
 
 > **Note**: In the examples below, replace `podman run ...` with the full `podman run` command shown in the

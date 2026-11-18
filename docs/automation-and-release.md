@@ -867,7 +867,10 @@ by themselves.
 | `mtv-api-tests run` | Runs the tests. `--mode local` shells out to `uv run pytest`; `--mode job` runs `oc apply -f` against the manifest |
 
 Both accept `--category` (a pytest marker), and `run` accepts `--source-provider`, `--destination-provider`, `--storage-class`,
-`--test-filter` / `-k`, and `--job-yaml`. `generate` additionally accepts `--image` for the Job container image.
+`--test-filter` / `-k`, `--job-yaml`, and `--toehold` (run through the copy appliance transfer path; forwarded to
+pytest as `--toehold`, supported vSphere providers only, `--mode local` only — `--mode job` exits with an error (exit code 1)
+because the Job manifest's pytest command is fixed at `generate` time). `generate` additionally accepts `--image` for
+the Job container image.
 
 Useful entry points for automation and debugging:
 
