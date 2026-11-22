@@ -112,7 +112,7 @@ Provider-specific secret keys and SDK arguments are then added on top (`utilitie
 | --- | --- | --- |
 | `vsphere` | `user`, `password`, `cacert` | `host=fqdn`, `copyoffload` |
 | `ovirt` | `user`, `password`, `cacert` (always fetched) | `host=api_url`, plus `ca_file` when secure or `insecure` when not |
-| `openstack` | `username`, `password`, `regionName`, `projectName`, `domainName`, `cacert` | `host`, `auth_url`, `project_name`, `user_domain_name`, `region_name`, domain IDs |
+| `openstack` | `username`, `password`, `regionName`, `projectName`, `domainName`, `cacert` | `host`, `auth_url`, `project_name`, `user_domain_name`, `region_name`, domain IDs, plus `ca_file` when secure or `insecure` when not |
 | `openshift` | none; the destination cluster secret is reused | none; `api_url` is replaced by the live cluster host |
 | `ova` | none beyond `url` and `insecureSkipVerify` | `host=api_url` |
 | `hyperv` | `username`, `password`, `smbUrl`, `smbUser`, `smbPassword`, `cacert` | `host=fqdn`, `cert_validation` set to the cert path or `False` |

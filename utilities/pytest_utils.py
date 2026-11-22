@@ -22,6 +22,7 @@ from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from ocp_resources.storage_map import StorageMap
 from ocp_resources.virtual_machine import VirtualMachine
+from openstack import exceptions as os_exc
 from pytest_testconfig import config as py_config
 from simple_logger.logger import get_logger
 
@@ -191,6 +192,7 @@ def teardown_resources(
     rhv_cloned_vms = session_teardown_resources.get(Provider.ProviderType.RHV, [])
     hyperv_cloned_vms = session_teardown_resources.get(Provider.ProviderType.HYPERV, [])
     openstack_volume_snapshots = session_teardown_resources.get("VolumeSnapshot", [])
+    openstack_volumes = session_teardown_resources.get("OpenstackVolume", [])
 
     # Resources that was created by running migration
     pods = session_teardown_resources.get(Pod.kind, [])
@@ -406,7 +408,7 @@ def teardown_resources(
             LOGGER.error(f"Failed to connect to VMware provider for cleanup: {exc}")
             leftovers.setdefault(Provider.ProviderType.VSPHERE, []).extend(vmware_cloned_vms)
 
-    if openstack_cloned_vms:
+    if openstack_cloned_vms or openstack_volumes:
         try:
             source_provider_data = session_store["source_provider_data"]
 
@@ -420,6 +422,8 @@ def teardown_resources(
                 region_name=source_provider_data["region_name"],
                 user_domain_id=source_provider_data["user_domain_id"],
                 project_domain_id=source_provider_data["project_domain_id"],
+                ca_file=session_store.get("source_provider_cacert"),
+                insecure=session_store.get("source_provider_insecure", False),
             ) as openstack_provider:
                 for _vm in openstack_cloned_vms:
                     _cloned_vm_name = _vm["name"]
@@ -430,9 +434,29 @@ def teardown_resources(
                         leftovers.setdefault(openstack_provider.type, []).append({
                             "cloned_vm_name": _cloned_vm_name,
                         })
+                # Volumes must be deleted after the servers (they are attached) and before the
+                # snapshots (cinder keeps a snapshot whose dependent clone volumes still exist)
+                for vol in openstack_volumes:
+                    vol_id = vol["id"]
+                    try:
+                        vol_obj = openstack_provider.api.block_storage.get_volume(vol_id)
+                    except os_exc.NotFoundException:
+                        continue  # nova already deleted the volume via delete_on_termination
+                    except os_exc.SDKException as exc:
+                        LOGGER.error(f"Failed to fetch clone volume {vol_id}: {exc}")
+                        leftovers.setdefault("OpenstackVolume", []).append(vol)
+                        continue
+                    try:
+                        LOGGER.info(f"Deleting clone volume (ID: {vol_id})...")
+                        openstack_provider.api.block_storage.delete_volume(vol_obj, ignore_missing=True)
+                        openstack_provider.api.block_storage.wait_for_delete(vol_obj, wait=120, interval=2)
+                    except os_exc.SDKException as exc:
+                        LOGGER.error(f"Failed to delete clone volume {vol_id}: {exc}")
+                        leftovers.setdefault("OpenstackVolume", []).append(vol)
         except Exception as exc:
             LOGGER.error(f"Failed to connect to OpenStack provider for cleanup: {exc}")
             leftovers.setdefault(Provider.ProviderType.OPENSTACK, openstack_cloned_vms)
+            leftovers.setdefault("OpenstackVolume", openstack_volumes)
 
     if rhv_cloned_vms:
         try:
@@ -493,12 +517,28 @@ def teardown_resources(
                 region_name=source_provider_data["region_name"],
                 user_domain_id=source_provider_data["user_domain_id"],
                 project_domain_id=source_provider_data["project_domain_id"],
+                ca_file=session_store.get("source_provider_cacert"),
+                insecure=session_store.get("source_provider_insecure", False),
             ) as openstack_provider:
                 for snapshot in openstack_volume_snapshots:
                     snapshot_id = snapshot["id"]
                     snapshot_name = snapshot["name"]
-                    LOGGER.info(f"Deleting volume snapshot '{snapshot_name}' (ID: {snapshot_id})...")
-                    openstack_provider.api.block_storage.delete_snapshot(snapshot_id, ignore_missing=True)
+                    try:
+                        snapshot_obj = openstack_provider.api.block_storage.get_snapshot(snapshot_id)
+                    except os_exc.NotFoundException:
+                        continue
+                    except os_exc.SDKException as exc:
+                        LOGGER.error(f"Failed to fetch volume snapshot {snapshot_name}: {exc}")
+                        leftovers.setdefault("VolumeSnapshot", []).append(snapshot)
+                        continue
+                    try:
+                        LOGGER.info(f"Deleting volume snapshot '{snapshot_name}' (ID: {snapshot_id})...")
+                        openstack_provider.api.block_storage.delete_snapshot(snapshot_obj, ignore_missing=True)
+                        # cinder silently keeps a snapshot with dependent volumes: wait to detect it
+                        openstack_provider.api.block_storage.wait_for_delete(snapshot_obj, wait=120, interval=2)
+                    except os_exc.SDKException as exc:
+                        LOGGER.error(f"Failed to delete volume snapshot {snapshot_name}: {exc}")
+                        leftovers.setdefault("VolumeSnapshot", []).append(snapshot)
         except Exception as exc:
             LOGGER.error(f"Failed to connect to OpenStack provider for volume snapshot cleanup: {exc}")
             leftovers.setdefault("VolumeSnapshot", openstack_volume_snapshots)

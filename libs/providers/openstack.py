@@ -38,6 +38,7 @@ class OpenStackProvider(BaseProvider):
         project_domain_id: str,
         ocp_resource: Provider | None = None,
         insecure: bool = False,
+        ca_file: str | None = None,
         **kwargs: Any,
     ):
         super().__init__(
@@ -49,6 +50,7 @@ class OpenStackProvider(BaseProvider):
         )
         self.type = Provider.ProviderType.OPENSTACK
         self.insecure = insecure
+        self.ca_file = ca_file
         self.auth_url = auth_url
         self.project_name = project_name
         self.user_domain_name = user_domain_name
@@ -70,6 +72,7 @@ class OpenStackProvider(BaseProvider):
             region_name=self.region_name,
             user_domain_id=self.user_domain_id,
             project_domain_id=self.project_domain_id,
+            verify=False if self.insecure else (self.ca_file or True),
         )
         return self
 
@@ -384,6 +387,12 @@ class OpenStackProvider(BaseProvider):
                         f"Available snapshots: {[s.id for s in volume_snapshots]}"
                     )
 
+                # create_server_image(wait=True) only waits for the Glance image; the cinder
+                # snapshot may still be "creating", which create_volume rejects with a 400
+                vol_snapshot = self.api.block_storage.wait_for_status(
+                    vol_snapshot, status="available", failures=["error"], wait=300
+                )
+
                 is_boot = source_vol.id == boot_volume.id if boot_volume else idx == 0
                 volume_size = boot_volume_size if is_boot else source_vol.size
                 volume_name_suffix = "boot-vol" if is_boot else f"data-vol-{idx}"
@@ -399,10 +408,11 @@ class OpenStackProvider(BaseProvider):
                     snapshot_id=vol_snapshot.id,
                     size=volume_size,
                 )
+                # Track before waiting: a failed availability wait must not orphan the volume
+                created_volume_ids.append(new_volume.id)
                 new_volume = self.api.block_storage.wait_for_status(
                     new_volume, status="available", failures=["error"], wait=300
                 )
-                created_volume_ids.append(new_volume.id)
 
                 bdm.append({
                     "uuid": new_volume.id,
@@ -438,6 +448,10 @@ class OpenStackProvider(BaseProvider):
                 self.fixture_store["teardown"].setdefault(self.type, []).append({
                     "name": new_server.name,
                 })
+                # nova's delete_on_termination is best-effort; volumes are deleted explicitly in teardown
+                self.fixture_store["teardown"].setdefault("OpenstackVolume", []).extend(
+                    {"id": vol_id} for vol_id in created_volume_ids
+                )
 
             if not power_on:
                 LOGGER.info(f"power_on is False, stopping server '{new_server.name}'")
@@ -510,7 +524,7 @@ class OpenStackProvider(BaseProvider):
             vm_name_suffix: Optional suffix to append to the VM name.
             clone_vm: If True, clone the VM if not found.
             session_uuid: Session UUID for cloning operations.
-            clone_options: Additional options for cloning (currently unused).
+            clone_options: Options for cloning; "source_vm_power" == "on" leaves the clone running.
 
         Returns:
             OSP_Server: The server object.
@@ -524,10 +538,15 @@ class OpenStackProvider(BaseProvider):
 
         if not vm:
             if clone_vm:
+                # A clone whose plan runs the source VM must not be stopped mid-first-boot:
+                # a hard kill during Windows boot leaves failed-boot flags that send the
+                # post-migration boot into WinRE. Leave it running; start_vm no-ops on ACTIVE.
+                power_on = (clone_options or {}).get("source_vm_power") == "on"
                 vm = self.clone_vm(
                     source_vm_name=query,
                     clone_vm_name=vm_name,
                     session_uuid=session_uuid,
+                    power_on=power_on,
                 )
             else:
                 LOGGER.debug(f"VM '{vm_name}' not found in OpenStack.")
