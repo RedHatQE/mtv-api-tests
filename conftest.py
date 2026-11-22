@@ -1843,6 +1843,7 @@ def prepared_plan(
                                 provider_vm_api=provider_vm_api,
                                 vm_name=vm["name"],
                                 timeout=class_plan_config.get("guest_agent_timeout", 120),
+                                required=plan.get("preserve_static_ips", False),
                             )
                         elif source_provider.type == Provider.ProviderType.HYPERV:
                             source_provider.wait_for_guest_network_config(
@@ -1954,6 +1955,7 @@ def prepared_plan(
                             provider_vm_api=provider_vm_api,
                             vm_name=vm["name"],
                             timeout=class_plan_config.get("guest_agent_timeout", 120),
+                            required=plan.get("preserve_static_ips", False),
                         )
                     elif source_provider.type == Provider.ProviderType.HYPERV:
                         source_provider.wait_for_guest_network_config(
@@ -2012,6 +2014,7 @@ def prepared_plan(
                                 provider_vm_api=provider_vm_api,
                                 vm_name=vm["name"],
                                 timeout=class_plan_config.get("guest_agent_timeout", 120),
+                                required=plan.get("preserve_static_ips", False),
                             )
 
                 # Detect IP origins (and NIC names when preserving static IPs) for Linux guests,
