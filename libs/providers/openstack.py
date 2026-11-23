@@ -297,7 +297,7 @@ class OpenStackProvider(BaseProvider):
         **kwargs: Any,
     ) -> OSP_Server:
         """
-        Clones a VM, always reusing the flavor and network from the source.
+        Clones a VM, always reusing the flavor and all networks from the source.
 
         Args:
             source_vm_name: The name of the VM to clone.
@@ -335,8 +335,10 @@ class OpenStackProvider(BaseProvider):
         if not networks:
             raise ValueError(f"Could not find a network for source VM '{source_vm_name}'.")
 
-        network_id: str = networks[0]["net_id"]
-        LOGGER.info(f"Using source flavor '{flavor_obj.name}' (ID: {flavor_id}) and network '{network_id}'")
+        # One port per distinct source network: the network map deduplicates networks,
+        # so duplicate ports on one network would skew the clone's NIC count against the map.
+        network_ids: list[str] = list(dict.fromkeys(net["net_id"] for net in networks))
+        LOGGER.info(f"Using source flavor '{flavor_obj.name}' (ID: {flavor_id}) and networks '{network_ids}'")
 
         snapshot: OSP_Image | None = None
         snapshot_name = f"{clone_vm_name}-snapshot"
@@ -438,7 +440,7 @@ class OpenStackProvider(BaseProvider):
                 image_id="",
                 block_device_mapping_v2=bdm,
                 flavor_id=flavor_id,
-                networks=[{"uuid": network_id}],
+                networks=[{"uuid": net_id} for net_id in network_ids],
             )
             new_server = self.api.compute.wait_for_server(new_server, wait=300)
             server_created = True
