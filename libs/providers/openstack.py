@@ -496,6 +496,9 @@ class OpenStackProvider(BaseProvider):
 
         Args:
             vm_name: The name of the VM to delete.
+
+        Raises:
+            openstack.exceptions.SDKException: If the compute delete or wait fails; the caller records the leftover.
         """
         LOGGER.info(f"Attempting to delete VM '{vm_name}'")
         vm_to_delete = self.get_instance_obj(name_filter=vm_name)
@@ -503,12 +506,9 @@ class OpenStackProvider(BaseProvider):
             LOGGER.warning(f"VM '{vm_name}' not found. Nothing to delete.")
             return
 
-        try:
-            self.api.compute.delete_server(vm_to_delete)
-            self.api.compute.wait_for_delete(vm_to_delete, interval=2, wait=180)
-            LOGGER.info(f"Successfully deleted VM '{vm_name}'.")
-        except Exception as e:
-            LOGGER.error(f"An error occurred while deleting VM '{vm_name}': {e}")
+        self.api.compute.delete_server(vm_to_delete)
+        self.api.compute.wait_for_delete(vm_to_delete, interval=2, wait=180)
+        LOGGER.info(f"Successfully deleted VM '{vm_name}'.")
 
     def get_vm_by_name(
         self,

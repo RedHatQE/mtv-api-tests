@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import requests
 from dotenv import load_dotenv
+from keystoneauth1.exceptions.connection import ConnectionError as KeystoneConnectionError
 from ocp_resources.conversion import Conversion
 from ocp_resources.host import Host
 from ocp_resources.migration import Migration
@@ -442,7 +443,7 @@ def teardown_resources(
                         vol_obj = openstack_provider.api.block_storage.get_volume(vol_id)
                     except os_exc.NotFoundException:
                         continue  # nova already deleted the volume via delete_on_termination
-                    except os_exc.SDKException as exc:
+                    except (os_exc.SDKException, KeystoneConnectionError) as exc:
                         LOGGER.error(f"Failed to fetch clone volume {vol_id}: {exc}")
                         leftovers.setdefault("OpenstackVolume", []).append(vol)
                         continue
@@ -450,7 +451,7 @@ def teardown_resources(
                         LOGGER.info(f"Deleting clone volume (ID: {vol_id})...")
                         openstack_provider.api.block_storage.delete_volume(vol_obj, ignore_missing=True)
                         openstack_provider.api.block_storage.wait_for_delete(vol_obj, wait=120, interval=2)
-                    except os_exc.SDKException as exc:
+                    except (os_exc.SDKException, KeystoneConnectionError) as exc:
                         LOGGER.error(f"Failed to delete clone volume {vol_id}: {exc}")
                         leftovers.setdefault("OpenstackVolume", []).append(vol)
         except Exception as exc:
@@ -527,7 +528,7 @@ def teardown_resources(
                         snapshot_obj = openstack_provider.api.block_storage.get_snapshot(snapshot_id)
                     except os_exc.NotFoundException:
                         continue
-                    except os_exc.SDKException as exc:
+                    except (os_exc.SDKException, KeystoneConnectionError) as exc:
                         LOGGER.error(f"Failed to fetch volume snapshot {snapshot_name}: {exc}")
                         leftovers.setdefault("VolumeSnapshot", []).append(snapshot)
                         continue
@@ -536,7 +537,7 @@ def teardown_resources(
                         openstack_provider.api.block_storage.delete_snapshot(snapshot_obj, ignore_missing=True)
                         # cinder silently keeps a snapshot with dependent volumes: wait to detect it
                         openstack_provider.api.block_storage.wait_for_delete(snapshot_obj, wait=120, interval=2)
-                    except os_exc.SDKException as exc:
+                    except (os_exc.SDKException, KeystoneConnectionError) as exc:
                         LOGGER.error(f"Failed to delete volume snapshot {snapshot_name}: {exc}")
                         leftovers.setdefault("VolumeSnapshot", []).append(snapshot)
         except Exception as exc:
