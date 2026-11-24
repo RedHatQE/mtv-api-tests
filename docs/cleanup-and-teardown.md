@@ -131,7 +131,8 @@ From there, `teardown_resources()` works through the rest of the inventory. In p
 - Tracked `VirtualMachine` and `Pod` resources.
 - Namespaces created during the run.
 - Source-side cloned VMs for VMware, OpenStack, RHV, and Hyper-V.
-- OpenStack volume snapshots that were recorded during clone preparation.
+- OpenStack clone volumes created from snapshots during clone preparation, deleted after the clone VMs (nova's `delete_on_termination` is best-effort and cannot be relied on).
+- OpenStack volume snapshots that were recorded during clone preparation, deleted last because cinder silently keeps a snapshot while clone volumes created from it still exist.
 
 It also performs extra cleanup and verification in the target namespace by:
 
