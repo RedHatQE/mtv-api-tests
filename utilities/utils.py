@@ -749,7 +749,12 @@ def create_source_provider(
 
         # Add CA certificate for SSL verification
         if not insecure:
-            _fetch_and_store_cacert(source_provider_data_copy, secret_string_data, tmp_dir, session_uuid, ca_cert_key)
+            cert_file = _fetch_and_store_cacert(
+                source_provider_data_copy, secret_string_data, tmp_dir, session_uuid, ca_cert_key
+            )
+            provider_args["ca_file"] = str(cert_file)
+        else:
+            provider_args["insecure"] = insecure
 
     elif hyperv_provider(provider_data=source_provider_data_copy):
         source_provider = HyperVProvider
@@ -818,6 +823,12 @@ def create_source_provider(
 
     # this is for communication with the provider
     with source_provider(ocp_resource=ocp_resource_provider, **provider_args) as _source_provider:
+        # Teardown re-creates providers from scratch; remember the CA bundle and the insecure
+        # setting so those connections trust the same endpoints as this one.
+        if ca_file := provider_args.get("ca_file"):
+            fixture_store["source_provider_cacert"] = ca_file
+        if insecure:
+            fixture_store["source_provider_insecure"] = insecure
         if not _source_provider.test:
             # The wrappers connect to provider_args["host"] when they have one (Hyper-V and vSphere use the
             # fqdn, the rest use the api_url); OpenShift sets no host and connects to the cluster.
