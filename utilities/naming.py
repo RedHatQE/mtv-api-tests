@@ -13,10 +13,10 @@ _INVALID_CHARS_PATTERN = re.compile(r"[^a-z0-9-]+")
 _LEADING_TRAILING_PATTERN = re.compile(r"^[^a-z0-9]+|[^a-z0-9]+$")
 
 # Kubernetes resource name limit
-_K8S_NAME_MAX_LENGTH = 63
+K8S_NAME_MAX_LENGTH = 63
 
 
-def truncate_resource_name(name: str, max_length: int = _K8S_NAME_MAX_LENGTH) -> str:
+def truncate_resource_name(name: str, max_length: int = K8S_NAME_MAX_LENGTH) -> str:
     """Truncate a resource name to the Kubernetes limit, keeping the trailing characters.
 
     Keeps the last ``max_length`` characters so uniqueness suffixes (session UUID,

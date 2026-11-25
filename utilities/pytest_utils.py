@@ -12,6 +12,8 @@ import requests
 from dotenv import load_dotenv
 from keystoneauth1.exceptions.connection import ConnectionError as KeystoneConnectionError
 from ocp_resources.conversion import Conversion
+from ocp_resources.copy_appliance_template import CopyApplianceTemplate
+from ocp_resources.exceptions import ResourceTeardownError
 from ocp_resources.host import Host
 from ocp_resources.migration import Migration
 from ocp_resources.namespace import Namespace
@@ -34,6 +36,7 @@ from libs.providers.rhv import OvirtProvider
 from libs.providers.vmware import VMWareProvider
 from utilities.migration_utils import append_leftovers, archive_plan, cancel_migration, check_dv_pvc_pv_deleted
 from utilities.utils import delete_all_vms, get_cluster_client
+from timeout_sampler import TimeoutExpiredError
 
 if TYPE_CHECKING:
     import pytest
@@ -194,6 +197,7 @@ def teardown_resources(
     hyperv_cloned_vms = session_teardown_resources.get(Provider.ProviderType.HYPERV, [])
     openstack_volume_snapshots = session_teardown_resources.get("VolumeSnapshot", [])
     openstack_volumes = session_teardown_resources.get("OpenstackVolume", [])
+    copy_appliance_templates = session_teardown_resources.get(CopyApplianceTemplate.kind, [])
 
     # Resources that was created by running migration
     pods = session_teardown_resources.get(Pod.kind, [])
@@ -217,6 +221,19 @@ def teardown_resources(
         except Exception as exc:
             LOGGER.error(f"Failed to cleanup plan {plan['name']}: {exc}")
             leftovers.setdefault(Plan.kind, []).append(plan)
+
+    for copy_appliance_template in copy_appliance_templates:
+        try:
+            template_obj = CopyApplianceTemplate(
+                name=copy_appliance_template["name"],
+                namespace=copy_appliance_template["namespace"],
+                client=ocp_client,
+            )
+            if not template_obj.clean_up(wait=True):
+                leftovers = append_leftovers(leftovers=leftovers, resource=template_obj)
+        except (TimeoutExpiredError, ResourceTeardownError) as exc:
+            LOGGER.error(f"Failed to cleanup copy appliance template {copy_appliance_template['name']}: {exc}")
+            leftovers.setdefault(CopyApplianceTemplate.kind, []).append(copy_appliance_template)
 
     for provider in providers:
         try:
