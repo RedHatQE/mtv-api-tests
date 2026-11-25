@@ -8,7 +8,7 @@ from ocp_resources.plan import Plan
 from ocp_resources.resource import Resource
 from simple_logger.logger import get_logger
 
-from utilities.naming import generate_name_with_uuid, truncate_resource_name
+from utilities.naming import K8S_NAME_MAX_LENGTH, generate_name_with_uuid, truncate_resource_name
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
@@ -40,6 +40,11 @@ def create_and_store_resource(
         _resource_name = _resource_dict.get("metadata", {}).get("name")
 
     if not _resource_name:
+        if "base_resource_name" not in fixture_store:
+            raise ValueError(
+                "fixture_store carries no 'base_resource_name': the base_resource_name fixture "
+                "did not run before this resource creation (check fixture ordering)."
+            )
         _resource_name = generate_name_with_uuid(name=fixture_store["base_resource_name"])
 
         if resource.kind in (Migration.kind, Plan.kind):
@@ -51,21 +56,44 @@ def create_and_store_resource(
 
     _resource = resource(**kwargs)
 
+    # Creation and the existence wait are separate steps so the teardown entry is recorded only
+    # once creation is confirmed: tracking a create that never happened or failed leaves teardown
+    # pointing at an object this run may not own.
     try:
-        _resource.deploy(wait=True)
+        _resource.deploy(wait=False)
     except ConflictError:
         LOGGER.warning(f"{_resource.kind} {_resource_name} already exists, reusing it.")
+        # Adoption path: the object predates this run, so it is tracked only after it proves
+        # usable — a failed wait must leave no entry behind.
         _resource.wait()
+        _store_resource_for_teardown(fixture_store=fixture_store, resource=_resource, test_name=test_name)
+        return _resource
 
-    LOGGER.info(f"Storing {_resource.kind} {_resource.name} in fixture store")
-    _resource_dict = {"name": _resource.name, "namespace": _resource.namespace, "module": _resource.__module__}
-
-    if test_name:
-        _resource_dict["test_name"] = test_name
-
-    fixture_store["teardown"].setdefault(_resource.kind, []).append(_resource_dict)
+    # Created by this run: track before the existence wait so a failed wait is still cleaned up.
+    _store_resource_for_teardown(fixture_store=fixture_store, resource=_resource, test_name=test_name)
+    _resource.wait()
 
     return _resource
+
+
+def _store_resource_for_teardown(
+    # Any: the store mixes heterogeneous per-kind entries (names, namespaces, module paths).
+    fixture_store: dict[str, Any],
+    resource: Resource,
+    test_name: str | None = None,
+) -> None:
+    """Record a resource in the fixture store so session teardown deletes it.
+
+    Args:
+        fixture_store (dict[str, Any]): Fixture store that tracks teardown.
+        resource (Resource): The resource to track.
+        test_name (str | None): Optional test name recorded with the entry.
+    """
+    LOGGER.info(f"Storing {resource.kind} {resource.name} in fixture store")
+    resource_dict = {"name": resource.name, "namespace": resource.namespace, "module": resource.__module__}
+    if test_name:
+        resource_dict["test_name"] = test_name
+    fixture_store["teardown"].setdefault(resource.kind, []).append(resource_dict)
 
 
 def unregister_teardown_resource(
